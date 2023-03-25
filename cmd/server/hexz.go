@@ -9,7 +9,7 @@ import (
 var ()
 
 func main() {
-	cfg := &hexz.ServerConfig{1}
+	cfg := &hexz.ServerConfig{}
 
 	flag.StringVar(&cfg.ServerAddress, "address", "", "Address on which to listen")
 	flag.IntVar(&cfg.ServerPort, "port", 8084, "Port on which to listen")
