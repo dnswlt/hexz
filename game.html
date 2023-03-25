@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+    <title>Hexz</title>
+    <style>
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            background-color: #1e1e1e;
+            color: #cbcbcb;
+        }
+
+        body {
+            font-family: arial, sans-serif;
+        }
+
+        .menu {
+            padding-left: 5px;
+            padding-right: 5px;
+        }
+
+        .menuitem {
+            display: inline;
+            margin-right: 1ex;
+        }
+
+        .widget {
+            margin-top: 6px;
+        }
+
+        #playerOneBadge,
+        #playerTwoBadge {
+            /* padding-right: 2em; */
+            display: inline-block;
+            width: 2.5em;
+            text-align: center;
+        }
+
+        #playerOneBadge {
+            color: #cbcbcb;
+            background-color: #255ab4;
+        }
+
+        #playerTwoBadge {
+            color: #1e1e1e;
+            background-color: #f8d748;
+        }
+
+        #shareLink {
+            cursor: pointer;
+        }
+
+        a:link,
+        a:visited,
+        a:hover,
+        a:active {
+            color: #92acd9;
+        }
+    </style>
+    <script type="text/javascript">
+        const styles = {
+            colors: {
+                grid: '#cbcbcb',
+                players: ['#255ab4', '#f8d748'],
+                preliminaryMoves: ['#92acd9', '#fbeba3'], // 50% alpha of players
+                deadCell: '#d03d12'
+            },
+        };
+
+        function gameId() {
+            let pathSegs = window.location.pathname.split("/");
+            return pathSegs[pathSegs.length - 1];
+        }
+
+        async function sendMove(row, col) {
+            return fetch("/hexz/move/" + gameId(), {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    row: row,
+                    col: col,
+                }),
+            })
+        }
+
+        async function resetGame() {
+            return fetch("/hexz/reset/" + gameId(), {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    message: "reset",
+                }),
+            })
+        }
+
+        const gstate = {
+            board: null,
+            role: 0,
+            done: false,
+        };
+
+        function handleServerEvent(sse, serverEvent) {
+            if (serverEvent.role > 0) {
+                gstate.role = serverEvent.role;
+                let ps = [
+                    document.getElementById("playerOneBadge"),
+                    document.getElementById("playerTwoBadge"),
+                ];
+                if (gstate.role > 0) {
+                    let role = gstate.role - 1;
+                    ps[role].innerHTML = "You";
+                }
+            }
+            if (serverEvent.board != null) {
+                // new board received.
+                gstate.board = serverEvent.board;
+                redraw();
+                updateTurnInfo();
+                updateScore();
+            }
+            if (serverEvent.debugMessage.length > 0) {
+                console.log(serverEvent.timestamp + ": " + serverEvent.debugMessage + " " + serverEvent.activeGames);
+            }
+            if (serverEvent.activeGames && serverEvent.activeGames.length > 0) {
+                updateActiveGames(serverEvent.activeGames);
+            }
+            if (serverEvent.lastEvent) {
+                console.log("Server sent last SSE. Closing the connection.");
+                gstate.done = true;
+                sse.close();
+            }
+            if (serverEvent.announcements && serverEvent.announcements.length > 0) {
+                updateAnnouncements(serverEvent);
+            }
+        }
+
+        function updateAnnouncements(serverEvent) {
+            let f2 = function(n) {
+                return String(n).padStart(2, '0');
+            }
+            let div = document.getElementById("announcements");
+            let time = new Date(serverEvent.timestamp);
+            let text = [];
+            for (const a of serverEvent.announcements) {
+                 text.push(`${f2(time.getHours())}:${f2(time.getMinutes())}:${f2(time.getSeconds())} - ${a}`);
+            }
+            div.innerHTML = text.join("<br>");
+        }
+
+        function updateScore() {
+            let div = document.getElementById("scoreInfo");
+            const s = gstate.board.score;
+            div.innerHTML = `${s[0]} &ndash; ${s[1]}`
+        }
+
+        function updateTurnInfo() {
+            let ts = [
+                document.getElementById("playerOneTurnInfo"),
+                document.getElementById("playerTwoTurnInfo"),
+            ];
+            let turn = gstate.board.turn - 1;
+            ts[turn].style.visibility = 'visible';
+            ts[(turn + 1) % 2].style.visibility = 'hidden';
+        }
+
+        function updateActiveGames(gameIds) {
+            let div = document.getElementById("activeGames");
+            let html = ["Other games: "];
+            let ownId = gameId();
+            for (gId of gameIds) {
+                if (gId != ownId) {
+                    html.push(`<a href="/hexz/${gId}">${gId}</a>`);
+                }
+            }
+            if (html.length > 1) {
+                div.innerHTML = html.join(" ");
+            } else {
+                // No other ongoing games.
+                div.innerHTML = "";
+            }
+        }
+
+        function newGame() {
+            window.location.replace("/hexz");
+        }
+    </script>
+</head>
+
+<body>
+    <div>
+        <canvas id="canvas" width="560" height="550"></canvas>
+    </div>
+    <div id="controls" class="menu">
+        <button id="home" class="menuitem">New Game</button>
+        <button id="reset" class="menuitem">Reset</button>
+        <div class="menuitem">
+            <span id="playerOneBadge">&nbsp;</span>
+            <span id="playerOneTurnInfo">&bull;</span>
+            <span id="scoreInfo">0 &ndash; 0</span>
+            <span id="playerTwoTurnInfo">&bull;</span>
+            <span id="playerTwoBadge">&nbsp;</span>
+        </div>
+        <div class="menuitem" id="turnInfo"></div>
+        <div class="menuitem" id="shareLink">&#x1F517; Share</div>
+    </div>
+    <div class="widget" id="announcements"></div>
+    <div class="widget" id="activeGames"></div>
+
+    <script type="text/javascript">
+        // Returns a Path2D representing a 0-centered hexagon with side length a.
+        function hexagon(a) {
+            let p = new Path2D();
+            let b2 = Math.sqrt(3) * a / 2;
+            let a2 = a / 2
+            p.moveTo(b2, a2);
+            p.lineTo(0, a);
+            p.lineTo(-b2, a2);
+            p.lineTo(-b2, -a2);
+            p.lineTo(0, -a);
+            p.lineTo(b2, -a2);
+            p.lineTo(b2, a2);
+            return p;
+        }
+
+        function drawBoard(ctx) {
+            if (!gstate.board) {
+                return;
+            }
+            let a = hexagonSideLength;
+            let b = Math.sqrt(3) * a;
+            let nRows = gstate.board.fields.length;
+            let hex = hexagon(a);
+            for (let i = 0; i < nRows; i++) {
+                for (let j = 0; j < gstate.board.fields[i].length; j++) {
+                    let xOff = (i % 2 == 0) ? 0 : b / 2;
+                    let x = xOff + j * b + b / 2;
+                    let y = i * a * 3 / 2 + a;
+                    let fld = gstate.board.fields[i][j];
+                    ctx.translate(x, y);
+                    if (fld.value == 1) {
+                        ctx.fillStyle = styles.colors.players[fld.owner - 1];
+                        ctx.fill(hex);
+                    } else if (fld.value == 2 && gstate.role == 0 || gstate.role == fld.owner) {
+                        // Only show hidden moves of this player.
+                        ctx.fillStyle = styles.colors.preliminaryMoves[fld.owner - 1];
+                        ctx.fill(hex);
+                    } else if (fld.value == 3) {
+                        ctx.fillStyle = styles.colors.deadCell;
+                        ctx.fill(hex);
+                    }
+                    ctx.strokeStyle = styles.colors.grid;
+                    ctx.stroke(hex);
+                    // Undo transform.
+                    ctx.translate(-x, -y);
+                }
+            }
+        }
+
+        function redraw() {
+            const c = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
+            ctx.resetTransform();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.translate(pad, pad);
+            drawBoard(ctx);
+        }
+
+        function resizeCanvas() {
+            const canvas = document.getElementById("canvas");
+            const maxWidth = 800;
+            const defaultWidth = 560;
+            const defaultHeight = 550;
+            canvas.width = Math.min(maxWidth, document.body.clientWidth);
+            canvas.height = Math.ceil(canvas.width * (defaultHeight / defaultWidth));
+            pad = canvas.width < 500 ? 10 : 20;
+            hexagonSideLength = (canvas.width - 2 * pad) / (10 * Math.sqrt(3));
+            redraw();
+        }
+
+        function initialize() {
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            canvas.addEventListener('click', onCanvasClicked);
+            canvas.addEventListener("contextmenu", e => {
+                e.preventDefault();
+                onCanvasClicked(e);
+            });
+            document.getElementById("home").addEventListener('click', newGame);
+            document.getElementById("reset").addEventListener('click', resetGame);
+            document.getElementById("shareLink").addEventListener('click', async function () {
+                try {
+                    await navigator.clipboard.writeText(window.location.href);
+                    console.log("Copied URL to clipboard.");
+                } catch (err) {
+                    console.log("Cannot copy to clipboard:", err);
+                }
+            });
+
+            const eventSource = new EventSource("/hexz/sse/" + gameId());
+            eventSource.onmessage = (event) => {
+                handleServerEvent(eventSource, JSON.parse(event.data));
+            }
+            eventSource.onerror = (err) => {
+                // Do nothing for now, the Browser will try to reconnect.
+            }
+        }
+
+        function onCanvasClicked(event) {
+            if (gstate.done) {
+                return;  // Do nothing if the game is over.
+            }
+            if (event.button != 0 || event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) {
+                const e = event;
+                console.log(`Click event: button=${e.button} altKey=${e.altKey} metaKey=${e.metaKey} ctrlKey=${e.ctrlKey} shiftKey=${e.shiftKey}`);
+                return;
+            }
+            const c = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
+            ctx.resetTransform();
+            ctx.translate(pad, pad);
+            let a = hexagonSideLength;
+            let b = Math.sqrt(3) * a;
+            let nRows = gstate.board.fields.length;
+            let hex = hexagon(a);
+            for (let i = 0; i < nRows; i++) {
+                for (let j = 0; j < gstate.board.fields[i].length; j++) {
+                    let xOff = (i % 2 == 0) ? 0 : b / 2;
+                    let x = xOff + j * b + b / 2;
+                    let y = i * a * 3 / 2 + a;
+                    ctx.translate(x, y);
+                    if (ctx.isPointInPath(hex, event.offsetX, event.offsetY)) {
+                        clickedOnField(i, j);
+                        break;
+                    }
+                    ctx.translate(-x, -y);
+                }
+            }
+            ctx.resetTransform();
+        }
+
+        function clickedOnField(row, col) {
+            sendMove(row, col);
+        }
+
+        function reset() {
+            redraw();
+        }
+
+        var hexagonSideLength = 30;
+        var pad = 20;
+
+        initialize();
+
+    </script>
+</body>
+
+</html>
