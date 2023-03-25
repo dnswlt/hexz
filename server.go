@@ -18,11 +18,11 @@ import (
 )
 
 type ServerConfig struct {
-	ServerAddress string
-	ServerPort    int
-	DocumentRoot  string
-	GameGcDelay   time.Duration
-	LoginTtl      time.Duration
+	ServerAddress     string
+	ServerPort        int
+	DocumentRoot      string
+	PlayerRemoveDelay time.Duration
+	LoginTtl          time.Duration
 
 	TlsCertChain string
 	TlsPrivKey   string
@@ -60,12 +60,6 @@ type Game struct {
 	done         chan struct{}     // Closed by the game master goroutine when it is done.
 }
 
-// JSON for server responses.
-type Field struct {
-	Value int `json:"value"`
-	Owner int `json:"owner"` // Player number owning this field.
-}
-
 type GameState string
 
 const (
@@ -76,14 +70,7 @@ const (
 	Aborted                GameState = "aborted"
 )
 
-type Board struct {
-	Turn         int       `json:"turn"`
-	Move         int       `json:"move"`
-	LastRevealed int       `json:"-"` // Move at which fields were last revealed
-	Fields       [][]Field `json:"fields"`
-	Score        []int     `json:"score"` // Always two elements
-	State        GameState `json:"state"`
-}
+// JSON for server responses.
 
 type ServerEvent struct {
 	Timestamp     string   `json:"timestamp"`
@@ -93,6 +80,29 @@ type ServerEvent struct {
 	DebugMessage  string   `json:"debugMessage"`
 	ActiveGames   []string `json:"activeGames"`
 	LastEvent     bool     `json:"lastEvent"` // Signals to clients that this is the last event they will receive.
+}
+
+type Board struct {
+	Turn         int       `json:"turn"`
+	Move         int       `json:"move"`
+	LastRevealed int       `json:"-"` // Move at which fields were last revealed
+	Fields       [][]Field `json:"fields"`
+	Score        []int     `json:"score"` // Always two elements
+	State        GameState `json:"state"`
+}
+
+type FieldValue int
+
+const (
+	fvEmpty          FieldValue = 0
+	fvOccupied       FieldValue = 1
+	fvOccupiedHidden FieldValue = 2
+	fvDeadCell       FieldValue = 3
+)
+
+type Field struct {
+	Value FieldValue `json:"value"`
+	Owner int        `json:"owner"` // Player number owning this field.
 }
 
 // JSON for incoming requests from UI clients.
@@ -251,14 +261,21 @@ func gameIdFromPath(path string) string {
 
 func recomputeScore(b *Board) {
 	s := []int{0, 0}
+	inconclusive := 0
 	for _, row := range b.Fields {
 		for _, fld := range row {
 			if fld.Owner > 0 {
 				s[fld.Owner-1]++
+			} else if fld.Value == fvEmpty || fld.Value == fvOccupiedHidden {
+				inconclusive++
 			}
 		}
 	}
 	b.Score = s
+	if inconclusive == 0 {
+		// No more inconclusive cells: game is finished
+		b.State = Finished
+	}
 }
 
 type idx struct {
@@ -320,7 +337,7 @@ func occupyFields(b *Board, playerNum, i, j int) int {
 	for k := 0; k < len(ms); k++ {
 		ms[k] = make([]int8, len(b.Fields[k]))
 	}
-	b.Fields[i][j].Value = 2
+	b.Fields[i][j].Value = fvOccupiedHidden
 	b.Fields[i][j].Owner = playerNum
 	areaSizes := make(map[int8]int)
 	var ns [6]idx
@@ -356,7 +373,7 @@ func occupyFields(b *Board, playerNum, i, j int) int {
 			for c := 0; c < len(b.Fields[r]); c++ {
 				if ms[r][c] == minN {
 					numFields++
-					b.Fields[r][c].Value = 1
+					b.Fields[r][c].Value = fvOccupied
 					b.Fields[r][c].Owner = playerNum
 				}
 			}
@@ -365,13 +382,60 @@ func occupyFields(b *Board, playerNum, i, j int) int {
 	return numFields
 }
 
+func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
+	turn := board.Turn
+	p := players[turn-1]
+	if p == nil || p.Id != e.PlayerId {
+		// Only allow moves by players whose turn it is.
+		return false
+	}
+	if !board.valid(idx{e.Row, e.Col}) {
+		// Invalid field indices.
+		return false
+	}
+	numOccupiedFields := 0
+	conflict := false
+	if board.Fields[e.Row][e.Col].Value > 0 {
+		if board.Fields[e.Row][e.Col].Value == fvOccupiedHidden && board.Fields[e.Row][e.Col].Owner != turn {
+			// Conflicting hidden moves. Leads to dead cell.
+			board.Fields[e.Row][e.Col].Value = fvDeadCell
+			board.Fields[e.Row][e.Col].Owner = 0
+			board.Move++
+			conflict = true
+		} else {
+			// Cannot make move on already occupied field.
+			return false
+		}
+	} else {
+		// Free cell: occupy it.
+		numOccupiedFields = occupyFields(board, turn, e.Row, e.Col)
+		board.Move++
+	}
+	// Update turn.
+	board.Turn++
+	if board.Turn > 2 {
+		board.Turn = 1
+	}
+	if numOccupiedFields > 1 || board.Move-board.LastRevealed == 4 || conflict {
+		// Reveal hidden moves.
+		for r := 0; r < len(board.Fields); r++ {
+			for c := 0; c < len(board.Fields[r]); c++ {
+				if board.Fields[r][c].Value == fvOccupiedHidden {
+					board.Fields[r][c].Value = fvOccupied
+				}
+			}
+		}
+		board.LastRevealed = board.Move
+	}
+	recomputeScore(board)
+	return true
+}
+
 // Controller function for a running game. To be executed by a dedicated goroutine.
 func gameMaster(game *Game) {
-	const numPlayers = 2
 	defer close(game.done)
 	defer deleteGame(game.Id)
 	log.Printf("New gameMaster started for game %s", game.Id)
-	gcTimeout := serverConfig.GameGcDelay
 	board := NewBoard()
 	eventListeners := make(map[string]chan ServerEvent)
 	defer func() {
@@ -381,8 +445,8 @@ func gameMaster(game *Game) {
 		}
 	}()
 	var players [2]*Player
-	playerGcCancel := make(map[string]chan struct{})
-	gcChan := make(chan string)
+	playerRmCancel := make(map[string]chan struct{})
+	playerRm := make(chan string)
 	broadcast := func(e ServerEvent) {
 		e.Timestamp = time.Now().Format(time.RFC3339)
 		for _, ch := range eventListeners {
@@ -409,11 +473,10 @@ func gameMaster(game *Game) {
 						players[playerIdx] = e.Player
 						break
 					} else if players[playerIdx].Id == e.Player.Id {
-						// Player reconnected. Cancel its GC.
-						if cancel, ok := playerGcCancel[e.Player.Id]; ok {
-							log.Printf("Player %s reconnected. Cancelling GC.", e.Player)
+						// Player reconnected. Cancel its removal.
+						if cancel, ok := playerRmCancel[e.Player.Id]; ok {
 							close(cancel)
-							delete(playerGcCancel, e.Player.Id)
+							delete(playerRmCancel, e.Player.Id)
 						}
 						break
 					}
@@ -428,89 +491,59 @@ func gameMaster(game *Game) {
 					announcement := fmt.Sprintf("Welcome %s! Waiting for player 2.", e.Player.Name)
 					broadcast(ServerEvent{Announcements: []string{announcement}})
 				} else if role == 2 {
-					announcement := fmt.Sprintf("The game %s vs %s begins!", players[0].Name, players[1].Name)
+					announcement := fmt.Sprintf("Let the game %s vs %s begin!", players[0].Name, players[1].Name)
 					broadcast(ServerEvent{Announcements: []string{announcement}})
 				}
 			case ControlEventUnregister:
 				delete(eventListeners, e.PlayerId)
-				if _, ok := playerGcCancel[e.PlayerId]; ok {
+				if _, ok := playerRmCancel[e.PlayerId]; ok {
 					// A repeated unregister should not happen. If it does, we ignore
 					// it and just wait for the existing GC "callback" to happen.
 					break
 				}
 				// Remove player after timeout. Don't remove them immediately as they might
 				// just be reloading their page and rejoin soon.
-				cancelChan := make(chan struct{})
-				playerGcCancel[e.PlayerId] = cancelChan
+				cancel := make(chan struct{})
+				playerRmCancel[e.PlayerId] = cancel
 				go func(playerId string) {
-					t := time.After(gcTimeout)
+					t := time.After(serverConfig.PlayerRemoveDelay)
 					select {
 					case <-t:
-						gcChan <- playerId
-					case <-cancelChan:
+						playerRm <- playerId
+					case <-cancel:
 					}
 				}(e.PlayerId)
 			case ControlEventMove:
-				turn := board.Turn
-				p := players[turn-1]
-				if p == nil || p.Id != e.PlayerId {
-					// Only allow moves by players whose turn it is.
-					break
-				}
-				if !board.valid(idx{e.Row, e.Col}) {
-					// Invalid field indices.
-					break
-				}
-				numOccupiedFields := 0
-				conflict := false
-				if board.Fields[e.Row][e.Col].Value > 0 {
-					if board.Fields[e.Row][e.Col].Value == 2 && board.Fields[e.Row][e.Col].Owner != turn {
-						// Conflicting hidden moves. Leads to dead cell.
-						board.Fields[e.Row][e.Col].Value = 3
-						board.Fields[e.Row][e.Col].Owner = 0
-						board.Move++
-						conflict = true
-					} else {
-						// Cannot make move on already occupied field.
-						break
-					}
-				} else {
-					// Free cell: occupy it.
-					numOccupiedFields = occupyFields(board, turn, e.Row, e.Col)
-					board.Move++
-				}
-				// Update turn.
-				board.Turn++
-				if board.Turn > numPlayers {
-					board.Turn = 1
-				}
-				if numOccupiedFields > 1 || board.Move-board.LastRevealed == 4 || conflict {
-					// Reveal hidden moves.
-					for r := 0; r < len(board.Fields); r++ {
-						for c := 0; c < len(board.Fields[r]); c++ {
-							if board.Fields[r][c].Value == 2 {
-								board.Fields[r][c].Value = 1
-							}
+				if makeMove(e, board, players) {
+					announcements := []string{}
+					if board.State == Finished {
+						won := "~~ nobody ~~"
+						if board.Score[0] > board.Score[1] {
+							won = players[0].Name
+						} else if board.Score[1] > board.Score[0] {
+							won = players[1].Name
 						}
+						msg := fmt.Sprintf("&#127942; &#127942; &#127942; %s wins &#127942; &#127942; &#127942;", won)
+						announcements = append(announcements, msg)
 					}
-					board.LastRevealed = board.Move
+					broadcast(ServerEvent{Board: board, Announcements: announcements})
 				}
-				recomputeScore(board)
-				broadcast(ServerEvent{Board: board})
 			case ControlEventReset:
 				board = NewBoard()
 				broadcast(ServerEvent{Board: board})
 			}
 		case <-tick:
 			broadcast(ServerEvent{ActiveGames: listRecentGames(5), DebugMessage: "ping"})
-		case playerId := <-gcChan:
-			if _, ok := playerGcCancel[playerId]; !ok {
-				// Ignore zombie GC message. Player has already reconnected.
-				log.Printf("Ignoring GC message for player %s in game %s", playerId, game.Id)
-			}
+		case playerId := <-playerRm:
 			log.Printf("Player %s has left game %s. Game over.", playerId, game.Id)
+			name := "?"
+			for i := 0; i < len(players); i++ {
+				if players[i] != nil && playerId == players[i].Id {
+					name = players[i].Name
+				}
+			}
 			broadcast(ServerEvent{
-				Announcements: []string{"A player left the game. Game over."},
+				Announcements: []string{fmt.Sprintf("Player %s left the game &#128546;. Game over.", name)},
 			})
 			return
 		}
@@ -845,9 +878,8 @@ func updateLoggedInPlayers() {
 		period = time.Duration(5) * time.Second
 	}
 	for {
-
-		t := time.NewTicker(period)
-		<-t.C
+		t := time.After(period)
+		<-t
 		activity := false
 		now := time.Now()
 		logoutThresh := now.Add(-serverConfig.LoginTtl)

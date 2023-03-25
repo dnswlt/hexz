@@ -15,8 +15,8 @@ func main() {
 	flag.StringVar(&cfg.ServerAddress, "address", "", "Address on which to listen")
 	flag.IntVar(&cfg.ServerPort, "port", 8084, "Port on which to listen")
 	flag.StringVar(&cfg.DocumentRoot, "document-root", ".", "Root directory from which to serve files")
-	flag.DurationVar(&cfg.GameGcDelay, "gcdelay", time.Duration(5)*time.Second,
-		"Seconds to wait before deleting a disconnected player from a game")
+	flag.DurationVar(&cfg.PlayerRemoveDelay, "remove-delay", time.Duration(60)*time.Second,
+		"Seconds to wait before removing a disconnected player from a game")
 	flag.DurationVar(&cfg.LoginTtl, "login-ttl", time.Duration(24)*time.Hour,
 		"Seconds to wait before deleting a disconnected player from a game")
 	flag.BoolVar(&cfg.DebugMode, "debug", false,
