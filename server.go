@@ -105,7 +105,8 @@ type ResetRequest struct {
 }
 
 type StatuszResponse struct {
-	NumOngoingGames int `json:"numOngoingGames"`
+	NumOngoingGames    int
+	NumLoggedInPlayers int
 }
 
 type Player struct {
@@ -573,7 +574,7 @@ func handleLoginPage(w http.ResponseWriter, r *http.Request) {
 	html, err := readFile(loginHtmlFilename)
 	if err != nil {
 		http.Error(w, "Failed to load login screen", http.StatusInternalServerError)
-		panic(err.Error())
+		log.Fatal("Cannot read login HTML page: ", err.Error())
 	}
 	w.Header().Set("Content-Type", "text/html")
 	w.Write(html)
@@ -672,7 +673,7 @@ func handleMove(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleReset(w http.ResponseWriter, r *http.Request) {
-	player, err := validatePostRequest(r)
+	p, err := validatePostRequest(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
@@ -687,7 +688,7 @@ func handleReset(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
 		return
 	}
-	game.sendEvent(ControlEventReset{playerId: player.Id, message: req.Message})
+	game.sendEvent(ControlEventReset{playerId: p.Id, message: req.Message})
 
 }
 
@@ -768,7 +769,11 @@ func handleStatusz(w http.ResponseWriter, r *http.Request) {
 	ongoingGamesMut.Lock()
 	resp.NumOngoingGames = len(ongoingGames)
 	ongoingGamesMut.Unlock()
+	loggedInPlayersMut.Lock()
+	resp.NumLoggedInPlayers = len(loggedInPlayers)
+	loggedInPlayersMut.Unlock()
 	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
 	if err := enc.Encode(resp); err != nil {
 		http.Error(w, "Serialization error", http.StatusInternalServerError)
 		panic(fmt.Sprintf("Cannot serialize my own structs?! %s", err))
@@ -832,7 +837,7 @@ func saveUserDatabase(players []Player) {
 	log.Printf("Saved user db (%d users)", len(players))
 }
 
-func userMaintenance() {
+func updateLoggedInPlayers() {
 	lastIteration := time.Now()
 	period := time.Duration(5) * time.Minute
 	if serverConfig.DebugMode {
@@ -900,7 +905,7 @@ func Serve(cfg *ServerConfig) {
 
 	loadUserDatabase()
 	// Start login GC routine
-	go userMaintenance()
+	go updateLoggedInPlayers()
 
 	if cfg.TlsCertChain != "" && cfg.TlsPrivKey != "" {
 		log.Fatal(http.ListenAndServeTLS(addr, cfg.TlsCertChain, cfg.TlsPrivKey, nil))
