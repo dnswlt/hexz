@@ -18,12 +18,15 @@ import (
 )
 
 type ServerConfig struct {
-	ServerAddress      string
-	ServerPort         int
-	DocumentRoot       string
-	GameGcDelaySeconds int
-	TlsCertChain       string
-	TlsPrivKey         string
+	ServerAddress string
+	ServerPort    int
+	DocumentRoot  string
+	GameGcDelay   time.Duration
+	LoginTtl      time.Duration
+
+	TlsCertChain string
+	TlsPrivKey   string
+	DebugMode    bool
 }
 
 var (
@@ -111,7 +114,7 @@ type Player struct {
 	LastActive time.Time
 }
 
-func LookupPlayer(playerId string) *Player {
+func lookupPlayer(playerId string) *Player {
 	loggedInPlayersMut.Lock()
 	defer loggedInPlayersMut.Unlock()
 
@@ -123,7 +126,7 @@ func LookupPlayer(playerId string) *Player {
 	return p
 }
 
-func LoginPlayer(playerId string, name string) bool {
+func loginPlayer(playerId string, name string) bool {
 	loggedInPlayersMut.Lock()
 	defer loggedInPlayersMut.Unlock()
 
@@ -367,7 +370,7 @@ func gameMaster(game *Game) {
 	defer close(game.done)
 	defer deleteGame(game.Id)
 	log.Printf("New gameMaster started for game %s", game.Id)
-	gcTimeout := time.Duration(serverConfig.GameGcDelaySeconds) * time.Second
+	gcTimeout := serverConfig.GameGcDelay
 	board := NewBoard()
 	eventListeners := make(map[string]chan ServerEvent)
 	defer func() {
@@ -599,7 +602,7 @@ func handleLoginRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	playerId := generatePlayerId()
-	if !LoginPlayer(playerId, name) {
+	if !loginPlayer(playerId, name) {
 		http.Error(w, "Cannot log in right now", http.StatusPreconditionFailed)
 	}
 	cookie := &http.Cookie{
@@ -642,7 +645,7 @@ func lookupPlayerFromCookie(r *http.Request) (*Player, error) {
 	if err != nil {
 		return nil, fmt.Errorf("missing cookie")
 	}
-	p := LookupPlayer(cookie.Value)
+	p := lookupPlayer(cookie.Value)
 	if p == nil {
 		return nil, fmt.Errorf("player not found")
 	}
@@ -815,7 +818,7 @@ func loadUserDatabase() {
 	}
 }
 
-func saveUserDatabase(players []*Player) {
+func saveUserDatabase(players []Player) {
 	w, err := os.Create(userDatabaseFilename)
 	if err != nil {
 		log.Print("userMaintenance: cannot save user db: ", err.Error())
@@ -831,12 +834,18 @@ func saveUserDatabase(players []*Player) {
 
 func userMaintenance() {
 	lastIteration := time.Now()
+	period := time.Duration(5) * time.Minute
+	if serverConfig.DebugMode {
+		// Clean up active users more frequently in debug mode.
+		period = time.Duration(5) * time.Second
+	}
 	for {
-		t := time.NewTicker(time.Duration(10) * time.Second)
+
+		t := time.NewTicker(period)
 		<-t.C
 		activity := false
 		now := time.Now()
-		logoutThresh := now.Add(time.Duration(-1) * time.Hour)
+		logoutThresh := now.Add(-serverConfig.LoginTtl)
 		loggedInPlayersMut.Lock()
 		del := []string{}
 		for pId, p := range loggedInPlayers {
@@ -855,10 +864,14 @@ func userMaintenance() {
 			log.Printf("Logged out player %s", pId)
 		}
 		if activity || len(del) > 0 {
-			players := []*Player{}
 			loggedInPlayersMut.Lock()
+			// Create copies of the players to avoid data race during serialization.
+			// (LastActive can get updated at any time by other goroutines.)
+			players := make([]Player, len(loggedInPlayers))
+			i := 0
 			for _, p := range loggedInPlayers {
-				players = append(players, p)
+				players[i] = *p
+				i++
 			}
 			loggedInPlayersMut.Unlock()
 			saveUserDatabase(players)
