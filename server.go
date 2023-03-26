@@ -104,25 +104,34 @@ type Board struct {
 	State        GameState `json:"state"`
 }
 
-type FieldValue int
+type CellType int
 
 const (
-	fvEmpty          FieldValue = 0
-	fvOccupied       FieldValue = 1
-	fvOccupiedHidden FieldValue = 2
-	fvDeadCell       FieldValue = 3
+	cellNormal CellType = iota
+	cellDead
+	cellFire
+	cellFlag
+	cellPest
+	cellDeath
 )
 
+func (c CellType) valid() bool {
+	return c >= cellNormal && c <= cellDeath
+}
+
 type Field struct {
-	Value FieldValue `json:"value"`
-	Owner int        `json:"owner"` // Player number owning this field.
+	Type   CellType `json:"type"`
+	Owner  int      `json:"owner"` // Player number owning this field. 0 for empty fields.
+	Hidden bool     `json:"hidden"`
 }
 
 // JSON for incoming requests from UI clients.
 type MoveRequest struct {
-	Row int `json:"row"`
-	Col int `json:"col"`
+	Row  int      `json:"row"`
+	Col  int      `json:"col"`
+	Type CellType `json:"type"`
 }
+
 type ResetRequest struct {
 	Message string `json:"message"`
 }
@@ -186,6 +195,7 @@ type ControlEventMove struct {
 	PlayerId string
 	Row      int
 	Col      int
+	Type     CellType
 }
 
 type ControlEventReset struct {
@@ -272,20 +282,26 @@ func gameIdFromPath(path string) string {
 	return ""
 }
 
-func recomputeScore(b *Board) {
+func (f *Field) occupied() bool {
+	return f.Type == cellDead || f.Owner > 0
+}
+
+func recomputeScoreAndState(b *Board) {
 	s := []int{0, 0}
-	inconclusive := 0
+	openCells := 0
 	for _, row := range b.Fields {
 		for _, fld := range row {
-			if fld.Owner > 0 {
+			if fld.Owner > 0 && !fld.Hidden {
 				s[fld.Owner-1]++
-			} else if fld.Value == fvEmpty || fld.Value == fvOccupiedHidden {
-				inconclusive++
+			}
+			if fld.Owner == 0 && fld.Type != cellDead || fld.Hidden {
+				// Don't finish the game until all cells are owned and not hidden, or dead.
+				openCells++
 			}
 		}
 	}
 	b.Score = s
-	if inconclusive == 0 {
+	if openCells == 0 {
 		// No more inconclusive cells: game is finished
 		b.State = Finished
 	}
@@ -342,57 +358,89 @@ func floodFill(b *Board, x idx, cb func(idx) bool) {
 	}
 }
 
-func occupyFields(b *Board, playerNum, i, j int) int {
-	// Create a copy of the board that indicates which neighboring cell of (i, j)
-	// it shares the free or opponent's area with.
+func occupyFields(b *Board, playerNum, i, j int, ct CellType) int {
+	// Create a board-shaped 2d array that indicates which neighboring cell of (i, j)
+	// it shares the free area with.
 	// Then find the smallest of these areas and occupy every free cell in it.
 	ms := make([][]int8, len(b.Fields))
 	for k := 0; k < len(ms); k++ {
 		ms[k] = make([]int8, len(b.Fields[k]))
+		for m := 0; m < len(ms[k]); m++ {
+			ms[k][m] = -1
+		}
 	}
-	b.Fields[i][j].Value = fvOccupiedHidden
 	b.Fields[i][j].Owner = playerNum
-	areaSizes := make(map[int8]int)
+	b.Fields[i][j].Type = ct
+	b.Fields[i][j].Hidden = true
+	var areas [6]struct {
+		size     int
+		numFlags [2]int
+	}
 	var ns [6]idx
 	n := b.neighbors(idx{i, j}, ns[:])
 	for k := 0; k < n; k++ {
-		k1 := int8(k + 1)
 		floodFill(b, ns[k], func(x idx) bool {
-			if ms[x.r][x.c] > 0 {
+			if ms[x.r][x.c] > -1 {
 				// Already seen.
 				return false
 			}
-			if b.Fields[x.r][x.c].Value > 0 {
+			if b.Fields[x.r][x.c].occupied() {
 				// Occupied fields act as boundaries.
+				if b.Fields[x.r][x.c].Type == cellFlag {
+					// Count number of flags at the area boundary.
+					areas[k].numFlags[b.Fields[x.r][x.c].Owner-1]++
+				}
 				return false
 			}
 			// Mark field as visited in k-th loop iteration.
-			ms[x.r][x.c] = k1
-			areaSizes[k1]++
+			ms[x.r][x.c] = int8(k)
+			areas[k].size++
 			return true
 		})
 	}
 	// If there is more than one area, we know we introduced a split, since the areas
 	// would have been connected by the previously free cell (i, j).
-	numFields := 0
-	if len(areaSizes) > 1 {
-		minN := int8(0)
-		for n, cnt := range areaSizes {
-			if minN == 0 || areaSizes[minN] > cnt {
-				minN = n
+	numFields := 1
+	numAreas := 0
+	for k := 0; k < len(areas); k++ {
+		if areas[k].size > 0 {
+			numAreas++
+		}
+	}
+	if numAreas > 1 {
+		// Find the minimum area to be filled.
+		minK := int8(-1)
+		for k := 0; k < len(areas); k++ {
+			if areas[k].size > 0 && (minK == -1 || areas[minK].size > areas[k].size) {
+				minK = int8(k)
 			}
+		}
+		// Now assign fields to player with most flags, or to current player on a tie.
+		occupator := playerNum
+		if areas[minK].numFlags[2-playerNum] > areas[minK].numFlags[playerNum-1] {
+			log.Print("Opponent has a FLAG")
+			occupator = 3 - playerNum
 		}
 		for r := 0; r < len(b.Fields); r++ {
 			for c := 0; c < len(b.Fields[r]); c++ {
-				if ms[r][c] == minN {
+				if ms[r][c] == minK {
 					numFields++
-					b.Fields[r][c].Value = fvOccupied
-					b.Fields[r][c].Owner = playerNum
+					b.Fields[r][c].Owner = occupator
 				}
 			}
 		}
 	}
 	return numFields
+}
+
+func applyFireEffect(b *Board, r, c int) {
+	var ns [6]idx
+	n := b.neighbors(idx{r, c}, ns[:])
+	for i := 0; i < n; i++ {
+		b.Fields[ns[i].r][ns[i].c].Owner = 0
+		b.Fields[ns[i].r][ns[i].c].Hidden = false
+		b.Fields[ns[i].r][ns[i].c].Type = cellDead
+	}
 }
 
 func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
@@ -402,16 +450,16 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 		// Only allow moves by players whose turn it is.
 		return false
 	}
-	if !board.valid(idx{e.Row, e.Col}) {
-		// Invalid field indices.
+	if !board.valid(idx{e.Row, e.Col}) || e.Type == cellDead {
+		// Invalid move.
 		return false
 	}
 	numOccupiedFields := 0
 	conflict := false
-	if board.Fields[e.Row][e.Col].Value > 0 {
-		if board.Fields[e.Row][e.Col].Value == fvOccupiedHidden && board.Fields[e.Row][e.Col].Owner != turn {
+	if board.Fields[e.Row][e.Col].occupied() {
+		if board.Fields[e.Row][e.Col].Hidden && board.Fields[e.Row][e.Col].Owner == (3-turn) {
 			// Conflicting hidden moves. Leads to dead cell.
-			board.Fields[e.Row][e.Col].Value = fvDeadCell
+			board.Fields[e.Row][e.Col].Type = cellDead
 			board.Fields[e.Row][e.Col].Owner = 0
 			board.Move++
 			conflict = true
@@ -421,7 +469,7 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 		}
 	} else {
 		// Free cell: occupy it.
-		numOccupiedFields = occupyFields(board, turn, e.Row, e.Col)
+		numOccupiedFields = occupyFields(board, turn, e.Row, e.Col, e.Type)
 		board.Move++
 	}
 	// Update turn.
@@ -433,14 +481,17 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 		// Reveal hidden moves.
 		for r := 0; r < len(board.Fields); r++ {
 			for c := 0; c < len(board.Fields[r]); c++ {
-				if board.Fields[r][c].Value == fvOccupiedHidden {
-					board.Fields[r][c].Value = fvOccupied
+				f := &board.Fields[r][c]
+				f.Hidden = false
+				if f.Type == cellFire {
+					applyFireEffect(board, r, c)
 				}
 			}
 		}
+
 		board.LastRevealed = board.Move
 	}
-	recomputeScore(board)
+	recomputeScoreAndState(board)
 	return true
 }
 
@@ -708,6 +759,11 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 	var req MoveRequest
 	if err := dec.Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !req.Type.valid() {
+		http.Error(w, "Invalid cell type", http.StatusBadRequest)
+		return
 	}
 	gameId := gameIdFromPath(r.URL.Path)
 	game := s.lookupGame(gameId)
@@ -715,7 +771,7 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
 		return
 	}
-	game.sendEvent(ControlEventMove{PlayerId: player.Id, Row: req.Row, Col: req.Col})
+	game.sendEvent(ControlEventMove{PlayerId: player.Id, Row: req.Row, Col: req.Col, Type: req.Type})
 }
 
 func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {

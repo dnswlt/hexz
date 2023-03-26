@@ -74,7 +74,7 @@
                 grid: '#cbcbcb',
                 background: '#1e1e1e',
                 players: ['#255ab4', '#f8d748'],
-                preliminaryMoves: ['#92acd9', '#fbeba3'], // 50% alpha of players
+                hiddenMoves: ['#92acd9', '#fbeba3'], // 50% alpha of players
                 deadCell: '#d03d12',
                 plagueCell: '#007642',
             },
@@ -94,6 +94,7 @@
                 body: JSON.stringify({
                     row: row,
                     col: col,
+                    type: gstate.selectedCellType,
                 }),
             })
         }
@@ -248,26 +249,38 @@
             death: "M 33.3333 45.2381 C 33.3333 47.8681 31.2014 50 28.5714 50 H 9.5238 H -9.5238 H -28.5714 C -31.2014 50 -33.3333 47.8681 -33.3333 45.2381 V 34.5238 C -33.3333 29.9214 -37.0643 26.1905 -41.6667 26.1905 C -44.9541 26.1905 -47.619 23.5257 -47.619 20.2381 V -2.381 C -47.619 -28.6802 -26.2993 -50 0 -50 C 26.299 -50 47.619 -28.6802 47.619 -2.381 V 20.2381 C 47.619 23.5257 44.9543 26.1905 41.6667 26.1905 C 37.0643 26.1905 33.3333 29.9214 33.3333 34.5238 V 45.2381 Z M 23.8095 40.4762 V 34.5238 C 23.8095 25.8848 29.9443 18.6786 38.0952 17.0238 V -2.381 C 38.0952 -23.4204 21.0395 -40.4762 0 -40.4762 C -21.0394 -40.4762 -38.0952 -23.4204 -38.0952 -2.381 V 17.0238 C -29.9444 18.6786 -23.8095 25.8848 -23.8095 34.5238 V 40.4762 H -14.2857 V 30.9524 C -14.2857 28.3224 -12.1538 26.1905 -9.5238 26.1905 C -6.8938 26.1905 -4.7619 28.3224 -4.7619 30.9524 V 40.4762 H 4.7619 V 30.9524 C 4.7619 28.3224 6.8938 26.1905 9.5238 26.1905 C 12.1538 26.1905 14.2857 28.3224 14.2857 30.9524 V 40.4762 H 23.8095 Z M -4.7619 4.7619 C -4.7619 11.3367 -16.0368 16.6667 -22.6072 16.6667 C -28.6443 16.6667 -28.6092 12.1667 -28.5638 6.3362 V 6.3357 C -28.5598 5.821 -28.5557 5.2957 -28.5557 4.7619 C -28.5557 -1.8129 -23.2292 -7.1429 -16.6588 -7.1429 C -10.0883 -7.1429 -4.7619 -1.8129 -4.7619 4.7619 Z M 28.5638 6.3362 C 28.5595 5.821 28.5557 5.2957 28.5557 4.7619 C 28.5557 -1.8129 23.229 -7.1429 16.6586 -7.1429 C 10.0881 -7.1429 4.7619 -1.8129 4.7619 4.7619 C 4.7619 11.3367 16.0367 16.6667 22.6071 16.6667 C 28.6443 16.6667 28.609 12.1667 28.5638 6.3362 Z",
         };
 
-        // Order matters! Elements in cells are ordered by their numeric code
-        // as it is used in board field types.
-        const cellTypes = [
+        // Cell types. Keep in sync with constants used by server.
+        const cellNormal = 0;
+        const cellDead = 1;
+        const cellFire = 2;
+        const cellFlag = 3;
+        const cellPest = 4;
+        const cellDeath = 5;
+
+        const cellTypeToPathMap = [];
+        cellTypeToPathMap[cellFire] = new Path2D(cellTypePaths.fire);
+        cellTypeToPathMap[cellFlag] = new Path2D(cellTypePaths.flag);
+        cellTypeToPathMap[cellPest] = new Path2D(cellTypePaths.pest);
+        cellTypeToPathMap[cellDeath] = new Path2D(cellTypePaths.death);
+
+        const buttonCells = [
             {
-                name: 'normal',
+                type: cellNormal,
             },
             {
-                name: 'fire',
+                type: cellFire,
                 symbol: new Path2D(cellTypePaths.fire),
             },
             {
-                name: 'flag',
+                type: cellFlag,
                 symbol: new Path2D(cellTypePaths.flag),
             },
             {
-                name: 'pest',
+                type: cellPest,
                 symbol: new Path2D(cellTypePaths.pest),
             },
             {
-                name: 'death',
+                type: cellDeath,
                 symbol: new Path2D(cellTypePaths.death),
             },
         ];
@@ -287,14 +300,27 @@
                     let y = i * a * 3 / 2 + a;
                     let fld = gstate.board.fields[i][j];
                     ctx.translate(x, y);
-                    if (fld.value == 1) {
-                        ctx.fillStyle = styles.colors.players[fld.owner - 1];
-                        ctx.fill(hex);
-                    } else if (fld.value == 2 && gstate.role == 0 || gstate.role == fld.owner) {
-                        // Only show hidden moves of this player.
-                        ctx.fillStyle = styles.colors.preliminaryMoves[fld.owner - 1];
-                        ctx.fill(hex);
-                    } else if (fld.value == 3) {
+                    if (fld.owner > 0) {
+                        if (fld.hidden && (fld.owner == gstate.role || gstate.role == 0)) {
+                            // Only this player and spectators can see hidden cells.
+                            ctx.fillStyle = styles.colors.hiddenMoves[fld.owner - 1];
+                            ctx.fill(hex);
+                        } else if (!fld.hidden) {
+                            ctx.fillStyle = styles.colors.players[fld.owner - 1];
+                            ctx.fill(hex);
+                        }
+                        if (fld.type != cellNormal) {
+                            // Draw icon on top.
+                            let symbol = cellTypeToPathMap[String(fld.type)];
+                            if (symbol) {
+                                ctx.save();
+                                ctx.scale(b / 50 / 3.5, b / 50 / 3.5);
+                                ctx.fillStyle = styles.colors.background;
+                                ctx.fill(symbol, 'evenodd');
+                                ctx.restore();
+                            }
+                        }
+                    } else if (fld.type == cellDead) {
                         ctx.fillStyle = styles.colors.deadCell;
                         ctx.fill(hex);
                     }
@@ -318,14 +344,14 @@
             // Draw bottom row with cell types to choose from.
             let bottomRow = nRows + 1;
             let xOff = (bottomRow % 2 == 0) ? 0 : b / 2;
-            for (let j = 0; j < cellTypes.length; j++) {
+            for (let j = 0; j < buttonCells.length; j++) {
                 let x = xOff + (j * 1.3) * b + b / 2;
                 let y = bottomRow * a * 3 / 2 + a;
                 ctx.save();
                 ctx.translate(x, y);
                 // Draw cell
-                let fillColor = styles.colors.preliminaryMoves[gstate.role - 1];
-                if (gstate.selectedCellType == j) {
+                let fillColor = styles.colors.hiddenMoves[gstate.role - 1];
+                if (gstate.selectedCellType == buttonCells[j].type) {
                     fillColor = styles.colors.players[gstate.role - 1];
                 }
                 ctx.fillStyle = fillColor;
@@ -333,12 +359,12 @@
                 ctx.strokeStyle = styles.colors.grid;
                 ctx.stroke(hex);
                 // Draw symbol on top
-                if (cellTypes[j].symbol) {
+                if (buttonCells[j].symbol) {
                     // Every symbol is expected to be bounded by a ((-50, -50), (50, 50)) square.
                     // 3.5 was chosen manually, icons "look right" at that scaling factor.
                     ctx.scale(b / 50 / 3.5, b / 50 / 3.5);
                     ctx.fillStyle = styles.colors.background;
-                    ctx.fill(cellTypes[j].symbol, 'evenodd');
+                    ctx.fill(buttonCells[j].symbol, 'evenodd');
                 }
                 ctx.restore();
             }
@@ -392,6 +418,7 @@
 
             const eventSource = new EventSource("/hexz/sse/" + gameId());
             eventSource.onmessage = (event) => {
+                // console.log(`Received event (${event.data.length} bytes)`);
                 handleServerEvent(eventSource, JSON.parse(event.data));
             }
             eventSource.onerror = (err) => {
@@ -434,12 +461,12 @@
             // Detect a click on one of the cell buttons below the board.
             let buttonRow = nRows + 1;
             let xOff = (buttonRow % 2 == 0) ? 0 : b / 2;
-            for (let j = 0; j < cellTypes.length; j++) {
+            for (let j = 0; j < buttonCells.length; j++) {
                 let x = xOff + (j * 1.3) * b + b / 2;
                 let y = buttonRow * a * 3 / 2 + a;
                 ctx.translate(x, y);
                 if (ctx.isPointInPath(hex, event.offsetX, event.offsetY)) {
-                    clickedOnCellButton(j);
+                    clickedOnCellButton(buttonCells[j].type);
                     break;
                 }
                 ctx.translate(-x, -y);
@@ -448,6 +475,8 @@
 
         function clickedOnField(row, col) {
             sendMove(row, col);
+            // Revert selection to normal to avoid accidentally placing special cells.
+            gstate.selectedCellType = cellNormal;
         }
 
         function clickedOnCellButton(cellType) {
