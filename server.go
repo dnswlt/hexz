@@ -106,9 +106,10 @@ type Board struct {
 }
 
 type Field struct {
-	Type   CellType `json:"type"`
-	Owner  int      `json:"owner"` // Player number owning this field. 0 for empty fields.
-	Hidden bool     `json:"hidden"`
+	Type         CellType `json:"type"`
+	Owner        int      `json:"owner"` // Player number owning this field. 0 for unowned fields.
+	Hidden       bool     `json:"hidden"`
+	LastModified int      `json:"-"` // Move on which this field was last modified.
 }
 
 type CellType int
@@ -273,10 +274,11 @@ func NewBoard() *Board {
 	}
 	initialPieces := func() map[CellType]int {
 		return map[CellType]int{
-			cellFire:  1,
-			cellFlag:  1,
-			cellPest:  0,
-			cellDeath: 0,
+			cellNormal: -1, // Unlimited
+			cellFire:   1,
+			cellFlag:   1,
+			cellPest:   0,
+			cellDeath:  0,
 		}
 	}
 	return &Board{
@@ -389,6 +391,7 @@ func occupyFields(b *Board, playerNum, i, j int, ct CellType) int {
 	b.Fields[i][j].Owner = playerNum
 	b.Fields[i][j].Type = ct
 	b.Fields[i][j].Hidden = true
+	b.Fields[i][j].LastModified = b.Move
 	var areas [6]struct {
 		size     int
 		numFlags [2]int
@@ -435,14 +438,14 @@ func occupyFields(b *Board, playerNum, i, j int, ct CellType) int {
 		// Now assign fields to player with most flags, or to current player on a tie.
 		occupator := playerNum
 		if areas[minK].numFlags[2-playerNum] > areas[minK].numFlags[playerNum-1] {
-			log.Print("Opponent has a FLAG")
-			occupator = 3 - playerNum
+			occupator = 3 - playerNum // The other player has more flags
 		}
 		for r := 0; r < len(b.Fields); r++ {
 			for c := 0; c < len(b.Fields[r]); c++ {
 				if ms[r][c] == minK {
 					numFields++
 					b.Fields[r][c].Owner = occupator
+					b.Fields[r][c].LastModified = b.Move
 				}
 			}
 		}
@@ -454,9 +457,11 @@ func applyFireEffect(b *Board, r, c int) {
 	var ns [6]idx
 	n := b.neighbors(idx{r, c}, ns[:])
 	for i := 0; i < n; i++ {
-		b.Fields[ns[i].r][ns[i].c].Owner = 0
-		b.Fields[ns[i].r][ns[i].c].Hidden = false
-		b.Fields[ns[i].r][ns[i].c].Type = cellDead
+		f := &b.Fields[ns[i].r][ns[i].c]
+		f.Owner = 0
+		f.Hidden = false
+		f.Type = cellDead
+		f.LastModified = b.Move
 	}
 }
 
@@ -480,9 +485,11 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 	if board.Fields[e.Row][e.Col].occupied() {
 		if board.Fields[e.Row][e.Col].Hidden && board.Fields[e.Row][e.Col].Owner == (3-turn) {
 			// Conflicting hidden moves. Leads to dead cell.
-			board.Fields[e.Row][e.Col].Type = cellDead
-			board.Fields[e.Row][e.Col].Owner = 0
 			board.Move++
+			f := &board.Fields[e.Row][e.Col]
+			f.Type = cellDead
+			f.Owner = 0
+			f.LastModified = board.Move
 			conflict = true
 		} else {
 			// Cannot make move on already occupied field.
@@ -490,8 +497,8 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 		}
 	} else {
 		// Free cell: occupy it.
-		numOccupiedFields = occupyFields(board, turn, e.Row, e.Col, e.Type)
 		board.Move++
+		numOccupiedFields = occupyFields(board, turn, e.Row, e.Col, e.Type)
 	}
 	board.Resources[turn-1].NumPieces[e.Type]--
 	// Update turn.
@@ -500,17 +507,27 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 		board.Turn = 1
 	}
 	if numOccupiedFields > 1 || board.Move-board.LastRevealed == 4 || conflict {
-		// Reveal hidden moves.
+		// Reveal hidden moves and apply effects.
 		for r := 0; r < len(board.Fields); r++ {
 			for c := 0; c < len(board.Fields[r]); c++ {
 				f := &board.Fields[r][c]
 				f.Hidden = false
-				if f.Type == cellFire {
+				if f.Type == cellFire && f.LastModified > board.LastRevealed {
 					applyFireEffect(board, r, c)
 				}
 			}
 		}
-
+		// Clean up old dead cells and fires.
+		for r := 0; r < len(board.Fields); r++ {
+			for c := 0; c < len(board.Fields[r]); c++ {
+				f := &board.Fields[r][c]
+				if (f.Type == cellDead || f.Type == cellFire) && f.LastModified <= board.LastRevealed {
+					f.Type = cellNormal
+					f.Owner = 0
+					f.LastModified = board.Move
+				}
+			}
+		}
 		board.LastRevealed = board.Move
 	}
 	recomputeScoreAndState(board)
