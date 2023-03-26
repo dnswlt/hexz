@@ -96,12 +96,19 @@ type ServerEvent struct {
 }
 
 type Board struct {
-	Turn         int       `json:"turn"`
-	Move         int       `json:"move"`
-	LastRevealed int       `json:"-"` // Move at which fields were last revealed
-	Fields       [][]Field `json:"fields"`
-	Score        []int     `json:"score"` // Always two elements
-	State        GameState `json:"state"`
+	Turn         int             `json:"turn"`
+	Move         int             `json:"move"`
+	LastRevealed int             `json:"-"` // Move at which fields were last revealed
+	Fields       [][]Field       `json:"fields"`
+	Score        [2]int          `json:"score"`
+	Resources    [2]ResourceInfo `json:"resources"`
+	State        GameState       `json:"state"`
+}
+
+type Field struct {
+	Type   CellType `json:"type"`
+	Owner  int      `json:"owner"` // Player number owning this field. 0 for empty fields.
+	Hidden bool     `json:"hidden"`
 }
 
 type CellType int
@@ -119,10 +126,9 @@ func (c CellType) valid() bool {
 	return c >= cellNormal && c <= cellDeath
 }
 
-type Field struct {
-	Type   CellType `json:"type"`
-	Owner  int      `json:"owner"` // Player number owning this field. 0 for empty fields.
-	Hidden bool     `json:"hidden"`
+// Information about the resources each player has left.
+type ResourceInfo struct {
+	NumPieces map[CellType]int `json:"numPieces"`
 }
 
 // JSON for incoming requests from UI clients.
@@ -265,10 +271,21 @@ func NewBoard() *Board {
 		n := numFieldsFirstRow - i%2
 		fields[i] = make([]Field, n)
 	}
+	initialPieces := func() map[CellType]int {
+		return map[CellType]int{
+			cellFire:  1,
+			cellFlag:  1,
+			cellPest:  0,
+			cellDeath: 0,
+		}
+	}
 	return &Board{
 		Turn:   1, // Player 1 begins
 		Fields: fields,
-		Score:  []int{0, 0},
+		Resources: [2]ResourceInfo{
+			{NumPieces: initialPieces()},
+			{NumPieces: initialPieces()},
+		},
 	}
 }
 
@@ -287,14 +304,14 @@ func (f *Field) occupied() bool {
 }
 
 func recomputeScoreAndState(b *Board) {
-	s := []int{0, 0}
+	s := [2]int{0, 0}
 	openCells := 0
 	for _, row := range b.Fields {
 		for _, fld := range row {
 			if fld.Owner > 0 && !fld.Hidden {
 				s[fld.Owner-1]++
 			}
-			if fld.Owner == 0 && fld.Type != cellDead || fld.Hidden {
+			if !fld.occupied() || fld.Hidden {
 				// Don't finish the game until all cells are owned and not hidden, or dead.
 				openCells++
 			}
@@ -451,7 +468,11 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 		return false
 	}
 	if !board.valid(idx{e.Row, e.Col}) || e.Type == cellDead {
-		// Invalid move.
+		// Invalid move request.
+		return false
+	}
+	if e.Type != cellNormal && board.Resources[turn-1].NumPieces[e.Type] == 0 {
+		// No pieces left of requested type
 		return false
 	}
 	numOccupiedFields := 0
@@ -472,6 +493,7 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 		numOccupiedFields = occupyFields(board, turn, e.Row, e.Col, e.Type)
 		board.Move++
 	}
+	board.Resources[turn-1].NumPieces[e.Type]--
 	// Update turn.
 	board.Turn++
 	if board.Turn > 2 {

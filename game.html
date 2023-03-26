@@ -75,8 +75,10 @@
                 background: '#1e1e1e',
                 players: ['#255ab4', '#f8d748'],
                 hiddenMoves: ['#92acd9', '#fbeba3'], // 50% alpha of players
+                cellIcons: ['#1e1e1e', '#7a6505'], // For yellow: 25% HSL luminance of player color.
                 deadCell: '#d03d12',
-                plagueCell: '#007642',
+                unavailablePiece: '#3e3e3e',
+                unavailablePieceIcon: '#cbcbcb',
             },
         };
 
@@ -300,22 +302,23 @@
                     let y = i * a * 3 / 2 + a;
                     let fld = gstate.board.fields[i][j];
                     ctx.translate(x, y);
+                    let visible = !fld.hidden || fld.owner == gstate.role || gstate.role == 0;
                     if (fld.owner > 0) {
-                        if (fld.hidden && (fld.owner == gstate.role || gstate.role == 0)) {
-                            // Only this player and spectators can see hidden cells.
+                        if (fld.hidden && visible) {
                             ctx.fillStyle = styles.colors.hiddenMoves[fld.owner - 1];
                             ctx.fill(hex);
                         } else if (!fld.hidden) {
                             ctx.fillStyle = styles.colors.players[fld.owner - 1];
                             ctx.fill(hex);
                         }
-                        if (fld.type != cellNormal) {
+                        if (visible && fld.type != cellNormal) {
                             // Draw icon on top.
+                            // TODO: factor this out, we use the same code for drawing button icons.
                             let symbol = cellTypeToPathMap[String(fld.type)];
                             if (symbol) {
                                 ctx.save();
                                 ctx.scale(b / 50 / 3.5, b / 50 / 3.5);
-                                ctx.fillStyle = styles.colors.background;
+                                ctx.fillStyle = styles.colors.cellIcons[fld.owner-1];
                                 ctx.fill(symbol, 'evenodd');
                                 ctx.restore();
                             }
@@ -337,6 +340,7 @@
                 // Don't show buttons for spectators.
                 return;
             }
+            let playerIdx = gstate.role - 1;
             let a = hexagonSideLength;
             let b = Math.sqrt(3) * a;
             let nRows = gstate.board.fields.length;
@@ -349,12 +353,21 @@
                 let y = bottomRow * a * 3 / 2 + a;
                 ctx.save();
                 ctx.translate(x, y);
-                // Draw cell
-                let fillColor = styles.colors.hiddenMoves[gstate.role - 1];
-                if (gstate.selectedCellType == buttonCells[j].type) {
-                    fillColor = styles.colors.players[gstate.role - 1];
+                // Determine background and icon colors to use.
+                let available = buttonCells[j].type == cellNormal 
+                    || gstate.board.resources[playerIdx].numPieces[buttonCells[j].type] > 0;
+                let cellColor = styles.colors.hiddenMoves[playerIdx];
+                if (!available) {
+                    cellColor = styles.colors.unavailablePiece;
+                } else if (gstate.selectedCellType == buttonCells[j].type) {
+                    cellColor = styles.colors.players[playerIdx];
                 }
-                ctx.fillStyle = fillColor;
+                let iconColor = styles.colors.cellIcons[playerIdx];
+                if (!available) {
+                    iconColor = styles.colors.unavailablePieceIcon;
+                }
+                ctx.fillStyle = cellColor;
+                // Draw cell
                 ctx.fill(hex);
                 ctx.strokeStyle = styles.colors.grid;
                 ctx.stroke(hex);
@@ -363,7 +376,7 @@
                     // Every symbol is expected to be bounded by a ((-50, -50), (50, 50)) square.
                     // 3.5 was chosen manually, icons "look right" at that scaling factor.
                     ctx.scale(b / 50 / 3.5, b / 50 / 3.5);
-                    ctx.fillStyle = styles.colors.background;
+                    ctx.fillStyle = iconColor;
                     ctx.fill(buttonCells[j].symbol, 'evenodd');
                 }
                 ctx.restore();
@@ -480,8 +493,13 @@
         }
 
         function clickedOnCellButton(cellType) {
-            gstate.selectedCellType = cellType;
-            redraw();
+            let playerIdx = gstate.role - 1;
+            let available = cellType == cellNormal 
+                    || gstate.board.resources[playerIdx].numPieces[cellType] > 0;
+            if (available) {
+                gstate.selectedCellType = cellType;
+                redraw();
+            }
         }
 
         function reset() {
