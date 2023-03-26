@@ -25,5 +25,5 @@ func main() {
 	flag.StringVar(&cfg.TlsPrivKey, "tls-key", "", "Path to privkey.pem for TLS")
 	flag.Parse()
 
-	hexz.Serve(cfg)
+	hexz.NewServer(cfg).Serve()
 }

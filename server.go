@@ -30,16 +30,29 @@ type ServerConfig struct {
 }
 
 var (
-	ongoingGames    = make(map[string]*Game)
+	// Regexp used to validate player names.
+	playernameRegexp = regexp.MustCompile("^[a-zA-Z0-9][a-zA-Z0-9_.-]+$")
+)
+
+type Server struct {
+	// Contains all ongoing games, mapped by their ID.
+	ongoingGames    map[string]*Game
 	ongoingGamesMut sync.Mutex
 
-	loggedInPlayers    = make(map[string]*Player)
+	// Contains all logged in players, mapped by their (cookie) playerId.
+	loggedInPlayers    map[string]*Player
 	loggedInPlayersMut sync.Mutex
+	// Server configuration (set from command-line flags).
+	config *ServerConfig
+}
 
-	usernameRegexp = regexp.MustCompile("^[a-zA-Z0-9][a-zA-Z0-9_.-]+$")
-
-	serverConfig *ServerConfig
-)
+func NewServer(cfg *ServerConfig) *Server {
+	return &Server{
+		ongoingGames:    make(map[string]*Game),
+		loggedInPlayers: make(map[string]*Player),
+		config:          cfg,
+	}
+}
 
 const (
 	numFieldsFirstRow = 10
@@ -125,11 +138,11 @@ type Player struct {
 	LastActive time.Time
 }
 
-func lookupPlayer(playerId string) *Player {
-	loggedInPlayersMut.Lock()
-	defer loggedInPlayersMut.Unlock()
+func (s *Server) lookupPlayer(playerId string) *Player {
+	s.loggedInPlayersMut.Lock()
+	defer s.loggedInPlayersMut.Unlock()
 
-	p, ok := loggedInPlayers[playerId]
+	p, ok := s.loggedInPlayers[playerId]
 	if !ok {
 		return nil
 	}
@@ -137,11 +150,11 @@ func lookupPlayer(playerId string) *Player {
 	return p
 }
 
-func loginPlayer(playerId string, name string) bool {
-	loggedInPlayersMut.Lock()
-	defer loggedInPlayersMut.Unlock()
+func (s *Server) loginPlayer(playerId string, name string) bool {
+	s.loggedInPlayersMut.Lock()
+	defer s.loggedInPlayersMut.Unlock()
 
-	if len(loggedInPlayers) > maxLoggedInPlayers {
+	if len(s.loggedInPlayers) > maxLoggedInPlayers {
 		// TODO: GC the logged in players to avoid running out of space.
 		// The login logic is very hacky for the time being.
 		return false
@@ -151,7 +164,7 @@ func loginPlayer(playerId string, name string) bool {
 		Name:       name,
 		LastActive: time.Now(),
 	}
-	loggedInPlayers[playerId] = p
+	s.loggedInPlayers[playerId] = p
 	return true
 }
 
@@ -206,8 +219,8 @@ func (g *Game) unregisterPlayer(playerId string) {
 	g.sendEvent(ControlEventUnregister{PlayerId: playerId})
 }
 
-func readFile(filename string) ([]byte, error) {
-	return os.ReadFile(path.Join(serverConfig.DocumentRoot, filename))
+func (s *Server) readFile(filename string) ([]byte, error) {
+	return os.ReadFile(path.Join(s.config.DocumentRoot, filename))
 }
 
 // Generates a random 128-bit hex string representing a player ID.
@@ -432,9 +445,9 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 }
 
 // Controller function for a running game. To be executed by a dedicated goroutine.
-func gameMaster(game *Game) {
+func (s *Server) gameMaster(game *Game) {
 	defer close(game.done)
-	defer deleteGame(game.Id)
+	defer s.deleteGame(game.Id)
 	log.Printf("New gameMaster started for game %s", game.Id)
 	board := NewBoard()
 	eventListeners := make(map[string]chan ServerEvent)
@@ -486,7 +499,7 @@ func gameMaster(game *Game) {
 				e.ReplyChan <- ch
 				// Send board and player role initially so client can display the UI.
 				role := (playerIdx + 1) % 3 // 0 == spectator
-				singlecast(e.Player.Id, ServerEvent{Board: board, ActiveGames: listRecentGames(5), Role: role})
+				singlecast(e.Player.Id, ServerEvent{Board: board, ActiveGames: s.listRecentGames(5), Role: role})
 				if role == 1 {
 					announcement := fmt.Sprintf("Welcome %s! Waiting for player 2.", e.Player.Name)
 					broadcast(ServerEvent{Announcements: []string{announcement}})
@@ -506,7 +519,7 @@ func gameMaster(game *Game) {
 				cancel := make(chan struct{})
 				playerRmCancel[e.PlayerId] = cancel
 				go func(playerId string) {
-					t := time.After(serverConfig.PlayerRemoveDelay)
+					t := time.After(s.config.PlayerRemoveDelay)
 					select {
 					case <-t:
 						playerRm <- playerId
@@ -533,7 +546,7 @@ func gameMaster(game *Game) {
 				broadcast(ServerEvent{Board: board})
 			}
 		case <-tick:
-			broadcast(ServerEvent{ActiveGames: listRecentGames(5), DebugMessage: "ping"})
+			broadcast(ServerEvent{ActiveGames: s.listRecentGames(5), DebugMessage: "ping"})
 		case playerId := <-playerRm:
 			log.Printf("Player %s has left game %s. Game over.", playerId, game.Id)
 			name := "?"
@@ -550,45 +563,45 @@ func gameMaster(game *Game) {
 	}
 }
 
-func startNewGame() (*Game, error) {
+func (s *Server) startNewGame() (*Game, error) {
 	// Try a few times to find an unused game Id, else give up.
 	// (I don't like forever loops... 100 attempts is plenty.)
 	var game *Game
 	for i := 0; i < 100; i++ {
 		id := generateGameId()
-		ongoingGamesMut.Lock()
-		if _, ok := ongoingGames[id]; !ok {
+		s.ongoingGamesMut.Lock()
+		if _, ok := s.ongoingGames[id]; !ok {
 			game = NewGame(id)
-			ongoingGames[id] = game
+			s.ongoingGames[id] = game
 		}
-		ongoingGamesMut.Unlock()
+		s.ongoingGamesMut.Unlock()
 		if game != nil {
-			go gameMaster(game)
+			go s.gameMaster(game)
 			return game, nil
 		}
 	}
 	return nil, fmt.Errorf("cannot start a new game")
 }
 
-func deleteGame(id string) {
-	ongoingGamesMut.Lock()
-	defer ongoingGamesMut.Unlock()
-	delete(ongoingGames, id)
+func (s *Server) deleteGame(id string) {
+	s.ongoingGamesMut.Lock()
+	defer s.ongoingGamesMut.Unlock()
+	delete(s.ongoingGames, id)
 }
 
-func lookupGame(id string) *Game {
-	ongoingGamesMut.Lock()
-	defer ongoingGamesMut.Unlock()
-	return ongoingGames[id]
+func (s *Server) lookupGame(id string) *Game {
+	s.ongoingGamesMut.Lock()
+	defer s.ongoingGamesMut.Unlock()
+	return s.ongoingGames[id]
 }
 
-func listRecentGames(limit int) []string {
-	ongoingGamesMut.Lock()
+func (s *Server) listRecentGames(limit int) []string {
+	s.ongoingGamesMut.Lock()
 	games := []*Game{}
-	for _, g := range ongoingGames {
+	for _, g := range s.ongoingGames {
 		games = append(games, g)
 	}
-	ongoingGamesMut.Unlock()
+	s.ongoingGamesMut.Unlock()
 	sort.Slice(games, func(i, j int) bool {
 		return games[i].Started.After(games[j].Started)
 	})
@@ -603,8 +616,8 @@ func listRecentGames(limit int) []string {
 	return ids
 }
 
-func handleLoginPage(w http.ResponseWriter, r *http.Request) {
-	html, err := readFile(loginHtmlFilename)
+func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
+	html, err := s.readFile(loginHtmlFilename)
 	if err != nil {
 		http.Error(w, "Failed to load login screen", http.StatusInternalServerError)
 		log.Fatal("Cannot read login HTML page: ", err.Error())
@@ -614,10 +627,10 @@ func handleLoginPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func isValidPlayerName(name string) bool {
-	return len(name) >= 3 && len(name) <= 20 && usernameRegexp.MatchString(name)
+	return len(name) >= 3 && len(name) <= 20 && playernameRegexp.MatchString(name)
 }
 
-func handleLoginRequest(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Only POST allowed", http.StatusBadRequest)
 		return
@@ -636,7 +649,7 @@ func handleLoginRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	playerId := generatePlayerId()
-	if !loginPlayer(playerId, name) {
+	if !s.loginPlayer(playerId, name) {
 		http.Error(w, "Cannot log in right now", http.StatusPreconditionFailed)
 	}
 	cookie := &http.Cookie{
@@ -652,42 +665,42 @@ func handleLoginRequest(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 }
 
-func handleHexz(w http.ResponseWriter, r *http.Request) {
-	_, err := lookupPlayerFromCookie(r)
+func (s *Server) handleHexz(w http.ResponseWriter, r *http.Request) {
+	_, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
-		handleLoginPage(w, r)
+		s.handleLoginPage(w, r)
 		return
 	}
 
 	// For now, immediately create a new game and redirect to it.
-	game, err := startNewGame()
+	game, err := s.startNewGame()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusPreconditionFailed)
 	}
 	http.Redirect(w, r, fmt.Sprintf("%s/%s", r.URL.Path, game.Id), http.StatusSeeOther)
 }
 
-func validatePostRequest(r *http.Request) (*Player, error) {
+func (s *Server) validatePostRequest(r *http.Request) (*Player, error) {
 	if r.Method != http.MethodPost {
 		return nil, fmt.Errorf("invalid method")
 	}
-	return lookupPlayerFromCookie(r)
+	return s.lookupPlayerFromCookie(r)
 }
 
-func lookupPlayerFromCookie(r *http.Request) (*Player, error) {
+func (s *Server) lookupPlayerFromCookie(r *http.Request) (*Player, error) {
 	cookie, err := r.Cookie(playerIdCookieName)
 	if err != nil {
 		return nil, fmt.Errorf("missing cookie")
 	}
-	p := lookupPlayer(cookie.Value)
+	p := s.lookupPlayer(cookie.Value)
 	if p == nil {
 		return nil, fmt.Errorf("player not found")
 	}
 	return p, nil
 }
 
-func handleMove(w http.ResponseWriter, r *http.Request) {
-	player, err := validatePostRequest(r)
+func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
+	player, err := s.validatePostRequest(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
@@ -697,7 +710,7 @@ func handleMove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 	gameId := gameIdFromPath(r.URL.Path)
-	game := lookupGame(gameId)
+	game := s.lookupGame(gameId)
 	if game == nil {
 		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
 		return
@@ -705,8 +718,8 @@ func handleMove(w http.ResponseWriter, r *http.Request) {
 	game.sendEvent(ControlEventMove{PlayerId: player.Id, Row: req.Row, Col: req.Col})
 }
 
-func handleReset(w http.ResponseWriter, r *http.Request) {
-	p, err := validatePostRequest(r)
+func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
+	p, err := s.validatePostRequest(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
@@ -716,7 +729,7 @@ func handleReset(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 	gameId := gameIdFromPath(r.URL.Path)
-	game := lookupGame(gameId)
+	game := s.lookupGame(gameId)
 	if game == nil {
 		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
 		return
@@ -725,15 +738,15 @@ func handleReset(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func handleSse(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 	// We expect a cookie to identify the p.
-	p, err := lookupPlayerFromCookie(r)
+	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	gameId := gameIdFromPath(r.URL.Path)
-	game := lookupGame(gameId)
+	game := s.lookupGame(gameId)
 	if game == nil {
 		http.Error(w, fmt.Sprintf("Game %s does not exist", gameId), http.StatusNotFound)
 		return
@@ -779,12 +792,12 @@ func handleSse(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleGame(w http.ResponseWriter, r *http.Request) {
-	_, err := lookupPlayerFromCookie(r)
+func (s *Server) handleGame(w http.ResponseWriter, r *http.Request) {
+	_, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 	}
-	gameHtml, err := readFile(gameHtmlFilename)
+	gameHtml, err := s.readFile(gameHtmlFilename)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -797,14 +810,14 @@ func isFavicon(path string) bool {
 		path == "/favicon-48x48.png" || path == "/apple-touch-icon.png"
 }
 
-func handleStatusz(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
 	var resp StatuszResponse
-	ongoingGamesMut.Lock()
-	resp.NumOngoingGames = len(ongoingGames)
-	ongoingGamesMut.Unlock()
-	loggedInPlayersMut.Lock()
-	resp.NumLoggedInPlayers = len(loggedInPlayers)
-	loggedInPlayersMut.Unlock()
+	s.ongoingGamesMut.Lock()
+	resp.NumOngoingGames = len(s.ongoingGames)
+	s.ongoingGamesMut.Unlock()
+	s.loggedInPlayersMut.Lock()
+	resp.NumLoggedInPlayers = len(s.loggedInPlayers)
+	s.loggedInPlayersMut.Unlock()
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(resp); err != nil {
@@ -813,12 +826,12 @@ func handleStatusz(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func defaultHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) defaultHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/" {
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 	}
 	if isFavicon(r.URL.Path) {
-		ico, err := os.ReadFile(path.Join(serverConfig.DocumentRoot, "images", path.Base(r.URL.Path)))
+		ico, err := os.ReadFile(path.Join(s.config.DocumentRoot, "images", path.Base(r.URL.Path)))
 		if err != nil {
 			http.Error(w, "favicon not found", http.StatusNotFound)
 			return
@@ -831,7 +844,7 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	log.Print("Ignoring request for path: ", r.URL.Path, r.URL.RawQuery)
 }
 
-func loadUserDatabase() {
+func (s *Server) loadUserDatabase() {
 	r, err := os.Open(userDatabaseFilename)
 	if err != nil {
 		if err != os.ErrNotExist {
@@ -846,12 +859,12 @@ func loadUserDatabase() {
 		log.Print("Corrupted user database: ", err.Error())
 	}
 	log.Printf("Loaded %d users from user db", len(players))
-	loggedInPlayersMut.Lock()
-	defer loggedInPlayersMut.Unlock()
+	s.loggedInPlayersMut.Lock()
+	defer s.loggedInPlayersMut.Unlock()
 	for _, p := range players {
-		if _, ok := loggedInPlayers[p.Id]; !ok {
+		if _, ok := s.loggedInPlayers[p.Id]; !ok {
 			// Only add players, don't overwrite anything existing in memory.
-			loggedInPlayers[p.Id] = p
+			s.loggedInPlayers[p.Id] = p
 		}
 	}
 }
@@ -870,10 +883,10 @@ func saveUserDatabase(players []Player) {
 	log.Printf("Saved user db (%d users)", len(players))
 }
 
-func updateLoggedInPlayers() {
+func (s *Server) updateLoggedInPlayers() {
 	lastIteration := time.Now()
 	period := time.Duration(5) * time.Minute
-	if serverConfig.DebugMode {
+	if s.config.DebugMode {
 		// Clean up active users more frequently in debug mode.
 		period = time.Duration(5) * time.Second
 	}
@@ -882,10 +895,10 @@ func updateLoggedInPlayers() {
 		<-t
 		activity := false
 		now := time.Now()
-		logoutThresh := now.Add(-serverConfig.LoginTtl)
-		loggedInPlayersMut.Lock()
+		logoutThresh := now.Add(-s.config.LoginTtl)
+		s.loggedInPlayersMut.Lock()
 		del := []string{}
-		for pId, p := range loggedInPlayers {
+		for pId, p := range s.loggedInPlayers {
 			if p.LastActive.Before(logoutThresh) {
 				del = append(del, pId)
 			} else if p.LastActive.After(lastIteration) {
@@ -893,54 +906,53 @@ func updateLoggedInPlayers() {
 			}
 		}
 		for _, pId := range del {
-			delete(loggedInPlayers, pId)
+			delete(s.loggedInPlayers, pId)
 		}
-		loggedInPlayersMut.Unlock()
+		s.loggedInPlayersMut.Unlock()
 		// Do I/O outside the mutex.
 		for _, pId := range del {
 			log.Printf("Logged out player %s", pId)
 		}
 		if activity || len(del) > 0 {
-			loggedInPlayersMut.Lock()
+			s.loggedInPlayersMut.Lock()
 			// Create copies of the players to avoid data race during serialization.
 			// (LastActive can get updated at any time by other goroutines.)
-			players := make([]Player, len(loggedInPlayers))
+			players := make([]Player, len(s.loggedInPlayers))
 			i := 0
-			for _, p := range loggedInPlayers {
+			for _, p := range s.loggedInPlayers {
 				players[i] = *p
 				i++
 			}
-			loggedInPlayersMut.Unlock()
+			s.loggedInPlayersMut.Unlock()
 			saveUserDatabase(players)
 		}
 		lastIteration = now
 	}
 }
 
-func Serve(cfg *ServerConfig) {
-	serverConfig = cfg
+func (s *Server) Serve() {
 	// Make sure we have access to the game HTML file.
-	if _, err := readFile(gameHtmlFilename); err != nil {
+	if _, err := s.readFile(gameHtmlFilename); err != nil {
 		log.Fatal("Cannot load game HTML: ", err)
 	}
-	http.HandleFunc("/hexz/move/", handleMove)
-	http.HandleFunc("/hexz/reset/", handleReset)
-	http.HandleFunc("/hexz/sse/", handleSse)
-	http.HandleFunc("/hexz/login", handleLoginRequest)
-	http.HandleFunc("/hexz", handleHexz)
-	http.HandleFunc("/hexz/", handleGame)
-	http.HandleFunc("/statusz", handleStatusz)
-	http.HandleFunc("/", defaultHandler)
+	http.HandleFunc("/hexz/move/", s.handleMove)
+	http.HandleFunc("/hexz/reset/", s.handleReset)
+	http.HandleFunc("/hexz/sse/", s.handleSse)
+	http.HandleFunc("/hexz/login", s.handleLoginRequest)
+	http.HandleFunc("/hexz", s.handleHexz)
+	http.HandleFunc("/hexz/", s.handleGame)
+	http.HandleFunc("/statusz", s.handleStatusz)
+	http.HandleFunc("/", s.defaultHandler)
 
-	addr := fmt.Sprintf("%s:%d", cfg.ServerAddress, cfg.ServerPort)
+	addr := fmt.Sprintf("%s:%d", s.config.ServerAddress, s.config.ServerPort)
 	log.Printf("Listening on %s", addr)
 
-	loadUserDatabase()
+	s.loadUserDatabase()
 	// Start login GC routine
-	go updateLoggedInPlayers()
+	go s.updateLoggedInPlayers()
 
-	if cfg.TlsCertChain != "" && cfg.TlsPrivKey != "" {
-		log.Fatal(http.ListenAndServeTLS(addr, cfg.TlsCertChain, cfg.TlsPrivKey, nil))
+	if s.config.TlsCertChain != "" && s.config.TlsPrivKey != "" {
+		log.Fatal(http.ListenAndServeTLS(addr, s.config.TlsCertChain, s.config.TlsPrivKey, nil))
 	}
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
