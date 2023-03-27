@@ -106,10 +106,10 @@ type Board struct {
 }
 
 type Field struct {
-	Type         CellType `json:"type"`
-	Owner        int      `json:"owner"` // Player number owning this field. 0 for unowned fields.
-	Hidden       bool     `json:"hidden"`
-	LastModified int      `json:"-"` // Move on which this field was last modified.
+	Type     CellType `json:"type"`
+	Owner    int      `json:"owner"` // Player number owning this field. 0 for unowned fields.
+	Hidden   bool     `json:"hidden"`
+	Lifetime int      `json:"-"` // Moves left until this cell gets cleared. -1 means infinity.
 }
 
 type CellType int
@@ -274,10 +274,10 @@ func NewBoard() *Board {
 	}
 	initialPieces := func() map[CellType]int {
 		return map[CellType]int{
-			cellNormal: -1, // Unlimited
+			cellNormal: numFieldsFirstRow * numBoardRows, // Essentially unlimited
 			cellFire:   1,
 			cellFlag:   1,
-			cellPest:   0,
+			cellPest:   1,
 			cellDeath:  0,
 		}
 	}
@@ -377,6 +377,17 @@ func floodFill(b *Board, x idx, cb func(idx) bool) {
 	}
 }
 
+func (c CellType) lifetime() int {
+	switch c {
+	case cellFire:
+	case cellDead:
+		return 1
+	case cellPest:
+		return 3
+	}
+	return -1 // Live forever
+}
+
 func occupyFields(b *Board, playerNum, r, c int, ct CellType) int {
 	// Create a board-shaped 2d array that indicates which neighboring cell of (i, j)
 	// it shares the free area with.
@@ -388,10 +399,11 @@ func occupyFields(b *Board, playerNum, r, c int, ct CellType) int {
 			ms[k][m] = -1
 		}
 	}
-	b.Fields[r][c].Owner = playerNum
-	b.Fields[r][c].Type = ct
-	b.Fields[r][c].Hidden = true
-	b.Fields[r][c].LastModified = b.Move
+	f := &b.Fields[r][c]
+	f.Owner = playerNum
+	f.Type = ct
+	f.Hidden = true
+	f.Lifetime = ct.lifetime()
 	var areas [6]struct {
 		size      int    // Number of free cells in the area
 		flags     [2]int // Number of flags along the boundary
@@ -460,7 +472,7 @@ func occupyFields(b *Board, playerNum, r, c int, ct CellType) int {
 				if ms[r][c] == minK && !f.occupied() {
 					numOccupiedFields++
 					f.Owner = occupator
-					f.LastModified = b.Move
+					f.Lifetime = cellNormal.lifetime()
 				}
 			}
 		}
@@ -476,7 +488,27 @@ func applyFireEffect(b *Board, r, c int) {
 		f.Owner = 0
 		f.Hidden = false
 		f.Type = cellDead
-		f.LastModified = b.Move
+		f.Lifetime = cellDead.lifetime()
+	}
+}
+
+func applyPestEffect(b *Board) {
+	var ns [6]idx
+	for r := 0; r < len(b.Fields); r++ {
+		for c := 0; c < len(b.Fields[r]); c++ {
+			// A pest cell does not propagate in its first round.
+			if b.Fields[r][c].Type == cellPest && b.Fields[r][c].Lifetime < cellPest.lifetime() {
+				n := b.neighbors(idx{r, c}, ns[:])
+				for i := 0; i < n; i++ {
+					f := &b.Fields[ns[i].r][ns[i].c]
+					if f.Owner > 0 && f.Owner != b.Fields[r][c].Owner && f.Type == cellNormal {
+						f.Owner = b.Fields[r][c].Owner
+						f.Type = cellPest
+						f.Lifetime = cellPest.lifetime()
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -504,7 +536,7 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 			f := &board.Fields[e.Row][e.Col]
 			f.Type = cellDead
 			f.Owner = 0
-			f.LastModified = board.Move
+			f.Lifetime = cellDead.lifetime()
 			revealBoard = true
 		} else {
 			// Cannot make move on already occupied field.
@@ -517,7 +549,7 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 			// Fire cells take effect immediately.
 			f := &board.Fields[e.Row][e.Col]
 			f.Owner = turn
-			f.LastModified = board.Move
+			f.Lifetime = cellFire.lifetime()
 			f.Type = e.Type
 			applyFireEffect(board, e.Row, e.Col)
 		} else {
@@ -533,24 +565,28 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 		board.Turn = 1
 	}
 	if numOccupiedFields > 1 || board.Move-board.LastRevealed == 4 || revealBoard {
-		// Reveal hidden moves and apply effects.
+		// Reveal hidden moves.
 		for r := 0; r < len(board.Fields); r++ {
 			for c := 0; c < len(board.Fields[r]); c++ {
 				f := &board.Fields[r][c]
 				f.Hidden = false
 			}
 		}
-		// Clean up old dead cells and fires.
+		applyPestEffect(board)
+		// Clean up old dead/fire/pest cells.
 		for r := 0; r < len(board.Fields); r++ {
 			for c := 0; c < len(board.Fields[r]); c++ {
 				f := &board.Fields[r][c]
-				if (f.Type == cellDead || f.Type == cellFire) && f.LastModified <= board.LastRevealed {
+				if (f.Type == cellDead || f.Type == cellFire || f.Type == cellPest) && f.Lifetime == 0 {
 					f.Type = cellNormal
 					f.Owner = 0
-					f.LastModified = board.Move
+				}
+				if f.Lifetime > 0 {
+					f.Lifetime--
 				}
 			}
 		}
+
 		board.LastRevealed = board.Move
 	}
 	recomputeScoreAndState(board)
