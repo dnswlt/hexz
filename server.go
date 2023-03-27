@@ -496,7 +496,7 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 		return false
 	}
 	numOccupiedFields := 0
-	conflict := false
+	revealBoard := false
 	if board.Fields[e.Row][e.Col].occupied() {
 		if board.Fields[e.Row][e.Col].Hidden && board.Fields[e.Row][e.Col].Owner == (3-turn) {
 			// Conflicting hidden moves. Leads to dead cell.
@@ -505,7 +505,7 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 			f.Type = cellDead
 			f.Owner = 0
 			f.LastModified = board.Move
-			conflict = true
+			revealBoard = true
 		} else {
 			// Cannot make move on already occupied field.
 			return false
@@ -513,23 +513,31 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 	} else {
 		// Free cell: occupy it.
 		board.Move++
-		numOccupiedFields = occupyFields(board, turn, e.Row, e.Col, e.Type)
+		if e.Type == cellFire {
+			// Fire cells take effect immediately.
+			f := &board.Fields[e.Row][e.Col]
+			f.Owner = turn
+			f.LastModified = board.Move
+			f.Type = e.Type
+			applyFireEffect(board, e.Row, e.Col)
+		} else {
+			numOccupiedFields = occupyFields(board, turn, e.Row, e.Col, e.Type)
+		}
 	}
-	board.Resources[turn-1].NumPieces[e.Type]--
+	if e.Type != cellNormal {
+		board.Resources[turn-1].NumPieces[e.Type]--
+	}
 	// Update turn.
 	board.Turn++
 	if board.Turn > 2 {
 		board.Turn = 1
 	}
-	if numOccupiedFields > 1 || board.Move-board.LastRevealed == 4 || conflict {
+	if numOccupiedFields > 1 || board.Move-board.LastRevealed == 4 || revealBoard {
 		// Reveal hidden moves and apply effects.
 		for r := 0; r < len(board.Fields); r++ {
 			for c := 0; c < len(board.Fields[r]); c++ {
 				f := &board.Fields[r][c]
 				f.Hidden = false
-				if f.Type == cellFire && f.LastModified > board.LastRevealed {
-					applyFireEffect(board, r, c)
-				}
 			}
 		}
 		// Clean up old dead cells and fires.
