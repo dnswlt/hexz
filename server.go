@@ -267,18 +267,23 @@ func NewGame(id string) *Game {
 }
 
 func NewBoard() *Board {
+	const numFields = numFieldsFirstRow*((numBoardRows+1)/2) + (numFieldsFirstRow-1)*(numBoardRows/2)
+	arr := make([]Field, numFields)
 	fields := make([][]Field, numBoardRows)
+	start := 0
 	for i := 0; i < len(fields); i++ {
-		n := numFieldsFirstRow - i%2
-		fields[i] = make([]Field, n)
+		end := start + numFieldsFirstRow - i%2
+		fields[i] = arr[start:end]
+		start = end
 	}
+	// This map defines how many special pieces each player starts with.
 	initialPieces := func() map[CellType]int {
 		return map[CellType]int{
 			cellNormal: numFieldsFirstRow * numBoardRows, // Essentially unlimited
 			cellFire:   1,
 			cellFlag:   1,
 			cellPest:   1,
-			cellDeath:  0,
+			cellDeath:  1,
 		}
 	}
 	return &Board{
@@ -379,8 +384,7 @@ func floodFill(b *Board, x idx, cb func(idx) bool) {
 
 func (c CellType) lifetime() int {
 	switch c {
-	case cellFire:
-	case cellDead:
+	case cellFire, cellDead, cellDeath:
 		return 1
 	case cellPest:
 		return 3
@@ -486,8 +490,8 @@ func applyFireEffect(b *Board, r, c int) {
 	for i := 0; i < n; i++ {
 		f := &b.Fields[ns[i].r][ns[i].c]
 		f.Owner = 0
-		f.Hidden = false
 		f.Type = cellDead
+		f.Hidden = false
 		f.Lifetime = cellDead.lifetime()
 	}
 }
@@ -534,9 +538,17 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 			// Conflicting hidden moves. Leads to dead cell.
 			board.Move++
 			f := &board.Fields[e.Row][e.Col]
-			f.Type = cellDead
 			f.Owner = 0
+			f.Type = cellDead
 			f.Lifetime = cellDead.lifetime()
+			revealBoard = true
+		} else if e.Type == cellDeath {
+			// Death cell can be placed anywhere and will "kill" whatever was there before.
+			f := &board.Fields[e.Row][e.Col]
+			f.Owner = turn
+			f.Type = cellDeath
+			f.Hidden = false
+			f.Lifetime = cellDeath.lifetime()
 			revealBoard = true
 		} else {
 			// Cannot make move on already occupied field.
@@ -545,12 +557,12 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 	} else {
 		// Free cell: occupy it.
 		board.Move++
+		f := &board.Fields[e.Row][e.Col]
 		if e.Type == cellFire {
 			// Fire cells take effect immediately.
-			f := &board.Fields[e.Row][e.Col]
 			f.Owner = turn
-			f.Lifetime = cellFire.lifetime()
 			f.Type = e.Type
+			f.Lifetime = cellFire.lifetime()
 			applyFireEffect(board, e.Row, e.Col)
 		} else {
 			numOccupiedFields = occupyFields(board, turn, e.Row, e.Col, e.Type)
@@ -573,13 +585,15 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 			}
 		}
 		applyPestEffect(board)
-		// Clean up old dead/fire/pest cells.
+		// Clean up old special cells.
 		for r := 0; r < len(board.Fields); r++ {
 			for c := 0; c < len(board.Fields[r]); c++ {
 				f := &board.Fields[r][c]
-				if (f.Type == cellDead || f.Type == cellFire || f.Type == cellPest) && f.Lifetime == 0 {
-					f.Type = cellNormal
+				if f.occupied() && f.Lifetime == 0 {
 					f.Owner = 0
+					f.Hidden = false
+					f.Type = cellNormal
+					f.Lifetime = cellNormal.lifetime()
 				}
 				if f.Lifetime > 0 {
 					f.Lifetime--
