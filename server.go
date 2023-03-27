@@ -377,7 +377,7 @@ func floodFill(b *Board, x idx, cb func(idx) bool) {
 	}
 }
 
-func occupyFields(b *Board, playerNum, i, j int, ct CellType) int {
+func occupyFields(b *Board, playerNum, r, c int, ct CellType) int {
 	// Create a board-shaped 2d array that indicates which neighboring cell of (i, j)
 	// it shares the free area with.
 	// Then find the smallest of these areas and occupy every free cell in it.
@@ -388,31 +388,40 @@ func occupyFields(b *Board, playerNum, i, j int, ct CellType) int {
 			ms[k][m] = -1
 		}
 	}
-	b.Fields[i][j].Owner = playerNum
-	b.Fields[i][j].Type = ct
-	b.Fields[i][j].Hidden = true
-	b.Fields[i][j].LastModified = b.Move
+	b.Fields[r][c].Owner = playerNum
+	b.Fields[r][c].Type = ct
+	b.Fields[r][c].Hidden = true
+	b.Fields[r][c].LastModified = b.Move
 	var areas [6]struct {
 		size     int
 		numFlags [2]int
 	}
+	// If the current move sets a flag, this flag counts in all directions.
+	if ct == cellFlag {
+		for i := 0; i < len(areas); i++ {
+			areas[i].numFlags[playerNum-1]++
+		}
+	}
+	// Flood fill starting from each of (r, c)'s neighbors.
 	var ns [6]idx
-	n := b.neighbors(idx{i, j}, ns[:])
+	n := b.neighbors(idx{r, c}, ns[:])
 	for k := 0; k < n; k++ {
 		floodFill(b, ns[k], func(x idx) bool {
-			if ms[x.r][x.c] > -1 {
+			if ms[x.r][x.c] != -1 {
 				// Already seen.
 				return false
 			}
-			if b.Fields[x.r][x.c].occupied() {
+			f := &b.Fields[x.r][x.c]
+			if f.occupied() {
 				// Occupied fields act as boundaries.
-				if b.Fields[x.r][x.c].Type == cellFlag {
-					// Count number of flags at the area boundary.
-					areas[k].numFlags[b.Fields[x.r][x.c].Owner-1]++
+				if f.Type == cellFlag {
+					areas[k].numFlags[f.Owner-1]++
 				}
+				// Mark as seen to avoid revisiting boundaries.
+				ms[x.r][x.c] = int8(k)
 				return false
 			}
-			// Mark field as visited in k-th loop iteration.
+			// Mark free field as visited in k-th loop iteration.
 			ms[x.r][x.c] = int8(k)
 			areas[k].size++
 			return true
@@ -420,7 +429,7 @@ func occupyFields(b *Board, playerNum, i, j int, ct CellType) int {
 	}
 	// If there is more than one area, we know we introduced a split, since the areas
 	// would have been connected by the previously free cell (i, j).
-	numFields := 1
+	numOccupiedFields := 1
 	numAreas := 0
 	for k := 0; k < len(areas); k++ {
 		if areas[k].size > 0 {
@@ -442,15 +451,17 @@ func occupyFields(b *Board, playerNum, i, j int, ct CellType) int {
 		}
 		for r := 0; r < len(b.Fields); r++ {
 			for c := 0; c < len(b.Fields[r]); c++ {
-				if ms[r][c] == minK {
-					numFields++
-					b.Fields[r][c].Owner = occupator
-					b.Fields[r][c].LastModified = b.Move
+
+				f := &b.Fields[r][c]
+				if ms[r][c] == minK && !f.occupied() {
+					numOccupiedFields++
+					f.Owner = occupator
+					f.LastModified = b.Move
 				}
 			}
 		}
 	}
-	return numFields
+	return numOccupiedFields
 }
 
 func applyFireEffect(b *Board, r, c int) {
