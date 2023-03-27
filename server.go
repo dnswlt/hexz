@@ -381,9 +381,9 @@ func occupyFields(b *Board, playerNum, r, c int, ct CellType) int {
 	// Create a board-shaped 2d array that indicates which neighboring cell of (i, j)
 	// it shares the free area with.
 	// Then find the smallest of these areas and occupy every free cell in it.
-	ms := make([][]int8, len(b.Fields))
+	ms := make([][]int, len(b.Fields))
 	for k := 0; k < len(ms); k++ {
-		ms[k] = make([]int8, len(b.Fields[k]))
+		ms[k] = make([]int, len(b.Fields[k]))
 		for m := 0; m < len(ms[k]); m++ {
 			ms[k][m] = -1
 		}
@@ -393,65 +393,69 @@ func occupyFields(b *Board, playerNum, r, c int, ct CellType) int {
 	b.Fields[r][c].Hidden = true
 	b.Fields[r][c].LastModified = b.Move
 	var areas [6]struct {
-		size     int
-		numFlags [2]int
+		size      int    // Number of free cells in the area
+		flags     [2]int // Number of flags along the boundary
+		deadCells int    // Number of dead cells along the boundary
 	}
 	// If the current move sets a flag, this flag counts in all directions.
 	if ct == cellFlag {
 		for i := 0; i < len(areas); i++ {
-			areas[i].numFlags[playerNum-1]++
+			areas[i].flags[playerNum-1]++
 		}
 	}
 	// Flood fill starting from each of (r, c)'s neighbors.
 	var ns [6]idx
 	n := b.neighbors(idx{r, c}, ns[:])
 	for k := 0; k < n; k++ {
+		if ms[ns[k].r][ns[k].c] != -1 {
+			// k's area is the same area as k-c for some c.
+			continue
+		}
 		floodFill(b, ns[k], func(x idx) bool {
-			if ms[x.r][x.c] != -1 {
-				// Already seen.
+			if ms[x.r][x.c] == k {
+				// Already seen in this iteration.
 				return false
 			}
 			f := &b.Fields[x.r][x.c]
 			if f.occupied() {
 				// Occupied fields act as boundaries.
 				if f.Type == cellFlag {
-					areas[k].numFlags[f.Owner-1]++
+					areas[k].flags[f.Owner-1]++
+				} else if f.Type == cellDead {
+					areas[k].deadCells++
 				}
 				// Mark as seen to avoid revisiting boundaries.
-				ms[x.r][x.c] = int8(k)
+				ms[x.r][x.c] = k
 				return false
 			}
-			// Mark free field as visited in k-th loop iteration.
-			ms[x.r][x.c] = int8(k)
+			// Mark as seen and update area size.
+			ms[x.r][x.c] = k
 			areas[k].size++
 			return true
 		})
 	}
 	// If there is more than one area, we know we introduced a split, since the areas
-	// would have been connected by the previously free cell (i, j).
+	// would have been connected by the previously free cell (r, c).
 	numOccupiedFields := 1
 	numAreas := 0
-	for k := 0; k < len(areas); k++ {
-		if areas[k].size > 0 {
+	minK := -1
+	// Count the number of separated areas and find the smallest one.
+	for k := 0; k < n; k++ {
+		if areas[k].size > 0 && areas[k].deadCells == 0 {
 			numAreas++
+			if minK == -1 || areas[minK].size > areas[k].size {
+				minK = k
+			}
 		}
 	}
 	if numAreas > 1 {
-		// Find the minimum area to be filled.
-		minK := int8(-1)
-		for k := 0; k < len(areas); k++ {
-			if areas[k].size > 0 && (minK == -1 || areas[minK].size > areas[k].size) {
-				minK = int8(k)
-			}
-		}
 		// Now assign fields to player with most flags, or to current player on a tie.
 		occupator := playerNum
-		if areas[minK].numFlags[2-playerNum] > areas[minK].numFlags[playerNum-1] {
+		if areas[minK].flags[2-playerNum] > areas[minK].flags[playerNum-1] {
 			occupator = 3 - playerNum // The other player has more flags
 		}
 		for r := 0; r < len(b.Fields); r++ {
 			for c := 0; c < len(b.Fields[r]); c++ {
-
 				f := &b.Fields[r][c]
 				if ms[r][c] == minK && !f.occupied() {
 					numOccupiedFields++
