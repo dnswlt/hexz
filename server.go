@@ -561,7 +561,7 @@ func makeMove(board *Board, e ControlEventMove, players [2]*Player) bool {
 		return false
 	}
 	numOccupiedFields := 0
-	revealBoard := e.Type != cellNormal
+	revealBoard := e.Type != cellNormal && e.Type != cellFlag
 	if board.Fields[e.Row][e.Col].occupied() {
 		if board.Fields[e.Row][e.Col].Hidden && board.Fields[e.Row][e.Col].Owner == (3-turn) {
 			// Conflicting hidden moves. Leads to dead cell.
