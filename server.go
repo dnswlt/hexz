@@ -63,8 +63,36 @@ const (
 	playerIdCookieName   = "playerId"
 	gameHtmlFilename     = "game.html"
 	loginHtmlFilename    = "login.html"
+	rulesHtmlFilename    = "rules.html"
 	userDatabaseFilename = "_users.json"
 )
+
+var (
+	// File extensions of resources we are willing to serve.
+	// Mostly a safety measure against directory scanning attacks.
+	validResourceFileExts = map[string]string{
+		".html": "text/html",
+		".png":  "image/png",
+		".gif":  "image/gif",
+	}
+	// Paths that browsers may request to retrieve a favicon.
+	// Keep in sync with files in the images/ folder.
+	faviconUrlPaths = []string{
+		"/favicon-16x16.png",
+		"/favicon-32x32.png",
+		"/favicon-48x48.png",
+		"/apple-touch-icon.png",
+	}
+)
+
+func isFavicon(path string) bool {
+	for _, p := range faviconUrlPaths {
+		if p == path {
+			return true
+		}
+	}
+	return false
+}
 
 type Game struct {
 	Id           string
@@ -506,6 +534,7 @@ func applyPestEffect(b *Board) {
 				for i := 0; i < n; i++ {
 					f := &b.Fields[ns[i].r][ns[i].c]
 					if f.Owner > 0 && f.Owner != b.Fields[r][c].Owner && f.Type == cellNormal {
+						// Pest only affects the opponent's normal cells.
 						f.Owner = b.Fields[r][c].Owner
 						f.Type = cellPest
 						f.Lifetime = cellPest.lifetime()
@@ -516,7 +545,7 @@ func applyPestEffect(b *Board) {
 	}
 }
 
-func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
+func makeMove(board *Board, e ControlEventMove, players [2]*Player) bool {
 	turn := board.Turn
 	p := players[turn-1]
 	if p == nil || p.Id != e.PlayerId {
@@ -532,7 +561,7 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 		return false
 	}
 	numOccupiedFields := 0
-	revealBoard := false
+	revealBoard := e.Type != cellNormal
 	if board.Fields[e.Row][e.Col].occupied() {
 		if board.Fields[e.Row][e.Col].Hidden && board.Fields[e.Row][e.Col].Owner == (3-turn) {
 			// Conflicting hidden moves. Leads to dead cell.
@@ -549,7 +578,6 @@ func makeMove(e ControlEventMove, board *Board, players [2]*Player) bool {
 			f.Type = cellDeath
 			f.Hidden = false
 			f.Lifetime = cellDeath.lifetime()
-			revealBoard = true
 		} else {
 			// Cannot make move on already occupied field.
 			return false
@@ -690,7 +718,7 @@ func (s *Server) gameMaster(game *Game) {
 					}
 				}(e.PlayerId)
 			case ControlEventMove:
-				if makeMove(e, board, players) {
+				if makeMove(board, e, players) {
 					announcements := []string{}
 					if board.State == Finished {
 						won := "~~ nobody ~~"
@@ -973,9 +1001,28 @@ func (s *Server) handleGame(w http.ResponseWriter, r *http.Request) {
 	w.Write(gameHtml)
 }
 
-func isFavicon(path string) bool {
-	return path == "/favicon-16x16.png" || path == "/favicon-32x32.png" ||
-		path == "/favicon-48x48.png" || path == "/apple-touch-icon.png"
+func (s *Server) handleFile(filepath string, w http.ResponseWriter, r *http.Request) {
+	contentType, ok := validResourceFileExts[path.Ext(filepath)]
+	if !ok {
+		http.Error(w, "", http.StatusNotFound)
+		return
+	}
+	contents, err := s.readFile(filepath)
+	if err != nil {
+		http.Error(w, "", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Write(contents)
+}
+
+func (s *Server) handleStaticResource(w http.ResponseWriter, r *http.Request) {
+	hexz := "/hexz/"
+	if !strings.HasPrefix(r.URL.Path, hexz) {
+		http.Error(w, "", http.StatusNotFound)
+		return
+	}
+	s.handleFile(r.URL.Path[len(hexz):], w, r)
 }
 
 func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
@@ -999,7 +1046,7 @@ func (s *Server) defaultHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 	}
 	if isFavicon(r.URL.Path) {
-		ico, err := os.ReadFile(path.Join(s.config.DocumentRoot, "images", path.Base(r.URL.Path)))
+		ico, err := s.readFile(path.Join("images", path.Base(r.URL.Path)))
 		if err != nil {
 			http.Error(w, "favicon not found", http.StatusNotFound)
 			return
@@ -1099,7 +1146,7 @@ func (s *Server) updateLoggedInPlayers() {
 }
 
 func (s *Server) Serve() {
-	// Make sure we have access to the game HTML file.
+	// Quick sanity check that we have access to the game HTML file.
 	if _, err := s.readFile(gameHtmlFilename); err != nil {
 		log.Fatal("Cannot load game HTML: ", err)
 	}
@@ -1107,6 +1154,10 @@ func (s *Server) Serve() {
 	http.HandleFunc("/hexz/reset/", s.handleReset)
 	http.HandleFunc("/hexz/sse/", s.handleSse)
 	http.HandleFunc("/hexz/login", s.handleLoginRequest)
+	http.HandleFunc("/hexz/rules", func(w http.ResponseWriter, r *http.Request) {
+		s.handleFile(rulesHtmlFilename, w, r)
+	})
+	http.HandleFunc("/hexz/images/", s.handleStaticResource)
 	http.HandleFunc("/hexz", s.handleHexz)
 	http.HandleFunc("/hexz/", s.handleGame)
 	http.HandleFunc("/statusz", s.handleStatusz)

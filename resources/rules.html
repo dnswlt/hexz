@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+    <title>Hexz - Rules</title>
+    <style>
+        html,
+        body {
+            background-color: #1e1e1e;
+            color: #cbcbcb;
+        }
+
+        body {
+            font-family: arial, sans-serif;
+        }
+
+        .blue {
+            background-color: #255ab4;
+        }
+
+        .lightblue {
+            background-color: #92acd9;
+        }
+
+        .yellow {
+            background-color: #f8d748;
+        }
+
+        .lightyellow {
+            background-color: #fbeba3;
+        }
+
+        .piece {
+            display: inline-block;
+            width: 1.5em;
+        }
+
+        img.screenshot {
+            width: 100%;
+            max-width: 480px;
+        }
+
+        img.icon {
+            width: 48px;
+        }
+
+        table,
+        th,
+        td {
+            border: 1px solid #cbcbcb;
+            border-collapse: collapse;
+        }
+
+        td {
+            padding: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Hexz Rules!</h1>
+    <h2>Ziel des Spiels</h2>
+    <p>
+        Hexz ist ein Spiel für zwei Spieler, das auf einem Spielfeld von 105 Sechsecken
+        (&laquo;<em>Hexagons</em>&raquo;) gespielt wird. Das
+        Ziel des Spiels ist, durch geschicktes Platzieren der eigenen Spielsteine
+        mehr Spielfelder (&laquo;<em>Zellen</em>&raquo;) zu besetzen als der Gegner.
+    </p>
+    <h2>Spielablauf</h2>
+    <p>
+        Die Spieler setzen abwechselnd ihre Spielsteine auf beliebige freie Felder.
+        Spieler 1 (&laquo;Erin&raquo;) hat die blauen Steine
+        <span class="blue piece">&nbsp;</span>, Spieler 2 (&laquo;Erwin&raquo;) hat die gelben Steine
+        <span class="yellow piece">&nbsp;</span>.
+    </p>
+    <p>
+        Ein gesetzter Stein ist zunächst verdeckt, d.h. für den Gegenspieler nicht sichtbar.
+        Verdeckte Steine werden in helleren Farben dargestellt:
+        <span class="lightblue piece">&nbsp;</span> für Erin,
+        <span class="lightyellow piece">&nbsp;</span> für Erwin.
+        Sobald die Spieler je zwei Steine
+        gesetzt haben, werden diese aufgedeckt und für den Gegenspieler sichtbar.
+    </p>
+    <p>
+        Ein Beispiel: Erin hat bereits zwei Steine gelegt, Erwin erst einen.
+        Alle Steine sind noch verdeckt.
+        Ein Zuschauer, der immer die verdeckten Steine beider Spieler sehen kann,
+        sieht folgendes Bild:
+    <div>
+        <img src="images/round1a.png" class="screenshot">
+    </div>
+    Nun legt Erwin den zweiten Stein und alle Steine werden aufgedeckt.
+    Beide Spieler sehen folgendes Bild:
+    <div>
+        <img src="images/round1b.png" class="screenshot">
+    </div>
+    </p>
+
+    <h2>Flächen abgrenzen</h2>
+    <p>
+        Die Spieler können in einem Spielzug mehrere Spielfelder besetzen, indem
+        sie durch Platzieren ihres Spielsteins eine bisher zusammenhängende freie Fläche
+        in mehrere (meist zwei) freie Flächen aufteilen.
+    </p>
+    <p>
+        Im folgenden Beispiel ist Erin beim Spielstand von 4 &ndash; 4 mit Blau am Zug 
+        und kann ihren Stein
+        in der untersten Reihe unter Erwins gelben Stein anlegen und so die gesamte
+        linke untere Ecke besetzen. 
+    <div>
+        <img src="images/split1a.png" class="screenshot">
+    </div>
+        Nachdem sie den Stein gelegt hat, wird die abgetrennte Fläche mit ihrer Farbe 
+        ausgefüllt und sie erhält entsprechend viele Punkte.
+        Der neue Spielstand ist 14 &ndash; 4.
+    <div>
+        <img src="images/split1b.png" class="screenshot">
+    </div>
+    </p>
+
+    <h2>Spezialsteine und zerstörte Zellen</h2>
+    <p>
+        Jeder Spieler kann neben den normalen Spielsteinen auch jederzeit einen
+        der vier Spezialsteine legen. Normalerweise werden dadurch alle verdeckten Steine
+        sofort aufgedeckt und der Gegenspieler ist am Zug. Ausnahmen sind in der Tabelle unten
+        beschrieben.
+    </p>
+    <p>
+    <table>
+        <thead>
+            <tr>
+                <th>Symb.</th>
+                <th>Name</th>
+                <th>Beschreibung</th>
+                <th>Lebens-<br>dauer</th>
+                <th>Ver-<br>steckt?</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>
+                    <img src="images/fire_icon.png" class="icon">
+                </td>
+                <td>
+                    Feuer
+                </td>
+                <td>
+                    Legt einen Brand auf dem Spielfeld und zerstört alle direkten Nachbarfelder.
+                    Die Nachbarfelder stehen eine Runde lang in Flammen und sind danach wieder
+                    unbesetzt. Das Feuerfeld selbst verschwindet nach einer Runde ebenfalls, wird
+                    aber in der Zwischenzeit als ein Punkt für den Spieler gezählt, der den Brand
+                    gelegt hat.
+                </td>
+                <td>
+                    1
+                </td>
+                <td>
+                    nein
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <img src="images/flag_icon.png" class="icon">
+                </td>
+                <td>
+                    Flagge
+                </td>
+                <td>
+                    Die Flagge beeinflusst, welchem Spieler die Felder zugesprochen werden, die
+                    durch Abgrenzen einer freien Fläche besetzt werden. Liegt im oder am Rand des
+                    abgegrenzten Gebiets ein Flaggen-Spielstein von Erin, so erhält sie die Fläche
+                    zugesprochen, auch wenn Erwin den Spielstein gelegt hat, der die Fläche abgrenzt.
+                </td>
+                <td>
+                    ewig
+                </td>
+                <td>
+                    ja
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <img src="images/pest_icon.png" class="icon">
+                </td>
+                <td>
+                    Farbpest
+                </td>
+                <td>
+                    Farbpest ist WILD! Sie verbreitet sich wie ein Lauffeuer und
+                    befällt in jeder Runde alle gegnerischen benachbarten normalen Zellen.
+                    Jede Farbpest-Zelle verschwindet nach drei Runden.
+                </td>
+                <td>
+                    3
+                </td>
+                <td>
+                    nein
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <img src="images/death_icon.png" class="icon">
+                </td>
+                <td>
+                    Killerstein
+                </td>
+                <td>
+                    Der Killerstein kann im Webshop gegen einen Tintenkiller eingetauscht werden.
+                    Im Spiel dient er dazu, beliebige gegnerische (oder auch eigene) Zellen zu
+                    zerstören. Er verschwindet nach einer Runde und hinterlässt eine leere Zelle.
+                </td>
+                <td>
+                    1
+                </td>
+                <td>
+                    nein
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <img src="images/deadcell_icon.png" class="icon">
+                </td>
+                <td>
+                    Zerstörte Zelle
+                </td>
+                <td>
+                    Setzen beide Spieler ihre verdeckten Steine auf dasselbe Feld, so wird dieses
+                    zu einer zerstörten Zelle, das in der darauffolgenden Runde wieder frei wird.
+                </td>
+                <td>
+                    1
+                </td>
+                <td>
+                    nein
+                </td>
+            </tr>
+        </tbody>
+    </table>
+    </p>
+    <h2>Spielende</h2>
+    <p>
+        Das Spiel endet, wenn alle Spielfelder besetzt sind. Die Spielerin mit den
+        meisten Punkten gewinnt. Jedes mit einem eigenen Stein belegte Spielfeld
+        gibt einen Punkt. Ein Spiel unter Männern endet immer unentschieden.
+    </p>
+</body>
+
+</html>
