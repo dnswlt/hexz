@@ -68,6 +68,28 @@
             color: #92acd9;
         }
     </style>
+</head>
+
+<body>
+    <div>
+        <canvas id="canvas" width="560" height="550"></canvas>
+    </div>
+    <div id="controls" class="menu">
+        <button id="home" class="menuitem">New Game</button>
+        <button id="reset" class="menuitem">Reset</button>
+        <div class="menuitem">
+            <span id="playerOneBadge">&nbsp;</span>
+            <span id="playerOneTurnInfo">&#9664;</span>
+            <span id="scoreInfo">0 &ndash; 0</span>
+            <span id="playerTwoTurnInfo">&#9654;</span>
+            <span id="playerTwoBadge">&nbsp;</span>
+        </div>
+        <div class="menuitem" id="turnInfo"></div>
+        <div class="menuitem" id="shareLink">&#x1F517; Share</div>
+    </div>
+    <div class="widget" id="announcements"></div>
+    <div class="widget" id="activeGames"></div>
+
     <script type="text/javascript">
         const styles = {
             colors: {
@@ -113,12 +135,17 @@
             })
         }
 
+        // Represents the game state.
         const gstate = {
             board: null,
             role: 0,
             done: false,
             selectedCellType: 0,
         };
+
+        // These values get dynamically updated depending on the canvas size.
+        var hexagonSideLength = 30;
+        var pad = 20;
 
         function handleServerEvent(sse, serverEvent) {
             if (serverEvent.role > 0) {
@@ -161,9 +188,10 @@
             }
             let div = document.getElementById("announcements");
             let time = new Date(serverEvent.timestamp);
+            let timeStr = `${f2(time.getHours())}:${f2(time.getMinutes())}:${f2(time.getSeconds())}`;
             let text = [];
             for (const a of serverEvent.announcements) {
-                text.push(`${f2(time.getHours())}:${f2(time.getMinutes())}:${f2(time.getSeconds())} - ${a}`);
+                text.push(`${timeStr} - ${a}`);
             }
             div.innerHTML = text.join("<br>");
         }
@@ -204,30 +232,7 @@
         function newGame() {
             window.location.replace("/hexz");
         }
-    </script>
-</head>
 
-<body>
-    <div>
-        <canvas id="canvas" width="560" height="550"></canvas>
-    </div>
-    <div id="controls" class="menu">
-        <button id="home" class="menuitem">New Game</button>
-        <button id="reset" class="menuitem">Reset</button>
-        <div class="menuitem">
-            <span id="playerOneBadge">&nbsp;</span>
-            <span id="playerOneTurnInfo">&bull;</span>
-            <span id="scoreInfo">0 &ndash; 0</span>
-            <span id="playerTwoTurnInfo">&bull;</span>
-            <span id="playerTwoBadge">&nbsp;</span>
-        </div>
-        <div class="menuitem" id="turnInfo"></div>
-        <div class="menuitem" id="shareLink">&#x1F517; Share</div>
-    </div>
-    <div class="widget" id="announcements"></div>
-    <div class="widget" id="activeGames"></div>
-
-    <script type="text/javascript">
         // Returns a Path2D representing a 0-centered hexagon with side length a.
         function hexagon(a) {
             let p = new Path2D();
@@ -271,19 +276,19 @@
             },
             {
                 type: cellFire,
-                symbol: new Path2D(cellTypePaths.fire),
+                symbol: cellTypeToPathMap[cellFire],
             },
             {
                 type: cellFlag,
-                symbol: new Path2D(cellTypePaths.flag),
+                symbol: cellTypeToPathMap[cellFlag],
             },
             {
                 type: cellPest,
-                symbol: new Path2D(cellTypePaths.pest),
+                symbol: cellTypeToPathMap[cellPest],
             },
             {
                 type: cellDeath,
-                symbol: new Path2D(cellTypePaths.death),
+                symbol: cellTypeToPathMap[cellDeath],
             },
         ];
 
@@ -401,7 +406,13 @@
             const defaultWidth = 560;
             // 2*20 padding + (6*2*30 + 5*30) hexz height + 3*30 for hexz-buttons.
             const defaultHeight = 640;
-            canvas.width = Math.min(maxWidth, document.body.clientWidth);
+            canvas.width = Math.floor(Math.min(
+                maxWidth, 
+                document.body.clientWidth,
+                // Ensure the whole board fits on the screen.
+                0.9 * document.body.clientHeight / defaultHeight * defaultWidth
+            ));
+            console.log("Kann was witz: ", canvas.width);
             canvas.height = Math.ceil(canvas.width * (defaultHeight / defaultWidth));
             pad = canvas.width < defaultWidth ? 10 : 20;
             hexagonSideLength = (canvas.width - 2 * pad) / (10 * Math.sqrt(3));
@@ -505,9 +516,6 @@
         function reset() {
             redraw();
         }
-
-        var hexagonSideLength = 30;
-        var pad = 20;
 
         initialize();
 
