@@ -97,6 +97,7 @@ func isFavicon(path string) bool {
 type Game struct {
 	Id           string
 	Started      time.Time
+	freeForm     bool
 	controlEvent chan ControlEvent // The channel to communicate with the game coordinating goroutine.
 	done         chan struct{}     // Closed by the game master goroutine when it is done.
 }
@@ -285,10 +286,11 @@ func generateGameId() string {
 	return b.String()
 }
 
-func NewGame(id string) *Game {
+func NewGame(id string, freeForm bool) *Game {
 	return &Game{
 		Id:           id,
 		Started:      time.Now(),
+		freeForm:     freeForm,
 		controlEvent: make(chan ControlEvent),
 		done:         make(chan struct{}),
 	}
@@ -545,6 +547,22 @@ func applyPestEffect(b *Board) {
 	}
 }
 
+func makeFreeFormMove(board *Board, e ControlEventMove, players [2]*Player) bool {
+	if !board.valid(idx{e.Row, e.Col}) {
+		// Invalid move request.
+		return false
+	}
+	board.Move++
+	f := &board.Fields[e.Row][e.Col]
+	f.Owner = board.Turn
+	f.Type = e.Type
+	board.Turn++
+	if board.Turn > 2 {
+		board.Turn = 1
+	}
+	return true
+}
+
 func makeMove(board *Board, e ControlEventMove, players [2]*Player) bool {
 	turn := board.Turn
 	p := players[turn-1]
@@ -718,16 +736,25 @@ func (s *Server) gameMaster(game *Game) {
 					}
 				}(e.PlayerId)
 			case ControlEventMove:
+				if game.freeForm {
+					makeFreeFormMove(board, e, players)
+					broadcast(ServerEvent{Board: board})
+					break
+				}
 				if makeMove(board, e, players) {
 					announcements := []string{}
 					if board.State == Finished {
-						won := "~~ nobody ~~"
+						var winner *Player
+						msg := "No one wins - this game is a draw"
 						if board.Score[0] > board.Score[1] {
-							won = players[0].Name
+							winner = players[0]
 						} else if board.Score[1] > board.Score[0] {
-							won = players[1].Name
+							winner = players[1]
 						}
-						msg := fmt.Sprintf("&#127942; &#127942; &#127942; %s wins &#127942; &#127942; &#127942;", won)
+						if winner != nil {
+							msg = fmt.Sprintf("&#127942; &#127942; &#127942; %s wins &#127942; &#127942; &#127942;",
+								winner.Name)
+						}
 						announcements = append(announcements, msg)
 					}
 					broadcast(ServerEvent{Board: board, Announcements: announcements})
@@ -755,7 +782,7 @@ func (s *Server) gameMaster(game *Game) {
 	}
 }
 
-func (s *Server) startNewGame() (*Game, error) {
+func (s *Server) startNewGame(freeForm bool) (*Game, error) {
 	// Try a few times to find an unused game Id, else give up.
 	// (I don't like forever loops... 100 attempts is plenty.)
 	var game *Game
@@ -763,7 +790,7 @@ func (s *Server) startNewGame() (*Game, error) {
 		id := generateGameId()
 		s.ongoingGamesMut.Lock()
 		if _, ok := s.ongoingGames[id]; !ok {
-			game = NewGame(id)
+			game = NewGame(id, freeForm)
 			s.ongoingGames[id] = game
 		}
 		s.ongoingGamesMut.Unlock()
@@ -864,8 +891,10 @@ func (s *Server) handleHexz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	debug := r.URL.Query().Get("d")
+	freeForm := len(debug) > 0
 	// For now, immediately create a new game and redirect to it.
-	game, err := s.startNewGame()
+	game, err := s.startNewGame(freeForm)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusPreconditionFailed)
 	}
