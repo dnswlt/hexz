@@ -639,7 +639,7 @@ func makeMove(board *Board, e ControlEventMove, players [2]*Player) bool {
 func (s *Server) gameMaster(game *Game) {
 	defer close(game.done)
 	defer s.deleteGame(game.Id)
-	log.Printf("New gameMaster started for game %s", game.Id)
+	log.Printf("Started new game %s", game.Id)
 	board := NewBoard()
 	eventListeners := make(map[string]chan ServerEvent)
 	defer func() {
@@ -739,7 +739,7 @@ func (s *Server) gameMaster(game *Game) {
 		case <-tick:
 			broadcast(ServerEvent{ActiveGames: s.listRecentGames(5), DebugMessage: "ping"})
 		case playerId := <-playerRm:
-			log.Printf("Player %s has left game %s. Game over.", playerId, game.Id)
+			log.Printf("Player %s left game %s: game over", playerId, game.Id)
 			name := "?"
 			for i := 0; i < len(players); i++ {
 				if players[i] != nil && playerId == players[i].Id {
@@ -747,6 +747,7 @@ func (s *Server) gameMaster(game *Game) {
 				}
 			}
 			broadcast(ServerEvent{
+				// Send sad emoji.
 				Announcements: []string{fmt.Sprintf("Player %s left the game &#128546;. Game over.", name)},
 			})
 			return
@@ -952,7 +953,6 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusPreconditionFailed)
 		return
 	}
-	log.Printf("New SSE channel for player %s and game %s", p.Id, game.Id)
 	// Headers to establish server-sent events (SSE) communication.
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
@@ -960,7 +960,7 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 		select {
 		case ev, ok := <-serverEventChan:
 			if !ok {
-				log.Printf("Closing SSE channel for player %s and game %s", p.Id, gameId)
+				log.Printf("Closing SSE channel for player %s in game %s", p.Id, gameId)
 				ev = ServerEvent{
 					LastEvent: true,
 				}
@@ -981,7 +981,7 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-r.Context().Done():
-			log.Printf("Player %s (%s) closed SSE channel", p.Id, r.RemoteAddr)
+			log.Printf("%s Player %s closed SSE channel", r.RemoteAddr, p.Id)
 			game.unregisterPlayer(p.Id)
 			return
 		}
@@ -1056,7 +1056,6 @@ func (s *Server) defaultHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Ignore
-	log.Print("Ignoring request for path: ", r.URL.Path, r.URL.RawQuery)
 }
 
 func (s *Server) loadUserDatabase() {
@@ -1145,25 +1144,39 @@ func (s *Server) updateLoggedInPlayers() {
 	}
 }
 
+func (s *Server) loggingHandler(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// t := time.Now().Format("2006-01-02 15:04:05.999Z07:00")
+		log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.URL.String())
+		h.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) Serve() {
+	addr := fmt.Sprintf("%s:%d", s.config.ServerAddress, s.config.ServerPort)
+	mux := &http.ServeMux{}
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: s.loggingHandler(mux),
+	}
+
 	// Quick sanity check that we have access to the game HTML file.
 	if _, err := s.readFile(gameHtmlFilename); err != nil {
 		log.Fatal("Cannot load game HTML: ", err)
 	}
-	http.HandleFunc("/hexz/move/", s.handleMove)
-	http.HandleFunc("/hexz/reset/", s.handleReset)
-	http.HandleFunc("/hexz/sse/", s.handleSse)
-	http.HandleFunc("/hexz/login", s.handleLoginRequest)
-	http.HandleFunc("/hexz/rules", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/hexz/move/", s.handleMove)
+	mux.HandleFunc("/hexz/reset/", s.handleReset)
+	mux.HandleFunc("/hexz/sse/", s.handleSse)
+	mux.HandleFunc("/hexz/login", s.handleLoginRequest)
+	mux.HandleFunc("/hexz/rules", func(w http.ResponseWriter, r *http.Request) {
 		s.handleFile(rulesHtmlFilename, w, r)
 	})
-	http.HandleFunc("/hexz/images/", s.handleStaticResource)
-	http.HandleFunc("/hexz", s.handleHexz)
-	http.HandleFunc("/hexz/", s.handleGame)
-	http.HandleFunc("/statusz", s.handleStatusz)
-	http.HandleFunc("/", s.defaultHandler)
+	mux.HandleFunc("/hexz/images/", s.handleStaticResource)
+	mux.HandleFunc("/hexz", s.handleHexz)
+	mux.HandleFunc("/hexz/", s.handleGame)
+	mux.HandleFunc("/statusz", s.handleStatusz)
+	mux.HandleFunc("/", s.defaultHandler)
 
-	addr := fmt.Sprintf("%s:%d", s.config.ServerAddress, s.config.ServerPort)
 	log.Printf("Listening on %s", addr)
 
 	s.loadUserDatabase()
@@ -1171,7 +1184,7 @@ func (s *Server) Serve() {
 	go s.updateLoggedInPlayers()
 
 	if s.config.TlsCertChain != "" && s.config.TlsPrivKey != "" {
-		log.Fatal(http.ListenAndServeTLS(addr, s.config.TlsCertChain, s.config.TlsPrivKey, nil))
+		log.Fatal(srv.ListenAndServeTLS(s.config.TlsCertChain, s.config.TlsPrivKey))
 	}
-	log.Fatal(http.ListenAndServe(addr, nil))
+	log.Fatal(srv.ListenAndServe())
 }
