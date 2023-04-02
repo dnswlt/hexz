@@ -36,7 +36,7 @@ var (
 
 type Server struct {
 	// Contains all ongoing games, mapped by their ID.
-	ongoingGames    map[string]*Game
+	ongoingGames    map[string]*GameHandle
 	ongoingGamesMut sync.Mutex
 
 	// Contains all logged in players, mapped by their (cookie) playerId.
@@ -48,7 +48,7 @@ type Server struct {
 
 func NewServer(cfg *ServerConfig) *Server {
 	return &Server{
-		ongoingGames:    make(map[string]*Game),
+		ongoingGames:    make(map[string]*GameHandle),
 		loggedInPlayers: make(map[string]*Player),
 		config:          cfg,
 	}
@@ -94,10 +94,53 @@ func isFavicon(path string) bool {
 	return false
 }
 
-type Game struct {
+type GameDesc struct {
+	gameType      GameType
+	minPlayers    int
+	maxPlayers    int
+	initialPieces map[CellType]int
+}
+
+var (
+	knownGames = map[string]GameDesc{
+		"classic": {
+			gameType:   "classic",
+			minPlayers: 2,
+			maxPlayers: 2,
+			initialPieces: map[CellType]int{
+				cellNormal: -1, // unlimited
+				cellFire:   1,
+				cellFlag:   1,
+				cellPest:   1,
+				cellDeath:  1,
+			},
+		},
+		"freeform": {
+			gameType:   "freeform",
+			minPlayers: 1,
+			maxPlayers: 1,
+			initialPieces: map[CellType]int{
+				cellNormal: -1, // unlimited
+				cellFire:   -1,
+				cellFlag:   -1,
+				cellPest:   -1,
+				cellDeath:  -1,
+			},
+		},
+	}
+)
+
+type GameType string
+
+const (
+	gameTypeClassic  GameType = "classic"
+	gameTypeFreeform GameType = "freeform"
+)
+
+type GameHandle struct {
 	Id           string
 	Started      time.Time
-	freeForm     bool
+	gameType     GameType
 	controlEvent chan ControlEvent // The channel to communicate with the game coordinating goroutine.
 	done         chan struct{}     // Closed by the game master goroutine when it is done.
 }
@@ -105,11 +148,11 @@ type Game struct {
 type GameState string
 
 const (
-	Initial                GameState = "initial"
-	WaitingForSecondPlayer GameState = "waiting"
-	Running                GameState = "running"
-	Finished               GameState = "finished"
-	Aborted                GameState = "aborted"
+	Initial           GameState = "initial"
+	WaitingForPlayers GameState = "waiting"
+	Running           GameState = "running"
+	Finished          GameState = "finished"
+	Aborted           GameState = "aborted"
 )
 
 // JSON for server responses.
@@ -154,6 +197,67 @@ const (
 
 func (c CellType) valid() bool {
 	return c >= cellNormal && c <= cellDeath
+}
+
+type GameEngine interface {
+	AddPlayer(name string) (playerNum int, added bool)
+	MakeMove(playerNum int, e ControlEventMove) bool
+	Board() *Board
+	IsDone() bool
+	Winner() (playerNum int, name string) // Results are only meaningful if IsDone() is true. 0 for draw.
+	Reset()
+}
+
+type GameEngineClassic struct {
+	board   *Board
+	players []string
+}
+
+func (g *GameEngineClassic) Board() *Board { return g.board }
+func (g *GameEngineClassic) Reset()        { g.board = NewBoard() }
+func (g *GameEngineClassic) IsDone() bool  { return g.board.State == Finished }
+func (g *GameEngineClassic) AddPlayer(name string) (playerNum int, added bool) {
+	if len(g.players) == 2 {
+		return 0, false
+	}
+	g.players = append(g.players, name)
+	if len(g.players) == 2 {
+		g.board.State = Running
+	} else {
+		g.board.State = WaitingForPlayers
+	}
+	return len(g.players), true
+}
+func (g *GameEngineClassic) Winner() (playerNum int, name string) {
+	if !g.IsDone() {
+		return 0, ""
+	}
+	if g.board.Score[0] > g.board.Score[1] {
+		return 1, g.players[0]
+	}
+	if g.board.Score[1] > g.board.Score[0] {
+		return 2, g.players[1]
+	}
+	return 0, ""
+}
+
+type GameEngineFreeform struct {
+	board     *Board
+	hasPlayer bool
+}
+
+func (g *GameEngineFreeform) Board() *Board { return g.board }
+func (g *GameEngineFreeform) Reset()        { g.board = NewBoard() }
+func (g *GameEngineFreeform) IsDone() bool  { return false }
+func (g *GameEngineFreeform) AddPlayer(name string) (playerNum int, added bool) {
+	if g.hasPlayer {
+		return 0, false
+	}
+	g.hasPlayer = true
+	return 1, true
+}
+func (g *GameEngineFreeform) Winner() (playerNum int, name string) {
+	return 0, ""
 }
 
 // Information about the resources each player has left.
@@ -244,7 +348,7 @@ func (e ControlEventUnregister) controlEventImpl() {}
 func (e ControlEventMove) controlEventImpl()       {}
 func (e ControlEventReset) controlEventImpl()      {}
 
-func (g *Game) sendEvent(e ControlEvent) bool {
+func (g *GameHandle) sendEvent(e ControlEvent) bool {
 	select {
 	case g.controlEvent <- e:
 		return true
@@ -253,7 +357,7 @@ func (g *Game) sendEvent(e ControlEvent) bool {
 	}
 }
 
-func (g *Game) registerPlayer(p *Player) (chan ServerEvent, error) {
+func (g *GameHandle) registerPlayer(p *Player) (chan ServerEvent, error) {
 	ch := make(chan chan ServerEvent)
 	if g.sendEvent(ControlEventRegister{Player: p, ReplyChan: ch}) {
 		return <-ch, nil
@@ -261,7 +365,7 @@ func (g *Game) registerPlayer(p *Player) (chan ServerEvent, error) {
 	return nil, fmt.Errorf("cannot register player %s in game %s: game over", p.Id, g.Id)
 }
 
-func (g *Game) unregisterPlayer(playerId string) {
+func (g *GameHandle) unregisterPlayer(playerId string) {
 	g.sendEvent(ControlEventUnregister{PlayerId: playerId})
 }
 
@@ -286,13 +390,28 @@ func generateGameId() string {
 	return b.String()
 }
 
-func NewGame(id string, freeForm bool) *Game {
-	return &Game{
+func NewGame(id string, gameType GameType) *GameHandle {
+	return &GameHandle{
 		Id:           id,
 		Started:      time.Now(),
-		freeForm:     freeForm,
+		gameType:     gameType,
 		controlEvent: make(chan ControlEvent),
 		done:         make(chan struct{}),
+	}
+}
+
+func NewGameEngine(gameType GameType) GameEngine {
+	switch gameType {
+	case gameTypeClassic:
+		return &GameEngineClassic{
+			board: NewBoard(),
+		}
+	case gameTypeFreeform:
+		return &GameEngineFreeform{
+			board: NewBoard(),
+		}
+	default:
+		panic("Unconsidered game type: " + gameType)
 	}
 }
 
@@ -323,6 +442,7 @@ func NewBoard() *Board {
 			{NumPieces: initialPieces()},
 			{NumPieces: initialPieces()},
 		},
+		State: Initial,
 	}
 }
 
@@ -547,7 +667,8 @@ func applyPestEffect(b *Board) {
 	}
 }
 
-func makeFreeFormMove(board *Board, e ControlEventMove, players [2]*Player) bool {
+func (g *GameEngineFreeform) MakeMove(playerNum int, e ControlEventMove) bool {
+	board := g.board
 	if !board.valid(idx{e.Row, e.Col}) {
 		// Invalid move request.
 		return false
@@ -563,10 +684,10 @@ func makeFreeFormMove(board *Board, e ControlEventMove, players [2]*Player) bool
 	return true
 }
 
-func makeMove(board *Board, e ControlEventMove, players [2]*Player) bool {
+func (g *GameEngineClassic) MakeMove(playerNum int, e ControlEventMove) bool {
+	board := g.board
 	turn := board.Turn
-	p := players[turn-1]
-	if p == nil || p.Id != e.PlayerId {
+	if playerNum != turn {
 		// Only allow moves by players whose turn it is.
 		return false
 	}
@@ -654,11 +775,11 @@ func makeMove(board *Board, e ControlEventMove, players [2]*Player) bool {
 }
 
 // Controller function for a running game. To be executed by a dedicated goroutine.
-func (s *Server) gameMaster(game *Game) {
+func (s *Server) gameMaster(game *GameHandle) {
 	defer close(game.done)
 	defer s.deleteGame(game.Id)
 	log.Printf("Started new game %s", game.Id)
-	board := NewBoard()
+	gameEngine := NewGameEngine(game.gameType)
 	eventListeners := make(map[string]chan ServerEvent)
 	defer func() {
 		// Signal that client SSE connections should be terminated.
@@ -666,7 +787,11 @@ func (s *Server) gameMaster(game *Game) {
 			close(ch)
 		}
 	}()
-	var players [2]*Player
+	type pInfo struct {
+		playerNum int
+		player    *Player
+	}
+	players := make(map[string]pInfo)
 	playerRmCancel := make(map[string]chan struct{})
 	playerRm := make(chan string)
 	broadcast := func(e ServerEvent) {
@@ -687,110 +812,103 @@ func (s *Server) gameMaster(game *Game) {
 		case ce := <-game.controlEvent:
 			switch e := ce.(type) {
 			case ControlEventRegister:
-				playerIdx := 0
-				for ; playerIdx < 2; playerIdx++ {
-					if players[playerIdx] == nil {
-						// The first two participants in the game are players.
-						// Anyone arriving later will be a spectator.
-						players[playerIdx] = e.Player
-						break
-					} else if players[playerIdx].Id == e.Player.Id {
-						// Player reconnected. Cancel its removal.
-						if cancel, ok := playerRmCancel[e.Player.Id]; ok {
-							close(cancel)
-							delete(playerRmCancel, e.Player.Id)
-						}
-						break
+				var playerNum int
+				var added bool
+				if p, ok := players[e.Player.Id]; ok {
+					// Player reconnected. Cancel its removal.
+					if cancel, ok := playerRmCancel[e.Player.Id]; ok {
+						close(cancel)
+						delete(playerRmCancel, e.Player.Id)
+					}
+					playerNum = p.playerNum
+				} else {
+					playerNum, added = gameEngine.AddPlayer(e.Player.Name)
+					if added {
+						players[e.Player.Id] = pInfo{playerNum, e.Player}
 					}
 				}
 				ch := make(chan ServerEvent)
 				eventListeners[e.Player.Id] = ch
 				e.ReplyChan <- ch
 				// Send board and player role initially so client can display the UI.
-				role := (playerIdx + 1) % 3 // 0 == spectator
-				singlecast(e.Player.Id, ServerEvent{Board: board, ActiveGames: s.listRecentGames(5), Role: role})
-				if role == 1 {
-					announcement := fmt.Sprintf("Welcome %s! Waiting for player 2.", e.Player.Name)
-					broadcast(ServerEvent{Announcements: []string{announcement}})
-				} else if role == 2 {
-					announcement := fmt.Sprintf("Let the game %s vs %s begin!", players[0].Name, players[1].Name)
-					broadcast(ServerEvent{Announcements: []string{announcement}})
+				singlecast(e.Player.Id, ServerEvent{Board: gameEngine.Board(), ActiveGames: s.listRecentGames(5), Role: playerNum})
+				announcements := []string{}
+				if added {
+					announcements = append(announcements, fmt.Sprintf("Welcome %s!", e.Player.Name))
 				}
+				if added && gameEngine.Board().State == Running {
+					announcements = append(announcements, "The game begins!")
+				}
+				broadcast(ServerEvent{Announcements: announcements})
 			case ControlEventUnregister:
 				delete(eventListeners, e.PlayerId)
 				if _, ok := playerRmCancel[e.PlayerId]; ok {
 					// A repeated unregister should not happen. If it does, we ignore
-					// it and just wait for the existing GC "callback" to happen.
+					// it and just wait for the existing scheduled removal to trigger.
 					break
 				}
-				// Remove player after timeout. Don't remove them immediately as they might
-				// just be reloading their page and rejoin soon.
-				cancel := make(chan struct{})
-				playerRmCancel[e.PlayerId] = cancel
-				go func(playerId string) {
-					t := time.After(s.config.PlayerRemoveDelay)
-					select {
-					case <-t:
-						playerRm <- playerId
-					case <-cancel:
-					}
-				}(e.PlayerId)
+				if _, ok := players[e.PlayerId]; ok {
+					// Remove player after timeout. Don't remove them immediately as they might
+					// just be reloading their page and rejoin soon.
+					cancel := make(chan struct{})
+					playerRmCancel[e.PlayerId] = cancel
+					go func(playerId string) {
+						t := time.After(s.config.PlayerRemoveDelay)
+						select {
+						case <-t:
+							playerRm <- playerId
+						case <-cancel:
+						}
+					}(e.PlayerId)
+				}
 			case ControlEventMove:
-				if game.freeForm {
-					makeFreeFormMove(board, e, players)
-					broadcast(ServerEvent{Board: board})
+				p, ok := players[e.PlayerId]
+				if !ok {
+					// Ignore invalid move request
 					break
 				}
-				if makeMove(board, e, players) {
+				if gameEngine.MakeMove(p.playerNum, e) {
 					announcements := []string{}
-					if board.State == Finished {
-						var winner *Player
-						msg := "No one wins - this game is a draw"
-						if board.Score[0] > board.Score[1] {
-							winner = players[0]
-						} else if board.Score[1] > board.Score[0] {
-							winner = players[1]
+					if gameEngine.IsDone() {
+						_, winner := gameEngine.Winner()
+						if winner != "" {
+							msg := fmt.Sprintf("&#127942; &#127942; &#127942; %s wins &#127942; &#127942; &#127942;",
+								winner)
+							announcements = append(announcements, msg)
 						}
-						if winner != nil {
-							msg = fmt.Sprintf("&#127942; &#127942; &#127942; %s wins &#127942; &#127942; &#127942;",
-								winner.Name)
-						}
-						announcements = append(announcements, msg)
 					}
-					broadcast(ServerEvent{Board: board, Announcements: announcements})
+					broadcast(ServerEvent{Board: gameEngine.Board(), Announcements: announcements})
 				}
 			case ControlEventReset:
-				board = NewBoard()
-				broadcast(ServerEvent{Board: board})
+				gameEngine.Reset()
+				broadcast(ServerEvent{Board: gameEngine.Board()})
 			}
 		case <-tick:
 			broadcast(ServerEvent{ActiveGames: s.listRecentGames(5), DebugMessage: "ping"})
 		case playerId := <-playerRm:
 			log.Printf("Player %s left game %s: game over", playerId, game.Id)
-			name := "?"
-			for i := 0; i < len(players); i++ {
-				if players[i] != nil && playerId == players[i].Id {
-					name = players[i].Name
-				}
+			playerName := "?"
+			if p, ok := players[playerId]; ok {
+				playerName = p.player.Name
 			}
 			broadcast(ServerEvent{
 				// Send sad emoji.
-				Announcements: []string{fmt.Sprintf("Player %s left the game &#128546;. Game over.", name)},
+				Announcements: []string{fmt.Sprintf("Player %s left the game &#128546;. Game over.", playerName)},
 			})
 			return
 		}
 	}
 }
 
-func (s *Server) startNewGame(freeForm bool) (*Game, error) {
+func (s *Server) startNewGame(gameType GameType) (*GameHandle, error) {
 	// Try a few times to find an unused game Id, else give up.
 	// (I don't like forever loops... 100 attempts is plenty.)
-	var game *Game
+	var game *GameHandle
 	for i := 0; i < 100; i++ {
 		id := generateGameId()
 		s.ongoingGamesMut.Lock()
 		if _, ok := s.ongoingGames[id]; !ok {
-			game = NewGame(id, freeForm)
+			game = NewGame(id, gameType)
 			s.ongoingGames[id] = game
 		}
 		s.ongoingGamesMut.Unlock()
@@ -808,7 +926,7 @@ func (s *Server) deleteGame(id string) {
 	delete(s.ongoingGames, id)
 }
 
-func (s *Server) lookupGame(id string) *Game {
+func (s *Server) lookupGame(id string) *GameHandle {
 	s.ongoingGamesMut.Lock()
 	defer s.ongoingGamesMut.Unlock()
 	return s.ongoingGames[id]
@@ -816,7 +934,7 @@ func (s *Server) lookupGame(id string) *Game {
 
 func (s *Server) listRecentGames(limit int) []string {
 	s.ongoingGamesMut.Lock()
-	games := []*Game{}
+	games := []*GameHandle{}
 	for _, g := range s.ongoingGames {
 		games = append(games, g)
 	}
@@ -891,10 +1009,13 @@ func (s *Server) handleHexz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	gameType := gameTypeClassic
 	debug := r.URL.Query().Get("d")
-	freeForm := len(debug) > 0
+	if len(debug) > 0 {
+		gameType = gameTypeFreeform
+	}
 	// For now, immediately create a new game and redirect to it.
-	game, err := s.startNewGame(freeForm)
+	game, err := s.startNewGame(gameType)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusPreconditionFailed)
 	}
