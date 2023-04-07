@@ -412,7 +412,6 @@
                 // Ensure the whole board fits on the screen.
                 0.9 * document.body.clientHeight / defaultHeight * defaultWidth
             ));
-            console.log("Kann was witz: ", canvas.width);
             canvas.height = Math.ceil(canvas.width * (defaultHeight / defaultWidth));
             pad = canvas.width < defaultWidth ? 10 : 20;
             hexagonSideLength = (canvas.width - 2 * pad) / (10 * Math.sqrt(3));
