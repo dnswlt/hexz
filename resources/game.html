@@ -316,7 +316,7 @@
                             }
                         }
                         if (visible && fld.v > 0) {
-                            ctx.fillStyle = "#1e1e1e";
+                            ctx.fillStyle = styles.colors.cellIcons[fld.owner - 1];
                             ctx.fillText(String(fld.v), 0, 0);
                         }
                     } else if (fld.type == cellDead) {

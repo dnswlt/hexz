@@ -343,7 +343,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 				}
 			case ControlEventMove:
 				p, ok := players[e.PlayerId]
-				if !ok {
+				if !ok || gameEngine.Board().State != Running {
 					// Ignore invalid move request
 					break
 				}
@@ -667,6 +667,12 @@ func (s *Server) handleGame(w http.ResponseWriter, r *http.Request) {
 	_, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
+		return
+	}
+	g := s.lookupGame(gameIdFromPath(r.URL.Path))
+	if g == nil {
+		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
+		return
 	}
 	gameHtml, err := s.readFile(gameHtmlFilename)
 	if err != nil {

@@ -131,11 +131,11 @@ func (g *GameEngineClassic) InitialResources() ResourceInfo {
 
 func (g *GameEngineClassic) IsDone() bool { return g.board.State == Finished }
 
-func scoreBasedSingleWinner(board *Board) (playerNum int) {
+func scoreBasedSingleWinner(score []int) (playerNum int) {
 	maxIdx := -1
 	maxScore := -1
 	uniq := false
-	for i, s := range board.Score {
+	for i, s := range score {
 		if s > maxScore {
 			maxScore = s
 			maxIdx = i
@@ -145,7 +145,7 @@ func scoreBasedSingleWinner(board *Board) (playerNum int) {
 		}
 	}
 	if uniq {
-		return maxIdx
+		return maxIdx + 1 // Return as playerNum
 	}
 	return 0
 }
@@ -154,7 +154,7 @@ func (g *GameEngineClassic) Winner() (playerNum int) {
 	if !g.IsDone() {
 		return 0
 	}
-	return scoreBasedSingleWinner(g.board)
+	return scoreBasedSingleWinner(g.board.Score)
 }
 
 func (f *Field) occupied() bool {
@@ -525,7 +525,7 @@ func (g *GameEngineSnakez) Init() {
 	g.maxValue = 5
 }
 func (g *GameEngineSnakez) Start() {
-	const numDeadCells = 16
+	const numDeadCells = 15 // Odd number, so we have an even number of free cells.
 	i := 0
 	n := len(g.board.FlatFields)
 	// j is only a safeguard for invalid calls to this method on a non-empty board.
@@ -545,7 +545,7 @@ func (g *GameEngineSnakez) InitialResources() ResourceInfo {
 	return ResourceInfo{
 		NumPieces: map[CellType]int{
 			cellNormal: -1, // unlimited
-			cellFlag:   3,
+			cellFlag:   1,
 		},
 	}
 }
@@ -557,26 +557,41 @@ func (g *GameEngineSnakez) Reset() {
 }
 
 func (g *GameEngineSnakez) recomputeScoreAndState() {
-	abs := func(a int) int {
-		if a < 0 {
-			return -a
-		}
-		return a
-	}
 	b := g.board
 	s := []int{0, 0}
+	validMoves := []int{0, 0}
 	openCells := 0
-	for i := range b.FlatFields {
-		fld := &b.FlatFields[i]
-		if fld.Owner > 0 && fld.Value == g.maxValue {
-			s[fld.Owner-1] += fld.Value
-		} else if !fld.occupied() {
-			openCells++
+	for r := range b.Fields {
+		for c := range b.Fields[r] {
+			fld := &b.Fields[r][c]
+			if fld.Owner > 0 {
+				s[fld.Owner-1] += fld.Value
+			} else if !fld.occupied() {
+				openCells++
+				if ok, _ := g.validateNormalMove(1, r, c); ok {
+					validMoves[0]++
+				}
+				if ok, _ := g.validateNormalMove(2, r, c); ok {
+					validMoves[1]++
+				}
+			}
 		}
 	}
 	b.Score = s
-	if openCells == 0 || openCells < abs(s[0]-s[1]) {
-		// Not enough open cells left for player to catch up with leader.
+	// If only one player has valid moves left, it's their turn.
+	canMove1 := validMoves[0] > 0 || (openCells > 0 && b.Resources[0].NumPieces[cellFlag] > 0)
+	canMove2 := validMoves[1] > 0 || (openCells > 0 && b.Resources[1].NumPieces[cellFlag] > 0)
+	if !canMove1 && canMove2 {
+		b.Turn = 2
+	} else if canMove1 && !canMove2 {
+		b.Turn = 1
+	}
+	// Check if the game is over:
+	// * No open cells left
+	// * None of the players can move
+	// * One player cannot move, the other one is leading
+	if openCells == 0 || !(canMove1 || canMove2) ||
+		(s[0] > s[1] && !canMove2) || (s[1] > s[0] && !canMove1) {
 		b.State = Finished
 	}
 }
@@ -587,6 +602,34 @@ func (g *GameEngineSnakez) lifetime(ct CellType) int {
 		return -1
 	}
 	return 0
+}
+
+func (g *GameEngineSnakez) validateNormalMove(playerNum int, r, c int) (ok bool, val int) {
+	// A normal cell can only be placed next to another normal cell
+	// of the same color, or next to a flag of the same color.
+	var ns [6]idx
+	b := g.board
+	n := b.neighbors(idx{r, c}, ns[:])
+	minVal := -1
+	maxVal := -1
+	for i := 0; i < n; i++ {
+		nf := &b.Fields[ns[i].r][ns[i].c]
+		if nf.Owner == playerNum {
+			if minVal == -1 || nf.Value < minVal {
+				minVal = nf.Value
+			}
+			if maxVal == -1 || nf.Value > maxVal {
+				maxVal = nf.Value
+			}
+		}
+	}
+	if minVal == -1 || maxVal == g.maxValue {
+		// Reject move in any of these cases:
+		// * No neighbor has the same color
+		// * One neighbor has the max value already
+		return false, 0
+	}
+	return true, minVal + 1
 }
 
 func (g *GameEngineSnakez) MakeMove(m GameEngineMove) bool {
@@ -609,34 +652,15 @@ func (g *GameEngineSnakez) MakeMove(m GameEngineMove) bool {
 		return false
 	}
 	if m.cellType == cellNormal {
-		// A normal cell can only be placed next to another normal cell
-		// of the same color, or next to a flag of the same color.
-		var ns [6]idx
-		n := b.neighbors(idx{m.row, m.col}, ns[:])
-		minVal := -1
-		maxVal := -1
-		for i := 0; i < n; i++ {
-			nf := &b.Fields[ns[i].r][ns[i].c]
-			if nf.Owner == turn {
-				if minVal == -1 || nf.Value < minVal {
-					minVal = nf.Value
-				}
-				if maxVal == -1 || nf.Value > maxVal {
-					maxVal = nf.Value
-				}
-			}
-		}
-		if minVal == -1 || maxVal == g.maxValue {
-			// Reject move in any of these cases:
-			// * No neighbor has the same color
-			// * One neighbar has the max value already
+		ok, val := g.validateNormalMove(turn, m.row, m.col)
+		if !ok {
 			return false
 		}
 		f.Owner = turn
 		f.Type = cellNormal
 		f.Lifetime = g.lifetime(cellNormal)
 		f.Hidden = false
-		f.Value = minVal + 1
+		f.Value = val
 	} else if m.cellType == cellFlag {
 		// A flag can be placed on any free cell. It does not add to the score.
 		f.Owner = turn
@@ -662,5 +686,5 @@ func (g *GameEngineSnakez) Winner() (playerNum int) {
 	if !g.IsDone() {
 		return 0
 	}
-	return scoreBasedSingleWinner(g.board)
+	return scoreBasedSingleWinner(g.board.Score)
 }
