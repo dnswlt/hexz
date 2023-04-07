@@ -33,6 +33,7 @@ type Field struct {
 	Type     CellType `json:"type"`
 	Owner    int      `json:"owner"` // Player number owning this field. 0 for unowned fields.
 	Hidden   bool     `json:"hidden"`
+	Value    int      `json:"v"` // Some games assign different values to cells.
 	Lifetime int      `json:"-"` // Moves left until this cell gets cleared. -1 means infinity.
 }
 

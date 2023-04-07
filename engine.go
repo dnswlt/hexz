@@ -51,6 +51,35 @@ func NewGameEngine(gameType GameType) GameEngine {
 	return ge
 }
 
+// Creates a new, empty 2d field array.
+func makeFields() [][]Field {
+	const numFields = numFieldsFirstRow*((numBoardRows+1)/2) + (numFieldsFirstRow-1)*(numBoardRows/2)
+	arr := make([]Field, numFields)
+	fields := make([][]Field, numBoardRows)
+	start := 0
+	for i := 0; i < len(fields); i++ {
+		end := start + numFieldsFirstRow - i%2
+		fields[i] = arr[start:end]
+		start = end
+	}
+	return fields
+}
+
+func InitBoard(g GameEngine) *Board {
+	b := &Board{
+		Turn:   1, // Player 1 begins
+		Fields: makeFields(),
+		State:  Initial,
+	}
+	numPlayers := g.NumPlayers()
+	b.Score = make([]int, numPlayers)
+	b.Resources = make([]ResourceInfo, numPlayers)
+	for i := 0; i < numPlayers; i++ {
+		b.Resources[i] = g.InitialResources()
+	}
+	return b
+}
+
 //
 // The "classic" hexz game
 //
@@ -451,35 +480,6 @@ func (g *GameEngineFreeform) Winner() (playerNum int) {
 	return 0 // No one ever wins here.
 }
 
-// Creates a new, empty 2d field array.
-func makeFields() [][]Field {
-	const numFields = numFieldsFirstRow*((numBoardRows+1)/2) + (numFieldsFirstRow-1)*(numBoardRows/2)
-	arr := make([]Field, numFields)
-	fields := make([][]Field, numBoardRows)
-	start := 0
-	for i := 0; i < len(fields); i++ {
-		end := start + numFieldsFirstRow - i%2
-		fields[i] = arr[start:end]
-		start = end
-	}
-	return fields
-}
-
-func InitBoard(g GameEngine) *Board {
-	b := &Board{
-		Turn:   1, // Player 1 begins
-		Fields: makeFields(),
-		State:  Initial,
-	}
-	numPlayers := g.NumPlayers()
-	b.Score = make([]int, numPlayers)
-	b.Resources = make([]ResourceInfo, numPlayers)
-	for i := 0; i < numPlayers; i++ {
-		b.Resources[i] = g.InitialResources()
-	}
-	return b
-}
-
 func (g *GameEngineFreeform) MakeMove(m GameEngineMove) bool {
 	board := g.board
 	if !board.valid(idx{m.row, m.col}) {
@@ -494,5 +494,6 @@ func (g *GameEngineFreeform) MakeMove(m GameEngineMove) bool {
 	if board.Turn > 2 {
 		board.Turn = 1
 	}
+	f.Value = board.Move
 	return true
 }

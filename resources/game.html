@@ -22,7 +22,7 @@
         }
 
         body {
-            font-family: arial, sans-serif;
+            font-family: sans-serif;
         }
 
         .menu {
@@ -281,6 +281,12 @@
             let b = Math.sqrt(3) * a;
             let nRows = gstate.board.fields.length;
             let hex = hexagon(a);
+            // Set properties of text drawn in cells.
+            const fontSize = Math.floor(a);
+            ctx.font = `${fontSize}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            // Draw cells.
             for (let i = 0; i < nRows; i++) {
                 for (let j = 0; j < gstate.board.fields[i].length; j++) {
                     let xOff = (i % 2 == 0) ? 0 : b / 2;
@@ -308,6 +314,10 @@
                                 ctx.fill(symbol, 'evenodd');
                                 ctx.restore();
                             }
+                        }
+                        if (visible && fld.v > 0) {
+                            ctx.fillStyle = "#1e1e1e";
+                            ctx.fillText(String(fld.v), 0, 0);
                         }
                     } else if (fld.type == cellDead) {
                         ctx.fillStyle = styles.colors.deadCell;
