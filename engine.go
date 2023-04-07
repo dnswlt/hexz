@@ -9,11 +9,17 @@ type GameType string
 
 const (
 	gameTypeClassic  GameType = "classic"
+	gameTypeSnakez   GameType = "snakez"
 	gameTypeFreeform GameType = "freeform"
 )
 
 func validGameType(gameType string) bool {
-	return gameType == string(gameTypeClassic) || gameType == string(gameTypeFreeform)
+	allGameTypes := map[GameType]bool{
+		gameTypeClassic:  true,
+		gameTypeSnakez:   true,
+		gameTypeFreeform: true,
+	}
+	return allGameTypes[GameType(gameType)]
 }
 
 type GameEngineMove struct {
@@ -42,6 +48,8 @@ func NewGameEngine(gameType GameType) GameEngine {
 	switch gameType {
 	case gameTypeClassic:
 		ge = &GameEngineClassic{}
+	case gameTypeSnakez:
+		ge = &GameEngineSnakez{}
 	case gameTypeFreeform:
 		ge = &GameEngineFreeform{}
 	default:
@@ -118,14 +126,11 @@ func (g *GameEngineClassic) InitialResources() ResourceInfo {
 
 func (g *GameEngineClassic) IsDone() bool { return g.board.State == Finished }
 
-func (g *GameEngineClassic) Winner() (playerNum int) {
-	if !g.IsDone() {
-		return 0
-	}
+func scoreBasedSingleWinner(board *Board) (playerNum int) {
 	maxIdx := -1
 	maxScore := -1
 	uniq := false
-	for i, s := range g.board.Score {
+	for i, s := range board.Score {
 		if s > maxScore {
 			maxScore = s
 			maxIdx = i
@@ -138,6 +143,13 @@ func (g *GameEngineClassic) Winner() (playerNum int) {
 		return maxIdx
 	}
 	return 0
+}
+
+func (g *GameEngineClassic) Winner() (playerNum int) {
+	if !g.IsDone() {
+		return 0
+	}
+	return scoreBasedSingleWinner(g.board)
 }
 
 func (f *Field) occupied() bool {
@@ -496,4 +508,131 @@ func (g *GameEngineFreeform) MakeMove(m GameEngineMove) bool {
 	}
 	f.Value = board.Move
 	return true
+}
+
+type GameEngineSnakez struct {
+	board *Board
+}
+
+func (g *GameEngineSnakez) Init() {
+	g.board = InitBoard(g)
+}
+func (g *GameEngineSnakez) Start() {
+	g.board.State = Running
+}
+
+func (g *GameEngineSnakez) InitialResources() ResourceInfo {
+	return ResourceInfo{
+		NumPieces: map[CellType]int{
+			cellNormal: -1, // unlimited
+			cellFlag:   3,
+		},
+	}
+}
+
+func (g *GameEngineSnakez) NumPlayers() int { return 2 }
+func (g *GameEngineSnakez) Reset() {
+	g.Init()
+}
+
+func (g *GameEngineSnakez) recomputeScoreAndState() {
+	abs := func(a int) int {
+		if a < 0 {
+			return -a
+		}
+		return a
+	}
+	b := g.board
+	s := []int{0, 0}
+	openCells := 0
+	for _, row := range b.Fields {
+		for _, fld := range row {
+			if fld.Owner > 0 && s[fld.Owner-1] < fld.Value {
+				s[fld.Owner-1] = fld.Value
+			} else {
+				openCells++
+			}
+		}
+	}
+	b.Score = s
+	if openCells == 0 || openCells < abs(s[0]-s[1]) {
+		// Not enough open cells left for player to catch up with leader.
+		b.State = Finished
+	}
+}
+
+func (g *GameEngineSnakez) lifetime(ct CellType) int {
+	switch ct {
+	case cellNormal, cellFlag:
+		return -1
+	}
+	return 0
+}
+
+func (g *GameEngineSnakez) MakeMove(m GameEngineMove) bool {
+	b := g.board
+	turn := b.Turn
+	if m.playerNum != turn {
+		// Only allow moves by players whose turn it is.
+		return false
+	}
+	if !b.valid(idx{m.row, m.col}) {
+		// Invalid move request.
+		return false
+	}
+	f := &b.Fields[m.row][m.col]
+	if f.occupied() {
+		return false
+	}
+	if b.Resources[turn-1].NumPieces[m.cellType] == 0 {
+		// No pieces left of requested type
+		return false
+	}
+	if m.cellType == cellNormal {
+		// A normal cell can only be placed next to another normal cell
+		// of the same color, or next to a flag of the same color.
+		var ns [6]idx
+		n := b.neighbors(idx{m.row, m.col}, ns[:])
+		minVal := -1
+		for i := 0; i < n; i++ {
+			nf := &b.Fields[ns[i].r][ns[i].c]
+			if nf.Owner == turn && (minVal == -1 || nf.Value < minVal) {
+				minVal = nf.Value
+			}
+		}
+		if minVal == -1 {
+			// No neighbor has the same color => reject move.
+			return false
+		}
+		f.Owner = turn
+		f.Type = cellNormal
+		f.Lifetime = g.lifetime(cellNormal)
+		f.Hidden = false
+		f.Value = minVal + 1
+	} else if m.cellType == cellFlag {
+		// A flag can be placed on any free cell. It does not add to the score.
+		f.Owner = turn
+		f.Type = cellFlag
+		f.Lifetime = g.lifetime(cellFlag)
+		f.Hidden = false
+		f.Value = 0
+		b.Resources[turn-1].NumPieces[cellFlag]--
+	}
+	b.Turn = 3 - b.Turn
+	b.Move++
+	g.recomputeScoreAndState()
+	return true
+}
+
+func (g *GameEngineSnakez) Board() *Board { return g.board }
+
+func (g *GameEngineSnakez) IsDone() bool {
+	return g.board.State == Finished
+}
+
+func (g *GameEngineSnakez) Winner() (playerNum int) {
+	if !g.IsDone() {
+		return 0
+	}
+	return scoreBasedSingleWinner(g.board)
 }

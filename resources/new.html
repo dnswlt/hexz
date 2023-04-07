@@ -69,8 +69,13 @@
             <input class="gameButton" type="submit" value="Classic">
         </form>
     </div>
-    <div class="spacer"></div>
-    <div class="centered">
+    <div class="centered spacer">
+        <form action="/hexz/new" method="post">
+            <input type="hidden" name="type" id="type" value="snakez">
+            <input class="gameButton" type="submit" value="Snakez">
+        </form>
+    </div>
+    <div class="centered spacer">
         <form action="/hexz/new" method="post">
             <input type="hidden" name="type" id="type" value="freeform">
             <input class="gameButton" type="submit" value="Freeform">

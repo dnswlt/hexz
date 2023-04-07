@@ -351,7 +351,7 @@
                 ctx.translate(x, y);
                 // Determine background and icon colors to use.
                 let available = buttonCells[j].type == cellNormal
-                    || gstate.board.resources[playerIdx].numPieces[buttonCells[j].type] > 0;
+                    || !!gstate.board.resources[playerIdx].numPieces[buttonCells[j].type];
                 let cellColor = styles.colors.hiddenMoves[playerIdx];
                 if (!available) {
                     cellColor = styles.colors.unavailablePiece;
@@ -466,7 +466,7 @@
                     let y = i * a * 3 / 2 + a;
                     ctx.translate(x, y);
                     if (ctx.isPointInPath(hex, event.offsetX, event.offsetY)) {
-                        clickedOnField(i, j);
+                        onFieldClicked(i, j);
                         break;
                     }
                     ctx.translate(-x, -y);
@@ -480,23 +480,23 @@
                 let y = buttonRow * a * 3 / 2 + a;
                 ctx.translate(x, y);
                 if (ctx.isPointInPath(hex, event.offsetX, event.offsetY)) {
-                    clickedOnCellButton(buttonCells[j].type);
+                    onCellButtonClicked(buttonCells[j].type);
                     break;
                 }
                 ctx.translate(-x, -y);
             }
         }
 
-        function clickedOnField(row, col) {
+        function onFieldClicked(row, col) {
             sendMove(row, col);
             // Revert selection to normal to avoid accidentally placing special cells.
             gstate.selectedCellType = cellNormal;
         }
 
-        function clickedOnCellButton(cellType) {
+        function onCellButtonClicked(cellType) {
             let playerIdx = gstate.role - 1;
             let available = cellType == cellNormal
-                || gstate.board.resources[playerIdx].numPieces[cellType] > 0;
+                || gstate.board.resources[playerIdx].numPieces[cellType] != 0;
             if (available) {
                 gstate.selectedCellType = cellType;
                 redraw();
