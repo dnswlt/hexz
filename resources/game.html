@@ -98,6 +98,8 @@
                 hiddenMoves: ['#92acd9', '#fbeba3'], // 50% alpha of players
                 cellIcons: ['#1e1e1e', '#7a6505'], // For yellow: 25% HSL luminance of player color.
                 deadCell: '#d03d12',
+                grassCell: '#007642',
+                grassCellFg: '#00331d',
                 unavailablePiece: '#3e3e3e',
                 unavailablePieceIcon: '#cbcbcb',
             },
@@ -240,10 +242,11 @@
         // Cell types. Keep in sync with constants used by server.
         const cellNormal = 0;
         const cellDead = 1;
-        const cellFire = 2;
-        const cellFlag = 3;
-        const cellPest = 4;
-        const cellDeath = 5;
+        const cellGrass = 2;
+        const cellFire = 3;
+        const cellFlag = 4;
+        const cellPest = 5;
+        const cellDeath = 6;
 
         const cellTypeToPathMap = [];
         cellTypeToPathMap[cellFire] = new Path2D(cellTypePaths.fire);
@@ -322,6 +325,13 @@
                     } else if (fld.type == cellDead) {
                         ctx.fillStyle = styles.colors.deadCell;
                         ctx.fill(hex);
+                    } else if (fld.type == cellGrass) {
+                        ctx.fillStyle = styles.colors.grassCell;
+                        ctx.fill(hex);
+                        if (fld.v > 0) {
+                            ctx.fillStyle = styles.colors.grassCellFg;
+                            ctx.fillText(String(fld.v), 0, 0);
+                        }
                     }
                     ctx.strokeStyle = styles.colors.grid;
                     ctx.stroke(hex);

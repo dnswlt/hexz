@@ -125,9 +125,9 @@ type GameInfo struct {
 }
 
 type Player struct {
-	id         string
-	name       string
-	lastActive time.Time
+	Id         string    `json:"id"`
+	Name       string    `json:"name"`
+	LastActive time.Time `json:"lastActive"`
 }
 
 func (s *Server) lookupPlayer(playerId string) *Player {
@@ -138,7 +138,7 @@ func (s *Server) lookupPlayer(playerId string) *Player {
 	if !ok {
 		return nil
 	}
-	p.lastActive = time.Now()
+	p.LastActive = time.Now()
 	return p
 }
 
@@ -152,9 +152,9 @@ func (s *Server) loginPlayer(playerId string, name string) bool {
 		return false
 	}
 	p := &Player{
-		id:         playerId,
-		name:       name,
-		lastActive: time.Now(),
+		Id:         playerId,
+		Name:       name,
+		LastActive: time.Now(),
 	}
 	s.loggedInPlayers[playerId] = p
 	return true
@@ -203,7 +203,7 @@ func (g *GameHandle) registerPlayer(p *Player) (chan ServerEvent, error) {
 	if g.sendEvent(ControlEventRegister{player: p, replyChan: ch}) {
 		return <-ch, nil
 	}
-	return nil, fmt.Errorf("cannot register player %s in game %s: game over", p.id, g.id)
+	return nil, fmt.Errorf("cannot register player %s in game %s: game over", p.Id, g.id)
 }
 
 func (g *GameHandle) unregisterPlayer(playerId string) {
@@ -273,7 +273,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 	playerName := func(playerNum int) (string, bool) {
 		for _, p := range players {
 			if p.playerNum == playerNum {
-				return p.name, true
+				return p.Name, true
 			}
 		}
 		return "", false
@@ -300,29 +300,29 @@ func (s *Server) gameMaster(game *GameHandle) {
 			case ControlEventRegister:
 				var playerNum int
 				added := false
-				if p, ok := players[e.player.id]; ok {
+				if p, ok := players[e.player.Id]; ok {
 					// Player reconnected. Cancel its removal.
-					if cancel, ok := playerRmCancel[e.player.id]; ok {
+					if cancel, ok := playerRmCancel[e.player.Id]; ok {
 						close(cancel)
-						delete(playerRmCancel, e.player.id)
+						delete(playerRmCancel, e.player.Id)
 					}
 					playerNum = p.playerNum
 				} else if len(players) < gameEngine.NumPlayers() {
 					added = true
 					playerNum = len(players) + 1
-					players[e.player.id] = pInfo{playerNum, e.player}
+					players[e.player.Id] = pInfo{playerNum, e.player}
 					if len(players) == gameEngine.NumPlayers() {
 						gameEngine.Start()
 					}
 				}
 				ch := make(chan ServerEvent)
-				eventListeners[e.player.id] = ch
+				eventListeners[e.player.Id] = ch
 				e.replyChan <- ch
 				// Send board and player role initially so client can display the UI.
-				singlecast(e.player.id, ServerEvent{Board: gameEngine.Board(), Role: playerNum})
+				singlecast(e.player.Id, ServerEvent{Board: gameEngine.Board(), Role: playerNum})
 				announcements := []string{}
 				if added {
-					announcements = append(announcements, fmt.Sprintf("Welcome %s!", e.player.name))
+					announcements = append(announcements, fmt.Sprintf("Welcome %s!", e.player.Name))
 				}
 				if added && gameEngine.Board().State == Running {
 					announcements = append(announcements, "The game begins!")
@@ -355,6 +355,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 					// Ignore invalid move request
 					break
 				}
+				before := time.Now()
 				if s.config.DebugMode {
 					debugReq, _ := json.Marshal(e.MoveRequest)
 					log.Printf("%s: move request: P%d %s", game.id, p.playerNum, debugReq)
@@ -370,6 +371,9 @@ func (s *Server) gameMaster(game *GameHandle) {
 					}
 					broadcast(ServerEvent{Board: gameEngine.Board(), Announcements: announcements})
 				}
+				if s.config.DebugMode {
+					log.Printf("MakeMove took %dus", time.Since(before).Microseconds())
+				}
 			case ControlEventReset:
 				gameEngine.Reset()
 				p, ok := players[e.playerId]
@@ -377,7 +381,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 					break // Only players are allowed to reset
 				}
 				announcements := []string{
-					fmt.Sprintf("Player %s restarted the game.", p.name),
+					fmt.Sprintf("Player %s restarted the game.", p.Name),
 				}
 				broadcast(ServerEvent{Board: gameEngine.Board(), Announcements: announcements})
 			}
@@ -387,7 +391,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 			log.Printf("Player %s left game %s: game over", playerId, game.id)
 			playerName := "?"
 			if p, ok := players[playerId]; ok {
-				playerName = p.name
+				playerName = p.Name
 			}
 			broadcast(ServerEvent{
 				// Send sad emoji.
@@ -537,7 +541,7 @@ func (s *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid value for 'type'", http.StatusBadRequest)
 		return
 	}
-	game, err := s.startNewGame(p.name, GameType(typeParam))
+	game, err := s.startNewGame(p.Name, GameType(typeParam))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusPreconditionFailed)
 	}
@@ -584,7 +588,7 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
 		return
 	}
-	game.sendEvent(ControlEventMove{playerId: player.id, MoveRequest: req})
+	game.sendEvent(ControlEventMove{playerId: player.Id, MoveRequest: req})
 }
 
 func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
@@ -603,7 +607,7 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
 		return
 	}
-	game.sendEvent(ControlEventReset{playerId: p.id, message: req.Message})
+	game.sendEvent(ControlEventReset{playerId: p.Id, message: req.Message})
 
 }
 
@@ -632,7 +636,7 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 		select {
 		case ev, ok := <-serverEventChan:
 			if !ok {
-				log.Printf("Closing SSE channel for player %s in game %s", p.id, gameId)
+				log.Printf("Closing SSE channel for player %s in game %s", p.Id, gameId)
 				ev = ServerEvent{
 					LastEvent: true,
 				}
@@ -653,8 +657,8 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-r.Context().Done():
-			log.Printf("%s Player %s closed SSE channel", r.RemoteAddr, p.id)
-			game.unregisterPlayer(p.id)
+			log.Printf("%s Player %s closed SSE channel", r.RemoteAddr, p.Id)
+			game.unregisterPlayer(p.Id)
 			return
 		}
 	}
@@ -765,9 +769,9 @@ func (s *Server) loadUserDatabase() {
 	s.loggedInPlayersMut.Lock()
 	defer s.loggedInPlayersMut.Unlock()
 	for _, p := range players {
-		if _, ok := s.loggedInPlayers[p.id]; !ok {
+		if _, ok := s.loggedInPlayers[p.Id]; !ok {
 			// Only add players, don't overwrite anything existing in memory.
-			s.loggedInPlayers[p.id] = p
+			s.loggedInPlayers[p.Id] = p
 		}
 	}
 }
@@ -802,9 +806,9 @@ func (s *Server) updateLoggedInPlayers() {
 		s.loggedInPlayersMut.Lock()
 		del := []string{}
 		for pId, p := range s.loggedInPlayers {
-			if p.lastActive.Before(logoutThresh) {
+			if p.LastActive.Before(logoutThresh) {
 				del = append(del, pId)
-			} else if p.lastActive.After(lastIteration) {
+			} else if p.LastActive.After(lastIteration) {
 				activity = true
 			}
 		}

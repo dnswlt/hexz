@@ -48,6 +48,7 @@ type CellType int
 const (
 	cellNormal CellType = iota
 	cellDead
+	cellGrass
 	cellFire
 	cellFlag
 	cellPest

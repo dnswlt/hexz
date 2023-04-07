@@ -1,6 +1,8 @@
 package hexz
 
-import "math/rand"
+import (
+	"math/rand"
+)
 
 const (
 	numFieldsFirstRow = 10
@@ -158,7 +160,7 @@ func (g *GameEngineClassic) Winner() (playerNum int) {
 }
 
 func (f *Field) occupied() bool {
-	return f.Type == cellDead || f.Owner > 0
+	return f.Type != cellNormal || f.Owner > 0
 }
 
 func (g *GameEngineClassic) recomputeScoreAndState() {
@@ -526,6 +528,7 @@ func (g *GameEngineSnakez) Init() {
 }
 func (g *GameEngineSnakez) Start() {
 	const numDeadCells = 15 // Odd number, so we have an even number of free cells.
+	const numGrassCells = 5
 	i := 0
 	n := len(g.board.FlatFields)
 	// j is only a safeguard for invalid calls to this method on a non-empty board.
@@ -536,6 +539,18 @@ func (g *GameEngineSnakez) Start() {
 			f := &g.board.FlatFields[k]
 			f.Type = cellDead
 			f.Lifetime = -1
+		}
+	}
+	// Place some grass cells.
+	i = 0
+	for j := 0; j < n && i < numGrassCells; j++ {
+		k := rand.Intn(n)
+		if !g.board.FlatFields[k].occupied() {
+			i++
+			f := &g.board.FlatFields[k]
+			f.Type = cellGrass
+			f.Lifetime = -1
+			f.Value = i
 		}
 	}
 	g.board.State = Running
@@ -632,6 +647,25 @@ func (g *GameEngineSnakez) validateNormalMove(playerNum int, r, c int) (ok bool,
 	return true, minVal + 1
 }
 
+// Occupies all grass cells around (r, c) that have at most the value
+// that (r, c) has.
+func (g *GameEngineSnakez) occupyGrassCells(r, c int) {
+	var ns [6]idx
+	b := g.board
+	f := &b.Fields[r][c]
+	if f.Owner == 0 || f.Value == 0 {
+		return
+	}
+	n := b.neighbors(idx{r, c}, ns[:])
+	for i := 0; i < n; i++ {
+		nb := &b.Fields[ns[i].r][ns[i].c]
+		if nb.Type == cellGrass && nb.Value <= f.Value {
+			nb.Type = cellNormal
+			nb.Owner = f.Owner
+		}
+	}
+}
+
 func (g *GameEngineSnakez) MakeMove(m GameEngineMove) bool {
 	b := g.board
 	turn := b.Turn
@@ -661,6 +695,7 @@ func (g *GameEngineSnakez) MakeMove(m GameEngineMove) bool {
 		f.Lifetime = g.lifetime(cellNormal)
 		f.Hidden = false
 		f.Value = val
+		g.occupyGrassCells(m.row, m.col)
 	} else if m.cellType == cellFlag {
 		// A flag can be placed on any free cell. It does not add to the score.
 		f.Owner = turn
