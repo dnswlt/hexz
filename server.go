@@ -60,6 +60,7 @@ const (
 	playerIdCookieName   = "playerId"
 	gameHtmlFilename     = "game.html"
 	loginHtmlFilename    = "login.html"
+	newGameHtmlFilename  = "new.html"
 	rulesHtmlFilename    = "rules.html"
 	userDatabaseFilename = "_users.json"
 )
@@ -488,18 +489,43 @@ func (s *Server) handleHexz(w http.ResponseWriter, r *http.Request) {
 		s.handleLoginPage(w, r)
 		return
 	}
-
-	gameType := gameTypeClassic
-	debug := r.URL.Query().Get("d")
-	if len(debug) > 0 {
-		gameType = gameTypeFreeform
+	html, err := s.readFile(newGameHtmlFilename)
+	if err != nil {
+		http.Error(w, "Failed to load html", http.StatusInternalServerError)
+		log.Fatal("Cannot read new game HTML page: ", err.Error())
 	}
-	// For now, immediately create a new game and redirect to it.
-	game, err := s.startNewGame(gameType)
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(html)
+}
+
+func (s *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid method", http.StatusBadRequest)
+		return
+	}
+	_, err := s.lookupPlayerFromCookie(r)
+	if err != nil {
+		s.handleLoginPage(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form", http.StatusBadRequest)
+		return
+	}
+	typeParam := r.Form.Get("type")
+	if typeParam == "" {
+		http.Error(w, "Missing 'type' form parameter", http.StatusBadRequest)
+		return
+	}
+	if !validGameType(typeParam) {
+		http.Error(w, "Invalid value for 'type'", http.StatusBadRequest)
+		return
+	}
+	game, err := s.startNewGame(GameType(typeParam))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusPreconditionFailed)
 	}
-	http.Redirect(w, r, fmt.Sprintf("%s/%s", r.URL.Path, game.Id), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/hexz/%s", game.Id), http.StatusSeeOther)
 }
 
 func (s *Server) validatePostRequest(r *http.Request) (*Player, error) {
@@ -803,6 +829,7 @@ func (s *Server) Serve() {
 	})
 	mux.HandleFunc("/hexz/images/", s.handleStaticResource)
 	mux.HandleFunc("/hexz", s.handleHexz)
+	mux.HandleFunc("/hexz/new", s.handleNewGame)
 	mux.HandleFunc("/hexz/", s.handleGame)
 	mux.HandleFunc("/statusz", s.handleStatusz)
 	mux.HandleFunc("/", s.defaultHandler)

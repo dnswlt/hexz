@@ -12,6 +12,10 @@ const (
 	gameTypeFreeform GameType = "freeform"
 )
 
+func validGameType(gameType string) bool {
+	return gameType == string(gameTypeClassic) || gameType == string(gameTypeFreeform)
+}
+
 type GameEngineMove struct {
 	playerNum int
 	row       int
@@ -111,7 +115,8 @@ func (f *Field) occupied() bool {
 	return f.Type == cellDead || f.Owner > 0
 }
 
-func recomputeScoreAndState(b *Board) {
+func (g *GameEngineClassic) recomputeScoreAndState() {
+	b := g.board
 	s := []int{0, 0}
 	openCells := 0
 	for _, row := range b.Fields {
@@ -404,7 +409,7 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 
 		board.LastRevealed = board.Move
 	}
-	recomputeScoreAndState(board)
+	g.recomputeScoreAndState()
 	return true
 }
 

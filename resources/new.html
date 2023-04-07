@@ -24,6 +24,7 @@
         body {
             font-family: arial, sans-serif;
         }
+
         h1, p, div {
             text-align: center;
         }
@@ -32,31 +33,32 @@
             justify-content: center;
             align-items: center;
         }
-
+        div.spacer {
+            margin-top: 1ex;
+        }
+        .gameButton {
+            min-width: 10em;
+        }
     </style>
 </head>
 
 <body>
-    <h1>Welcome to Hexz!</h1>
+    <h1>Start a new game</h1>
     <p>
-        To play, please enter a user name.
+        Please select the game you want to play.
     </p>
     <div class="centered">
-        <form action="/hexz/login" method="post">
-            <table>
-                <tr>
-                    <td>
-                        <label for="name">Name: </label>
-                    </td>
-                    <td>
-                        <input type="text" name="name" id="name" required>
-                    </td>
-                    <td>
-                        <input type="submit" value="Let's play!">
-                    </td>
-                </tr>
-            </table>
-        </form>    
+        <form action="/hexz/new" method="post">
+            <input type="hidden" name="type" id="type" value="classic">
+            <input class="gameButton" type="submit" value="Classic">
+        </form>
+    </div>
+    <div class="spacer"></div>
+    <div class="centered">
+        <form action="/hexz/new" method="post">
+            <input type="hidden" name="type" id="type" value="freeform">
+            <input class="gameButton" type="submit" value="Freeform">
+        </form>
     </div>
 </body>
 

@@ -199,7 +199,9 @@
         function updateScore() {
             let div = document.getElementById("scoreInfo");
             const s = gstate.board.score;
-            div.innerHTML = `${s[0]} &ndash; ${s[1]}`
+            if (s) {
+                div.innerHTML = s.join(" &ndash; ");
+            }
         }
 
         function updateTurnInfo() {
@@ -323,7 +325,7 @@
                             if (symbol) {
                                 ctx.save();
                                 ctx.scale(b / 50 / 3.5, b / 50 / 3.5);
-                                ctx.fillStyle = styles.colors.cellIcons[fld.owner-1];
+                                ctx.fillStyle = styles.colors.cellIcons[fld.owner - 1];
                                 ctx.fill(symbol, 'evenodd');
                                 ctx.restore();
                             }
@@ -359,7 +361,7 @@
                 ctx.save();
                 ctx.translate(x, y);
                 // Determine background and icon colors to use.
-                let available = buttonCells[j].type == cellNormal 
+                let available = buttonCells[j].type == cellNormal
                     || gstate.board.resources[playerIdx].numPieces[buttonCells[j].type] > 0;
                 let cellColor = styles.colors.hiddenMoves[playerIdx];
                 if (!available) {
@@ -407,7 +409,7 @@
             // 2*20 padding + (6*2*30 + 5*30) hexz height + 3*30 for hexz-buttons.
             const defaultHeight = 640;
             canvas.width = Math.floor(Math.min(
-                maxWidth, 
+                maxWidth,
                 document.body.clientWidth,
                 // Ensure the whole board fits on the screen.
                 0.9 * document.body.clientHeight / defaultHeight * defaultWidth
@@ -504,8 +506,8 @@
 
         function clickedOnCellButton(cellType) {
             let playerIdx = gstate.role - 1;
-            let available = cellType == cellNormal 
-                    || gstate.board.resources[playerIdx].numPieces[cellType] > 0;
+            let available = cellType == cellNormal
+                || gstate.board.resources[playerIdx].numPieces[cellType] > 0;
             if (available) {
                 gstate.selectedCellType = cellType;
                 redraw();
