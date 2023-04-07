@@ -96,17 +96,15 @@ func isFavicon(path string) bool {
 
 type GameDesc struct {
 	gameType      GameType
-	minPlayers    int
-	maxPlayers    int
+	numPlayers    int
 	initialPieces map[CellType]int
 }
 
 var (
-	knownGames = map[string]GameDesc{
-		"classic": {
-			gameType:   "classic",
-			minPlayers: 2,
-			maxPlayers: 2,
+	allGameTypes = map[GameType]GameDesc{
+		gameTypeClassic: {
+			gameType:   gameTypeClassic,
+			numPlayers: 2,
 			initialPieces: map[CellType]int{
 				cellNormal: -1, // unlimited
 				cellFire:   1,
@@ -115,10 +113,9 @@ var (
 				cellDeath:  1,
 			},
 		},
-		"freeform": {
-			gameType:   "freeform",
-			minPlayers: 1,
-			maxPlayers: 1,
+		gameTypeFreeform: {
+			gameType:   gameTypeFreeform,
+			numPlayers: 2,
 			initialPieces: map[CellType]int{
 				cellNormal: -1, // unlimited
 				cellFire:   -1,
@@ -148,11 +145,10 @@ type GameHandle struct {
 type GameState string
 
 const (
-	Initial           GameState = "initial"
-	WaitingForPlayers GameState = "waiting"
-	Running           GameState = "running"
-	Finished          GameState = "finished"
-	Aborted           GameState = "aborted"
+	Initial  GameState = "initial"
+	Running  GameState = "running"
+	Finished GameState = "finished"
+	Aborted  GameState = "aborted"
 )
 
 // JSON for server responses.
@@ -168,13 +164,13 @@ type ServerEvent struct {
 }
 
 type Board struct {
-	Turn         int             `json:"turn"`
-	Move         int             `json:"move"`
-	LastRevealed int             `json:"-"` // Move at which fields were last revealed
-	Fields       [][]Field       `json:"fields"`
-	Score        [2]int          `json:"score"`
-	Resources    [2]ResourceInfo `json:"resources"`
-	State        GameState       `json:"state"`
+	Turn         int            `json:"turn"`
+	Move         int            `json:"move"`
+	LastRevealed int            `json:"-"` // Move at which fields were last revealed
+	Fields       [][]Field      `json:"fields"`
+	Score        []int          `json:"score"`
+	Resources    []ResourceInfo `json:"resources"`
+	State        GameState      `json:"state"`
 }
 
 type Field struct {
@@ -200,69 +196,96 @@ func (c CellType) valid() bool {
 }
 
 type GameEngine interface {
-	AddPlayer(name string) (playerNum int, added bool)
+	Init(numPlayers int)
+	Reset()
 	MakeMove(playerNum int, e ControlEventMove) bool
 	Board() *Board
 	IsDone() bool
-	Winner() (playerNum int, name string) // Results are only meaningful if IsDone() is true. 0 for draw.
-	Reset()
+	Winner() (playerNum int) // Results are only meaningful if IsDone() is true. 0 for draw.
 }
 
 type GameEngineClassic struct {
-	board   *Board
-	players []string
+	board *Board
 }
 
 func (g *GameEngineClassic) Board() *Board { return g.board }
-func (g *GameEngineClassic) Reset()        { g.board = NewBoard() }
-func (g *GameEngineClassic) IsDone() bool  { return g.board.State == Finished }
-func (g *GameEngineClassic) AddPlayer(name string) (playerNum int, added bool) {
-	if len(g.players) == 2 {
-		return 0, false
+func (g *GameEngineClassic) Init(numPlayers int) {
+	if numPlayers != 2 {
+		panic("Cannot play a classic game with " + fmt.Sprint(numPlayers) + " players")
 	}
-	g.players = append(g.players, name)
-	if len(g.players) == 2 {
-		g.board.State = Running
-	} else {
-		g.board.State = WaitingForPlayers
-	}
-	return len(g.players), true
+	g.board = NewBoard()
+	InitBoard(g.board, numPlayers, gameTypeClassic)
 }
-func (g *GameEngineClassic) Winner() (playerNum int, name string) {
+
+func (g *GameEngineClassic) Reset() {
+	g.Init(2)
+}
+
+func (g *GameEngineClassic) IsDone() bool { return g.board.State == Finished }
+
+func (g *GameEngineClassic) Winner() (playerNum int) {
 	if !g.IsDone() {
-		return 0, ""
+		return 0
 	}
-	if g.board.Score[0] > g.board.Score[1] {
-		return 1, g.players[0]
+	maxIdx := -1
+	maxScore := -1
+	uniq := false
+	for i, s := range g.board.Score {
+		if s > maxScore {
+			maxScore = s
+			maxIdx = i
+			uniq = true
+		} else if s == maxScore {
+			uniq = false
+		}
 	}
-	if g.board.Score[1] > g.board.Score[0] {
-		return 2, g.players[1]
+	if uniq {
+		return maxIdx
 	}
-	return 0, ""
+	return 0
 }
 
 type GameEngineFreeform struct {
-	board     *Board
-	hasPlayer bool
+	board *Board
 }
 
 func (g *GameEngineFreeform) Board() *Board { return g.board }
-func (g *GameEngineFreeform) Reset()        { g.board = NewBoard() }
-func (g *GameEngineFreeform) IsDone() bool  { return false }
-func (g *GameEngineFreeform) AddPlayer(name string) (playerNum int, added bool) {
-	if g.hasPlayer {
-		return 0, false
-	}
-	g.hasPlayer = true
-	return 1, true
+
+func (g *GameEngineFreeform) Init(numPlayers int) {
+	g.board = NewBoard()
+	InitBoard(g.board, numPlayers, gameTypeFreeform)
 }
-func (g *GameEngineFreeform) Winner() (playerNum int, name string) {
-	return 0, ""
+
+func (g *GameEngineFreeform) Reset()       { g.board = NewBoard() }
+func (g *GameEngineFreeform) IsDone() bool { return false }
+func (g *GameEngineFreeform) Winner() (playerNum int) {
+	return 0 // No one ever wins here.
 }
 
 // Information about the resources each player has left.
 type ResourceInfo struct {
 	NumPieces map[CellType]int `json:"numPieces"`
+}
+
+func InitBoard(board *Board, numPlayers int, gameType GameType) {
+	board.Score = make([]int, numPlayers)
+
+	gd, ok := allGameTypes[gameType]
+	if !ok {
+		panic("Game type " + gameType + " not in allGameTypes")
+	}
+	board.Resources = make([]ResourceInfo, numPlayers)
+	for i := 0; i < numPlayers; i++ {
+		ri := ResourceInfo{
+			NumPieces: make(map[CellType]int),
+		}
+		for ct, n := range gd.initialPieces {
+			ri.NumPieces[ct] = n
+		}
+		board.Resources[i] = ri
+	}
+
+	board.State = Running
 }
 
 // JSON for incoming requests from UI clients.
@@ -403,18 +426,15 @@ func NewGame(id string, gameType GameType) *GameHandle {
 func NewGameEngine(gameType GameType) GameEngine {
 	switch gameType {
 	case gameTypeClassic:
-		return &GameEngineClassic{
-			board: NewBoard(),
-		}
+		return &GameEngineClassic{}
 	case gameTypeFreeform:
-		return &GameEngineFreeform{
-			board: NewBoard(),
-		}
+		return &GameEngineFreeform{}
 	default:
 		panic("Unconsidered game type: " + gameType)
 	}
 }
 
+// Creates a new, empty board. Callers need to set the Resources of the board later!
 func NewBoard() *Board {
 	const numFields = numFieldsFirstRow*((numBoardRows+1)/2) + (numFieldsFirstRow-1)*(numBoardRows/2)
 	arr := make([]Field, numFields)
@@ -425,24 +445,10 @@ func NewBoard() *Board {
 		fields[i] = arr[start:end]
 		start = end
 	}
-	// This map defines how many special pieces each player starts with.
-	initialPieces := func() map[CellType]int {
-		return map[CellType]int{
-			cellNormal: numFieldsFirstRow * numBoardRows, // Essentially unlimited
-			cellFire:   1,
-			cellFlag:   1,
-			cellPest:   1,
-			cellDeath:  1,
-		}
-	}
 	return &Board{
 		Turn:   1, // Player 1 begins
 		Fields: fields,
-		Resources: [2]ResourceInfo{
-			{NumPieces: initialPieces()},
-			{NumPieces: initialPieces()},
-		},
-		State: Initial,
+		State:  Initial,
 	}
 }
 
@@ -461,7 +467,7 @@ func (f *Field) occupied() bool {
 }
 
 func recomputeScoreAndState(b *Board) {
-	s := [2]int{0, 0}
+	s := []int{0, 0}
 	openCells := 0
 	for _, row := range b.Fields {
 		for _, fld := range row {
@@ -813,7 +819,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 			switch e := ce.(type) {
 			case ControlEventRegister:
 				var playerNum int
-				var added bool
+				added := false
 				if p, ok := players[e.Player.Id]; ok {
 					// Player reconnected. Cancel its removal.
 					if cancel, ok := playerRmCancel[e.Player.Id]; ok {
@@ -821,10 +827,12 @@ func (s *Server) gameMaster(game *GameHandle) {
 						delete(playerRmCancel, e.Player.Id)
 					}
 					playerNum = p.playerNum
-				} else {
-					playerNum, added = gameEngine.AddPlayer(e.Player.Name)
-					if added {
-						players[e.Player.Id] = pInfo{playerNum, e.Player}
+				} else if len(players) < allGameTypes[game.gameType].numPlayers {
+					added = true
+					playerNum = len(players) + 1
+					players[e.Player.Id] = pInfo{playerNum, e.Player}
+					if len(players) == allGameTypes[game.gameType].numPlayers {
+						gameEngine.Init(len(players))
 					}
 				}
 				ch := make(chan ServerEvent)
@@ -870,10 +878,16 @@ func (s *Server) gameMaster(game *GameHandle) {
 				if gameEngine.MakeMove(p.playerNum, e) {
 					announcements := []string{}
 					if gameEngine.IsDone() {
-						_, winner := gameEngine.Winner()
-						if winner != "" {
+						winner := gameEngine.Winner()
+						if winner > 0 {
+							winnerName := ""
+							for _, pi := range players {
+								if pi.playerNum == winner {
+									winnerName = pi.player.Name
+								}
+							}
 							msg := fmt.Sprintf("&#127942; &#127942; &#127942; %s wins &#127942; &#127942; &#127942;",
-								winner)
+								winnerName)
 							announcements = append(announcements, msg)
 						}
 					}
