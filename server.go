@@ -319,7 +319,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 				if added && gameEngine.Board().State == Running {
 					announcements = append(announcements, "The game begins!")
 				}
-				broadcast(ServerEvent{Announcements: announcements})
+				broadcast(ServerEvent{Board: gameEngine.Board(), Announcements: announcements})
 			case ControlEventUnregister:
 				delete(eventListeners, e.PlayerId)
 				if _, ok := playerRmCancel[e.PlayerId]; ok {

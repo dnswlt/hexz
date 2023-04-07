@@ -1,5 +1,7 @@
 package hexz
 
+import "math/rand"
+
 const (
 	numFieldsFirstRow = 10
 	numBoardRows      = 11
@@ -60,7 +62,7 @@ func NewGameEngine(gameType GameType) GameEngine {
 }
 
 // Creates a new, empty 2d field array.
-func makeFields() [][]Field {
+func makeFields() ([]Field, [][]Field) {
 	const numFields = numFieldsFirstRow*((numBoardRows+1)/2) + (numFieldsFirstRow-1)*(numBoardRows/2)
 	arr := make([]Field, numFields)
 	fields := make([][]Field, numBoardRows)
@@ -70,14 +72,16 @@ func makeFields() [][]Field {
 		fields[i] = arr[start:end]
 		start = end
 	}
-	return fields
+	return arr, fields
 }
 
 func InitBoard(g GameEngine) *Board {
+	flatFields, fields := makeFields()
 	b := &Board{
-		Turn:   1, // Player 1 begins
-		Fields: makeFields(),
-		State:  Initial,
+		Turn:       1, // Player 1 begins
+		FlatFields: flatFields,
+		Fields:     fields,
+		State:      Initial,
 	}
 	numPlayers := g.NumPlayers()
 	b.Score = make([]int, numPlayers)
@@ -106,6 +110,7 @@ func (g *GameEngineClassic) Start() {
 
 func (g *GameEngineClassic) Reset() {
 	g.Init()
+	g.Start()
 }
 
 func (g *GameEngineClassic) NumPlayers() int {
@@ -511,13 +516,28 @@ func (g *GameEngineFreeform) MakeMove(m GameEngineMove) bool {
 }
 
 type GameEngineSnakez struct {
-	board *Board
+	board    *Board
+	maxValue int
 }
 
 func (g *GameEngineSnakez) Init() {
 	g.board = InitBoard(g)
+	g.maxValue = 5
 }
 func (g *GameEngineSnakez) Start() {
+	const numDeadCells = 16
+	i := 0
+	n := len(g.board.FlatFields)
+	// j is only a safeguard for invalid calls to this method on a non-empty board.
+	for j := 0; j < n && i < numDeadCells; j++ {
+		k := rand.Intn(n)
+		if !g.board.FlatFields[k].occupied() {
+			i++
+			f := &g.board.FlatFields[k]
+			f.Type = cellDead
+			f.Lifetime = -1
+		}
+	}
 	g.board.State = Running
 }
 
@@ -533,6 +553,7 @@ func (g *GameEngineSnakez) InitialResources() ResourceInfo {
 func (g *GameEngineSnakez) NumPlayers() int { return 2 }
 func (g *GameEngineSnakez) Reset() {
 	g.Init()
+	g.Start()
 }
 
 func (g *GameEngineSnakez) recomputeScoreAndState() {
@@ -545,13 +566,12 @@ func (g *GameEngineSnakez) recomputeScoreAndState() {
 	b := g.board
 	s := []int{0, 0}
 	openCells := 0
-	for _, row := range b.Fields {
-		for _, fld := range row {
-			if fld.Owner > 0 && s[fld.Owner-1] < fld.Value {
-				s[fld.Owner-1] = fld.Value
-			} else {
-				openCells++
-			}
+	for i := range b.FlatFields {
+		fld := &b.FlatFields[i]
+		if fld.Owner > 0 && fld.Value == g.maxValue {
+			s[fld.Owner-1] += fld.Value
+		} else if !fld.occupied() {
+			openCells++
 		}
 	}
 	b.Score = s
@@ -594,14 +614,22 @@ func (g *GameEngineSnakez) MakeMove(m GameEngineMove) bool {
 		var ns [6]idx
 		n := b.neighbors(idx{m.row, m.col}, ns[:])
 		minVal := -1
+		maxVal := -1
 		for i := 0; i < n; i++ {
 			nf := &b.Fields[ns[i].r][ns[i].c]
-			if nf.Owner == turn && (minVal == -1 || nf.Value < minVal) {
-				minVal = nf.Value
+			if nf.Owner == turn {
+				if minVal == -1 || nf.Value < minVal {
+					minVal = nf.Value
+				}
+				if maxVal == -1 || nf.Value > maxVal {
+					maxVal = nf.Value
+				}
 			}
 		}
-		if minVal == -1 {
-			// No neighbor has the same color => reject move.
+		if minVal == -1 || maxVal == g.maxValue {
+			// Reject move in any of these cases:
+			// * No neighbor has the same color
+			// * One neighbar has the max value already
 			return false
 		}
 		f.Owner = turn

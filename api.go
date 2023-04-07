@@ -22,8 +22,9 @@ type ServerEvent struct {
 type Board struct {
 	Turn         int            `json:"turn"`
 	Move         int            `json:"move"`
-	LastRevealed int            `json:"-"` // Move at which fields were last revealed
-	Fields       [][]Field      `json:"fields"`
+	LastRevealed int            `json:"-"`      // Move at which fields were last revealed
+	FlatFields   []Field        `json:"-"`      //
+	Fields       [][]Field      `json:"fields"` // Subslices of FlatFields
 	Score        []int          `json:"score"`
 	Resources    []ResourceInfo `json:"resources"`
 	State        GameState      `json:"state"`
