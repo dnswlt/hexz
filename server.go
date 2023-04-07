@@ -93,9 +93,10 @@ func isFavicon(path string) bool {
 }
 
 type GameHandle struct {
-	Id           string
-	Started      time.Time
+	id           string
+	started      time.Time
 	gameType     GameType
+	host         string            // Name of the player hosting the game (the one who created it)
 	controlEvent chan ControlEvent // The channel to communicate with the game coordinating goroutine.
 	done         chan struct{}     // Closed by the game master goroutine when it is done.
 }
@@ -114,6 +115,13 @@ type ResetRequest struct {
 type StatuszResponse struct {
 	NumOngoingGames    int
 	NumLoggedInPlayers int
+}
+
+// Used in responses to list active games (/hexz/gamez).
+type GameInfo struct {
+	Id      string    `json:"id"`
+	Host    string    `json:"host"`
+	Started time.Time `json:"started"`
 }
 
 type Player struct {
@@ -195,7 +203,7 @@ func (g *GameHandle) registerPlayer(p *Player) (chan ServerEvent, error) {
 	if g.sendEvent(ControlEventRegister{Player: p, ReplyChan: ch}) {
 		return <-ch, nil
 	}
-	return nil, fmt.Errorf("cannot register player %s in game %s: game over", p.Id, g.Id)
+	return nil, fmt.Errorf("cannot register player %s in game %s: game over", p.Id, g.id)
 }
 
 func (g *GameHandle) unregisterPlayer(playerId string) {
@@ -223,11 +231,12 @@ func generateGameId() string {
 	return b.String()
 }
 
-func NewGame(id string, gameType GameType) *GameHandle {
+func NewGame(id, host string, gameType GameType) *GameHandle {
 	return &GameHandle{
-		Id:           id,
-		Started:      time.Now(),
+		id:           id,
+		started:      time.Now(),
 		gameType:     gameType,
+		host:         host,
 		controlEvent: make(chan ControlEvent),
 		done:         make(chan struct{}),
 	}
@@ -246,8 +255,8 @@ func gameIdFromPath(path string) string {
 // Controller function for a running game. To be executed by a dedicated goroutine.
 func (s *Server) gameMaster(game *GameHandle) {
 	defer close(game.done)
-	defer s.deleteGame(game.Id)
-	log.Printf("Started new game %s", game.Id)
+	defer s.deleteGame(game.id)
+	log.Printf("Started new game %s", game.id)
 	gameEngine := NewGameEngine(game.gameType)
 	eventListeners := make(map[string]chan ServerEvent)
 	defer func() {
@@ -302,7 +311,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 				eventListeners[e.Player.Id] = ch
 				e.ReplyChan <- ch
 				// Send board and player role initially so client can display the UI.
-				singlecast(e.Player.Id, ServerEvent{Board: gameEngine.Board(), ActiveGames: s.listRecentGames(5), Role: playerNum})
+				singlecast(e.Player.Id, ServerEvent{Board: gameEngine.Board(), Role: playerNum})
 				announcements := []string{}
 				if added {
 					announcements = append(announcements, fmt.Sprintf("Welcome %s!", e.Player.Name))
@@ -340,7 +349,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 				}
 				if s.config.DebugMode {
 					debugReq, _ := json.Marshal(e.MoveRequest)
-					log.Printf("%s: move request: P%d %s", game.Id, p.playerNum, debugReq)
+					log.Printf("%s: move request: P%d %s", game.id, p.playerNum, debugReq)
 				}
 				if gameEngine.MakeMove(GameEngineMove{playerNum: p.playerNum, row: e.Row, col: e.Col, cellType: e.Type}) {
 					announcements := []string{}
@@ -365,9 +374,9 @@ func (s *Server) gameMaster(game *GameHandle) {
 				broadcast(ServerEvent{Board: gameEngine.Board()})
 			}
 		case <-tick:
-			broadcast(ServerEvent{ActiveGames: s.listRecentGames(5), DebugMessage: "ping"})
+			broadcast(ServerEvent{DebugMessage: "ping"})
 		case playerId := <-playerRm:
-			log.Printf("Player %s left game %s: game over", playerId, game.Id)
+			log.Printf("Player %s left game %s: game over", playerId, game.id)
 			playerName := "?"
 			if p, ok := players[playerId]; ok {
 				playerName = p.player.Name
@@ -381,7 +390,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 	}
 }
 
-func (s *Server) startNewGame(gameType GameType) (*GameHandle, error) {
+func (s *Server) startNewGame(host string, gameType GameType) (*GameHandle, error) {
 	// Try a few times to find an unused game Id, else give up.
 	// (I don't like forever loops... 100 attempts is plenty.)
 	var game *GameHandle
@@ -389,7 +398,7 @@ func (s *Server) startNewGame(gameType GameType) (*GameHandle, error) {
 		id := generateGameId()
 		s.ongoingGamesMut.Lock()
 		if _, ok := s.ongoingGames[id]; !ok {
-			game = NewGame(id, gameType)
+			game = NewGame(id, host, gameType)
 			s.ongoingGames[id] = game
 		}
 		s.ongoingGamesMut.Unlock()
@@ -413,25 +422,24 @@ func (s *Server) lookupGame(id string) *GameHandle {
 	return s.ongoingGames[id]
 }
 
-func (s *Server) listRecentGames(limit int) []string {
+func (s *Server) listRecentGames(limit int) []*GameInfo {
 	s.ongoingGamesMut.Lock()
-	games := []*GameHandle{}
+	gameInfos := []*GameInfo{}
 	for _, g := range s.ongoingGames {
-		games = append(games, g)
+		gameInfos = append(gameInfos, &GameInfo{
+			Id:      g.id,
+			Host:    g.host,
+			Started: g.started,
+		})
 	}
 	s.ongoingGamesMut.Unlock()
-	sort.Slice(games, func(i, j int) bool {
-		return games[i].Started.After(games[j].Started)
+	sort.Slice(gameInfos, func(i, j int) bool {
+		return gameInfos[i].Started.After(gameInfos[j].Started)
 	})
-	n := limit
-	if limit > len(games) {
-		n = len(games)
+	if limit > len(gameInfos) {
+		limit = len(gameInfos)
 	}
-	ids := make([]string, n)
-	for i, g := range games[:n] {
-		ids[i] = g.Id
-	}
-	return ids
+	return gameInfos[:limit]
 }
 
 func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
@@ -503,7 +511,7 @@ func (s *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid method", http.StatusBadRequest)
 		return
 	}
-	_, err := s.lookupPlayerFromCookie(r)
+	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
 		s.handleLoginPage(w, r)
 		return
@@ -521,11 +529,11 @@ func (s *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid value for 'type'", http.StatusBadRequest)
 		return
 	}
-	game, err := s.startNewGame(GameType(typeParam))
+	game, err := s.startNewGame(p.Name, GameType(typeParam))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusPreconditionFailed)
 	}
-	http.Redirect(w, r, fmt.Sprintf("/hexz/%s", game.Id), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/hexz/%s", game.id), http.StatusSeeOther)
 }
 
 func (s *Server) validatePostRequest(r *http.Request) (*Player, error) {
@@ -642,6 +650,17 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+func (s *Server) handleGamez(w http.ResponseWriter, r *http.Request) {
+	gameInfos := s.listRecentGames(5)
+	json, err := json.Marshal(gameInfos)
+	if err != nil {
+		http.Error(w, "marshal error", http.StatusInternalServerError)
+		panic("Cannot marshal []GameInfo: " + err.Error())
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(json)
 }
 
 func (s *Server) handleGame(w http.ResponseWriter, r *http.Request) {
@@ -830,6 +849,7 @@ func (s *Server) Serve() {
 	mux.HandleFunc("/hexz/images/", s.handleStaticResource)
 	mux.HandleFunc("/hexz", s.handleHexz)
 	mux.HandleFunc("/hexz/new", s.handleNewGame)
+	mux.HandleFunc("/hexz/gamez", s.handleGamez)
 	mux.HandleFunc("/hexz/", s.handleGame)
 	mux.HandleFunc("/statusz", s.handleStatusz)
 	mux.HandleFunc("/", s.defaultHandler)

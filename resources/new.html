@@ -20,24 +20,40 @@
             background-color: #1e1e1e;
             color: #cbcbcb;
         }
+        a:link,
+        a:visited,
+        a:hover,
+        a:active {
+            color: #92acd9;
+        }
 
         body {
             font-family: arial, sans-serif;
         }
 
-        h1, p, div {
+        h1,
+        h2,
+        p,
+        div {
             text-align: center;
         }
+
         div.centered {
             display: flex;
             justify-content: center;
             align-items: center;
         }
+
         div.spacer {
             margin-top: 1ex;
         }
+
         .gameButton {
             min-width: 10em;
+        }
+        th, td {
+            text-align: left;
+            padding-right: 1em;
         }
     </style>
 </head>
@@ -60,6 +76,36 @@
             <input class="gameButton" type="submit" value="Freeform">
         </form>
     </div>
+
+    <h1>Join a game</h1>
+    <div class="centered" id="activeGames">
+        <table>
+            <thead>
+                <tr>
+                    <th>Host</th>
+                    <th>Game</th>
+                </tr>
+            </thead>
+            <tbody id="activeGamesTbody">
+            </tbody>
+        </table>
+    </div>
+    <script type="text/javascript">
+        async function getActiveGames() {
+            const resp = await fetch("/hexz/gamez");
+            const games = await resp.json();
+            const tbody = document.getElementById("activeGamesTbody");
+            for (const g of games) {
+                tbody.insertAdjacentHTML("beforeend", 
+                `<tr>
+                    <td>${g.host}</td>
+                    <td><a href="/hexz/${g.id}">${g.id}</a></td>
+                </tr>`);
+            }
+        }
+
+        getActiveGames();
+    </script>
 </body>
 
 </html>

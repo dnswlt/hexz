@@ -16,7 +16,6 @@ type ServerEvent struct {
 	Role          int      `json:"role"` // 0: spectator, 1, 2: players
 	Announcements []string `json:"announcements"`
 	DebugMessage  string   `json:"debugMessage"`
-	ActiveGames   []string `json:"activeGames"`
 	LastEvent     bool     `json:"lastEvent"` // Signals to clients that this is the last event they will receive.
 }
 

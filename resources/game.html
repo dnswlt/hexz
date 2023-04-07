@@ -88,7 +88,6 @@
         <div class="menuitem" id="shareLink">&#x1F517; Share</div>
     </div>
     <div class="widget" id="announcements"></div>
-    <div class="widget" id="activeGames"></div>
 
     <script type="text/javascript">
         const styles = {
@@ -167,10 +166,7 @@
                 updateScore();
             }
             if (serverEvent.debugMessage.length > 0) {
-                console.log(serverEvent.timestamp + ": " + serverEvent.debugMessage + " " + serverEvent.activeGames);
-            }
-            if (serverEvent.activeGames && serverEvent.activeGames.length > 0) {
-                updateActiveGames(serverEvent.activeGames);
+                console.log(serverEvent.timestamp + ": " + serverEvent.debugMessage);
             }
             if (serverEvent.lastEvent) {
                 console.log("Server sent last SSE. Closing the connection.");
@@ -212,23 +208,6 @@
             let turn = gstate.board.turn - 1;
             ts[turn].style.visibility = 'visible';
             ts[(turn + 1) % 2].style.visibility = 'hidden';
-        }
-
-        function updateActiveGames(gameIds) {
-            let div = document.getElementById("activeGames");
-            let html = ["Other games: "];
-            let ownId = gameId();
-            for (gId of gameIds) {
-                if (gId != ownId) {
-                    html.push(`<a href="/hexz/${gId}">${gId}</a>`);
-                }
-            }
-            if (html.length > 1) {
-                div.innerHTML = html.join(" ");
-            } else {
-                // No other ongoing games.
-                div.innerHTML = "";
-            }
         }
 
         function newGame() {
