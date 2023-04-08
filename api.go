@@ -11,23 +11,23 @@ const (
 // JSON for server responses.
 
 type ServerEvent struct {
-	Timestamp     string   `json:"timestamp"`
-	Board         *Board   `json:"board"`
-	Role          int      `json:"role"` // 0: spectator, 1, 2: players
-	Announcements []string `json:"announcements"`
-	DebugMessage  string   `json:"debugMessage"`
-	LastEvent     bool     `json:"lastEvent"` // Signals to clients that this is the last event they will receive.
+	Timestamp     string     `json:"timestamp"`
+	Board         *BoardView `json:"board"`
+	Role          int        `json:"role"` // 0: spectator, 1, 2: players
+	Announcements []string   `json:"announcements"`
+	DebugMessage  string     `json:"debugMessage"`
+	LastEvent     bool       `json:"lastEvent"` // Signals to clients that this is the last event they will receive.
 }
 
-type Board struct {
-	Turn         int            `json:"turn"`
-	Move         int            `json:"move"`
-	LastRevealed int            `json:"-"`      // Move at which fields were last revealed
-	FlatFields   []Field        `json:"-"`      //
-	Fields       [][]Field      `json:"fields"` // Subslices of FlatFields
-	Score        []int          `json:"score"`
-	Resources    []ResourceInfo `json:"resources"`
-	State        GameState      `json:"state"`
+// A player's or spectator's view of the board.
+// See type Board for the internal representation that holds the complete information.
+type BoardView struct {
+	Turn      int            `json:"turn"`
+	Move      int            `json:"move"`
+	Fields    [][]Field      `json:"fields"` // The board's fields.
+	Score     []int          `json:"score"`  // Depending on the number of players, 1 or 2 elements.
+	Resources []ResourceInfo `json:"resources"`
+	State     GameState      `json:"state"`
 }
 
 type Field struct {

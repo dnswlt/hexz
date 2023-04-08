@@ -297,16 +297,15 @@
                     let y = i * a * 3 / 2 + a;
                     let fld = gstate.board.fields[i][j];
                     ctx.translate(x, y);
-                    let visible = !fld.hidden || fld.owner == gstate.role || gstate.role == 0;
                     if (fld.owner > 0) {
-                        if (fld.hidden && visible) {
+                        if (fld.hidden) {
                             ctx.fillStyle = styles.colors.hiddenMoves[fld.owner - 1];
                             ctx.fill(hex);
-                        } else if (!fld.hidden) {
+                        } else {
                             ctx.fillStyle = styles.colors.players[fld.owner - 1];
                             ctx.fill(hex);
                         }
-                        if (visible && fld.type != cellNormal) {
+                        if (fld.type != cellNormal) {
                             // Draw icon on top.
                             // TODO: factor this out, we use the same code for drawing button icons.
                             let symbol = cellTypeToPathMap[String(fld.type)];
@@ -318,7 +317,7 @@
                                 ctx.restore();
                             }
                         }
-                        if (visible && fld.v > 0) {
+                        if (fld.v > 0) {
                             ctx.fillStyle = styles.colors.cellIcons[fld.owner - 1];
                             ctx.fillText(String(fld.v), 0, 0);
                         }

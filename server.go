@@ -130,16 +130,16 @@ type Player struct {
 	LastActive time.Time `json:"lastActive"`
 }
 
-func (s *Server) lookupPlayer(playerId string) *Player {
+func (s *Server) lookupPlayer(playerId string) (Player, bool) {
 	s.loggedInPlayersMut.Lock()
 	defer s.loggedInPlayersMut.Unlock()
 
 	p, ok := s.loggedInPlayers[playerId]
 	if !ok {
-		return nil
+		return Player{}, false
 	}
 	p.LastActive = time.Now()
-	return p
+	return *p, true
 }
 
 func (s *Server) loginPlayer(playerId string, name string) bool {
@@ -166,7 +166,7 @@ type ControlEvent interface {
 }
 
 type ControlEventRegister struct {
-	player    *Player
+	player    Player
 	replyChan chan chan ServerEvent
 }
 
@@ -198,7 +198,7 @@ func (g *GameHandle) sendEvent(e ControlEvent) bool {
 	}
 }
 
-func (g *GameHandle) registerPlayer(p *Player) (chan ServerEvent, error) {
+func (g *GameHandle) registerPlayer(p Player) (chan ServerEvent, error) {
 	ch := make(chan chan ServerEvent)
 	if g.sendEvent(ControlEventRegister{player: p, replyChan: ch}) {
 		return <-ch, nil
@@ -258,6 +258,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 	defer s.deleteGame(game.id)
 	log.Printf("Started new game %s", game.id)
 	gameEngine := NewGameEngine(game.gameType)
+	// Player and spectator channels, keyed by playerId.
 	eventListeners := make(map[string]chan ServerEvent)
 	defer func() {
 		// Signal that client SSE connections should be terminated.
@@ -267,9 +268,9 @@ func (s *Server) gameMaster(game *GameHandle) {
 	}()
 	type pInfo struct {
 		playerNum int
-		*Player
+		Player
 	}
-	players := make(map[string]pInfo) // keys are playerId (UUID)
+	players := make(map[string]pInfo) // keyed by playerId
 	playerName := func(playerNum int) (string, bool) {
 		for _, p := range players {
 			if p.playerNum == playerNum {
@@ -280,16 +281,35 @@ func (s *Server) gameMaster(game *GameHandle) {
 	}
 	playerRmCancel := make(map[string]chan struct{})
 	playerRm := make(chan string)
-	broadcast := func(e ServerEvent) {
-		e.Timestamp = time.Now().Format(time.RFC3339)
+	broadcastPing := func(message string) {
+		now := time.Now().Format(time.RFC3339)
 		for _, ch := range eventListeners {
-			ch <- e
+			ch <- ServerEvent{Timestamp: now, DebugMessage: message}
 		}
 	}
-	singlecast := func(playerId string, e ServerEvent) {
+	broadcast := func(e *ServerEvent) {
+		e.Timestamp = time.Now().Format(time.RFC3339)
+		// Send event to all listeners. Avoid recomputing board for spectators.
+		var spectatorBoard *BoardView
+		for pId, ch := range eventListeners {
+			pNum := players[pId].playerNum
+			if pNum > 0 {
+				e.Board = gameEngine.Board().ViewFor(pNum)
+			} else {
+				if spectatorBoard == nil {
+					spectatorBoard = gameEngine.Board().ViewFor(0)
+				}
+				e.Board = spectatorBoard
+			}
+			ch <- *e
+		}
+	}
+	singlecast := func(playerId string, e *ServerEvent) {
 		if ch, ok := eventListeners[playerId]; ok {
 			e.Timestamp = time.Now().Format(time.RFC3339)
-			ch <- e
+			pNum := players[playerId].playerNum
+			e.Board = gameEngine.Board().ViewFor(pNum)
+			ch <- *e
 		}
 	}
 	for {
@@ -319,7 +339,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 				eventListeners[e.player.Id] = ch
 				e.replyChan <- ch
 				// Send board and player role initially so client can display the UI.
-				singlecast(e.player.Id, ServerEvent{Board: gameEngine.Board(), Role: playerNum})
+				singlecast(e.player.Id, &ServerEvent{Role: playerNum})
 				announcements := []string{}
 				if added {
 					announcements = append(announcements, fmt.Sprintf("Welcome %s!", e.player.Name))
@@ -327,7 +347,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 				if added && gameEngine.Board().State == Running {
 					announcements = append(announcements, "The game begins!")
 				}
-				broadcast(ServerEvent{Board: gameEngine.Board(), Announcements: announcements})
+				broadcast(&ServerEvent{Announcements: announcements})
 			case ControlEventUnregister:
 				delete(eventListeners, e.playerId)
 				if _, ok := playerRmCancel[e.playerId]; ok {
@@ -369,7 +389,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 									winnerName))
 						}
 					}
-					broadcast(ServerEvent{Board: gameEngine.Board(), Announcements: announcements})
+					broadcast(&ServerEvent{Announcements: announcements})
 				}
 				if s.config.DebugMode {
 					log.Printf("MakeMove took %dus", time.Since(before).Microseconds())
@@ -383,17 +403,17 @@ func (s *Server) gameMaster(game *GameHandle) {
 				announcements := []string{
 					fmt.Sprintf("Player %s restarted the game.", p.Name),
 				}
-				broadcast(ServerEvent{Board: gameEngine.Board(), Announcements: announcements})
+				broadcast(&ServerEvent{Announcements: announcements})
 			}
 		case <-tick:
-			broadcast(ServerEvent{DebugMessage: "ping"})
+			broadcastPing("ping")
 		case playerId := <-playerRm:
 			log.Printf("Player %s left game %s: game over", playerId, game.id)
 			playerName := "?"
 			if p, ok := players[playerId]; ok {
 				playerName = p.Name
 			}
-			broadcast(ServerEvent{
+			broadcast(&ServerEvent{
 				// Send sad emoji.
 				Announcements: []string{fmt.Sprintf("Player %s left the game &#128546;. Game over.", playerName)},
 			})
@@ -548,21 +568,25 @@ func (s *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, fmt.Sprintf("/hexz/%s", game.id), http.StatusSeeOther)
 }
 
-func (s *Server) validatePostRequest(r *http.Request) (*Player, error) {
+func (s *Server) validatePostRequest(r *http.Request) (Player, error) {
 	if r.Method != http.MethodPost {
-		return nil, fmt.Errorf("invalid method")
+		return Player{}, fmt.Errorf("invalid method")
 	}
-	return s.lookupPlayerFromCookie(r)
+	p, err := s.lookupPlayerFromCookie(r)
+	if err != nil {
+		return Player{}, fmt.Errorf("invalid method")
+	}
+	return p, nil
 }
 
-func (s *Server) lookupPlayerFromCookie(r *http.Request) (*Player, error) {
+func (s *Server) lookupPlayerFromCookie(r *http.Request) (Player, error) {
 	cookie, err := r.Cookie(playerIdCookieName)
 	if err != nil {
-		return nil, fmt.Errorf("missing cookie")
+		return Player{}, fmt.Errorf("missing cookie")
 	}
-	p := s.lookupPlayer(cookie.Value)
-	if p == nil {
-		return nil, fmt.Errorf("player not found")
+	p, ok := s.lookupPlayer(cookie.Value)
+	if !ok {
+		return Player{}, fmt.Errorf("player not found")
 	}
 	return p, nil
 }

@@ -9,6 +9,55 @@ const (
 	numBoardRows      = 11
 )
 
+type Board struct {
+	Turn         int
+	Move         int
+	LastRevealed int       // Move at which fields were last revealed
+	FlatFields   []Field   // The 1-d array backing the "2d" Fields.
+	Fields       [][]Field // The board's fields. Subslices of FlatFields.
+	Score        []int     // Depending on the number of players, 1 or 2 elements.
+	Resources    []ResourceInfo
+	State        GameState
+}
+
+// Each player has a different view of the board. In particular, player A
+// should not see the hidden moves of player B. To not give cheaters a chance,
+// we should never send the hidden moves out to other players at all
+// (i.e., we shouldn't just rely on our UI which would not show them; cheaters
+// can easily intercept the http response.)
+func (b *Board) ViewFor(playerNum int) *BoardView {
+	score := make([]int, len(b.Score))
+	copy(score, b.Score)
+	resources := make([]ResourceInfo, len(b.Resources))
+	for i, r := range b.Resources {
+		numPieces := make(map[CellType]int)
+		for k, v := range r.NumPieces {
+			numPieces[k] = v
+		}
+		resources[i] = ResourceInfo{
+			NumPieces: numPieces,
+		}
+	}
+	flat, fields := copyFields(b)
+	// Hide other player's hidden fields.
+	if playerNum > 0 {
+		for i := 0; i < len(flat); i++ {
+			f := &flat[i]
+			if f.Owner != playerNum && f.Hidden {
+				*f = Field{}
+			}
+		}
+	}
+	return &BoardView{
+		Turn:      b.Turn,
+		Move:      b.Move,
+		Score:     score,
+		Resources: resources,
+		State:     b.State,
+		Fields:    fields,
+	}
+}
+
 type GameType string
 
 const (
@@ -66,15 +115,31 @@ func NewGameEngine(gameType GameType) GameEngine {
 // Creates a new, empty 2d field array.
 func makeFields() ([]Field, [][]Field) {
 	const numFields = numFieldsFirstRow*((numBoardRows+1)/2) + (numFieldsFirstRow-1)*(numBoardRows/2)
-	arr := make([]Field, numFields)
+	flat := make([]Field, numFields)
 	fields := make([][]Field, numBoardRows)
 	start := 0
 	for i := 0; i < len(fields); i++ {
 		end := start + numFieldsFirstRow - i%2
-		fields[i] = arr[start:end]
+		fields[i] = flat[start:end]
 		start = end
 	}
-	return arr, fields
+	return flat, fields
+}
+
+// Creates a deep copy of the board's fields.
+// Useful to send slightly modified variations of the same board to different
+// players.
+func copyFields(b *Board) ([]Field, [][]Field) {
+	flat := make([]Field, len(b.FlatFields))
+	copy(flat, b.FlatFields)
+	fields := make([][]Field, len(b.Fields))
+	start := 0
+	for i, fs := range b.Fields {
+		end := start + len(fs)
+		fields[i] = flat[start:end]
+		start = end
+	}
+	return flat, fields
 }
 
 func InitBoard(g GameEngine) *Board {

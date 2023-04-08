@@ -14,7 +14,7 @@ func main() {
 	const sideLen = 11
 	var board [sideLen][sideLen]byte
 	for i, r := range board {
-		for j, _ := range r {
+		for j := range r {
 			board[i][j] = 'X'
 			if rand.Intn(2) == 0 {
 				board[i][j] = 'O'
@@ -24,7 +24,7 @@ func main() {
 
 	for i, r := range board {
 		fmt.Print(strings.Repeat(" ", i))
-		for j, _ := range r {
+		for j := range r {
 			fmt.Printf("%c ", board[i][j])
 		}
 		fmt.Print("\n")
@@ -32,7 +32,7 @@ func main() {
 	fmt.Print("\n")
 	for i, r := range board {
 		fmt.Print(strings.Repeat(" ", i))
-		for j, _ := range r {
+		for j := range r {
 			if board[i][j] == 'X' {
 				fmt.Printf("%c ", board[i][j])
 			} else {
@@ -45,7 +45,7 @@ func main() {
 	fmt.Print("\n")
 	for i, r := range board {
 		fmt.Print(strings.Repeat(" ", i))
-		for j, _ := range r {
+		for j := range r {
 			if board[i][j] == 'O' {
 				fmt.Printf("%c ", board[i][j])
 			} else {

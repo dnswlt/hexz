@@ -51,3 +51,22 @@ func TestValidCellTypes(t *testing.T) {
 		})
 	}
 }
+
+func TestCopyLocalToHeap(t *testing.T) {
+	type s struct {
+		t string
+	}
+
+	var l s
+	l.t = "hello"
+	m := make(map[string]*s)
+	m["a"] = &l
+	l.t = "world"
+	m["b"] = &l
+	if m["a"].t != "hello" {
+		t.Errorf("Want m[\"a\"] == \"hello\", got: %s", m["a"].t)
+	}
+	if m["b"].t != "world" {
+		t.Errorf("Want m[\"b\"] == \"world\", got: %s", m["b"].t)
+	}
+}
