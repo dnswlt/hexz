@@ -95,7 +95,9 @@
                 grid: '#cbcbcb',
                 background: '#1e1e1e',
                 players: ['#255ab4', '#f8d748'],
-                hiddenMoves: ['#92acd9', '#fbeba3'], // 50% alpha of players
+                hiddenMoves: ['#92acd9', '#fbeba3'], // 50% alpha of players on white bg.
+                blocked: ['#fbeba3', '#92acd9', '#3e3e3e'],  // 20% alpha of players and dead cell on white bg.
+                // blocked: ['#fdf5d1', '#c8d5ec', '#3e3e3e'],  // 20% alpha of players and dead cell on white bg.
                 cellIcons: ['#1e1e1e', '#7a6505'], // For yellow: 25% HSL luminance of player color.
                 deadCell: '#d03d12',
                 grassCell: '#007642',
@@ -331,6 +333,17 @@
                             ctx.fillStyle = styles.colors.grassCellFg;
                             ctx.fillText(String(fld.v), 0, 0);
                         }
+                    } else if (fld.blocked > 0) {
+                        // blocked is a bitmap. Player 1 is at the first bit, player 2 at the second.
+                        if (fld.blocked == 1) {
+                            ctx.fillStyle = styles.colors.blocked[0];
+                        } else if (fld.blocked == 2) {
+                            ctx.fillStyle = styles.colors.blocked[1];
+                        } else {
+                            // both are blocked
+                            ctx.fillStyle = styles.colors.blocked[2];
+                        }
+                        ctx.fill(hex);
                     }
                     ctx.strokeStyle = styles.colors.grid;
                     ctx.stroke(hex);

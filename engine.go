@@ -583,21 +583,24 @@ func (g *GameEngineFreeform) MakeMove(m GameEngineMove) bool {
 }
 
 type GameEngineSnakez struct {
-	board    *Board
-	maxValue int
+	board *Board
 }
+
+const (
+	snakezNumDeadCells  = 15 // Odd number, so we have an even number of free cells.
+	snakezNumGrassCells = 5
+	snakezMaxValue      = 5 // Maximum value a cell can take.
+)
 
 func (g *GameEngineSnakez) Init() {
 	g.board = InitBoard(g)
-	g.maxValue = 5
 }
+
 func (g *GameEngineSnakez) Start() {
-	const numDeadCells = 15 // Odd number, so we have an even number of free cells.
-	const numGrassCells = 5
 	i := 0
 	n := len(g.board.FlatFields)
 	// j is only a safeguard for invalid calls to this method on a non-empty board.
-	for j := 0; j < n && i < numDeadCells; j++ {
+	for j := 0; j < n && i < snakezNumDeadCells; j++ {
 		k := rand.Intn(n)
 		if !g.board.FlatFields[k].occupied() {
 			i++
@@ -608,7 +611,7 @@ func (g *GameEngineSnakez) Start() {
 	}
 	// Place some grass cells.
 	i = 0
-	for j := 0; j < n && i < numGrassCells; j++ {
+	for j := 0; j < n && i < snakezNumGrassCells; j++ {
 		k := rand.Intn(n)
 		if !g.board.FlatFields[k].occupied() {
 			i++
@@ -703,13 +706,30 @@ func (g *GameEngineSnakez) validateNormalMove(playerNum int, r, c int) (ok bool,
 			}
 		}
 	}
-	if minVal == -1 || maxVal == g.maxValue {
+	if minVal == -1 || maxVal == snakezMaxValue {
 		// Reject move in any of these cases:
 		// * No neighbor has the same color
 		// * One neighbor has the max value already
 		return false, 0
 	}
 	return true, minVal + 1
+}
+
+// Marks all cells neighboring (r, c) as blocked for the player owning (r, c).
+func (g *GameEngineSnakez) blockNeighborCells(r, c int) {
+	b := g.board
+	var ns [6]idx
+	f := &b.Fields[r][c]
+	if f.Owner == 0 {
+		return
+	}
+	n := b.neighbors(idx{r, c}, ns[:])
+	for i := 0; i < n; i++ {
+		nb := &b.Fields[ns[i].r][ns[i].c]
+		if !nb.occupied() {
+			nb.Blocked |= 1 << (f.Owner - 1)
+		}
+	}
 }
 
 // Occupies all grass cells around (r, c) that have at most the value
@@ -727,6 +747,9 @@ func (g *GameEngineSnakez) occupyGrassCells(r, c int) {
 		if nb.Type == cellGrass && nb.Value <= f.Value {
 			nb.Type = cellNormal
 			nb.Owner = f.Owner
+			if nb.Value == snakezMaxValue {
+				g.blockNeighborCells(ns[i].r, ns[i].c)
+			}
 		}
 	}
 }
@@ -760,7 +783,11 @@ func (g *GameEngineSnakez) MakeMove(m GameEngineMove) bool {
 		f.Lifetime = g.lifetime(cellNormal)
 		f.Hidden = false
 		f.Value = val
+		if f.Value == snakezMaxValue {
+			g.blockNeighborCells(m.row, m.col)
+		}
 		g.occupyGrassCells(m.row, m.col)
+
 	} else if m.cellType == cellFlag {
 		// A flag can be placed on any free cell. It does not add to the score.
 		f.Owner = turn
