@@ -62,14 +62,14 @@ type GameType string
 
 const (
 	gameTypeClassic  GameType = "classic"
-	gameTypeSnakez   GameType = "snakez"
+	gameTypeFlagz    GameType = "flagz"
 	gameTypeFreeform GameType = "freeform"
 )
 
 func validGameType(gameType string) bool {
 	allGameTypes := map[GameType]bool{
 		gameTypeClassic:  true,
-		gameTypeSnakez:   true,
+		gameTypeFlagz:    true,
 		gameTypeFreeform: true,
 	}
 	return allGameTypes[GameType(gameType)]
@@ -101,8 +101,8 @@ func NewGameEngine(gameType GameType) GameEngine {
 	switch gameType {
 	case gameTypeClassic:
 		ge = &GameEngineClassic{}
-	case gameTypeSnakez:
-		ge = &GameEngineSnakez{}
+	case gameTypeFlagz:
+		ge = &GameEngineFlagz{}
 	case gameTypeFreeform:
 		ge = &GameEngineFreeform{}
 	default:
@@ -582,25 +582,25 @@ func (g *GameEngineFreeform) MakeMove(m GameEngineMove) bool {
 	return true
 }
 
-type GameEngineSnakez struct {
+type GameEngineFlagz struct {
 	board *Board
 }
 
 const (
-	snakezNumDeadCells  = 15 // Odd number, so we have an even number of free cells.
-	snakezNumGrassCells = 5
-	snakezMaxValue      = 5 // Maximum value a cell can take.
+	flagzNumDeadCells  = 15 // Odd number, so we have an even number of free cells.
+	flagzNumGrassCells = 5
+	flagzMaxValue      = 5 // Maximum value a cell can take.
 )
 
-func (g *GameEngineSnakez) Init() {
+func (g *GameEngineFlagz) Init() {
 	g.board = InitBoard(g)
 }
 
-func (g *GameEngineSnakez) Start() {
+func (g *GameEngineFlagz) Start() {
 	i := 0
 	n := len(g.board.FlatFields)
 	// j is only a safeguard for invalid calls to this method on a non-empty board.
-	for j := 0; j < n && i < snakezNumDeadCells; j++ {
+	for j := 0; j < n && i < flagzNumDeadCells; j++ {
 		k := rand.Intn(n)
 		if !g.board.FlatFields[k].occupied() {
 			i++
@@ -611,7 +611,7 @@ func (g *GameEngineSnakez) Start() {
 	}
 	// Place some grass cells.
 	i = 0
-	for j := 0; j < n && i < snakezNumGrassCells; j++ {
+	for j := 0; j < n && i < flagzNumGrassCells; j++ {
 		k := rand.Intn(n)
 		if !g.board.FlatFields[k].occupied() {
 			i++
@@ -624,7 +624,7 @@ func (g *GameEngineSnakez) Start() {
 	g.board.State = Running
 }
 
-func (g *GameEngineSnakez) InitialResources() ResourceInfo {
+func (g *GameEngineFlagz) InitialResources() ResourceInfo {
 	return ResourceInfo{
 		NumPieces: map[CellType]int{
 			cellNormal: -1, // unlimited
@@ -633,13 +633,13 @@ func (g *GameEngineSnakez) InitialResources() ResourceInfo {
 	}
 }
 
-func (g *GameEngineSnakez) NumPlayers() int { return 2 }
-func (g *GameEngineSnakez) Reset() {
+func (g *GameEngineFlagz) NumPlayers() int { return 2 }
+func (g *GameEngineFlagz) Reset() {
 	g.Init()
 	g.Start()
 }
 
-func (g *GameEngineSnakez) recomputeScoreAndState() {
+func (g *GameEngineFlagz) recomputeScoreAndState() {
 	b := g.board
 	s := []int{0, 0}
 	validMoves := []int{0, 0}
@@ -679,7 +679,7 @@ func (g *GameEngineSnakez) recomputeScoreAndState() {
 	}
 }
 
-func (g *GameEngineSnakez) lifetime(ct CellType) int {
+func (g *GameEngineFlagz) lifetime(ct CellType) int {
 	switch ct {
 	case cellNormal, cellFlag:
 		return -1
@@ -687,7 +687,7 @@ func (g *GameEngineSnakez) lifetime(ct CellType) int {
 	return 0
 }
 
-func (g *GameEngineSnakez) validateNormalMove(playerNum int, r, c int) (ok bool, val int) {
+func (g *GameEngineFlagz) validateNormalMove(playerNum int, r, c int) (ok bool, val int) {
 	// A normal cell can only be placed next to another normal cell
 	// of the same color, or next to a flag of the same color.
 	var ns [6]idx
@@ -706,7 +706,7 @@ func (g *GameEngineSnakez) validateNormalMove(playerNum int, r, c int) (ok bool,
 			}
 		}
 	}
-	if minVal == -1 || maxVal == snakezMaxValue {
+	if minVal == -1 || maxVal == flagzMaxValue {
 		// Reject move in any of these cases:
 		// * No neighbor has the same color
 		// * One neighbor has the max value already
@@ -716,7 +716,7 @@ func (g *GameEngineSnakez) validateNormalMove(playerNum int, r, c int) (ok bool,
 }
 
 // Marks all cells neighboring (r, c) as blocked for the player owning (r, c).
-func (g *GameEngineSnakez) blockNeighborCells(r, c int) {
+func (g *GameEngineFlagz) blockNeighborCells(r, c int) {
 	b := g.board
 	var ns [6]idx
 	f := &b.Fields[r][c]
@@ -734,7 +734,7 @@ func (g *GameEngineSnakez) blockNeighborCells(r, c int) {
 
 // Occupies all grass cells around (r, c) that have at most the value
 // that (r, c) has.
-func (g *GameEngineSnakez) occupyGrassCells(r, c int) {
+func (g *GameEngineFlagz) occupyGrassCells(r, c int) {
 	var ns [6]idx
 	b := g.board
 	f := &b.Fields[r][c]
@@ -747,14 +747,14 @@ func (g *GameEngineSnakez) occupyGrassCells(r, c int) {
 		if nb.Type == cellGrass && nb.Value <= f.Value {
 			nb.Type = cellNormal
 			nb.Owner = f.Owner
-			if nb.Value == snakezMaxValue {
+			if nb.Value == flagzMaxValue {
 				g.blockNeighborCells(ns[i].r, ns[i].c)
 			}
 		}
 	}
 }
 
-func (g *GameEngineSnakez) MakeMove(m GameEngineMove) bool {
+func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 	b := g.board
 	turn := b.Turn
 	if m.playerNum != turn {
@@ -783,7 +783,7 @@ func (g *GameEngineSnakez) MakeMove(m GameEngineMove) bool {
 		f.Lifetime = g.lifetime(cellNormal)
 		f.Hidden = false
 		f.Value = val
-		if f.Value == snakezMaxValue {
+		if f.Value == flagzMaxValue {
 			g.blockNeighborCells(m.row, m.col)
 		}
 		g.occupyGrassCells(m.row, m.col)
@@ -803,13 +803,13 @@ func (g *GameEngineSnakez) MakeMove(m GameEngineMove) bool {
 	return true
 }
 
-func (g *GameEngineSnakez) Board() *Board { return g.board }
+func (g *GameEngineFlagz) Board() *Board { return g.board }
 
-func (g *GameEngineSnakez) IsDone() bool {
+func (g *GameEngineFlagz) IsDone() bool {
 	return g.board.State == Finished
 }
 
-func (g *GameEngineSnakez) Winner() (playerNum int) {
+func (g *GameEngineFlagz) Winner() (playerNum int) {
 	if !g.IsDone() {
 		return 0
 	}
