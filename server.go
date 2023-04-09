@@ -296,6 +296,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 			pNum := players[pId].playerNum
 			if pNum > 0 {
 				e.Board = gameEngine.Board().ViewFor(pNum)
+				e.Role = pNum
 			} else {
 				if spectatorBoard == nil {
 					spectatorBoard = gameEngine.Board().ViewFor(0)
@@ -396,10 +397,14 @@ func (s *Server) gameMaster(game *GameHandle) {
 					log.Printf("MakeMove took %dus", time.Since(before).Microseconds())
 				}
 			case ControlEventReset:
-				gameEngine.Reset()
 				p, ok := players[e.playerId]
 				if !ok {
 					break // Only players are allowed to reset
+				}
+				shouldRestart := gameEngine.Board().State != Initial
+				gameEngine.Reset()
+				if shouldRestart {
+					gameEngine.Start()
 				}
 				announcements := []string{
 					fmt.Sprintf("Player %s restarted the game.", p.Name),

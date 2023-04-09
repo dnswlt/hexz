@@ -636,7 +636,6 @@ func (g *GameEngineFlagz) InitialResources() ResourceInfo {
 func (g *GameEngineFlagz) NumPlayers() int { return 2 }
 func (g *GameEngineFlagz) Reset() {
 	g.Init()
-	g.Start()
 }
 
 func (g *GameEngineFlagz) recomputeScoreAndState() {
