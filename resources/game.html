@@ -100,6 +100,7 @@
                 cellIcons: ['#1e1e1e', '#7a6505'], // Blue: background. Yellow: 25% HSL luminance of player's color.
                 deadCell: '#d03d12',
                 grassCell: '#008048',
+                rockCell: '#5f5f5f',
                 grassCellFg: '#00331d',
                 unavailablePiece: '#3e3e3e',
                 unavailablePieceIcon: '#cbcbcb',
@@ -245,12 +246,13 @@
 
         // Cell types. Keep in sync with constants used by server.
         const cellNormal = 0;
-        const cellDead = 1;
-        const cellGrass = 2;
-        const cellFire = 3;
-        const cellFlag = 4;
-        const cellPest = 5;
-        const cellDeath = 6;
+        const cellDead = cellNormal + 1;
+        const cellGrass = cellDead + 1;
+        const cellRock = cellGrass + 1;
+        const cellFire = cellRock + 1;
+        const cellFlag = cellFire + 1;
+        const cellPest = cellFlag + 1;
+        const cellDeath = cellPest + 1;
 
         const cellTypeToPathMap = [];
         cellTypeToPathMap[cellFire] = new Path2D(cellTypePaths.fire);
@@ -286,7 +288,6 @@
         let buttonCells = [];
 
         function initializeButtonCells() {
-            console.log("initializeButtonCells");
             let playerIdx = gstate.role - 1;
             if (!gstate.board) {
                 return;
@@ -298,7 +299,6 @@
                     buttonCells.push(allButtonCells[i]);
                 }
             }
-            console.log("initializeButtonCells done: ", buttonCells.length);
         }
 
         function drawBoard(ctx) {
@@ -348,6 +348,9 @@
                         }
                     } else if (fld.type == cellDead) {
                         ctx.fillStyle = styles.colors.deadCell;
+                        ctx.fill(hex);
+                    } else if (fld.type == cellRock) {
+                        ctx.fillStyle = styles.colors.rockCell;
                         ctx.fill(hex);
                     } else if (fld.type == cellGrass) {
                         ctx.fillStyle = styles.colors.grassCell;

@@ -443,7 +443,7 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 		// Only allow moves by players whose turn it is.
 		return false
 	}
-	if !board.valid(idx{m.row, m.col}) || m.cellType == cellDead {
+	if !board.valid(idx{m.row, m.col}) || !m.cellType.isPlayerPiece() {
 		// Invalid move request.
 		return false
 	}
@@ -605,7 +605,7 @@ func (g *GameEngineFlagz) Start() {
 		if !g.board.FlatFields[k].occupied() {
 			i++
 			f := &g.board.FlatFields[k]
-			f.Type = cellDead
+			f.Type = cellRock
 			f.Lifetime = -1
 		}
 	}
@@ -795,6 +795,9 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 		f.Hidden = false
 		f.Value = 0
 		b.Resources[turn-1].NumPieces[cellFlag]--
+	} else {
+		// Invalid piece. Just be caught by resource check already, so never reached.
+		return false
 	}
 	b.Turn = 3 - b.Turn
 	b.Move++

@@ -37,6 +37,7 @@ func TestValidCellTypes(t *testing.T) {
 		{-1, false},
 		{cellNormal, true},
 		{cellDead, true},
+		{cellRock, true},
 		{cellFire, true},
 		{cellFlag, true},
 		{cellPest, true},

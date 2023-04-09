@@ -46,16 +46,24 @@ type ResourceInfo struct {
 
 type CellType int
 
+// Remember to update the known cell types in game.html if you make changes here!
 const (
-	cellNormal CellType = iota
-	cellDead
-	cellGrass
+	cellNormal CellType = iota // Empty cells if not owned, otherwise the player's regular cell.
+	// Non-player cells.
+	cellDead  // A dead cell. Usually generated from a piece placement conflict.
+	cellGrass // Introduced in the Flagz game. Cells that can be collected.
+	cellRock  // Unowned and similar to a dead cell. Can be used to build static obstacles.
+	// Player's special pieces. Update isPlayerPiece() if you make changes.
 	cellFire
 	cellFlag
 	cellPest
-	cellDeath
+	cellDeath // If you add one below cellDeath, update valid().
 )
 
 func (c CellType) valid() bool {
 	return c >= cellNormal && c <= cellDeath
+}
+
+func (c CellType) isPlayerPiece() bool {
+	return c == cellNormal || c >= cellFire && c <= cellDead
 }
