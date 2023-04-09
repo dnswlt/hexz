@@ -12,6 +12,7 @@ import (
 	"path"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -97,6 +98,7 @@ type GameHandle struct {
 	started      time.Time
 	gameType     GameType
 	host         string            // Name of the player hosting the game (the one who created it)
+	singlePlayer bool              // If true, only player 1 is human, the rest are computer-controlled.
 	controlEvent chan ControlEvent // The channel to communicate with the game coordinating goroutine.
 	done         chan struct{}     // Closed by the game master goroutine when it is done.
 }
@@ -232,17 +234,6 @@ func generateGameId() string {
 	return b.String()
 }
 
-func NewGame(id, host string, gameType GameType) *GameHandle {
-	return &GameHandle{
-		id:           id,
-		started:      time.Now(),
-		gameType:     gameType,
-		host:         host,
-		controlEvent: make(chan ControlEvent),
-		done:         make(chan struct{}),
-	}
-}
-
 // Looks up the game ID from the URL path.
 func gameIdFromPath(path string) string {
 	pathSegs := strings.Split(path, "/")
@@ -257,6 +248,7 @@ func gameIdFromPath(path string) string {
 func (s *Server) gameMaster(game *GameHandle) {
 	defer close(game.done)
 	defer s.deleteGame(game.id)
+	const playerIdComputer = "comp"
 	log.Printf("Started new game %s", game.id)
 	gameEngine := NewGameEngine(game.gameType)
 	// Player and spectator channels, keyed by playerId.
@@ -333,8 +325,13 @@ func (s *Server) gameMaster(game *GameHandle) {
 					added = true
 					playerNum = len(players) + 1
 					players[e.player.Id] = pInfo{playerNum, e.player}
-					if len(players) == gameEngine.NumPlayers() {
+					if game.singlePlayer || len(players) == gameEngine.NumPlayers() {
 						gameEngine.Start()
+					}
+					if game.singlePlayer {
+						log.Print("XXX single player")
+						players[playerIdComputer] =
+							pInfo{playerNum: 2, Player: Player{Id: playerIdComputer, Name: "Computer"}}
 					}
 				}
 				ch := make(chan ServerEvent)
@@ -391,10 +388,27 @@ func (s *Server) gameMaster(game *GameHandle) {
 									winnerName))
 						}
 					}
+					if game.singlePlayer && gameEngine.Board().Turn != 1 && !gameEngine.IsDone() {
+						if m, err := gameEngine.(SinglePlayerGameEngine).SuggestMove(); err == nil {
+							go func() {
+								<-time.After(time.Duration(1000) * time.Millisecond)
+								game.controlEvent <- ControlEventMove{
+									playerId: playerIdComputer,
+									MoveRequest: MoveRequest{
+										Row:  m.row,
+										Col:  m.col,
+										Type: m.cellType,
+									},
+								}
+							}()
+						} else {
+							log.Print("Error: could not suggest a move:", err.Error())
+						}
+					}
 					broadcast(&ServerEvent{Announcements: announcements})
 				}
 				if s.config.DebugMode {
-					log.Printf("MakeMove took %dus", time.Since(before).Microseconds())
+					log.Printf("MakeMove took %dus.", time.Since(before).Microseconds())
 				}
 			case ControlEventReset:
 				p, ok := players[e.playerId]
@@ -428,7 +442,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 	}
 }
 
-func (s *Server) startNewGame(host string, gameType GameType) (*GameHandle, error) {
+func (s *Server) startNewGame(host string, gameType GameType, singlePlayer bool) (*GameHandle, error) {
 	// Try a few times to find an unused game Id, else give up.
 	// (I don't like forever loops... 100 attempts is plenty.)
 	var game *GameHandle
@@ -436,7 +450,15 @@ func (s *Server) startNewGame(host string, gameType GameType) (*GameHandle, erro
 		id := generateGameId()
 		s.ongoingGamesMut.Lock()
 		if _, ok := s.ongoingGames[id]; !ok {
-			game = NewGame(id, host, gameType)
+			game = &GameHandle{
+				id:           id,
+				started:      time.Now(),
+				gameType:     gameType,
+				host:         host,
+				singlePlayer: singlePlayer,
+				controlEvent: make(chan ControlEvent),
+				done:         make(chan struct{}),
+			}
 			s.ongoingGames[id] = game
 		}
 		s.ongoingGamesMut.Unlock()
@@ -495,6 +517,18 @@ func isValidPlayerName(name string) bool {
 	return len(name) >= 3 && len(name) <= 20 && playernameRegexp.MatchString(name)
 }
 
+func makePlayerCookie(playerId string, ttl time.Duration) *http.Cookie {
+	return &http.Cookie{
+		Name:     playerIdCookieName,
+		Value:    playerId,
+		Path:     "/hexz",
+		MaxAge:   int(ttl.Seconds()),
+		HttpOnly: true,  // Don't let JS access the cookie
+		Secure:   false, // also allow plain http
+		SameSite: http.SameSiteLaxMode,
+	}
+}
+
 func (s *Server) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Only POST allowed", http.StatusBadRequest)
@@ -517,21 +551,12 @@ func (s *Server) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
 	if !s.loginPlayer(playerId, name) {
 		http.Error(w, "Cannot log in right now", http.StatusPreconditionFailed)
 	}
-	cookie := &http.Cookie{
-		Name:     playerIdCookieName,
-		Value:    playerId,
-		Path:     "/hexz",
-		MaxAge:   24 * 60 * 60,
-		HttpOnly: true,
-		Secure:   false, // also allow plain http
-		SameSite: http.SameSiteLaxMode,
-	}
-	http.SetCookie(w, cookie)
+	http.SetCookie(w, makePlayerCookie(playerId, s.config.LoginTtl))
 	http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 }
 
 func (s *Server) handleHexz(w http.ResponseWriter, r *http.Request) {
-	_, err := s.lookupPlayerFromCookie(r)
+	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
 		s.handleLoginPage(w, r)
 		return
@@ -542,6 +567,8 @@ func (s *Server) handleHexz(w http.ResponseWriter, r *http.Request) {
 		log.Fatal("Cannot read new game HTML page: ", err.Error())
 	}
 	w.Header().Set("Content-Type", "text/html")
+	// Prolong cookie ttl.
+	http.SetCookie(w, makePlayerCookie(p.Id, s.config.LoginTtl))
 	w.Write(html)
 }
 
@@ -568,7 +595,20 @@ func (s *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid value for 'type'", http.StatusBadRequest)
 		return
 	}
-	game, err := s.startNewGame(p.Name, GameType(typeParam))
+	gameType := GameType(typeParam)
+	singlePlayer := false
+	if r.Form.Has("singlePlayer") {
+		singlePlayer, err = strconv.ParseBool(r.Form.Get("singlePlayer"))
+		if err != nil {
+			http.Error(w, "Invalid value for 'singlePlayer'", http.StatusBadRequest)
+			return
+		}
+		if singlePlayer && !supportsSinglePlayer(gameType) {
+			http.Error(w, "Single player mode not supported", http.StatusBadRequest)
+			return
+		}
+	}
+	game, err := s.startNewGame(p.Name, GameType(typeParam), singlePlayer)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusPreconditionFailed)
 	}
@@ -679,6 +719,7 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Serialization error", http.StatusInternalServerError)
 				panic(fmt.Sprintf("Cannot serialize my own structs?! %s", err))
 			}
+			// log.Printf("Sending %d bytes over SSE", buf.Len())
 			fmt.Fprintf(w, "data: %s\n\n", buf.String())
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
@@ -695,6 +736,7 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// /hexz/gamez: async request by clients to obtain a list of games to join.
 func (s *Server) handleGamez(w http.ResponseWriter, r *http.Request) {
 	gameInfos := s.listRecentGames(5)
 	json, err := json.Marshal(gameInfos)
@@ -707,7 +749,7 @@ func (s *Server) handleGamez(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGame(w http.ResponseWriter, r *http.Request) {
-	_, err := s.lookupPlayerFromCookie(r)
+	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 		return
@@ -722,6 +764,8 @@ func (s *Server) handleGame(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 	w.Header().Set("Content-Type", "text/html")
+	// Prolong cookie ttl.
+	http.SetCookie(w, makePlayerCookie(p.Id, s.config.LoginTtl))
 	w.Write(gameHtml)
 }
 

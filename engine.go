@@ -1,6 +1,7 @@
 package hexz
 
 import (
+	"fmt"
 	"math/rand"
 )
 
@@ -75,6 +76,10 @@ func validGameType(gameType string) bool {
 	return allGameTypes[GameType(gameType)]
 }
 
+func supportsSinglePlayer(t GameType) bool {
+	return t == gameTypeFlagz
+}
+
 type GameEngineMove struct {
 	playerNum int
 	row       int
@@ -92,6 +97,10 @@ type GameEngine interface {
 	Board() *Board
 	IsDone() bool
 	Winner() (playerNum int) // Results are only meaningful if IsDone() is true. 0 for draw.
+}
+
+type SinglePlayerGameEngine interface {
+	SuggestMove() (GameEngineMove, error)
 }
 
 // Dispatches on the gameType to create a corresponding GameEngine.
@@ -686,11 +695,18 @@ func (g *GameEngineFlagz) lifetime(ct CellType) int {
 	return 0
 }
 
+// Validates if (r, c) would be a legal move for playerNum.
+// Returns the value that the cell would get if the move were made.
+// This method does not validate that it's playerNum's turn and it assumes
+// that (r, c) is a valid index.
 func (g *GameEngineFlagz) validateNormalMove(playerNum int, r, c int) (ok bool, val int) {
 	// A normal cell can only be placed next to another normal cell
 	// of the same color, or next to a flag of the same color.
-	var ns [6]idx
 	b := g.board
+	if b.Fields[r][c].occupied() {
+		return false, 0
+	}
+	var ns [6]idx
 	n := b.neighbors(idx{r, c}, ns[:])
 	minVal := -1
 	maxVal := -1
@@ -816,4 +832,62 @@ func (g *GameEngineFlagz) Winner() (playerNum int) {
 		return 0
 	}
 	return scoreBasedSingleWinner(g.board.Score)
+}
+
+// Suggests a move for the player whose turn it is.
+// Uses a random strategy. Probably not very smart.
+func (g *GameEngineFlagz) SuggestMove() (GameEngineMove, error) {
+	if g.board.State != Running {
+		return GameEngineMove{}, fmt.Errorf("game is not running")
+	}
+	b := g.board
+	playerNum := g.board.Turn
+	type mov struct {
+		row int
+		col int
+		typ CellType
+		val int
+	}
+	normalMoves := []mov{}
+	flagMoves := []mov{}
+	for r := 0; r < len(b.Fields); r++ {
+		for c := 0; c < len(b.Fields[r]); c++ {
+			if b.Fields[r][c].occupied() {
+				continue
+			}
+			if b.Resources[playerNum-1].NumPieces[cellFlag] > 0 {
+				flagMoves = append(flagMoves, mov{
+					row: r, col: c, typ: cellFlag, val: 0,
+				})
+			}
+			ok, val := g.validateNormalMove(playerNum, r, c)
+			if ok {
+				normalMoves = append(normalMoves, mov{
+					row: r, col: c, typ: cellNormal, val: val,
+				})
+			}
+		}
+	}
+	if len(flagMoves) > 0 {
+		// Place a flag with a 10% probability, unless it's the only legal move.
+		if len(normalMoves) == 0 || rand.Float64() <= 0.1 {
+			m := flagMoves[rand.Intn(len(flagMoves))]
+			return GameEngineMove{
+				playerNum: playerNum,
+				row:       m.row,
+				col:       m.col,
+				cellType:  m.typ,
+			}, nil
+		}
+	}
+	if len(normalMoves) == 0 {
+		return GameEngineMove{}, fmt.Errorf("no legal moves")
+	}
+	m := normalMoves[rand.Intn(len(normalMoves))]
+	return GameEngineMove{
+		playerNum: playerNum,
+		row:       m.row,
+		col:       m.col,
+		cellType:  m.typ,
+	}, nil
 }

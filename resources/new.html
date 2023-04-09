@@ -52,12 +52,16 @@
             min-width: 10em;
             font-size: 120%;
             background-color: #92acd9;
+            padding: 4px;
             border: none;
             color: #1e1e1e;
         }
         th, td {
             text-align: left;
             padding-right: 1em;
+        }
+        div#joingame {
+            display: none;
         }
     </style>
 </head>
@@ -76,7 +80,14 @@
     <div class="centered spacer">
         <form action="/hexz/new" method="post">
             <input type="hidden" name="type" id="type" value="Flagz">
-            <input class="gameButton" type="submit" value="&#127480;&#127464; Flagz">
+            <input class="gameButton" type="submit" value="&#127480;&#127464; Flagz (2P)">
+        </form>
+    </div>
+    <div class="centered spacer">
+        <form action="/hexz/new" method="post">
+            <input type="hidden" name="type" id="type" value="Flagz">
+            <input type="hidden" name="singlePlayer" id="singlePlayer" value="true">
+            <input class="gameButton" type="submit" value="&#127480;&#127464; Flagz (1P)">
         </form>
     </div>
     <div class="centered spacer">
@@ -86,25 +97,31 @@
         </form>
     </div>
 
-    <h1>Join a game</h1>
-    <div class="centered" id="activeGames">
-        <table>
-            <thead>
-                <tr>
-                    <th>Game</th>
-                    <th>Host</th>
-                    <th>Type</th>
-                </tr>
-            </thead>
-            <tbody id="activeGamesTbody">
-            </tbody>
-        </table>
+    <div id="joingame">
+        <h1>Join a game</h1>
+        <div class="centered" id="activeGames">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Game</th>
+                        <th>Host</th>
+                        <th>Type</th>
+                    </tr>
+                </thead>
+                <tbody id="activeGamesTbody">
+                </tbody>
+            </table>
+        </div>
     </div>
+
     <script type="text/javascript">
         async function getActiveGames() {
             const resp = await fetch("/hexz/gamez");
             const games = await resp.json();
             const tbody = document.getElementById("activeGamesTbody");
+            if (games && games.length > 0) {
+                document.getElementById("joingame").style.display = "block";
+            }
             for (const g of games) {
                 tbody.insertAdjacentHTML("beforeend", 
                 `<tr>
