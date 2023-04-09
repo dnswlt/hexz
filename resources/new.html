@@ -69,19 +69,19 @@
     </p>
     <div class="centered">
         <form action="/hexz/new" method="post">
-            <input type="hidden" name="type" id="type" value="classic">
+            <input type="hidden" name="type" id="type" value="Classic">
             <input class="gameButton" type="submit" value="&#x1F3B9; Classic">
         </form>
     </div>
     <div class="centered spacer">
         <form action="/hexz/new" method="post">
-            <input type="hidden" name="type" id="type" value="flagz">
+            <input type="hidden" name="type" id="type" value="Flagz">
             <input class="gameButton" type="submit" value="&#127480;&#127464; Flagz">
         </form>
     </div>
     <div class="centered spacer">
         <form action="/hexz/new" method="post">
-            <input type="hidden" name="type" id="type" value="freeform">
+            <input type="hidden" name="type" id="type" value="Freeform">
             <input class="gameButton" type="submit" value="&#x1F438; Freeform">
         </form>
     </div>
@@ -91,8 +91,9 @@
         <table>
             <thead>
                 <tr>
-                    <th>Host</th>
                     <th>Game</th>
+                    <th>Host</th>
+                    <th>Type</th>
                 </tr>
             </thead>
             <tbody id="activeGamesTbody">
@@ -107,8 +108,9 @@
             for (const g of games) {
                 tbody.insertAdjacentHTML("beforeend", 
                 `<tr>
-                    <td>${g.host}</td>
                     <td><a href="/hexz/${g.id}">${g.id}</a></td>
+                    <td>${g.host}</td>
+                    <td>${g.gameType}</td>
                 </tr>`);
             }
         }

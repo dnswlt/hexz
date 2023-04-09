@@ -119,9 +119,10 @@ type StatuszResponse struct {
 
 // Used in responses to list active games (/hexz/gamez).
 type GameInfo struct {
-	Id      string    `json:"id"`
-	Host    string    `json:"host"`
-	Started time.Time `json:"started"`
+	Id       string    `json:"id"`
+	Host     string    `json:"host"`
+	Started  time.Time `json:"started"`
+	GameType GameType  `json:"gameType"`
 }
 
 type Player struct {
@@ -459,9 +460,10 @@ func (s *Server) listRecentGames(limit int) []*GameInfo {
 	gameInfos := []*GameInfo{}
 	for _, g := range s.ongoingGames {
 		gameInfos = append(gameInfos, &GameInfo{
-			Id:      g.id,
-			Host:    g.host,
-			Started: g.started,
+			Id:       g.id,
+			Host:     g.host,
+			Started:  g.started,
+			GameType: g.gameType,
 		})
 	}
 	s.ongoingGamesMut.Unlock()

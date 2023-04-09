@@ -61,9 +61,9 @@ func (b *Board) ViewFor(playerNum int) *BoardView {
 type GameType string
 
 const (
-	gameTypeClassic  GameType = "classic"
-	gameTypeFlagz    GameType = "flagz"
-	gameTypeFreeform GameType = "freeform"
+	gameTypeClassic  GameType = "Classic"
+	gameTypeFlagz    GameType = "Flagz"
+	gameTypeFreeform GameType = "Freeform"
 )
 
 func validGameType(gameType string) bool {
