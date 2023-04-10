@@ -25,6 +25,8 @@ type ServerConfig struct {
 	PlayerRemoveDelay time.Duration
 	LoginTtl          time.Duration
 
+	AuthToken string // Used in http Basic authentication for /statusz
+
 	TlsCertChain string
 	TlsPrivKey   string
 	DebugMode    bool
@@ -43,8 +45,13 @@ type Server struct {
 	// Contains all logged in players, mapped by their (cookie) playerId.
 	loggedInPlayers    map[string]*Player
 	loggedInPlayersMut sync.Mutex
+
 	// Server configuration (set from command-line flags).
 	config *ServerConfig
+
+	// Counters
+	counters    map[string]*Counter
+	countersMut sync.Mutex
 }
 
 func NewServer(cfg *ServerConfig) *Server {
@@ -52,7 +59,24 @@ func NewServer(cfg *ServerConfig) *Server {
 		ongoingGames:    make(map[string]*GameHandle),
 		loggedInPlayers: make(map[string]*Player),
 		config:          cfg,
+		counters:        make(map[string]*Counter),
 	}
+}
+
+func (s *Server) Counter(name string) *Counter {
+	s.countersMut.Lock()
+	defer s.countersMut.Unlock()
+
+	if c, ok := s.counters[name]; ok {
+		return c
+	}
+	c := NewCounter(name)
+	s.counters[name] = c
+	return c
+}
+
+func (s *Server) IncCounter(name string) {
+	s.Counter(name).Increment()
 }
 
 const (
@@ -114,9 +138,15 @@ type ResetRequest struct {
 	Message string `json:"message"`
 }
 
+type StatuszCounter struct {
+	Name  string `json:"name"`
+	Value int64  `json:"value"`
+}
+
 type StatuszResponse struct {
-	NumOngoingGames    int `json:"numOngoingGames"`
-	NumLoggedInPlayers int `json:"numLoggedInPlayers"`
+	NumOngoingGames    int              `json:"numOngoingGames"`
+	NumLoggedInPlayers int              `json:"numLoggedInPlayers"`
+	Counters           []StatuszCounter `json:"counters"`
 }
 
 // Used in responses to list active games (/hexz/gamez).
@@ -214,6 +244,7 @@ func (g *GameHandle) unregisterPlayer(playerId string) {
 }
 
 func (s *Server) readFile(filename string) ([]byte, error) {
+	s.IncCounter("/storage/files/readfile")
 	return os.ReadFile(path.Join(s.config.DocumentRoot, filename))
 }
 
@@ -530,6 +561,7 @@ func makePlayerCookie(playerId string, ttl time.Duration) *http.Cookie {
 }
 
 func (s *Server) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
+	s.IncCounter("/requests/login/total")
 	if r.Method != http.MethodPost {
 		http.Error(w, "Only POST allowed", http.StatusBadRequest)
 		return
@@ -552,6 +584,7 @@ func (s *Server) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
 	if !s.loginPlayer(playerId, name) {
 		http.Error(w, "Cannot log in right now", http.StatusPreconditionFailed)
 	}
+	s.IncCounter("/requests/login/success")
 	http.SetCookie(w, makePlayerCookie(playerId, s.config.LoginTtl))
 	http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 }
@@ -613,6 +646,7 @@ func (s *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusPreconditionFailed)
 	}
+	s.IncCounter("/games/started")
 	http.Redirect(w, r, fmt.Sprintf("/hexz/%s", game.id), http.StatusSeeOther)
 }
 
@@ -796,12 +830,28 @@ func (s *Server) handleStaticResource(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
 	var resp StatuszResponse
+
 	s.ongoingGamesMut.Lock()
 	resp.NumOngoingGames = len(s.ongoingGames)
 	s.ongoingGamesMut.Unlock()
+
 	s.loggedInPlayersMut.Lock()
 	resp.NumLoggedInPlayers = len(s.loggedInPlayers)
 	s.loggedInPlayersMut.Unlock()
+
+	s.countersMut.Lock()
+	counters := make([]StatuszCounter, len(s.counters))
+	i := 0
+	for _, c := range s.counters {
+		counters[i] = StatuszCounter{Name: c.name, Value: c.value}
+		i++
+	}
+	s.countersMut.Unlock()
+	sort.Slice(counters, func(i, j int) bool {
+		return counters[i].Name < counters[j].Name
+	})
+	resp.Counters = counters
+
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(resp); err != nil {
@@ -815,6 +865,7 @@ func (s *Server) defaultHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 	}
 	if isFavicon(r.URL.Path) {
+		s.IncCounter("/requests/favicon")
 		ico, err := s.readFile(path.Join("images", path.Base(r.URL.Path)))
 		if err != nil {
 			http.Error(w, "favicon not found", http.StatusNotFound)
@@ -824,7 +875,8 @@ func (s *Server) defaultHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write(ico)
 		return
 	}
-	// Ignore
+	s.IncCounter("/requests/other")
+	http.Error(w, "", http.StatusNotFound)
 }
 
 func (s *Server) loadUserDatabase() {
@@ -852,7 +904,7 @@ func (s *Server) loadUserDatabase() {
 	}
 }
 
-func saveUserDatabase(players []Player) {
+func (s *Server) saveUserDatabase(players []Player) {
 	w, err := os.Create(userDatabaseFilename)
 	if err != nil {
 		log.Print("userMaintenance: cannot save user db: ", err.Error())
@@ -864,6 +916,7 @@ func saveUserDatabase(players []Player) {
 		log.Print("userMaintenance: error saving user db: ", err.Error())
 	}
 	log.Printf("Saved user db (%d users)", len(players))
+	s.IncCounter("/storage/userdb/saved")
 }
 
 func (s *Server) updateLoggedInPlayers() {
@@ -907,7 +960,7 @@ func (s *Server) updateLoggedInPlayers() {
 				i++
 			}
 			s.loggedInPlayersMut.Unlock()
-			saveUserDatabase(players)
+			s.saveUserDatabase(players)
 		}
 		lastIteration = now
 	}
@@ -916,9 +969,35 @@ func (s *Server) updateLoggedInPlayers() {
 func (s *Server) loggingHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// t := time.Now().Format("2006-01-02 15:04:05.999Z07:00")
+		s.IncCounter("/requests/total")
 		log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.URL.String())
 		h.ServeHTTP(w, r)
 	})
+}
+
+func (s *Server) basicAuthHandlerFunc(h http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			if s.config.AuthToken == "" || strings.HasPrefix(r.RemoteAddr, "127.0.0.1") {
+				// No authentication required
+				s.IncCounter("/auth/not_required")
+				h(w, r)
+				return
+			}
+			_, pass, ok := r.BasicAuth()
+			if !ok || pass != s.config.AuthToken {
+				if !ok {
+					s.IncCounter("/auth/missing_token")
+				} else {
+					s.IncCounter("/auth/bad_pass")
+				}
+				w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			s.IncCounter("/auth/access_granted")
+			h(w, r)
+		})
 }
 
 func (s *Server) Serve() {
@@ -945,7 +1024,7 @@ func (s *Server) Serve() {
 	mux.HandleFunc("/hexz/new", s.handleNewGame)
 	mux.HandleFunc("/hexz/gamez", s.handleGamez)
 	mux.HandleFunc("/hexz/", s.handleGame)
-	mux.HandleFunc("/statusz", s.handleStatusz)
+	mux.Handle("/statusz", s.basicAuthHandlerFunc(s.handleStatusz))
 	mux.HandleFunc("/", s.defaultHandler)
 
 	log.Printf("Listening on %s", addr)

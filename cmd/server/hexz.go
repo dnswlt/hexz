@@ -22,6 +22,7 @@ func main() {
 		"Time to wait logging a player out after inactivity")
 	flag.BoolVar(&cfg.DebugMode, "debug", false,
 		"Run server in debug mode. Only set to true during development.")
+	flag.StringVar(&cfg.AuthToken, "auth-token", "", "Token for access to restricted paths (http authentication)")
 	flag.StringVar(&cfg.TlsCertChain, "tls-cert", "", "Path to chain.pem for TLS")
 	flag.StringVar(&cfg.TlsPrivKey, "tls-key", "", "Path to privkey.pem for TLS")
 	flag.Parse()
