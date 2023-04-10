@@ -876,6 +876,7 @@ func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
 func (s *Server) defaultHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/" {
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
+		return
 	}
 	if isFavicon(r.URL.Path) {
 		s.IncCounter("/requests/favicon")
