@@ -286,7 +286,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 	defer close(game.done)
 	defer s.deleteGame(game.id)
 	const playerIdComputer = "comp"
-	log.Printf("Started new game %s", game.id)
+	log.Printf("Started new %q game: %s", game.gameType, game.id)
 	gameEngine := NewGameEngine(game.gameType)
 	// Player and spectator channels, keyed by playerId.
 	eventListeners := make(map[string]chan ServerEvent)
@@ -301,13 +301,12 @@ func (s *Server) gameMaster(game *GameHandle) {
 		Player
 	}
 	players := make(map[string]pInfo) // keyed by playerId
-	playerName := func(playerNum int) (string, bool) {
+	playerNames := func() []string {
+		r := make([]string, len(players))
 		for _, p := range players {
-			if p.playerNum == playerNum {
-				return p.Name, true
-			}
+			r[p.playerNum-1] = p.Name
 		}
-		return "", false
+		return r
 	}
 	playerRmCancel := make(map[string]chan struct{})
 	playerRm := make(chan string)
@@ -319,6 +318,9 @@ func (s *Server) gameMaster(game *GameHandle) {
 	}
 	broadcast := func(e *ServerEvent) {
 		e.Timestamp = time.Now().Format(time.RFC3339)
+		if gameEngine.Board().State != Initial {
+			e.PlayerNames = playerNames()
+		}
 		// Send event to all listeners. Avoid recomputing board for spectators.
 		var spectatorBoard *BoardView
 		for pId, ch := range eventListeners {
@@ -366,7 +368,6 @@ func (s *Server) gameMaster(game *GameHandle) {
 						gameEngine.Start()
 					}
 					if game.singlePlayer {
-						log.Print("XXX single player")
 						players[playerIdComputer] =
 							pInfo{playerNum: 2, Player: Player{Id: playerIdComputer, Name: "Computer"}}
 					}
@@ -417,11 +418,13 @@ func (s *Server) gameMaster(game *GameHandle) {
 					log.Printf("%s: move request: P%d %s", game.id, p.playerNum, debugReq)
 				}
 				if gameEngine.MakeMove(GameEngineMove{playerNum: p.playerNum, row: e.Row, col: e.Col, cellType: e.Type}) {
-					announcements := []string{}
+					evt := &ServerEvent{Announcements: []string{}}
 					if gameEngine.IsDone() {
-						if winnerName, ok := playerName(gameEngine.Winner()); ok {
-							announcements = append(announcements,
-								fmt.Sprintf("&#127942; &#127942; &#127942; %s wins &#127942; &#127942; &#127942;",
+						if winner := gameEngine.Winner(); winner > 0 {
+							evt.Winner = winner
+							winnerName := playerNames()[winner-1]
+							evt.Announcements = append(evt.Announcements,
+								fmt.Sprintf("&#127942; &#127942; &#127942; %s won &#127942; &#127942; &#127942;",
 									winnerName))
 						}
 					}
@@ -442,7 +445,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 							log.Print("Error: could not suggest a move:", err.Error())
 						}
 					}
-					broadcast(&ServerEvent{Announcements: announcements})
+					broadcast(evt)
 				}
 				if s.config.DebugMode {
 					log.Printf("MakeMove took %dus.", time.Since(before).Microseconds())

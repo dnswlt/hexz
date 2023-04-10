@@ -14,20 +14,23 @@ type ServerEvent struct {
 	Timestamp     string     `json:"timestamp"`
 	Board         *BoardView `json:"board"`
 	Role          int        `json:"role"` // 0: spectator, 1, 2: players
+	PlayerNames   []string   `json:"playerNames"`
 	Announcements []string   `json:"announcements"`
 	DebugMessage  string     `json:"debugMessage"`
-	LastEvent     bool       `json:"lastEvent"` // Signals to clients that this is the last event they will receive.
+	Winner        int        `json:"winner,omitempty"` // Number of the player that wins. 0 if no winner yet or draw.
+	LastEvent     bool       `json:"lastEvent"`        // Signals to clients that this is the last event they will receive.
 }
 
 // A player's or spectator's view of the board.
 // See type Board for the internal representation that holds the complete information.
 type BoardView struct {
-	Turn      int            `json:"turn"`
-	Move      int            `json:"move"`
-	Fields    [][]Field      `json:"fields"` // The board's fields.
-	Score     []int          `json:"score"`  // Depending on the number of players, 1 or 2 elements.
-	Resources []ResourceInfo `json:"resources"`
-	State     GameState      `json:"state"`
+	Turn        int            `json:"turn"`
+	Move        int            `json:"move"`
+	Fields      [][]Field      `json:"fields"` // The board's fields.
+	PlayerNames []string       `json:"playerNames"`
+	Score       []int          `json:"score"` // Depending on the number of players, 1 or 2 elements.
+	Resources   []ResourceInfo `json:"resources"`
+	State       GameState      `json:"state"`
 }
 
 type Field struct {

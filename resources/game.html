@@ -27,6 +27,7 @@
             font-family: sans-serif;
         }
 
+        /* Smaller margins on smaller (phone) screens */
         @media screen and (max-width: 560px) {
             body {
                 margin: 10px 10px 0 10px;
@@ -39,21 +40,16 @@
             }
         }
 
-        .menuitem {
-            display: inline;
-            margin-right: 1ex;
-        }
-
         #canvas {
             margin-bottom: 10px;
         }
 
         #playerOneBadge,
         #playerTwoBadge {
-            /* padding-right: 2em; */
             display: inline-block;
-            width: 2.5em;
+            width: 7em;  /* TODO: make them occupy all space in the menu row. */
             text-align: center;
+            padding: 5px;
         }
 
         #playerOneBadge {
@@ -78,14 +74,20 @@
         }
 
         div.menurow {
-            margin-bottom: 5px;
+            margin-bottom: 8px;
+        }
+
+        .menuitem {
+            display: inline;
+            margin-right: 1ex;
         }
 
         button {
             color: #1e1e1e;
             background-color: #92acd9;
             border: none;
-            font: sans-serif;
+            font-family: sans-serif;
+            font-size: 12pt;
             padding: 5px;
             min-width: 6em;
         }
@@ -97,7 +99,7 @@
         <canvas id="canvas" width="560" height="550"></canvas>
     </div>
     <div id="controls" class="menu">
-        <div class="menurow menurowLargeMargin">
+        <div class="menurow">
             <div class="menuitem">
                 <span id="playerOneBadge">&nbsp;</span>
                 <span id="playerOneTurnInfo">&#9664;</span>
@@ -106,11 +108,9 @@
                 <span id="playerTwoBadge">&nbsp;</span>
             </div>
         </div>
-        <div class="menurow menurowLargeMargin">
+        <div class="menurow">
             <button id="home" class="menuitem">New Game</button>
             <button id="reset" class="menuitem">Reset</button>
-            <button id="animate" class="menuitem">Animate Winner</button>
-            <button id="animate2" class="menuitem">Animate Loser</button>
             <div class="menuitem" id="shareLink">&#x1F517; Share</div>
         </div>
     </div>
@@ -154,77 +154,6 @@
             })
         }
 
-        let animationStartedMillis = 0;
-
-        function animateWinner() {
-            const duration = 5000;
-            const freq = duration / 8;
-            let elapsed = Date.now() - animationStartedMillis;
-            const continueAnimation = elapsed < duration;
-            elapsed = Math.min(duration, elapsed);
-            const ctx = document.getElementById("canvas").getContext('2d');
-            ctx.resetTransform();
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const w = canvas.clientWidth;
-            const h = canvas.clientHeight;
-            const trophy = String.fromCodePoint("0x1F3C6");
-            const letters = [trophy, "Y", "O", "U", " ", "W", "O", "N", "!", trophy];
-            const fontSize = Math.floor(Math.min(h / 4, w / (letters.length * 1.1)));
-            ctx.font = `${fontSize}px sans-serif`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillStyle = gstate.role > 0 ? styles.colors.players[gstate.role - 1] : "#ffffff";
-            for (let i = 0; i < letters.length; i++) {
-                const xOff = w / (2 * letters.length) * (2 * i + 1);
-                const yOff = h / 2 + h / 4 * Math.sin((elapsed + i * 0.25 * freq) / freq * Math.PI);
-                ctx.fillText(letters[i], xOff, yOff);
-            }
-            if (continueAnimation) {
-                window.requestAnimationFrame(animateWinner);
-            } else {
-                setTimeout(function () { redraw(); }, 2000);
-            }
-        }
-
-
-        function animateLoser() {
-            const duration = 5000;
-            const freq = duration / 2;
-            let elapsed = Date.now() - animationStartedMillis;
-            const continueAnimation = elapsed < duration;
-            elapsed = Math.min(duration, elapsed);
-            const delayedX = Math.max(0, (elapsed - 1000) / (duration - 1000)) * duration;
-            const ctx = document.getElementById("canvas").getContext('2d');
-            ctx.resetTransform();
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const w = canvas.clientWidth;
-            const h = canvas.clientHeight;
-            const sadFace = String.fromCodePoint("0x1F622");
-            const seeNoEvil = String.fromCodePoint("0x1F648");
-            const text = sadFace + " YOU LOSE " + seeNoEvil;
-            const fontSize = Math.floor(Math.min(h / (text.length * 0.8), w / (text.length * 0.8)));
-            ctx.font = `${fontSize}px sans-serif`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillStyle = gstate.role > 0 ? styles.colors.players[gstate.role - 1] : "#ffffff";
-            ctx.translate(w / 2, h / 2);
-            ctx.rotate(Math.PI * delayedX / freq);
-            const scaleFactor = 1 - delayedX / duration;
-            ctx.scale(scaleFactor, scaleFactor);
-            ctx.fillText(text, 0, 0);
-            if (continueAnimation) {
-                window.requestAnimationFrame(animateLoser);
-            } else {
-                setTimeout(function () { redraw(); }, 2000);
-            }
-        }
-
-        function showAnimation(animationFunc) {
-            console.log("showAnimation");
-            animationStartedMillis = Date.now();
-            window.requestAnimationFrame(animationFunc);
-        }
-
         async function resetGame() {
             return fetch("/hexz/reset/" + gameId(), {
                 method: "POST",
@@ -251,14 +180,6 @@
         function handleServerEvent(sse, serverEvent) {
             if (gstate.role == 0 && serverEvent.role > 0) {
                 gstate.role = serverEvent.role;
-                let ps = [
-                    document.getElementById("playerOneBadge"),
-                    document.getElementById("playerTwoBadge"),
-                ];
-                if (gstate.role > 0) {
-                    let role = gstate.role - 1;
-                    ps[role].innerHTML = "You";
-                }
             }
             if (serverEvent.board != null) {
                 // new board received.
@@ -269,6 +190,21 @@
                 redraw();
                 updateTurnInfo();
                 updateScore();
+                if (serverEvent.winner > 0) {
+                    // Show an animation if a winner was just announced.
+                    setTimeout(function () {
+                        showAnimation(serverEvent.winner == gstate.role ? animateWinner : animateLoser);
+                    }, 1000);
+                }
+            }
+            if (serverEvent.playerNames) {
+                let ps = [
+                    document.getElementById("playerOneBadge"),
+                    document.getElementById("playerTwoBadge"),
+                ];
+                for (let i = 0; i < serverEvent.playerNames.length; i++) {
+                    ps[i].innerHTML = serverEvent.playerNames[i];
+                }
             }
             if (serverEvent.debugMessage.length > 0) {
                 console.log(serverEvent.timestamp + ": " + serverEvent.debugMessage);
@@ -570,8 +506,6 @@
             });
             document.getElementById("home").addEventListener('click', newGame);
             document.getElementById("reset").addEventListener('click', resetGame);
-            document.getElementById("animate").addEventListener('click', function() {showAnimation(animateWinner);});
-            document.getElementById("animate2").addEventListener('click', function() {showAnimation(animateLoser);});
             document.getElementById("shareLink").addEventListener('click', async function () {
                 try {
                     await navigator.clipboard.writeText(window.location.href);
@@ -651,6 +585,80 @@
                 gstate.selectedCellType = cellType;
                 redraw();
             }
+        }
+
+        let animationStartedMillis = 0;
+
+        function animateWinner() {
+            const duration = 5000;
+            const waitTime = 3000;
+            const freq = duration / 8;
+            let elapsed = Date.now() - animationStartedMillis;
+            const continueAnimation = elapsed < duration;
+            elapsed = Math.min(duration, elapsed);
+            const ctx = document.getElementById("canvas").getContext('2d');
+            ctx.resetTransform();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const w = canvas.clientWidth;
+            const h = canvas.clientHeight;
+            const trophy = String.fromCodePoint("0x1F3C6");
+            const letters = [trophy, "Y", "O", "U", " ", "W", "O", "N", "!", trophy];
+            const fontSize = Math.floor(Math.min(h / 4, w / (letters.length * 1.1)));
+            ctx.font = `${fontSize}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = gstate.role > 0 ? styles.colors.players[gstate.role - 1] : "#ffffff";
+            for (let i = 0; i < letters.length; i++) {
+                const xOff = w / (2 * letters.length) * (2 * i + 1);
+                const yOff = h / 2 + h / 4 * Math.sin((elapsed + i * 0.25 * freq) / freq * Math.PI);
+                ctx.fillText(letters[i], xOff, yOff);
+            }
+            if (continueAnimation) {
+                window.requestAnimationFrame(animateWinner);
+            } else {
+                setTimeout(function () { redraw(); }, waitTime);
+            }
+        }
+
+        function animateLoser() {
+            const duration = 5000;
+            const waitTime = 3000;
+            const delay = 1000;
+            const freq = duration / 2;
+            let elapsed = Date.now() - animationStartedMillis;
+            const continueAnimation = elapsed < duration;
+            elapsed = Math.min(duration, elapsed);
+            const delayedX = Math.max(0, (elapsed - delay) / (duration - delay)) * duration;
+            const ctx = document.getElementById("canvas").getContext('2d');
+            ctx.resetTransform();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const w = canvas.clientWidth;
+            const h = canvas.clientHeight;
+            const sadFace = String.fromCodePoint("0x1F622");
+            const seeNoEvil = String.fromCodePoint("0x1F648");
+            const text = sadFace + " YOU LOST " + seeNoEvil;
+            const fontSize = Math.floor(Math.min(h / (text.length * 0.8), w / (text.length * 0.8)));
+            ctx.font = `${fontSize}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = gstate.role > 0 ? styles.colors.players[gstate.role - 1] : "#ffffff";
+            ctx.translate(w / 2, h / 2);
+            if (continueAnimation) {
+                ctx.rotate(Math.PI * delayedX / freq);
+                const scaleFactor = 1 - delayedX / duration;
+                ctx.scale(scaleFactor, scaleFactor);
+            }
+            ctx.fillText(text, 0, 0);
+            if (continueAnimation) {
+                window.requestAnimationFrame(animateLoser);
+            } else {
+                setTimeout(function () { redraw(); }, waitTime);
+            }
+        }
+
+        function showAnimation(animationFunc) {
+            animationStartedMillis = Date.now();
+            window.requestAnimationFrame(animationFunc);
         }
 
         function reset() {
