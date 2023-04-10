@@ -32,7 +32,7 @@ type ServerConfig struct {
 
 var (
 	// Regexp used to validate player names.
-	playernameRegexp = regexp.MustCompile("^[a-zA-Z0-9][a-zA-Z0-9_.-]+$")
+	playernameRegexp = regexp.MustCompile(`^[\p{Latin}0-9_.-]+$`)
 )
 
 type Server struct {
@@ -539,6 +539,7 @@ func (s *Server) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.Form.Get("name")
+	name = strings.TrimSpace(name)
 	if name == "" {
 		http.Error(w, "Missing 'user' form parameter", http.StatusBadRequest)
 		return

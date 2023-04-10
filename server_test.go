@@ -14,16 +14,22 @@ func TestValidPlayerName(t *testing.T) {
 		{"abc.def", true},
 		{"abc_def-123", true},
 		{"1digit", true},
+		{"HANS", true},
+		{"Mørän", true},
+		{"Jérôme", true},
+		{"Strüßenbähn", true},
 		{"123", true},
-		{"ab", false},
+		{"_letter-or.digit", true},
+		{"ab", false},      // Too short
+		{"jens$", false},   // Invalid character
+		{"dw@best", false}, // Invalid character
 		{"", false},
-		{"_letterordigit", false},
 		{"verylongusernamesarenotallowedalright", false},
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
 			if got := isValidPlayerName(test.name); got != test.want {
-				t.Errorf("unexpected result %t for name %s", test.want, test.name)
+				t.Errorf("unexpected result %t for name %s", got, test.name)
 			}
 		})
 	}
