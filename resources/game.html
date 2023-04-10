@@ -25,18 +25,9 @@
             font-family: sans-serif;
         }
 
-        .menu {
-            padding-left: 5px;
-            padding-right: 5px;
-        }
-
         .menuitem {
             display: inline;
             margin-right: 1ex;
-        }
-
-        .widget {
-            margin-top: 6px;
         }
 
         #playerOneBadge,
@@ -67,6 +58,11 @@
         a:active {
             color: #92acd9;
         }
+
+        div.menurow {
+            margin-left: 20px;
+            margin-bottom: 5px;
+        }
     </style>
 </head>
 
@@ -75,17 +71,20 @@
         <canvas id="canvas" width="560" height="550"></canvas>
     </div>
     <div id="controls" class="menu">
-        <button id="home" class="menuitem">New Game</button>
-        <button id="reset" class="menuitem">Reset</button>
-        <div class="menuitem">
-            <span id="playerOneBadge">&nbsp;</span>
-            <span id="playerOneTurnInfo">&#9664;</span>
-            <span id="scoreInfo">0 &ndash; 0</span>
-            <span id="playerTwoTurnInfo">&#9654;</span>
-            <span id="playerTwoBadge">&nbsp;</span>
+        <div class="menurow">
+            <div class="menuitem">
+                <span id="playerOneBadge">&nbsp;</span>
+                <span id="playerOneTurnInfo">&#9664;</span>
+                <span id="scoreInfo">0 &ndash; 0</span>
+                <span id="playerTwoTurnInfo">&#9654;</span>
+                <span id="playerTwoBadge">&nbsp;</span>
+            </div>
         </div>
-        <div class="menuitem" id="turnInfo"></div>
-        <div class="menuitem" id="shareLink">&#x1F517; Share</div>
+        <div class="menurow">
+            <button id="home" class="menuitem">New Game</button>
+            <button id="reset" class="menuitem">Reset</button>
+            <div class="menuitem" id="shareLink">&#x1F517; Share</div>
+        </div>
     </div>
     <div class="widget" id="announcements"></div>
 

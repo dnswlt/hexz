@@ -2,6 +2,7 @@ package hexz
 
 import (
 	crand "crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -25,7 +26,7 @@ type ServerConfig struct {
 	PlayerRemoveDelay time.Duration
 	LoginTtl          time.Duration
 
-	AuthToken string // Used in http Basic authentication for /statusz
+	AuthTokenSha256 string // Used in http Basic authentication for /statusz. Must be a SHA256 checksum.
 
 	TlsCertChain string
 	TlsPrivKey   string
@@ -52,6 +53,8 @@ type Server struct {
 	// Counters
 	counters    map[string]*Counter
 	countersMut sync.Mutex
+
+	started time.Time
 }
 
 func NewServer(cfg *ServerConfig) *Server {
@@ -60,6 +63,7 @@ func NewServer(cfg *ServerConfig) *Server {
 		loggedInPlayers: make(map[string]*Player),
 		config:          cfg,
 		counters:        make(map[string]*Counter),
+		started:         time.Now(),
 	}
 }
 
@@ -144,6 +148,8 @@ type StatuszCounter struct {
 }
 
 type StatuszResponse struct {
+	Started            time.Time        `json:"started"`
+	UptimeSeconds      int              `json:"uptimeSeconds"`
 	NumOngoingGames    int              `json:"numOngoingGames"`
 	NumLoggedInPlayers int              `json:"numLoggedInPlayers"`
 	Counters           []StatuszCounter `json:"counters"`
@@ -852,6 +858,9 @@ func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
 	})
 	resp.Counters = counters
 
+	resp.Started = s.started
+	resp.UptimeSeconds = int(time.Since(s.started).Seconds())
+
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
@@ -934,21 +943,21 @@ func (s *Server) updateLoggedInPlayers() {
 		now := time.Now()
 		logoutThresh := now.Add(-s.config.LoginTtl)
 		s.loggedInPlayersMut.Lock()
-		del := []string{}
-		for pId, p := range s.loggedInPlayers {
+		del := []*Player{}
+		for _, p := range s.loggedInPlayers {
 			if p.LastActive.Before(logoutThresh) {
-				del = append(del, pId)
+				del = append(del, p)
 			} else if p.LastActive.After(lastIteration) {
 				activity = true
 			}
 		}
-		for _, pId := range del {
-			delete(s.loggedInPlayers, pId)
+		for _, p := range del {
+			delete(s.loggedInPlayers, p.Id)
 		}
 		s.loggedInPlayersMut.Unlock()
 		// Do I/O outside the mutex.
-		for _, pId := range del {
-			log.Printf("Logged out player %s", pId)
+		for _, p := range del {
+			log.Printf("Logged out player %s(%s)", p.Name, p.Id)
 		}
 		if activity || len(del) > 0 {
 			s.loggedInPlayersMut.Lock()
@@ -979,24 +988,32 @@ func (s *Server) loggingHandler(h http.Handler) http.Handler {
 func (s *Server) basicAuthHandlerFunc(h http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
-			if s.config.AuthToken == "" || strings.HasPrefix(r.RemoteAddr, "127.0.0.1") {
+			if strings.HasPrefix(r.RemoteAddr, "127.0.0.1:") {
 				// No authentication required
-				s.IncCounter("/auth/not_required")
+				s.IncCounter("/auth/granted/local")
 				h(w, r)
 				return
 			}
+			if s.config.AuthTokenSha256 == "" {
+				// No auth token: only local access is allowed.
+				s.IncCounter("/auth/rejected/nonlocal")
+				http.Error(w, "", http.StatusForbidden)
+				return
+			}
 			_, pass, ok := r.BasicAuth()
-			if !ok || pass != s.config.AuthToken {
+			passSha256Bytes := sha256.Sum256([]byte(pass))
+			passSha256 := fmt.Sprintf("%x", passSha256Bytes)
+			if !ok || passSha256 != s.config.AuthTokenSha256 {
 				if !ok {
-					s.IncCounter("/auth/missing_token")
+					s.IncCounter("/auth/rejected/missing_token")
 				} else {
-					s.IncCounter("/auth/bad_pass")
+					s.IncCounter("/auth/rejected/bad_passwd")
 				}
 				w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
-			s.IncCounter("/auth/access_granted")
+			s.IncCounter("/auth/granted/basic_auth")
 			h(w, r)
 		})
 }

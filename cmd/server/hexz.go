@@ -2,6 +2,9 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"os"
+	"regexp"
 	"time"
 
 	"github.com/dnswlt/hackz/hexz"
@@ -22,10 +25,16 @@ func main() {
 		"Time to wait logging a player out after inactivity")
 	flag.BoolVar(&cfg.DebugMode, "debug", false,
 		"Run server in debug mode. Only set to true during development.")
-	flag.StringVar(&cfg.AuthToken, "auth-token", "", "Token for access to restricted paths (http authentication)")
+	flag.StringVar(&cfg.AuthTokenSha256, "auth-token", "", "SHA256 token for access to restricted paths (http authentication)")
 	flag.StringVar(&cfg.TlsCertChain, "tls-cert", "", "Path to chain.pem for TLS")
 	flag.StringVar(&cfg.TlsPrivKey, "tls-key", "", "Path to privkey.pem for TLS")
 	flag.Parse()
 
+	if cfg.AuthTokenSha256 != "" {
+		if len(cfg.AuthTokenSha256) != 64 || !regexp.MustCompile("[a-fA-F0-9]+").MatchString(cfg.AuthTokenSha256) {
+			fmt.Fprint(os.Stderr, "-auth-token must be a SHA256 hex digest")
+			os.Exit(1)
+		}
+	}
 	hexz.NewServer(cfg).Serve()
 }
