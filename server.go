@@ -852,6 +852,7 @@ func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
 	})
 	resp.Counters = counters
 
+	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(resp); err != nil {
