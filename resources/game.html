@@ -12,11 +12,13 @@
 
     <title>Hexz</title>
     <style>
-        html,
-        body {
+        html {
             width: 100%;
             height: 100%;
-            margin: 0;
+        }
+
+        body {
+            min-height: 100%;
             background-color: #1e1e1e;
             color: #cbcbcb;
         }
@@ -25,9 +27,25 @@
             font-family: sans-serif;
         }
 
+        @media screen and (max-width: 560px) {
+            body {
+                margin: 10px 10px 0 10px;
+            }
+        }
+
+        @media screen and (min-width: 561px) {
+            body {
+                margin: 20px 20px 0 20px;
+            }
+        }
+
         .menuitem {
             display: inline;
             margin-right: 1ex;
+        }
+
+        #canvas {
+            margin-bottom: 10px;
         }
 
         #playerOneBadge,
@@ -60,8 +78,15 @@
         }
 
         div.menurow {
-            margin-left: 20px;
             margin-bottom: 5px;
+        }
+        button {
+            color: #1e1e1e;
+            background-color: #92acd9;
+            border: none;
+            font: sans-serif;
+            padding: 5px;
+            min-width: 6em;
         }
     </style>
 </head>
@@ -71,7 +96,7 @@
         <canvas id="canvas" width="560" height="550"></canvas>
     </div>
     <div id="controls" class="menu">
-        <div class="menurow">
+        <div class="menurow menurowLargeMargin">
             <div class="menuitem">
                 <span id="playerOneBadge">&nbsp;</span>
                 <span id="playerOneTurnInfo">&#9664;</span>
@@ -80,7 +105,7 @@
                 <span id="playerTwoBadge">&nbsp;</span>
             </div>
         </div>
-        <div class="menurow">
+        <div class="menurow menurowLargeMargin">
             <button id="home" class="menuitem">New Game</button>
             <button id="reset" class="menuitem">Reset</button>
             <div class="menuitem" id="shareLink">&#x1F517; Share</div>
@@ -148,7 +173,6 @@
 
         // These values get dynamically updated depending on the canvas size.
         var hexagonSideLength = 30;
-        var pad = 20;
 
         function handleServerEvent(sse, serverEvent) {
             if (gstate.role == 0 && serverEvent.role > 0) {
@@ -427,12 +451,15 @@
             }
         }
 
+        const canvasPadding = 1; // 1px one each side to avoid cutting off outer strokes.
+
         function redraw() {
             const c = document.getElementById("canvas");
             const ctx = canvas.getContext("2d");
             ctx.resetTransform();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.translate(pad, pad);
+            // Add 1 pixel breathing space for hex outlines.
+            ctx.translate(canvasPadding, canvasPadding);
             drawBoard(ctx);
             drawButtons(ctx);
         }
@@ -441,10 +468,11 @@
             const canvas = document.getElementById("canvas");
             const maxWidth = 800;
             // default width and height are assuming a=30 hexz side length.
-            // 2*20 padding + 10 hexz of width sqrt(3)*30
-            const defaultWidth = 560;
-            // 2*20 padding + (6*2*30 + 5*30) hexz height + 3*30 for hexz-buttons.
-            const defaultHeight = 640;
+            const pad = 2 * canvasPadding;
+            // 10 hexz of width sqrt(3)*30
+            const defaultWidth = 520 + pad;
+            // 1px padding t/b + (6*2*30 + 5*30) hexz height + 3*30 for hexz-buttons.
+            const defaultHeight = 600 + pad;
             canvas.width = Math.floor(Math.min(
                 maxWidth,
                 document.body.clientWidth,
@@ -452,8 +480,7 @@
                 0.9 * document.body.clientHeight / defaultHeight * defaultWidth
             ));
             canvas.height = Math.ceil(canvas.width * (defaultHeight / defaultWidth));
-            pad = canvas.width < defaultWidth ? 10 : 20;
-            hexagonSideLength = (canvas.width - 2 * pad) / (10 * Math.sqrt(3));
+            hexagonSideLength = (canvas.width - pad) / (10 * Math.sqrt(3));
             redraw();
         }
 
@@ -501,7 +528,6 @@
             const c = document.getElementById("canvas");
             const ctx = canvas.getContext("2d");
             ctx.resetTransform();
-            ctx.translate(pad, pad);
             let a = hexagonSideLength;
             let b = Math.sqrt(3) * a;
             let nRows = gstate.board.fields.length;
