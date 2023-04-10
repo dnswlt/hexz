@@ -19,8 +19,8 @@ def pprint_file(f):
 
 def generate_auth_token(s):
     m = hashlib.sha256()
-    m.update(s)
-    return m.hexdigest()
+    m.update(s.encode('utf-8'))
+    print(m.hexdigest())
 
 
 def main():
