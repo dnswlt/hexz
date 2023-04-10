@@ -80,6 +80,7 @@
         div.menurow {
             margin-bottom: 5px;
         }
+
         button {
             color: #1e1e1e;
             background-color: #92acd9;
@@ -108,6 +109,8 @@
         <div class="menurow menurowLargeMargin">
             <button id="home" class="menuitem">New Game</button>
             <button id="reset" class="menuitem">Reset</button>
+            <button id="animate" class="menuitem">Animate Winner</button>
+            <button id="animate2" class="menuitem">Animate Loser</button>
             <div class="menuitem" id="shareLink">&#x1F517; Share</div>
         </div>
     </div>
@@ -149,6 +152,77 @@
                     type: gstate.selectedCellType,
                 }),
             })
+        }
+
+        let animationStartedMillis = 0;
+
+        function animateWinner() {
+            const duration = 5000;
+            const freq = duration / 8;
+            let elapsed = Date.now() - animationStartedMillis;
+            const continueAnimation = elapsed < duration;
+            elapsed = Math.min(duration, elapsed);
+            const ctx = document.getElementById("canvas").getContext('2d');
+            ctx.resetTransform();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const w = canvas.clientWidth;
+            const h = canvas.clientHeight;
+            const trophy = String.fromCodePoint("0x1F3C6");
+            const letters = [trophy, "Y", "O", "U", " ", "W", "O", "N", "!", trophy];
+            const fontSize = Math.floor(Math.min(h / 4, w / (letters.length * 1.1)));
+            ctx.font = `${fontSize}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = gstate.role > 0 ? styles.colors.players[gstate.role - 1] : "#ffffff";
+            for (let i = 0; i < letters.length; i++) {
+                const xOff = w / (2 * letters.length) * (2 * i + 1);
+                const yOff = h / 2 + h / 4 * Math.sin((elapsed + i * 0.25 * freq) / freq * Math.PI);
+                ctx.fillText(letters[i], xOff, yOff);
+            }
+            if (continueAnimation) {
+                window.requestAnimationFrame(animateWinner);
+            } else {
+                setTimeout(function () { redraw(); }, 2000);
+            }
+        }
+
+
+        function animateLoser() {
+            const duration = 5000;
+            const freq = duration / 2;
+            let elapsed = Date.now() - animationStartedMillis;
+            const continueAnimation = elapsed < duration;
+            elapsed = Math.min(duration, elapsed);
+            const delayedX = Math.max(0, (elapsed - 1000) / (duration - 1000)) * duration;
+            const ctx = document.getElementById("canvas").getContext('2d');
+            ctx.resetTransform();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const w = canvas.clientWidth;
+            const h = canvas.clientHeight;
+            const sadFace = String.fromCodePoint("0x1F622");
+            const seeNoEvil = String.fromCodePoint("0x1F648");
+            const text = sadFace + " YOU LOSE " + seeNoEvil;
+            const fontSize = Math.floor(Math.min(h / (text.length * 0.8), w / (text.length * 0.8)));
+            ctx.font = `${fontSize}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = gstate.role > 0 ? styles.colors.players[gstate.role - 1] : "#ffffff";
+            ctx.translate(w / 2, h / 2);
+            ctx.rotate(Math.PI * delayedX / freq);
+            const scaleFactor = 1 - delayedX / duration;
+            ctx.scale(scaleFactor, scaleFactor);
+            ctx.fillText(text, 0, 0);
+            if (continueAnimation) {
+                window.requestAnimationFrame(animateLoser);
+            } else {
+                setTimeout(function () { redraw(); }, 2000);
+            }
+        }
+
+        function showAnimation(animationFunc) {
+            console.log("showAnimation");
+            animationStartedMillis = Date.now();
+            window.requestAnimationFrame(animationFunc);
         }
 
         async function resetGame() {
@@ -496,6 +570,8 @@
             });
             document.getElementById("home").addEventListener('click', newGame);
             document.getElementById("reset").addEventListener('click', resetGame);
+            document.getElementById("animate").addEventListener('click', function() {showAnimation(animateWinner);});
+            document.getElementById("animate2").addEventListener('click', function() {showAnimation(animateLoser);});
             document.getElementById("shareLink").addEventListener('click', async function () {
                 try {
                     await navigator.clipboard.writeText(window.location.href);
