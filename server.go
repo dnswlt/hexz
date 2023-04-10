@@ -985,6 +985,11 @@ func (s *Server) loggingHandler(h http.Handler) http.Handler {
 	})
 }
 
+func sha256HexDigest(pass string) string {
+	passSha256Bytes := sha256.Sum256([]byte(pass))
+	return fmt.Sprintf("%x", passSha256Bytes)
+}
+
 func (s *Server) basicAuthHandlerFunc(h http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
@@ -1001,14 +1006,16 @@ func (s *Server) basicAuthHandlerFunc(h http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 			_, pass, ok := r.BasicAuth()
-			passSha256Bytes := sha256.Sum256([]byte(pass))
-			passSha256 := fmt.Sprintf("%x", passSha256Bytes)
-			if !ok || passSha256 != s.config.AuthTokenSha256 {
-				if !ok {
-					s.IncCounter("/auth/rejected/missing_token")
-				} else {
-					s.IncCounter("/auth/rejected/bad_passwd")
-				}
+			passSha256 := sha256HexDigest(pass)
+			rejected := true
+			if !ok {
+				s.IncCounter("/auth/rejected/missing_token")
+			} else if passSha256 != s.config.AuthTokenSha256 {
+				s.IncCounter("/auth/rejected/bad_passwd")
+			} else {
+				rejected = false
+			}
+			if rejected {
 				w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return

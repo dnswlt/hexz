@@ -1,5 +1,7 @@
 import json
 import sys
+import hashlib
+
 
 def pprint_file(f):
     """Pretty prints f's contents if it's JSON, else just cats it."""
@@ -15,10 +17,20 @@ def pprint_file(f):
         print(f"Could not read file: {e}")
 
 
+def generate_auth_token(s):
+    m = hashlib.sha256()
+    m.update(s)
+    return m.hexdigest()
+
+
 def main():
     if len(sys.argv) == 3 and sys.argv[1] == 'print':
         pprint_file(sys.argv[2])
         return
+    elif len(sys.argv) == 3 and sys.argv[1] == 'auth-token':
+        generate_auth_token(sys.argv[2])
+        return
+
 
 if __name__ == "__main__":
     main()

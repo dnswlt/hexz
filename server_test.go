@@ -77,3 +77,11 @@ func TestCopyLocalToHeap(t *testing.T) {
 		t.Errorf("Want m[\"b\"] == \"world\", got: %s", m["b"].t)
 	}
 }
+
+func TestSha256HexDigest(t *testing.T) {
+	got := sha256HexDigest("foo")
+	want := "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"
+	if got != want {
+		t.Errorf("Want: %q, got: %q", want, got)
+	}
+}
