@@ -190,7 +190,7 @@
                 redraw();
                 updateTurnInfo();
                 updateScore();
-                if (serverEvent.winner > 0) {
+                if (gstate.role > 0 && serverEvent.winner > 0) {
                     // Show an animation if a winner was just announced.
                     setTimeout(function () {
                         showAnimation(serverEvent.winner == gstate.role ? animateWinner : animateLoser);

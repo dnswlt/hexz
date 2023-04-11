@@ -150,6 +150,7 @@ type StatuszCounter struct {
 type StatuszResponse struct {
 	Started            time.Time        `json:"started"`
 	UptimeSeconds      int              `json:"uptimeSeconds"`
+	Uptime             string           `json:"uptime"` // 1h30m3.5s
 	NumOngoingGames    int              `json:"numOngoingGames"`
 	NumLoggedInPlayers int              `json:"numLoggedInPlayers"`
 	Counters           []StatuszCounter `json:"counters"`
@@ -727,6 +728,7 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
+	s.IncCounter("/requests/sse/incoming")
 	// We expect a cookie to identify the p.
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
@@ -744,12 +746,14 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusPreconditionFailed)
 		return
 	}
+	s.IncCounter("/requests/sse/accepted")
 	// Headers to establish server-sent events (SSE) communication.
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
 	for {
 		select {
 		case ev, ok := <-serverEventChan:
+			s.IncCounter("/requests/sse/events")
 			if !ok {
 				log.Printf("Closing SSE channel for player %s in game %s", p.Id, gameId)
 				ev = ServerEvent{
@@ -765,7 +769,7 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 			}
 			// log.Printf("Sending %d bytes over SSE", buf.Len())
 			fmt.Fprintf(w, "data: %s\n\n", buf.String())
-			if f, ok := w.(http.Flusher); ok {
+			if f, canFlush := w.(http.Flusher); canFlush {
 				f.Flush()
 			}
 			if !ok {
@@ -852,7 +856,7 @@ func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
 	counters := make([]StatuszCounter, len(s.counters))
 	i := 0
 	for _, c := range s.counters {
-		counters[i] = StatuszCounter{Name: c.name, Value: c.value}
+		counters[i] = StatuszCounter{Name: c.Name(), Value: c.Value()}
 		i++
 	}
 	s.countersMut.Unlock()
@@ -862,7 +866,9 @@ func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
 	resp.Counters = counters
 
 	resp.Started = s.started
-	resp.UptimeSeconds = int(time.Since(s.started).Seconds())
+	uptime := time.Since(s.started)
+	resp.UptimeSeconds = int(uptime.Seconds())
+	resp.Uptime = uptime.String()
 
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
