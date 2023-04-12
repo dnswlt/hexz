@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -131,39 +132,8 @@ type GameHandle struct {
 	done         chan struct{}     // Closed by the game master goroutine when it is done.
 }
 
-// JSON for incoming requests from UI clients.
-type MoveRequest struct {
-	Row  int      `json:"row"`
-	Col  int      `json:"col"`
-	Type CellType `json:"type"`
-}
-
-type ResetRequest struct {
-	Message string `json:"message"`
-}
-
-type StatuszCounter struct {
-	Name  string `json:"name"`
-	Value int64  `json:"value"`
-}
-
-type StatuszResponse struct {
-	Started            time.Time        `json:"started"`
-	UptimeSeconds      int              `json:"uptimeSeconds"`
-	Uptime             string           `json:"uptime"` // 1h30m3.5s
-	NumOngoingGames    int              `json:"numOngoingGames"`
-	NumLoggedInPlayers int              `json:"numLoggedInPlayers"`
-	Counters           []StatuszCounter `json:"counters"`
-}
-
-// Used in responses to list active games (/hexz/gamez).
-type GameInfo struct {
-	Id       string    `json:"id"`
-	Host     string    `json:"host"`
-	Started  time.Time `json:"started"`
-	GameType GameType  `json:"gameType"`
-}
-
+// Player has JSON annotations for serialization to disk.
+// It is not used in the public API.
 type Player struct {
 	Id         string    `json:"id"`
 	Name       string    `json:"name"`
@@ -283,10 +253,11 @@ func gameIdFromPath(path string) string {
 }
 
 // Controller function for a running game. To be executed by a dedicated goroutine.
-func (s *Server) gameMaster(game *GameHandle) {
+func gameMaster(s *Server, game *GameHandle) {
 	defer close(game.done)
 	defer s.deleteGame(game.id)
 	const playerIdComputer = "comp"
+	s.IncCounter(fmt.Sprintf("/games/%s/started", game.gameType))
 	log.Printf("Started new %q game: %s", game.gameType, game.id)
 	gameEngine := NewGameEngine(game.gameType)
 	// Player and spectator channels, keyed by playerId.
@@ -418,9 +389,10 @@ func (s *Server) gameMaster(game *GameHandle) {
 					debugReq, _ := json.Marshal(e.MoveRequest)
 					log.Printf("%s: move request: P%d %s", game.id, p.playerNum, debugReq)
 				}
-				if gameEngine.MakeMove(GameEngineMove{playerNum: p.playerNum, row: e.Row, col: e.Col, cellType: e.Type}) {
+				if gameEngine.MakeMove(GameEngineMove{playerNum: p.playerNum, move: e.Move, row: e.Row, col: e.Col, cellType: e.Type}) {
 					evt := &ServerEvent{Announcements: []string{}}
 					if gameEngine.IsDone() {
+						s.IncCounter(fmt.Sprintf("/games/%s/finished", game.gameType))
 						if winner := gameEngine.Winner(); winner > 0 {
 							evt.Winner = winner
 							winnerName := playerNames()[winner-1]
@@ -436,6 +408,7 @@ func (s *Server) gameMaster(game *GameHandle) {
 								game.controlEvent <- ControlEventMove{
 									playerId: playerIdComputer,
 									MoveRequest: MoveRequest{
+										Move: m.move,
 										Row:  m.row,
 										Col:  m.col,
 										Type: m.cellType,
@@ -504,7 +477,7 @@ func (s *Server) startNewGame(host string, gameType GameType, singlePlayer bool)
 		}
 		s.ongoingGamesMut.Unlock()
 		if game != nil {
-			go s.gameMaster(game)
+			go gameMaster(s, game)
 			return game, nil
 		}
 	}
@@ -1000,10 +973,22 @@ func sha256HexDigest(pass string) string {
 	return fmt.Sprintf("%x", passSha256Bytes)
 }
 
+func isLocalAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback()
+}
+
 func (s *Server) basicAuthHandlerFunc(h http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
-			if strings.HasPrefix(r.RemoteAddr, "127.0.0.1:") {
+			if isLocalAddr(r.RemoteAddr) {
 				// No authentication required
 				s.IncCounter("/auth/granted/local")
 				h(w, r)
@@ -1012,7 +997,7 @@ func (s *Server) basicAuthHandlerFunc(h http.HandlerFunc) http.HandlerFunc {
 			if s.config.AuthTokenSha256 == "" {
 				// No auth token: only local access is allowed.
 				s.IncCounter("/auth/rejected/nonlocal")
-				http.Error(w, "", http.StatusForbidden)
+				http.Error(w, "Forbidden", http.StatusForbidden)
 				return
 			}
 			_, pass, ok := r.BasicAuth()

@@ -1,2 +1,4 @@
 /hexz
 _users.json
+*.prof
+*.test

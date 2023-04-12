@@ -147,6 +147,7 @@
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
+                    move: gstate.board.move,
                     row: row,
                     col: col,
                     type: gstate.selectedCellType,

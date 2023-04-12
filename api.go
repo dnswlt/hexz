@@ -1,5 +1,7 @@
 package hexz
 
+import "time"
+
 type GameState string
 
 const (
@@ -69,4 +71,38 @@ func (c CellType) valid() bool {
 
 func (c CellType) isPlayerPiece() bool {
 	return c == cellNormal || c >= cellFire && c <= cellDead
+}
+
+// JSON for incoming requests from UI clients.
+type MoveRequest struct {
+	Move int      `json:"move"` // Used to discard move requests that do not match the game's current state.
+	Row  int      `json:"row"`
+	Col  int      `json:"col"`
+	Type CellType `json:"type"`
+}
+
+type ResetRequest struct {
+	Message string `json:"message"`
+}
+
+type StatuszCounter struct {
+	Name  string `json:"name"`
+	Value int64  `json:"value"`
+}
+
+type StatuszResponse struct {
+	Started            time.Time        `json:"started"`
+	UptimeSeconds      int              `json:"uptimeSeconds"`
+	Uptime             string           `json:"uptime"` // 1h30m3.5s
+	NumOngoingGames    int              `json:"numOngoingGames"`
+	NumLoggedInPlayers int              `json:"numLoggedInPlayers"`
+	Counters           []StatuszCounter `json:"counters"`
+}
+
+// Used in responses to list active games (/hexz/gamez).
+type GameInfo struct {
+	Id       string    `json:"id"`
+	Host     string    `json:"host"`
+	Started  time.Time `json:"started"`
+	GameType GameType  `json:"gameType"`
 }

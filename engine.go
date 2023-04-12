@@ -82,6 +82,7 @@ func supportsSinglePlayer(t GameType) bool {
 
 type GameEngineMove struct {
 	playerNum int
+	move      int
 	row       int
 	col       int
 	cellType  CellType
@@ -448,7 +449,7 @@ func applyPestEffect(b *Board) {
 func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 	board := g.board
 	turn := board.Turn
-	if m.playerNum != turn {
+	if m.playerNum != turn || m.move != board.Move {
 		// Only allow moves by players whose turn it is.
 		return false
 	}
@@ -772,7 +773,7 @@ func (g *GameEngineFlagz) occupyGrassCells(r, c int) {
 func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 	b := g.board
 	turn := b.Turn
-	if m.playerNum != turn {
+	if m.playerNum != turn || m.move != b.Move {
 		// Only allow moves by players whose turn it is.
 		return false
 	}
@@ -874,6 +875,7 @@ func (g *GameEngineFlagz) SuggestMove() (GameEngineMove, error) {
 			m := flagMoves[rand.Intn(len(flagMoves))]
 			return GameEngineMove{
 				playerNum: playerNum,
+				move:      b.Move,
 				row:       m.row,
 				col:       m.col,
 				cellType:  m.typ,
@@ -886,6 +888,7 @@ func (g *GameEngineFlagz) SuggestMove() (GameEngineMove, error) {
 	m := normalMoves[rand.Intn(len(normalMoves))]
 	return GameEngineMove{
 		playerNum: playerNum,
+		move:      b.Move,
 		row:       m.row,
 		col:       m.col,
 		cellType:  m.typ,
