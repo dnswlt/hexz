@@ -166,6 +166,7 @@ func (mcts *MCTS) run(path []*mcNode) (depth int) {
 			panic(fmt.Sprintf("No next moves on allegedly non-final node: %s", node.String()))
 		}
 		node.children = cs
+		node.liveChildren = len(cs)
 		// Play a random child (rollout)
 		c := cs[mcts.rnd.Intn(len(cs))]
 		winner := mcts.playRandomGame(c)
