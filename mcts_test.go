@@ -9,6 +9,31 @@ import (
 
 var useFloat32 = flag.Bool("use-float32", false, "set to true to benchmark with float32")
 
+func BenchmarkPlayRandomGame(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		ge := &GameEngineFlagz{}
+		ge.Init()
+		ge.Start()
+		mcts := NewMCTS(ge)
+		r := 0
+		c := 0
+	Outer:
+		for ; r < len(ge.board.Fields); r++ {
+			for ; c < len(ge.board.Fields[r]); c++ {
+				if !ge.board.Fields[r][c].occupied() {
+					break Outer
+				}
+			}
+		}
+		mcts.playRandomGame(&mcNode{
+			r:        r,
+			c:        c,
+			cellType: cellFlag,
+			turn:     1,
+		})
+	}
+}
+
 func TestMCTSFull(t *testing.T) {
 	if testing.Short() {
 		return
