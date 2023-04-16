@@ -51,7 +51,7 @@ func (b *Board) ViewFor(playerNum int) *BoardView {
 		}
 	}
 	return &BoardView{
-		Turn:      int(b.Turn),
+		Turn:      b.Turn,
 		Move:      b.Move,
 		Score:     score,
 		Resources: resources,
