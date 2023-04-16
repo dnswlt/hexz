@@ -91,13 +91,25 @@ type StatuszCounter struct {
 	Value int64  `json:"value"`
 }
 
+type StatuszDistribBucket struct {
+	Lower float64 `json:"lower"`
+	Upper float64 `json:"upper"` // exclusive
+	Count int64   `json:"count"`
+}
+
+type StatuszDistrib struct {
+	Name    string                 `json:"name"`
+	Buckets []StatuszDistribBucket `json:"buckets"`
+}
+
 type StatuszResponse struct {
-	Started            time.Time        `json:"started"`
-	UptimeSeconds      int              `json:"uptimeSeconds"`
-	Uptime             string           `json:"uptime"` // 1h30m3.5s
-	NumOngoingGames    int              `json:"numOngoingGames"`
-	NumLoggedInPlayers int              `json:"numLoggedInPlayers"`
-	Counters           []StatuszCounter `json:"counters"`
+	Started            time.Time         `json:"started"`
+	UptimeSeconds      int               `json:"uptimeSeconds"`
+	Uptime             string            `json:"uptime"` // 1h30m3.5s
+	NumOngoingGames    int               `json:"numOngoingGames"`
+	NumLoggedInPlayers int               `json:"numLoggedInPlayers"`
+	Counters           []StatuszCounter  `json:"counters"`
+	Distributions      []*StatuszDistrib `json:"distributions"`
 }
 
 // Used in responses to list active games (/hexz/gamez).

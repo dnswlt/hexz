@@ -129,6 +129,7 @@ type GameEngine interface {
 	Board() *Board
 	IsDone() bool
 	Winner() (playerNum int) // Results are only meaningful if IsDone() is true. 0 for draw.
+	GameType() GameType
 }
 
 type SinglePlayerGameEngine interface {
@@ -210,7 +211,8 @@ type GameEngineClassic struct {
 	board *Board
 }
 
-func (g *GameEngineClassic) Board() *Board { return g.board }
+func (g *GameEngineClassic) GameType() GameType { return gameTypeClassic }
+func (g *GameEngineClassic) Board() *Board      { return g.board }
 func (g *GameEngineClassic) Init() {
 	g.board = InitBoard(g)
 }
@@ -577,7 +579,8 @@ type GameEngineFreeform struct {
 	board *Board
 }
 
-func (g *GameEngineFreeform) Board() *Board { return g.board }
+func (g *GameEngineFreeform) GameType() GameType { return gameTypeFreeform }
+func (g *GameEngineFreeform) Board() *Board      { return g.board }
 
 func (g *GameEngineFreeform) Init() {
 	g.board = InitBoard(g)
@@ -629,6 +632,8 @@ type GameEngineFlagz struct {
 	board *Board
 	rnd   *rand.Rand
 }
+
+func (g *GameEngineFlagz) GameType() GameType { return gameTypeFlagz }
 
 const (
 	flagzNumRockCells  = 15 // Odd number, so we have an even number of free cells.

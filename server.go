@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"net"
 	"net/http"
@@ -57,17 +58,35 @@ type Server struct {
 	counters    map[string]*Counter
 	countersMut sync.Mutex
 
+	// Distributions
+	distrib    map[string]*Distribution
+	distribMut sync.Mutex
+
 	started time.Time
 }
 
 func NewServer(cfg *ServerConfig) *Server {
-	return &Server{
+	s := &Server{
 		ongoingGames:    make(map[string]*GameHandle),
 		loggedInPlayers: make(map[string]*Player),
 		config:          cfg,
 		counters:        make(map[string]*Counter),
+		distrib:         make(map[string]*Distribution),
 		started:         time.Now(),
 	}
+	s.InitCounters()
+	return s
+}
+
+func (s *Server) InitCounters() {
+	checkedAdd := func(name string, bounds []float64) {
+		if err := s.AddDistribution(name, bounds); err != nil {
+			panic("Cannot create counter")
+		}
+	}
+	checkedAdd(fmt.Sprintf("/games/%s/mcts/elapsed", gameTypeFlagz), DistribRange(0.001, 60*60, 1.1))
+	checkedAdd(fmt.Sprintf("/games/%s/mcts/iterations", gameTypeFlagz), DistribRange(1, 1e9, 1.2))
+	checkedAdd(fmt.Sprintf("/games/%s/mcts/iterations_per_sec", gameTypeFlagz), DistribRange(1, 1e6, 1.1))
 }
 
 func (s *Server) Counter(name string) *Counter {
@@ -84,6 +103,33 @@ func (s *Server) Counter(name string) *Counter {
 
 func (s *Server) IncCounter(name string) {
 	s.Counter(name).Increment()
+}
+
+func (s *Server) AddDistribution(name string, bounds []float64) error {
+	s.distribMut.Lock()
+	defer s.distribMut.Unlock()
+
+	if _, ok := s.distrib[name]; ok {
+		return fmt.Errorf("distribution %s already exists", name)
+	}
+	d, err := NewDistribution(name, bounds)
+	if err != nil {
+		return err
+	}
+	s.distrib[name] = d
+	return nil
+}
+
+func (s *Server) AddDistribValue(name string, value float64) bool {
+	s.distribMut.Lock()
+	defer s.distribMut.Unlock()
+
+	d, ok := s.distrib[name]
+	if !ok {
+		return false
+	}
+	d.Add(value)
+	return true
 }
 
 const (
@@ -255,7 +301,8 @@ func gameIdFromPath(path string) string {
 	return ""
 }
 
-func cpuPlayer(playerId string, thinkTime time.Duration, ge SinglePlayerGameEngine, req chan tok, ctrl chan ControlEvent) {
+func cpuPlayer(s *Server, playerId string, thinkTime time.Duration, ge SinglePlayerGameEngine, req chan tok, ctrl chan ControlEvent) {
+	gameType := ge.GameType()
 	mcts := NewMCTS(ge)
 	// Minimum time to spend thinking about a move, even if we're dead certain about the result.
 	minTime := time.Duration(100) * time.Millisecond
@@ -271,7 +318,7 @@ func cpuPlayer(playerId string, thinkTime time.Duration, ge SinglePlayerGameEngi
 		} else {
 			t = thinkTime // use full time allowed.
 		}
-		log.Printf("SuggestMoveMC: %s", stats)
+		// Send move request
 		ctrl <- ControlEventMove{
 			playerId:   playerId,
 			confidence: stats.MaxQ(),
@@ -282,6 +329,14 @@ func cpuPlayer(playerId string, thinkTime time.Duration, ge SinglePlayerGameEngi
 				Type: m.cellType,
 			},
 		}
+		// Update counters
+		s.IncCounter(fmt.Sprintf("/games/%s/mcts/suggested_moves", gameType))
+		if stats.FullyExplored {
+			s.IncCounter(fmt.Sprintf("/games/%s/mcts/fully_explored", gameType))
+		}
+		s.AddDistribValue(fmt.Sprintf("/games/%s/mcts/elapsed", gameType), stats.Elapsed.Seconds())
+		s.AddDistribValue(fmt.Sprintf("/games/%s/mcts/iterations", gameType), float64(stats.Iterations))
+		s.AddDistribValue(fmt.Sprintf("/games/%s/mcts/iterations_per_sec", gameType), float64(stats.Iterations)/stats.Elapsed.Seconds())
 	}
 }
 
@@ -355,7 +410,7 @@ func gameMaster(s *Server, game *GameHandle) {
 		// Start CPU player.
 		cpuCh = make(chan tok)
 		defer close(cpuCh)
-		go cpuPlayer(playerIdComputer, s.config.CompThinkTime, gameEngine.(SinglePlayerGameEngine), cpuCh, game.controlEvent)
+		go cpuPlayer(s, playerIdComputer, s.config.CompThinkTime, gameEngine.(SinglePlayerGameEngine), cpuCh, game.controlEvent)
 	}
 
 	for {
@@ -867,6 +922,43 @@ func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
 		return counters[i].Name < counters[j].Name
 	})
 	resp.Counters = counters
+
+	// Distributions. Copy them under the mutex, then process JSON.
+	s.distribMut.Lock()
+	distribCopies := make([]*Distribution, len(s.distrib))
+	j := 0
+	for _, d := range s.distrib {
+		distribCopies[j] = d.Copy()
+		j++
+	}
+	s.distribMut.Unlock()
+	distribs := make([]*StatuszDistrib, len(s.distrib))
+	for i, d := range distribCopies {
+		distribs[i] = &StatuszDistrib{
+			Name:    d.name,
+			Buckets: []StatuszDistribBucket{},
+		}
+		for j := range d.counts {
+			if d.counts[j] == 0 {
+				continue
+			}
+			var b StatuszDistribBucket
+			b.Count = d.counts[j]
+			if j == 0 {
+				b.Lower = math.Inf(-1)
+				b.Upper = d.upperBounds[j]
+			} else if j == len(d.counts)-1 {
+				b.Lower = d.upperBounds[j-1]
+				b.Upper = math.Inf(1)
+			} else {
+				b.Lower = d.upperBounds[j-1]
+				b.Upper = d.upperBounds[j]
+			}
+			distribs[i].Buckets = append(distribs[i].Buckets, b)
+		}
+	}
+	sort.Slice(distribs, func(i, j int) bool { return distribs[i].Name < distribs[j].Name })
+	resp.Distributions = distribs
 
 	resp.Started = s.started
 	uptime := time.Since(s.started)
