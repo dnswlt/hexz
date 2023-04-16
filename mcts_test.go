@@ -9,7 +9,10 @@ import (
 
 var useFloat32 = flag.Bool("use-float32", false, "set to true to benchmark with float32")
 
-func TestMCTSFull(tt *testing.T) {
+func TestMCTSFull(t *testing.T) {
+	if testing.Short() {
+		return
+	}
 	// Play one full game without crashing
 	thinkTime := time.Duration(100) * time.Millisecond
 
@@ -25,7 +28,7 @@ func TestMCTSFull(tt *testing.T) {
 		ti := ge.Board().Turn - 1
 		m, _ := mcts[ti].SuggestMove(thinkTime)
 		if !ge.MakeMove(m) {
-			tt.Fatal("Cannot make move")
+			t.Fatal("Cannot make move")
 		}
 	}
 }
