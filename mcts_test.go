@@ -14,7 +14,7 @@ func BenchmarkPlayRandomGame(b *testing.B) {
 		ge := &GameEngineFlagz{}
 		ge.Init()
 		ge.Start()
-		mcts := NewMCTS(ge)
+		mcts := NewMCTS()
 		r := 0
 		c := 0
 	Outer:
@@ -25,7 +25,7 @@ func BenchmarkPlayRandomGame(b *testing.B) {
 				}
 			}
 		}
-		mcts.playRandomGame(&mcNode{
+		mcts.playRandomGame(ge, &mcNode{
 			r:        r,
 			c:        c,
 			cellType: cellFlag,
@@ -46,8 +46,8 @@ func TestMCTSFull(t *testing.T) {
 	ge.Start()
 
 	mcts := []*MCTS{
-		NewMCTS(ge),
-		NewMCTS(ge),
+		NewMCTS(),
+		NewMCTS(),
 	}
 	for !ge.IsDone() {
 		ti := ge.Board().Turn - 1

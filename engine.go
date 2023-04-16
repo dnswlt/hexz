@@ -2,6 +2,7 @@ package hexz
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"time"
 )
@@ -648,13 +649,6 @@ const (
 func (g *GameEngineFlagz) Init() {
 	g.board = InitBoard(g)
 	g.rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
-	g.freeCells = 0
-	for i := 0; i < len(g.board.FlatFields); i++ {
-		if !g.board.FlatFields[i].occupied() {
-			g.freeCells++
-		}
-	}
-	g.normalMoves = [2]int{0, 0}
 }
 
 func (g *GameEngineFlagz) Start() {
@@ -682,6 +676,15 @@ func (g *GameEngineFlagz) Start() {
 			f.Value = v
 		}
 	}
+	// Reset freeCells and normalMoves.
+	g.freeCells = 0
+	for i := 0; i < len(g.board.FlatFields); i++ {
+		if !g.board.FlatFields[i].occupied() {
+			g.freeCells++
+		}
+	}
+	g.normalMoves = [2]int{0, 0}
+
 	g.board.State = Running
 }
 
@@ -881,7 +884,7 @@ func (g *GameEngineFlagz) RandomMove() (GameEngineMove, error) {
 			}
 			if flagsLeft {
 				flagMoves[nFlags] = mov{row: int8(r), col: int8(c)}
-				nFlags += 1
+				nFlags++
 			}
 			if f.isAvail(playerNum) {
 				normalMoves[nMoves] = mov{row: int8(r), col: int8(c)}
@@ -903,7 +906,7 @@ func (g *GameEngineFlagz) RandomMove() (GameEngineMove, error) {
 		}
 	}
 	if nMoves == 0 {
-		panic("no legal moves")
+		log.Fatalf("no legal moves: %d %v %v %d %t %d", g.freeCells, g.normalMoves, g.board.Resources, playerNum, flagsLeft, nFlags)
 	}
 	m := normalMoves[g.rnd.Intn(nMoves)]
 	return GameEngineMove{

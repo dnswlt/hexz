@@ -79,8 +79,8 @@ func main() {
 
 		var moveStats [2][]*hexz.MCTSStats
 		mcts := []*hexz.MCTS{
-			hexz.NewMCTS(ge),
-			hexz.NewMCTS(ge),
+			hexz.NewMCTS(),
+			hexz.NewMCTS(),
 		}
 		// Evaluate parameters both on P1 and P2
 		benchPlayer := nRuns%2 + 1

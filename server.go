@@ -303,7 +303,7 @@ func gameIdFromPath(path string) string {
 
 func cpuPlayer(s *Server, playerId string, thinkTime time.Duration, ge SinglePlayerGameEngine, req chan tok, ctrl chan ControlEvent) {
 	gameType := ge.GameType()
-	mcts := NewMCTS(ge)
+	mcts := NewMCTS()
 	// Minimum time to spend thinking about a move, even if we're dead certain about the result.
 	minTime := time.Duration(100) * time.Millisecond
 	t := thinkTime

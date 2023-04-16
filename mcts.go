@@ -256,7 +256,7 @@ func (s *MCTSStats) String() string {
 	return sb.String()
 }
 
-func NewMCTS(g SinglePlayerGameEngine) *MCTS {
+func NewMCTS() *MCTS {
 	return &MCTS{
 		rnd:              rand.New(rand.NewSource(time.Now().UnixNano())),
 		MaxFlagPositions: 5,
