@@ -2,7 +2,6 @@ package hexz
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 	"time"
 )
@@ -865,55 +864,53 @@ func (g *GameEngineFlagz) RandomMove() (GameEngineMove, error) {
 		return GameEngineMove{}, fmt.Errorf("game is not running")
 	}
 	b := g.board
-	playerNum := g.board.Turn
-	type mov struct {
-		row int8
-		col int8
+	pIdx := b.Turn - 1
+	nMoves := g.normalMoves[pIdx]
+	flagsLeft := b.Resources[pIdx].NumPieces[cellFlag] > 0
+	pickFlag := false
+	if g.freeCells > 0 && flagsLeft && (nMoves == 0 || g.rnd.Float64() <= float64(1)/float64(nMoves+1)) {
+		pickFlag = true
 	}
-	const maxMoves = 105
-	var normalMoves [maxMoves]mov
-	nMoves := 0
-	var flagMoves [maxMoves]mov
-	nFlags := 0
-	flagsLeft := b.Resources[playerNum-1].NumPieces[cellFlag] > 0
-	for r := 0; r < len(b.Fields); r++ {
-		for c := 0; c < len(b.Fields[r]); c++ {
-			f := &b.Fields[r][c]
-			if f.occupied() {
-				continue
+	if pickFlag {
+		nthFlag := g.rnd.Intn(g.freeCells)
+		n := 0
+		for r := 0; r < len(b.Fields); r++ {
+			for c := 0; c < len(b.Fields[r]); c++ {
+				if !b.Fields[r][c].occupied() {
+					if n == nthFlag {
+						return GameEngineMove{
+							playerNum: b.Turn,
+							move:      b.Move,
+							row:       r,
+							col:       c,
+							cellType:  cellFlag,
+						}, nil
+					}
+					n++
+				}
 			}
-			if flagsLeft {
-				flagMoves[nFlags] = mov{row: int8(r), col: int8(c)}
-				nFlags++
-			}
-			if f.isAvail(playerNum) {
-				normalMoves[nMoves] = mov{row: int8(r), col: int8(c)}
-				nMoves++
+		}
+	} else {
+		// Pick a normal move
+		nthMove := g.rnd.Intn(nMoves)
+		n := 0
+		for r := 0; r < len(b.Fields); r++ {
+			for c := 0; c < len(b.Fields[r]); c++ {
+				f := &b.Fields[r][c]
+				if !f.occupied() && f.isAvail(b.Turn) {
+					if n == nthMove {
+						return GameEngineMove{
+							playerNum: b.Turn,
+							move:      b.Move,
+							row:       r,
+							col:       c,
+							cellType:  cellNormal,
+						}, nil
+					}
+					n++
+				}
 			}
 		}
 	}
-	if nFlags > 0 {
-		// Place a flag with a probability depending on the % of flag moves, unless it's the only legal move.
-		if nMoves == 0 || g.rnd.Float64() <= float64(1)/float64(nMoves+1) {
-			m := flagMoves[g.rnd.Intn(nFlags)]
-			return GameEngineMove{
-				playerNum: playerNum,
-				move:      b.Move,
-				row:       int(m.row),
-				col:       int(m.col),
-				cellType:  cellFlag,
-			}, nil
-		}
-	}
-	if nMoves == 0 {
-		log.Fatalf("no legal moves: %d %v %v %d %t %d", g.freeCells, g.normalMoves, g.board.Resources, playerNum, flagsLeft, nFlags)
-	}
-	m := normalMoves[g.rnd.Intn(nMoves)]
-	return GameEngineMove{
-		playerNum: playerNum,
-		move:      b.Move,
-		row:       int(m.row),
-		col:       int(m.col),
-		cellType:  cellNormal,
-	}, nil
+	panic("no legal move found")
 }
