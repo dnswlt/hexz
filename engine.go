@@ -115,6 +115,10 @@ type GameEngineMove struct {
 	cellType  CellType
 }
 
+func (m *GameEngineMove) String() string {
+	return fmt.Sprintf("P%d@%d (%d,%d/%d)", m.playerNum, m.move, m.row, m.col, m.cellType)
+}
+
 type GameEngine interface {
 	Init()
 	Start()
@@ -842,7 +846,7 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 		// Invalid piece. Just be caught by resource check already, so never reached.
 		return false
 	}
-	b.Turn = 3 - b.Turn
+	b.Turn = 3 - b.Turn // Usually it's the other player's turn. If not, recomputeState will fix that.
 	b.Move++
 	g.recomputeState()
 	return true

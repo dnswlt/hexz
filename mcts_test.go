@@ -4,15 +4,51 @@ import (
 	"flag"
 	"math"
 	"testing"
+	"time"
 )
+
+var useFloat32 = flag.Bool("use-float32", false, "set to true to benchmark with float32")
+
+func TestMCTSFull(tt *testing.T) {
+	// Play one full game without crashing
+	thinkTime := time.Duration(100) * time.Millisecond
+
+	ge := &GameEngineFlagz{}
+	ge.Init()
+	ge.Start()
+
+	mcts := []*MCTS{
+		NewMCTS(ge),
+		NewMCTS(ge),
+	}
+	for !ge.IsDone() {
+		ti := ge.Board().Turn - 1
+		m, _ := mcts[ti].SuggestMove(thinkTime)
+		if !ge.MakeMove(m) {
+			tt.Fatal("Cannot make move")
+		}
+	}
+}
 
 // Quick check that sqrt and log are just as fast on float32 as they are on
 // float64, despite the casting nuisances.
 
-var useFloat32 = flag.Bool("use-float32", false, "set to true to benchmark with float32")
+/*
+On an M1 Pro, float64 and float32 results are identical. But on my Intel NUC float32 is way faster:
+
+benchstat sqrt32.txt sqrt64.txt
+goos: linux
+goarch: amd64
+pkg: github.com/dnswlt/hackz/hexz
+cpu: Intel(R) Core(TM) i5-6260U CPU @ 1.80GHz
+       │ sqrt32.txt  │             sqrt64.txt              │
+       │   sec/op    │   sec/op     vs base                │
+Sqrt-4   417.6µ ± 0%   626.7µ ± 0%  +50.06% (p=0.000 n=10)
+
+*/
 
 func BenchmarkSqrt(b *testing.B) {
-	const iterations = 100000
+	const iterations = 1000
 	if *useFloat32 {
 		for i := 0; i < b.N; i++ {
 			var s float32
@@ -49,10 +85,23 @@ pkg: github.com/dnswlt/hackz/hexz
        │   sec/op    │   sec/op     vs base               │
 Log-10   527.4µ ± 0%   509.3µ ± 0%  -3.44% (p=0.000 n=10)
 
+But on my Intel NUC, log32 is MUCH slower:
+
+benchstat log32.txt log64.txt
+goos: linux
+goarch: amd64
+pkg: github.com/dnswlt/hackz/hexz
+cpu: Intel(R) Core(TM) i5-6260U CPU @ 1.80GHz
+      │  log32.txt  │              log64.txt              │
+      │   sec/op    │   sec/op     vs base                │
+Log-4   4.348m ± 0%   1.388m ± 0%  -68.08% (p=0.000 n=10)
+
+How does this make any sense?!
+
 */
 
 func BenchmarkLog(b *testing.B) {
-	const iterations = 100000
+	const iterations = 1000
 	if *useFloat32 {
 		for i := 0; i < b.N; i++ {
 			var s float32

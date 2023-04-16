@@ -17,7 +17,12 @@ type mcNode struct {
 	count        float64
 	done         bool
 	turn         int
-	doneChildren int
+	liveChildren int // Number of child nodes that are not done yet.
+}
+
+func (n *mcNode) String() string {
+	return fmt.Sprintf("(%d,%d/%d) #cs:%d, wins:%f count:%f, done:%t, turn:%d, #lc:%d",
+		n.r, n.c, n.cellType, len(n.children), n.wins, n.count, n.done, n.turn, n.liveChildren)
 }
 
 func (n *mcNode) Q() float64 {
@@ -149,18 +154,16 @@ func (mcts *MCTS) backpropagate(path []*mcNode, winner int) {
 	}
 }
 
-func (mcts *MCTS) run(path []*mcNode) (depth int, moved bool) {
+func (mcts *MCTS) run(path []*mcNode) (depth int) {
 	node := path[len(path)-1]
 	ge := mcts.gameEngine
 	b := mcts.gameEngine.Board()
 	if node.children == nil {
-		// Terminal node in our exploration graph.
-		// It's not a terminal node in the whole game, though.
+		// Terminal node in our exploration graph, but not in the whole game:
+		// While traversing a path we play moves and detect when the game IsDone (below).
 		cs := mcts.nextMoves(node, b)
 		if len(cs) == 0 {
-			// All children are duplicates
-			node.done = true
-			return 0, false
+			panic(fmt.Sprintf("No next moves on allegedly non-final node: %s", node.String()))
 		}
 		node.children = cs
 		// Play a random child (rollout)
@@ -168,20 +171,19 @@ func (mcts *MCTS) run(path []*mcNode) (depth int, moved bool) {
 		winner := mcts.playRandomGame(c)
 		path = append(path, c)
 		mcts.backpropagate(path, winner)
-		return len(path), true
+		return len(path)
 	}
 	// Node has children already, descend to the one with the highest UTC.
 	c := mcts.getNextByUtc(node)
 	if c == nil {
-		// All children are done, no point in replaying them.
-		node.done = true
-		return 0, false
+		// All children are done, but that was not properly propagated up to the parent node.
+		panic(fmt.Sprintf("No children left for node: %s", node.String()))
 	}
 	move := GameEngineMove{
 		playerNum: c.turn, move: b.Move, row: c.r, col: c.c, cellType: c.cellType,
 	}
 	if !ge.MakeMove(move) {
-		panic("I cannot move")
+		panic(fmt.Sprintf("Failed to make move %s", move.String()))
 	}
 	path = append(path, c)
 	if ge.IsDone() {
@@ -189,13 +191,15 @@ func (mcts *MCTS) run(path []*mcNode) (depth int, moved bool) {
 		c.done = true
 		winner := ge.Winner()
 		mcts.backpropagate(path, winner)
-		return len(path), true
+		depth = len(path)
+	} else {
+		// Not done: descend to next level
+		depth = mcts.run(path)
 	}
-	// Descend to next level
-	depth, moved = mcts.run(path)
 	if c.done {
-		node.doneChildren++
-		if node.doneChildren == len(node.children) {
+		// Propagate up the fact that child is done to avoid revisiting it.
+		node.liveChildren--
+		if node.liveChildren == 0 {
 			node.done = true
 		}
 	}
@@ -212,12 +216,12 @@ type MCTSMoveStats struct {
 }
 
 type MCTSStats struct {
-	Iterations int
-	MaxDepth   int
-	TreeSize   int
-	Elapsed    time.Duration
-	Moves      []MCTSMoveStats
-	NotMoved   int // Number of times we ended up in a leaf node that has no valid successors.
+	Iterations    int
+	MaxDepth      int
+	TreeSize      int
+	Elapsed       time.Duration
+	FullyExplored bool
+	Moves         []MCTSMoveStats
 }
 
 func (s *MCTSStats) MinQ() float64 {
@@ -242,8 +246,8 @@ func (s *MCTSStats) MaxQ() float64 {
 
 func (s *MCTSStats) String() string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "N: %d\nmaxDepth:%d\nsize:%d\nelapsed:%.3f\nN/sec:%.1f\nfailureRate:%.3f\n",
-		s.Iterations, s.MaxDepth, s.TreeSize, s.Elapsed.Seconds(), float64(s.Iterations)/s.Elapsed.Seconds(), float64(s.NotMoved)/float64(s.Iterations))
+	fmt.Fprintf(&sb, "N: %d\nmaxDepth:%d\nsize:%d\nelapsed:%.3f\nN/sec:%.1f\n",
+		s.Iterations, s.MaxDepth, s.TreeSize, s.Elapsed.Seconds(), float64(s.Iterations)/s.Elapsed.Seconds())
 	for _, m := range s.Moves {
 		cellType := ""
 		if m.cellType == cellFlag {
@@ -268,10 +272,8 @@ func (mcts *MCTS) SuggestMove(maxDuration time.Duration) (GameEngineMove, *MCTSS
 	origBoard := mcts.gameEngine.Board()
 	root := &mcNode{turn: origBoard.Turn}
 	started := time.Now()
-	n := 0
 	maxDepth := 0
-	notMoved := 0
-	for {
+	for n := 0; ; n++ {
 		// Check every N rounds if we're done.
 		if n&63 == 0 && time.Since(started) >= maxDuration {
 			break
@@ -279,30 +281,26 @@ func (mcts *MCTS) SuggestMove(maxDuration time.Duration) (GameEngineMove, *MCTSS
 		mcts.gameEngine.SetBoard(origBoard.copy())
 		path := make([]*mcNode, 1, 100)
 		path[0] = root
-		depth, moved := mcts.run(path)
+		depth := mcts.run(path)
 		if depth > maxDepth {
 			maxDepth = depth
 		}
-		if !moved {
-			notMoved++
-		}
 		if root.done {
-			log.Print("board completely explored")
+			// Board completely explored
 			break
 		}
-		n++
 	}
 	elapsed := time.Since(started)
 	mcts.gameEngine.SetBoard(origBoard)
 
 	// Return some stats
 	stats := &MCTSStats{
-		Iterations: int(root.count),
-		MaxDepth:   maxDepth,
-		Elapsed:    elapsed,
-		TreeSize:   root.size(),
-		Moves:      make([]MCTSMoveStats, len(root.children)),
-		NotMoved:   notMoved,
+		Iterations:    int(root.count),
+		MaxDepth:      maxDepth,
+		Elapsed:       elapsed,
+		FullyExplored: root.done,
+		TreeSize:      root.size(),
+		Moves:         make([]MCTSMoveStats, len(root.children)),
 	}
 	var best *mcNode
 	for i, c := range root.children {

@@ -127,7 +127,6 @@ func main() {
 				if agg[i].MaxDepth < s.MaxDepth {
 					agg[i].MaxDepth = s.MaxDepth
 				}
-				agg[i].NotMoved += s.NotMoved
 				if agg[i].TreeSize < s.TreeSize {
 					agg[i].TreeSize = s.TreeSize
 				}
