@@ -20,14 +20,16 @@ import (
 	"time"
 )
 
+type tok struct{}
+
 type ServerConfig struct {
 	ServerAddress     string
 	ServerPort        int
 	DocumentRoot      string
 	PlayerRemoveDelay time.Duration
 	LoginTtl          time.Duration
-
-	AuthTokenSha256 string // Used in http Basic authentication for /statusz. Must be a SHA256 checksum.
+	CompThinkTime     time.Duration
+	AuthTokenSha256   string // Used in http Basic authentication for /statusz. Must be a SHA256 checksum.
 
 	TlsCertChain string
 	TlsPrivKey   string
@@ -187,6 +189,7 @@ type ControlEventUnregister struct {
 type ControlEventMove struct {
 	playerId string
 	MoveRequest
+	confidence float64 // In [0..1], can be populated by CPU players to express their confidence in winning.
 }
 
 type ControlEventReset struct {
@@ -252,6 +255,36 @@ func gameIdFromPath(path string) string {
 	return ""
 }
 
+func cpuPlayer(playerId string, thinkTime time.Duration, ge SinglePlayerGameEngine, req chan tok, ctrl chan ControlEvent) {
+	mcts := NewMCTS(ge)
+	// Minimum time to spend thinking about a move, even if we're dead certain about the result.
+	minTime := time.Duration(100) * time.Millisecond
+	t := thinkTime
+	for range req {
+		m, stats := mcts.SuggestMove(t)
+		if minQ := stats.MinQ(); minQ >= 0.98 || minQ <= 0.02 {
+			// Speed up if we think we (almost) won or lost.
+			t = t / 2
+			if t < minTime {
+				t = minTime
+			}
+		} else {
+			t = thinkTime // use full time allowed.
+		}
+		log.Printf("SuggestMoveMC: %s", stats)
+		ctrl <- ControlEventMove{
+			playerId:   playerId,
+			confidence: stats.MaxQ(),
+			MoveRequest: MoveRequest{
+				Move: m.move,
+				Row:  m.row,
+				Col:  m.col,
+				Type: m.cellType,
+			},
+		}
+	}
+}
+
 // Controller function for a running game. To be executed by a dedicated goroutine.
 func gameMaster(s *Server, game *GameHandle) {
 	defer close(game.done)
@@ -299,7 +332,7 @@ func gameMaster(s *Server, game *GameHandle) {
 			pNum := players[pId].playerNum
 			if pNum > 0 {
 				e.Board = gameEngine.Board().ViewFor(pNum)
-				e.Role = pNum
+				e.Role = int(pNum)
 			} else {
 				if spectatorBoard == nil {
 					spectatorBoard = gameEngine.Board().ViewFor(0)
@@ -317,6 +350,14 @@ func gameMaster(s *Server, game *GameHandle) {
 			ch <- *e
 		}
 	}
+	var cpuCh chan tok
+	if game.singlePlayer {
+		// Start CPU player.
+		cpuCh = make(chan tok)
+		defer close(cpuCh)
+		go cpuPlayer(playerIdComputer, s.config.CompThinkTime, gameEngine.(SinglePlayerGameEngine), cpuCh, game.controlEvent)
+	}
+
 	for {
 		tick := time.After(5 * time.Second)
 		select {
@@ -348,7 +389,7 @@ func gameMaster(s *Server, game *GameHandle) {
 				eventListeners[e.player.Id] = ch
 				e.replyChan <- ch
 				// Send board and player role initially so client can display the UI.
-				singlecast(e.player.Id, &ServerEvent{Role: playerNum})
+				singlecast(e.player.Id, &ServerEvent{Role: int(playerNum)})
 				announcements := []string{}
 				if added {
 					announcements = append(announcements, fmt.Sprintf("Welcome %s!", e.player.Name))
@@ -401,23 +442,12 @@ func gameMaster(s *Server, game *GameHandle) {
 									winnerName))
 						}
 					}
+					if e.confidence > 0 {
+						evt.Announcements = append(evt.Announcements, fmt.Sprintf("CPU confidence: %.3f", e.confidence))
+					}
 					if game.singlePlayer && gameEngine.Board().Turn != 1 && !gameEngine.IsDone() {
-						if m, err := gameEngine.(SinglePlayerGameEngine).SuggestMove(); err == nil {
-							go func() {
-								<-time.After(time.Duration(1000) * time.Millisecond)
-								game.controlEvent <- ControlEventMove{
-									playerId: playerIdComputer,
-									MoveRequest: MoveRequest{
-										Move: m.move,
-										Row:  m.row,
-										Col:  m.col,
-										Type: m.cellType,
-									},
-								}
-							}()
-						} else {
-							log.Print("Error: could not suggest a move:", err.Error())
-						}
+						// Ask CPU player to make a move.
+						cpuCh <- tok{}
 					}
 					broadcast(evt)
 				}

@@ -3,6 +3,7 @@ package hexz
 import (
 	"fmt"
 	"math/rand"
+	"time"
 )
 
 const (
@@ -50,12 +51,38 @@ func (b *Board) ViewFor(playerNum int) *BoardView {
 		}
 	}
 	return &BoardView{
-		Turn:      b.Turn,
+		Turn:      int(b.Turn),
 		Move:      b.Move,
 		Score:     score,
 		Resources: resources,
 		State:     b.State,
 		Fields:    fields,
+	}
+}
+
+func (b *Board) copy() *Board {
+	score := make([]int, len(b.Score))
+	copy(score, b.Score)
+	resources := make([]ResourceInfo, len(b.Resources))
+	for i, r := range b.Resources {
+		numPieces := make(map[CellType]int)
+		for k, v := range r.NumPieces {
+			numPieces[k] = v
+		}
+		resources[i] = ResourceInfo{
+			NumPieces: numPieces,
+		}
+	}
+	flat, fields := copyFields(b)
+	return &Board{
+		Turn:         b.Turn,
+		Move:         b.Move,
+		Score:        score,
+		Resources:    resources,
+		State:        b.State,
+		Fields:       fields,
+		FlatFields:   flat,
+		LastRevealed: b.LastRevealed,
 	}
 }
 
@@ -101,7 +128,9 @@ type GameEngine interface {
 }
 
 type SinglePlayerGameEngine interface {
-	SuggestMove() (GameEngineMove, error)
+	GameEngine
+	RandomMove() (GameEngineMove, error)
+	SetBoard(b *Board)
 }
 
 // Dispatches on the gameType to create a corresponding GameEngine.
@@ -336,7 +365,7 @@ func occupyFields(b *Board, playerNum, r, c int, ct CellType) int {
 	f.Owner = playerNum
 	f.Type = ct
 	f.Hidden = true
-	f.Lifetime = ct.lifetime()
+	f.lifetime = ct.lifetime()
 	var areas [6]struct {
 		size      int    // Number of free cells in the area
 		flags     [2]int // Number of flags along the boundary
@@ -405,7 +434,7 @@ func occupyFields(b *Board, playerNum, r, c int, ct CellType) int {
 				if ms[r][c] == minK && !f.occupied() {
 					numOccupiedFields++
 					f.Owner = occupator
-					f.Lifetime = cellNormal.lifetime()
+					f.lifetime = cellNormal.lifetime()
 				}
 			}
 		}
@@ -421,7 +450,7 @@ func applyFireEffect(b *Board, r, c int) {
 		f.Owner = 0
 		f.Type = cellDead
 		f.Hidden = false
-		f.Lifetime = cellDead.lifetime()
+		f.lifetime = cellDead.lifetime()
 	}
 }
 
@@ -430,7 +459,7 @@ func applyPestEffect(b *Board) {
 	for r := 0; r < len(b.Fields); r++ {
 		for c := 0; c < len(b.Fields[r]); c++ {
 			// A pest cell does not propagate in its first round.
-			if b.Fields[r][c].Type == cellPest && b.Fields[r][c].Lifetime < cellPest.lifetime() {
+			if b.Fields[r][c].Type == cellPest && b.Fields[r][c].lifetime < cellPest.lifetime() {
 				n := b.neighbors(idx{r, c}, ns[:])
 				for i := 0; i < n; i++ {
 					f := &b.Fields[ns[i].r][ns[i].c]
@@ -438,7 +467,7 @@ func applyPestEffect(b *Board) {
 						// Pest only affects the opponent's normal cells.
 						f.Owner = b.Fields[r][c].Owner
 						f.Type = cellPest
-						f.Lifetime = cellPest.lifetime()
+						f.lifetime = cellPest.lifetime()
 					}
 				}
 			}
@@ -470,7 +499,7 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 			f := &board.Fields[m.row][m.col]
 			f.Owner = 0
 			f.Type = cellDead
-			f.Lifetime = cellDead.lifetime()
+			f.lifetime = cellDead.lifetime()
 			revealBoard = true
 		} else if m.cellType == cellDeath {
 			// Death cell can be placed anywhere and will "kill" whatever was there before.
@@ -478,7 +507,7 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 			f.Owner = turn
 			f.Type = cellDeath
 			f.Hidden = false
-			f.Lifetime = cellDeath.lifetime()
+			f.lifetime = cellDeath.lifetime()
 		} else {
 			// Cannot make move on already occupied field.
 			return false
@@ -491,7 +520,7 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 			// Fire cells take effect immediately.
 			f.Owner = turn
 			f.Type = m.cellType
-			f.Lifetime = cellFire.lifetime()
+			f.lifetime = cellFire.lifetime()
 			applyFireEffect(board, m.row, m.col)
 		} else {
 			numOccupiedFields = occupyFields(board, turn, m.row, m.col, m.cellType)
@@ -518,14 +547,14 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 		for r := 0; r < len(board.Fields); r++ {
 			for c := 0; c < len(board.Fields[r]); c++ {
 				f := &board.Fields[r][c]
-				if f.occupied() && f.Lifetime == 0 {
+				if f.occupied() && f.lifetime == 0 {
 					f.Owner = 0
 					f.Hidden = false
 					f.Type = cellNormal
-					f.Lifetime = cellNormal.lifetime()
+					f.lifetime = cellNormal.lifetime()
 				}
-				if f.Lifetime > 0 {
-					f.Lifetime--
+				if f.lifetime > 0 {
+					f.lifetime--
 				}
 			}
 		}
@@ -588,47 +617,49 @@ func (g *GameEngineFreeform) MakeMove(m GameEngineMove) bool {
 	if board.Turn > 2 {
 		board.Turn = 1
 	}
-	f.Value = board.Move
+	f.Value = 1
 	return true
 }
 
 type GameEngineFlagz struct {
 	board *Board
+	rnd   *rand.Rand
 }
 
 const (
-	flagzNumDeadCells  = 15 // Odd number, so we have an even number of free cells.
+	flagzNumRockCells  = 15 // Odd number, so we have an even number of free cells.
 	flagzNumGrassCells = 5
 	flagzMaxValue      = 5 // Maximum value a cell can take.
 )
 
 func (g *GameEngineFlagz) Init() {
 	g.board = InitBoard(g)
+	g.rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
 }
 
 func (g *GameEngineFlagz) Start() {
 	i := 0
 	n := len(g.board.FlatFields)
 	// j is only a safeguard for invalid calls to this method on a non-empty board.
-	for j := 0; j < n && i < flagzNumDeadCells; j++ {
-		k := rand.Intn(n)
+	for j := 0; j < n && i < flagzNumRockCells; j++ {
+		k := g.rnd.Intn(n)
 		if !g.board.FlatFields[k].occupied() {
 			i++
 			f := &g.board.FlatFields[k]
 			f.Type = cellRock
-			f.Lifetime = -1
+			f.lifetime = -1
 		}
 	}
 	// Place some grass cells.
-	i = 0
-	for j := 0; j < n && i < flagzNumGrassCells; j++ {
-		k := rand.Intn(n)
+	v := 0
+	for j := 0; j < n && v < flagzNumGrassCells; j++ {
+		k := g.rnd.Intn(n)
 		if !g.board.FlatFields[k].occupied() {
-			i++
+			v++
 			f := &g.board.FlatFields[k]
 			f.Type = cellGrass
-			f.Lifetime = -1
-			f.Value = i
+			f.lifetime = -1
+			f.Value = v
 		}
 	}
 	g.board.State = Running
@@ -648,31 +679,32 @@ func (g *GameEngineFlagz) Reset() {
 	g.Init()
 }
 
-func (g *GameEngineFlagz) recomputeScoreAndState() {
+func (g *GameEngineFlagz) recomputeState() {
 	b := g.board
-	s := []int{0, 0}
-	validMoves := []int{0, 0}
-	openCells := 0
+	openCells := false
+	canMove1 := false
+	canMove2 := false
+Outer:
 	for r := range b.Fields {
 		for c := range b.Fields[r] {
 			fld := &b.Fields[r][c]
-			if fld.Owner > 0 {
-				s[fld.Owner-1] += fld.Value
-			} else if !fld.occupied() {
-				openCells++
-				if ok, _ := g.validateNormalMove(1, r, c); ok {
-					validMoves[0]++
+			if !fld.occupied() {
+				openCells = true
+				if fld.isAvail(1) {
+					canMove1 = true
 				}
-				if ok, _ := g.validateNormalMove(2, r, c); ok {
-					validMoves[1]++
+				if fld.isAvail(2) {
+					canMove2 = true
 				}
+			}
+			if canMove1 && canMove2 {
+				break Outer
 			}
 		}
 	}
-	b.Score = s
+	canMove1 = canMove1 || (openCells && b.Resources[0].NumPieces[cellFlag] > 0)
+	canMove2 = canMove2 || (openCells && b.Resources[1].NumPieces[cellFlag] > 0)
 	// If only one player has valid moves left, it's their turn.
-	canMove1 := validMoves[0] > 0 || (openCells > 0 && b.Resources[0].NumPieces[cellFlag] > 0)
-	canMove2 := validMoves[1] > 0 || (openCells > 0 && b.Resources[1].NumPieces[cellFlag] > 0)
 	if !canMove1 && canMove2 {
 		b.Turn = 2
 	} else if canMove1 && !canMove2 {
@@ -682,7 +714,8 @@ func (g *GameEngineFlagz) recomputeScoreAndState() {
 	// * No open cells left
 	// * None of the players can move
 	// * One player cannot move, the other one is leading
-	if openCells == 0 || !(canMove1 || canMove2) ||
+	s := b.Score
+	if !openCells || !(canMove1 || canMove2) ||
 		(s[0] > s[1] && !canMove2) || (s[1] > s[0] && !canMove1) {
 		b.State = Finished
 	}
@@ -696,54 +729,48 @@ func (g *GameEngineFlagz) lifetime(ct CellType) int {
 	return 0
 }
 
+func (f *Field) isAvail(playerNum int) bool {
+	return f.nextVal[playerNum-1] > 0
+}
+
 // Validates if (r, c) would be a legal move for playerNum.
 // Returns the value that the cell would get if the move were made.
 // This method does not validate that it's playerNum's turn and it assumes
 // that (r, c) is a valid index.
-func (g *GameEngineFlagz) validateNormalMove(playerNum int, r, c int) (ok bool, val int) {
+func (g *GameEngineFlagz) validateNormalMove(playerNum, r, c int) (ok bool, val int) {
 	// A normal cell can only be placed next to another normal cell
 	// of the same color, or next to a flag of the same color.
 	b := g.board
-	if b.Fields[r][c].occupied() {
+	fld := &b.Fields[r][c]
+	if fld.occupied() {
 		return false, 0
 	}
-	var ns [6]idx
-	n := b.neighbors(idx{r, c}, ns[:])
-	minVal := -1
-	maxVal := -1
-	for i := 0; i < n; i++ {
-		nf := &b.Fields[ns[i].r][ns[i].c]
-		if nf.Owner == playerNum {
-			if minVal == -1 || nf.Value < minVal {
-				minVal = nf.Value
-			}
-			if maxVal == -1 || nf.Value > maxVal {
-				maxVal = nf.Value
-			}
-		}
-	}
-	if minVal == -1 || maxVal == flagzMaxValue {
-		// Reject move in any of these cases:
-		// * No neighbor has the same color
-		// * One neighbor has the max value already
+	if !fld.isAvail(playerNum) {
+		// Cannot place a cell if there is no neighboring cell of the same player.
 		return false, 0
 	}
-	return true, minVal + 1
+	return true, fld.nextVal[playerNum-1]
 }
 
-// Marks all cells neighboring (r, c) as blocked for the player owning (r, c).
-func (g *GameEngineFlagz) blockNeighborCells(r, c int) {
+// Marks all cells neighboring (r, c) as available/blocked for the player owning (r, c).
+func (g *GameEngineFlagz) updateNeighborCells(r, c int) {
 	b := g.board
 	var ns [6]idx
 	f := &b.Fields[r][c]
 	if f.Owner == 0 {
 		return
 	}
+	pIdx := f.Owner - 1
 	n := b.neighbors(idx{r, c}, ns[:])
 	for i := 0; i < n; i++ {
 		nb := &b.Fields[ns[i].r][ns[i].c]
 		if !nb.occupied() {
-			nb.Blocked |= 1 << (f.Owner - 1)
+			if f.Value == flagzMaxValue {
+				nb.Blocked |= 1 << pIdx
+				nb.nextVal[pIdx] = -1
+			} else if nb.nextVal[pIdx] == 0 || nb.nextVal[pIdx] > f.Value+1 {
+				nb.nextVal[pIdx] = f.Value + 1
+			}
 		}
 	}
 }
@@ -763,9 +790,8 @@ func (g *GameEngineFlagz) occupyGrassCells(r, c int) {
 		if nb.Type == cellGrass && nb.Value <= f.Value {
 			nb.Type = cellNormal
 			nb.Owner = f.Owner
-			if nb.Value == flagzMaxValue {
-				g.blockNeighborCells(ns[i].r, ns[i].c)
-			}
+			b.Score[f.Owner-1] += nb.Value
+			g.updateNeighborCells(ns[i].r, ns[i].c)
 		}
 	}
 }
@@ -796,21 +822,21 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 		}
 		f.Owner = turn
 		f.Type = cellNormal
-		f.Lifetime = g.lifetime(cellNormal)
+		f.lifetime = g.lifetime(cellNormal)
 		f.Hidden = false
 		f.Value = val
-		if f.Value == flagzMaxValue {
-			g.blockNeighborCells(m.row, m.col)
-		}
+		b.Score[turn-1] += val
+		g.updateNeighborCells(m.row, m.col)
 		g.occupyGrassCells(m.row, m.col)
 
 	} else if m.cellType == cellFlag {
 		// A flag can be placed on any free cell. It does not add to the score.
 		f.Owner = turn
 		f.Type = cellFlag
-		f.Lifetime = g.lifetime(cellFlag)
+		f.lifetime = g.lifetime(cellFlag)
 		f.Hidden = false
 		f.Value = 0
+		g.updateNeighborCells(m.row, m.col)
 		b.Resources[turn-1].NumPieces[cellFlag]--
 	} else {
 		// Invalid piece. Just be caught by resource check already, so never reached.
@@ -818,11 +844,12 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 	}
 	b.Turn = 3 - b.Turn
 	b.Move++
-	g.recomputeScoreAndState()
+	g.recomputeState()
 	return true
 }
 
-func (g *GameEngineFlagz) Board() *Board { return g.board }
+func (g *GameEngineFlagz) Board() *Board     { return g.board }
+func (g *GameEngineFlagz) SetBoard(b *Board) { g.board = b }
 
 func (g *GameEngineFlagz) IsDone() bool {
 	return g.board.State == Finished
@@ -837,60 +864,60 @@ func (g *GameEngineFlagz) Winner() (playerNum int) {
 
 // Suggests a move for the player whose turn it is.
 // Uses a random strategy. Probably not very smart.
-func (g *GameEngineFlagz) SuggestMove() (GameEngineMove, error) {
+func (g *GameEngineFlagz) RandomMove() (GameEngineMove, error) {
 	if g.board.State != Running {
 		return GameEngineMove{}, fmt.Errorf("game is not running")
 	}
 	b := g.board
 	playerNum := g.board.Turn
 	type mov struct {
-		row int
-		col int
-		typ CellType
-		val int
+		row int8
+		col int8
 	}
-	normalMoves := []mov{}
-	flagMoves := []mov{}
+	const maxMoves = 105
+	var normalMoves [maxMoves]mov
+	nMoves := 0
+	var flagMoves [maxMoves]mov
+	nFlags := 0
+	flagsLeft := b.Resources[playerNum-1].NumPieces[cellFlag] > 0
 	for r := 0; r < len(b.Fields); r++ {
 		for c := 0; c < len(b.Fields[r]); c++ {
-			if b.Fields[r][c].occupied() {
+			f := &b.Fields[r][c]
+			if f.occupied() {
 				continue
 			}
-			if b.Resources[playerNum-1].NumPieces[cellFlag] > 0 {
-				flagMoves = append(flagMoves, mov{
-					row: r, col: c, typ: cellFlag, val: 0,
-				})
+			if flagsLeft {
+				flagMoves[nFlags] = mov{row: int8(r), col: int8(c)}
+				nFlags += 1
 			}
-			ok, val := g.validateNormalMove(playerNum, r, c)
-			if ok {
-				normalMoves = append(normalMoves, mov{
-					row: r, col: c, typ: cellNormal, val: val,
-				})
+			if f.isAvail(playerNum) {
+				normalMoves[nMoves] = mov{row: int8(r), col: int8(c)}
+				nMoves++
 			}
 		}
 	}
-	if len(flagMoves) > 0 {
-		// Place a flag with a 10% probability, unless it's the only legal move.
-		if len(normalMoves) == 0 || rand.Float64() <= 0.1 {
-			m := flagMoves[rand.Intn(len(flagMoves))]
+	if nFlags > 0 {
+		// Place a flag with a probability depending on the % of flag moves, unless it's the only legal move.
+		if nMoves == 0 || g.rnd.Float64() <= float64(1)/float64(nMoves+1) {
+			m := flagMoves[g.rnd.Intn(nFlags)]
 			return GameEngineMove{
 				playerNum: playerNum,
 				move:      b.Move,
-				row:       m.row,
-				col:       m.col,
-				cellType:  m.typ,
+				row:       int(m.row),
+				col:       int(m.col),
+				cellType:  cellFlag,
 			}, nil
 		}
 	}
-	if len(normalMoves) == 0 {
-		return GameEngineMove{}, fmt.Errorf("no legal moves")
+	if nMoves == 0 {
+		panic("no legal moves")
 	}
-	m := normalMoves[rand.Intn(len(normalMoves))]
+	m := normalMoves[g.rnd.Intn(nMoves)]
 	return GameEngineMove{
 		playerNum: playerNum,
 		move:      b.Move,
-		row:       m.row,
-		col:       m.col,
-		cellType:  m.typ,
+		row:       int(m.row),
+		col:       int(m.col),
+		cellType:  cellNormal,
 	}, nil
 }
