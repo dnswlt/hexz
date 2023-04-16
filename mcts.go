@@ -49,17 +49,15 @@ func (n *mcNode) size() int {
 }
 
 type MCTS struct {
-	gameEngine       SinglePlayerGameEngine
 	rnd              *rand.Rand
 	MaxFlagPositions int // maximum number of (random) positions to consider for placing a flag in a single move.
 	UctFactor        float64
 	FlagsFirst       bool // If true, flags will be played whenever possible.
 }
 
-func (mcts *MCTS) playRandomGame(firstMove *mcNode) (winner int) {
-	ge := mcts.gameEngine
+func (mcts *MCTS) playRandomGame(ge SinglePlayerGameEngine, firstMove *mcNode) (winner int) {
 	b := ge.Board()
-	if !mcts.gameEngine.MakeMove(GameEngineMove{
+	if !ge.MakeMove(GameEngineMove{
 		playerNum: firstMove.turn,
 		move:      b.Move,
 		row:       firstMove.r,
@@ -154,10 +152,9 @@ func (mcts *MCTS) backpropagate(path []*mcNode, winner int) {
 	}
 }
 
-func (mcts *MCTS) run(path []*mcNode) (depth int) {
+func (mcts *MCTS) run(ge SinglePlayerGameEngine, path []*mcNode) (depth int) {
 	node := path[len(path)-1]
-	ge := mcts.gameEngine
-	b := mcts.gameEngine.Board()
+	b := ge.Board()
 	if node.children == nil {
 		// Terminal node in our exploration graph, but not in the whole game:
 		// While traversing a path we play moves and detect when the game IsDone (below).
@@ -169,7 +166,7 @@ func (mcts *MCTS) run(path []*mcNode) (depth int) {
 		node.liveChildren = len(cs)
 		// Play a random child (rollout)
 		c := cs[mcts.rnd.Intn(len(cs))]
-		winner := mcts.playRandomGame(c)
+		winner := mcts.playRandomGame(ge, c)
 		path = append(path, c)
 		mcts.backpropagate(path, winner)
 		return len(path)
@@ -195,7 +192,7 @@ func (mcts *MCTS) run(path []*mcNode) (depth int) {
 		depth = len(path)
 	} else {
 		// Not done: descend to next level
-		depth = mcts.run(path)
+		depth = mcts.run(ge, path)
 	}
 	if c.done {
 		// Propagate up the fact that child is done to avoid revisiting it.
@@ -261,7 +258,6 @@ func (s *MCTSStats) String() string {
 
 func NewMCTS(g SinglePlayerGameEngine) *MCTS {
 	return &MCTS{
-		gameEngine:       g,
 		rnd:              rand.New(rand.NewSource(time.Now().UnixNano())),
 		MaxFlagPositions: 5,
 		UctFactor:        1.0,
@@ -269,9 +265,8 @@ func NewMCTS(g SinglePlayerGameEngine) *MCTS {
 	}
 }
 
-func (mcts *MCTS) SuggestMove(maxDuration time.Duration) (GameEngineMove, *MCTSStats) {
-	origBoard := mcts.gameEngine.Board()
-	root := &mcNode{turn: origBoard.Turn}
+func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration time.Duration) (GameEngineMove, *MCTSStats) {
+	root := &mcNode{turn: gameEngine.Board().Turn}
 	started := time.Now()
 	maxDepth := 0
 	for n := 0; ; n++ {
@@ -279,10 +274,10 @@ func (mcts *MCTS) SuggestMove(maxDuration time.Duration) (GameEngineMove, *MCTSS
 		if n&63 == 0 && time.Since(started) >= maxDuration {
 			break
 		}
-		mcts.gameEngine.SetBoard(origBoard.copy())
+		ge := gameEngine.Clone()
 		path := make([]*mcNode, 1, 100)
 		path[0] = root
-		depth := mcts.run(path)
+		depth := mcts.run(ge, path)
 		if depth > maxDepth {
 			maxDepth = depth
 		}
@@ -292,7 +287,6 @@ func (mcts *MCTS) SuggestMove(maxDuration time.Duration) (GameEngineMove, *MCTSS
 		}
 	}
 	elapsed := time.Since(started)
-	mcts.gameEngine.SetBoard(origBoard)
 
 	// Return some stats
 	stats := &MCTSStats{
@@ -318,7 +312,11 @@ func (mcts *MCTS) SuggestMove(maxDuration time.Duration) (GameEngineMove, *MCTSS
 		}
 	}
 	move := GameEngineMove{
-		playerNum: best.turn, move: origBoard.Move, row: best.r, col: best.c, cellType: best.cellType,
+		playerNum: best.turn,
+		move:      gameEngine.Board().Move,
+		row:       best.r,
+		col:       best.c,
+		cellType:  best.cellType,
 	}
 	return move, stats
 }

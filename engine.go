@@ -134,8 +134,9 @@ type GameEngine interface {
 
 type SinglePlayerGameEngine interface {
 	GameEngine
+	// Returns a random move that can be played in the engine's current state.
 	RandomMove() (GameEngineMove, error)
-	SetBoard(b *Board)
+	Clone() SinglePlayerGameEngine // Returns a clone of the engine, e.g. to use in MCTS.
 }
 
 // Dispatches on the gameType to create a corresponding GameEngine.
@@ -631,6 +632,9 @@ func (g *GameEngineFreeform) MakeMove(m GameEngineMove) bool {
 type GameEngineFlagz struct {
 	board *Board
 	rnd   *rand.Rand
+	// Used to efficiently process moves and determine game state for flagz.
+	freeCells   int    // Number of unoccupied cells
+	normalMoves [2]int // Number of normal cell moves the players can make
 }
 
 func (g *GameEngineFlagz) GameType() GameType { return gameTypeFlagz }
@@ -644,6 +648,13 @@ const (
 func (g *GameEngineFlagz) Init() {
 	g.board = InitBoard(g)
 	g.rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
+	g.freeCells = 0
+	for i := 0; i < len(g.board.FlatFields); i++ {
+		if !g.board.FlatFields[i].occupied() {
+			g.freeCells++
+		}
+	}
+	g.normalMoves = [2]int{0, 0}
 }
 
 func (g *GameEngineFlagz) Start() {
@@ -690,29 +701,8 @@ func (g *GameEngineFlagz) Reset() {
 
 func (g *GameEngineFlagz) recomputeState() {
 	b := g.board
-	openCells := false
-	canMove1 := false
-	canMove2 := false
-Outer:
-	for r := range b.Fields {
-		for c := range b.Fields[r] {
-			fld := &b.Fields[r][c]
-			if !fld.occupied() {
-				openCells = true
-				if fld.isAvail(1) {
-					canMove1 = true
-				}
-				if fld.isAvail(2) {
-					canMove2 = true
-				}
-			}
-			if canMove1 && canMove2 {
-				break Outer
-			}
-		}
-	}
-	canMove1 = canMove1 || (openCells && b.Resources[0].NumPieces[cellFlag] > 0)
-	canMove2 = canMove2 || (openCells && b.Resources[1].NumPieces[cellFlag] > 0)
+	canMove1 := g.normalMoves[0] > 0 || (g.freeCells > 0 && b.Resources[0].NumPieces[cellFlag] > 0)
+	canMove2 := g.normalMoves[1] > 0 || (g.freeCells > 0 && b.Resources[1].NumPieces[cellFlag] > 0)
 	// If only one player has valid moves left, it's their turn.
 	if !canMove1 && canMove2 {
 		b.Turn = 2
@@ -722,9 +712,9 @@ Outer:
 	// Check if the game is over:
 	// * No open cells left
 	// * None of the players can move
-	// * One player cannot move, the other one is leading
+	// * One player cannot move, the other one has a higher score
 	s := b.Score
-	if !openCells || !(canMove1 || canMove2) ||
+	if g.freeCells == 0 || !(canMove1 || canMove2) ||
 		(s[0] > s[1] && !canMove2) || (s[1] > s[0] && !canMove1) {
 		b.State = Finished
 	}
@@ -742,26 +732,9 @@ func (f *Field) isAvail(playerNum int) bool {
 	return f.nextVal[playerNum-1] > 0
 }
 
-// Validates if (r, c) would be a legal move for playerNum.
-// Returns the value that the cell would get if the move were made.
-// This method does not validate that it's playerNum's turn and it assumes
-// that (r, c) is a valid index.
-func (g *GameEngineFlagz) validateNormalMove(playerNum, r, c int) (ok bool, val int) {
-	// A normal cell can only be placed next to another normal cell
-	// of the same color, or next to a flag of the same color.
-	b := g.board
-	fld := &b.Fields[r][c]
-	if fld.occupied() {
-		return false, 0
-	}
-	if !fld.isAvail(playerNum) {
-		// Cannot place a cell if there is no neighboring cell of the same player.
-		return false, 0
-	}
-	return true, fld.nextVal[playerNum-1]
-}
-
-// Marks all cells neighboring (r, c) as available/blocked for the player owning (r, c).
+// Updates the Blocked and nextVal status of all cells neighboring (r, c).
+// Also updates the counts of availalbe moves per player in g.
+// (r, c) must already have been updated.
 func (g *GameEngineFlagz) updateNeighborCells(r, c int) {
 	b := g.board
 	var ns [6]idx
@@ -775,31 +748,23 @@ func (g *GameEngineFlagz) updateNeighborCells(r, c int) {
 		nb := &b.Fields[ns[i].r][ns[i].c]
 		if !nb.occupied() {
 			if f.Value == flagzMaxValue {
+				// New 5 => neighbors get blocked for normal moves.
+				if nb.nextVal[pIdx] > 0 {
+					g.normalMoves[pIdx]--
+				}
 				nb.Blocked |= 1 << pIdx
 				nb.nextVal[pIdx] = -1
-			} else if nb.nextVal[pIdx] == 0 || nb.nextVal[pIdx] > f.Value+1 {
+			} else if nb.nextVal[pIdx] == 0 {
+				g.normalMoves[pIdx]++
+				nb.nextVal[pIdx] = f.Value + 1
+			} else if nb.nextVal[pIdx] > f.Value+1 {
 				nb.nextVal[pIdx] = f.Value + 1
 			}
-		}
-	}
-}
-
-// Occupies all grass cells around (r, c) that have at most the value
-// that (r, c) has.
-func (g *GameEngineFlagz) occupyGrassCells(r, c int) {
-	var ns [6]idx
-	b := g.board
-	f := &b.Fields[r][c]
-	if f.Owner == 0 || f.Value == 0 {
-		return
-	}
-	n := b.neighbors(idx{r, c}, ns[:])
-	for i := 0; i < n; i++ {
-		nb := &b.Fields[ns[i].r][ns[i].c]
-		if nb.Type == cellGrass && nb.Value <= f.Value {
+		} else if nb.Type == cellGrass && nb.Value <= f.Value {
 			nb.Type = cellNormal
 			nb.Owner = f.Owner
-			b.Score[f.Owner-1] += nb.Value
+			b.Score[pIdx] += nb.Value
+			// Now recurse to process grass cell neighbors.
 			g.updateNeighborCells(ns[i].r, ns[i].c)
 		}
 	}
@@ -808,6 +773,7 @@ func (g *GameEngineFlagz) occupyGrassCells(r, c int) {
 func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 	b := g.board
 	turn := b.Turn
+	pIdx := turn - 1
 	if m.playerNum != turn || m.move != b.Move {
 		// Only allow moves by players whose turn it is.
 		return false
@@ -820,13 +786,13 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 	if f.occupied() {
 		return false
 	}
-	if b.Resources[turn-1].NumPieces[m.cellType] == 0 {
+	if b.Resources[pIdx].NumPieces[m.cellType] == 0 {
 		// No pieces left of requested type
 		return false
 	}
 	if m.cellType == cellNormal {
-		ok, val := g.validateNormalMove(turn, m.row, m.col)
-		if !ok {
+		val := f.nextVal[pIdx]
+		if val <= 0 {
 			return false
 		}
 		f.Owner = turn
@@ -834,10 +800,13 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 		f.lifetime = g.lifetime(cellNormal)
 		f.Hidden = false
 		f.Value = val
-		b.Score[turn-1] += val
+		b.Score[pIdx] += val
+		g.freeCells--
+		g.normalMoves[pIdx]--
+		if f.nextVal[1-pIdx] > 0 {
+			g.normalMoves[1-pIdx]--
+		}
 		g.updateNeighborCells(m.row, m.col)
-		g.occupyGrassCells(m.row, m.col)
-
 	} else if m.cellType == cellFlag {
 		// A flag can be placed on any free cell. It does not add to the score.
 		f.Owner = turn
@@ -845,10 +814,18 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 		f.lifetime = g.lifetime(cellFlag)
 		f.Hidden = false
 		f.Value = 0
-		g.updateNeighborCells(m.row, m.col)
 		b.Resources[turn-1].NumPieces[cellFlag]--
+		g.freeCells--
+		// Adjust available normal moves for both players if f was available to them.
+		if f.nextVal[pIdx] > 0 {
+			g.normalMoves[pIdx]--
+		}
+		if f.nextVal[1-pIdx] > 0 {
+			g.normalMoves[1-pIdx]--
+		}
+		g.updateNeighborCells(m.row, m.col)
 	} else {
-		// Invalid piece. Just be caught by resource check already, so never reached.
+		// Invalid piece. Should be caught by resource check already, so never reached.
 		return false
 	}
 	b.Turn = 3 - b.Turn // Usually it's the other player's turn. If not, recomputeState will fix that.
@@ -857,8 +834,15 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 	return true
 }
 
-func (g *GameEngineFlagz) Board() *Board     { return g.board }
-func (g *GameEngineFlagz) SetBoard(b *Board) { g.board = b }
+func (g *GameEngineFlagz) Board() *Board { return g.board }
+func (g *GameEngineFlagz) Clone() SinglePlayerGameEngine {
+	return &GameEngineFlagz{
+		board:       g.board.copy(),
+		rnd:         g.rnd, // rand.New(rand.NewSource(time.Now().UnixNano())),
+		freeCells:   g.freeCells,
+		normalMoves: g.normalMoves,
+	}
+}
 
 func (g *GameEngineFlagz) IsDone() bool {
 	return g.board.State == Finished

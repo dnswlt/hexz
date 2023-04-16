@@ -51,7 +51,7 @@ func TestMCTSFull(t *testing.T) {
 	}
 	for !ge.IsDone() {
 		ti := ge.Board().Turn - 1
-		m, _ := mcts[ti].SuggestMove(thinkTime)
+		m, _ := mcts[ti].SuggestMove(ge, thinkTime)
 		if !ge.MakeMove(m) {
 			t.Fatal("Cannot make move")
 		}

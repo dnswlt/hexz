@@ -308,7 +308,7 @@ func cpuPlayer(s *Server, playerId string, thinkTime time.Duration, ge SinglePla
 	minTime := time.Duration(100) * time.Millisecond
 	t := thinkTime
 	for range req {
-		m, stats := mcts.SuggestMove(t)
+		m, stats := mcts.SuggestMove(ge, t)
 		if minQ := stats.MinQ(); minQ >= 0.98 || minQ <= 0.02 {
 			// Speed up if we think we (almost) won or lost.
 			t = t / 2

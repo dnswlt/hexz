@@ -98,7 +98,7 @@ func main() {
 			}
 			t := ge.Board().Turn - 1
 			moveThinkTime := getThinkTime(moveStats[t], benchPlayer == ge.Board().Turn)
-			m, stats := mcts[t].SuggestMove(moveThinkTime)
+			m, stats := mcts[t].SuggestMove(ge, moveThinkTime)
 			moveStats[t] = append(moveStats[t], stats)
 			fmt.Print(stats)
 			if !ge.MakeMove(m) {
