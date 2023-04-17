@@ -86,6 +86,7 @@ func (s *Server) InitCounters() {
 	}
 	checkedAdd(fmt.Sprintf("/games/%s/mcts/elapsed", gameTypeFlagz), DistribRange(0.001, 60*60, 1.1))
 	checkedAdd(fmt.Sprintf("/games/%s/mcts/iterations", gameTypeFlagz), DistribRange(1, 1e9, 1.2))
+	checkedAdd(fmt.Sprintf("/games/%s/mcts/tree_size", gameTypeFlagz), DistribRange(1, 1e9, 1.2))
 	checkedAdd(fmt.Sprintf("/games/%s/mcts/iterations_per_sec", gameTypeFlagz), DistribRange(1, 1e6, 1.1))
 }
 
@@ -336,6 +337,7 @@ func cpuPlayer(s *Server, playerId string, thinkTime time.Duration, ge SinglePla
 		}
 		s.AddDistribValue(fmt.Sprintf("/games/%s/mcts/elapsed", gameType), stats.Elapsed.Seconds())
 		s.AddDistribValue(fmt.Sprintf("/games/%s/mcts/iterations", gameType), float64(stats.Iterations))
+		s.AddDistribValue(fmt.Sprintf("/games/%s/mcts/tree_size", gameType), float64(stats.TreeSize))
 		s.AddDistribValue(fmt.Sprintf("/games/%s/mcts/iterations_per_sec", gameType), float64(stats.Iterations)/stats.Elapsed.Seconds())
 	}
 }
@@ -923,7 +925,7 @@ func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
 	})
 	resp.Counters = counters
 
-	// Distributions. Copy them under the mutex, then process JSON.
+	// Distributions. Copy them under the mutex, then prepare JSON structs.
 	s.distribMut.Lock()
 	distribCopies := make([]*Distribution, len(s.distrib))
 	j := 0

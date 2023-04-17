@@ -40,12 +40,17 @@ func (n *mcNode) U(parentCount float64, uctFactor float64) float64 {
 	return n.wins/n.count + uctFactor*math.Sqrt(math.Log(parentCount)/n.count)
 }
 
-func (n *mcNode) size() int {
+func (root *mcNode) size() int {
 	s := 0
-	for _, c := range n.children {
-		s += c.size()
+	q := make([]*mcNode, 1, 1024)
+	q[0] = root
+	for len(q) > 0 {
+		n := q[len(q)-1]
+		q = q[:len(q)-1]
+		s++
+		q = append(q, n.children...)
 	}
-	return 1 + s
+	return s
 }
 
 type MCTS struct {
