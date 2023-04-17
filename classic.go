@@ -27,15 +27,14 @@ func (g *GameEngineClassic) NumPlayers() int {
 }
 
 func (g *GameEngineClassic) InitialResources() ResourceInfo {
+	var ps [cellTypeLen]int
+	ps[cellNormal] = -1 // unlimited
+	ps[cellFire] = 1
+	ps[cellFlag] = 1
+	ps[cellPest] = 1
+	ps[cellDeath] = 1
 	return ResourceInfo{
-		NumPieces: map[CellType]int{
-			cellNormal: -1, // unlimited
-			cellFire:   1,
-			cellFlag:   1,
-			cellPest:   1,
-			cellDeath:  1,
-		},
-	}
+		NumPieces: ps}
 }
 
 func (g *GameEngineClassic) IsDone() bool { return g.board.State == Finished }
@@ -219,6 +218,10 @@ func (g *GameEngineClassic) applyPestEffect() {
 	}
 }
 
+func (g *GameEngineClassic) isPlayerPiece(c CellType) bool {
+	return c == cellNormal || c >= cellFire && c <= cellDead
+}
+
 func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 	board := g.board
 	turn := board.Turn
@@ -226,7 +229,7 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 		// Only allow moves by players whose turn it is.
 		return false
 	}
-	if !board.valid(idx{m.row, m.col}) || !m.cellType.isPlayerPiece() {
+	if !board.valid(idx{m.row, m.col}) || !g.isPlayerPiece(m.cellType) {
 		// Invalid move request.
 		return false
 	}

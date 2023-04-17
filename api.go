@@ -48,7 +48,7 @@ type Field struct {
 
 // Information about the resources each player has left.
 type ResourceInfo struct {
-	NumPieces map[CellType]int `json:"numPieces"`
+	NumPieces [cellTypeLen]int `json:"numPieces"`
 }
 
 type CellType int
@@ -64,15 +64,12 @@ const (
 	cellFire
 	cellFlag
 	cellPest
-	cellDeath // If you add one below cellDeath, update valid().
+	cellDeath   // If you add one below cellDeath, update valid().
+	cellTypeLen // End marker for CellType. Should never be used.
 )
 
 func (c CellType) valid() bool {
-	return c >= cellNormal && c <= cellDeath
-}
-
-func (c CellType) isPlayerPiece() bool {
-	return c == cellNormal || c >= cellFire && c <= cellDead
+	return c >= cellNormal && c < cellTypeLen
 }
 
 // JSON for incoming requests from UI clients.

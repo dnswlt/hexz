@@ -22,15 +22,14 @@ func (g *GameEngineFreeform) NumPlayers() int {
 }
 
 func (g *GameEngineFreeform) InitialResources() ResourceInfo {
+	var ps [cellTypeLen]int
+	ps[cellNormal] = -1 // unlimited
+	ps[cellFire] = -1
+	ps[cellFlag] = -1
+	ps[cellPest] = -1
+	ps[cellDeath] = -1
 	return ResourceInfo{
-		NumPieces: map[CellType]int{
-			cellNormal: -1, // unlimited
-			cellFire:   -1,
-			cellFlag:   -1,
-			cellPest:   -1,
-			cellDeath:  -1,
-		},
-	}
+		NumPieces: ps}
 }
 
 func (g *GameEngineFreeform) Reset()       { g.Init() }

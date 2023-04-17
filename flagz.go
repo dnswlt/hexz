@@ -68,11 +68,11 @@ func (g *GameEngineFlagz) Start() {
 }
 
 func (g *GameEngineFlagz) InitialResources() ResourceInfo {
+	var ps [cellTypeLen]int
+	ps[cellNormal] = -1
+	ps[cellFlag] = 3
 	return ResourceInfo{
-		NumPieces: map[CellType]int{
-			cellNormal: -1, // unlimited
-			cellFlag:   3,
-		},
+		NumPieces: ps,
 	}
 }
 

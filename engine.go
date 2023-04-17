@@ -76,12 +76,8 @@ func (b *Board) ViewFor(playerNum int) *BoardView {
 	copy(score, b.Score)
 	resources := make([]ResourceInfo, len(b.Resources))
 	for i, r := range b.Resources {
-		numPieces := make(map[CellType]int)
-		for k, v := range r.NumPieces {
-			numPieces[k] = v
-		}
 		resources[i] = ResourceInfo{
-			NumPieces: numPieces,
+			NumPieces: r.NumPieces,
 		}
 	}
 	flat, fields := copyFields(b)
@@ -109,12 +105,8 @@ func (b *Board) copy() *Board {
 	copy(score, b.Score)
 	resources := make([]ResourceInfo, len(b.Resources))
 	for i, r := range b.Resources {
-		numPieces := make(map[CellType]int)
-		for k, v := range r.NumPieces {
-			numPieces[k] = v
-		}
 		resources[i] = ResourceInfo{
-			NumPieces: numPieces,
+			NumPieces: r.NumPieces,
 		}
 	}
 	flat, fields := copyFields(b)

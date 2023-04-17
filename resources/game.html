@@ -330,7 +330,7 @@
             buttonCells = [];
             res = gstate.board.resources[playerIdx];
             for (let i = 0; i < allButtonCells.length; i++) {
-                if (allButtonCells[i].type in res.numPieces) {
+                if (allButtonCells[i].type in res.numPieces && res.numPieces[allButtonCells[i].type] != 0) {
                     buttonCells.push(allButtonCells[i]);
                 }
             }
