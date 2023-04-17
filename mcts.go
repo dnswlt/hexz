@@ -274,7 +274,7 @@ func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration tim
 		if n&63 == 0 && time.Since(started) >= maxDuration {
 			break
 		}
-		ge := gameEngine.Clone()
+		ge := gameEngine.Clone(mcts.rnd)
 		path := make([]*mcNode, 1, 100)
 		path[0] = root
 		depth := mcts.run(ge, path)

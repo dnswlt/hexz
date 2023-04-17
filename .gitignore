@@ -3,3 +3,4 @@ _users.json
 *.prof
 *.test
 /bench
+*.txt

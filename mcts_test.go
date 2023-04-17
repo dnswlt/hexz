@@ -25,7 +25,7 @@ func BenchmarkPlayRandomGame(b *testing.B) {
 				}
 			}
 		}
-		mcts.playRandomGame(ge.Clone(), &mcNode{
+		mcts.playRandomGame(ge.Clone(mcts.rnd), &mcNode{
 			r:        r,
 			c:        c,
 			cellType: cellFlag,

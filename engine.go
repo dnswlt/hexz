@@ -136,7 +136,11 @@ type SinglePlayerGameEngine interface {
 	GameEngine
 	// Returns a random move that can be played in the engine's current state.
 	RandomMove() (GameEngineMove, error)
-	Clone() SinglePlayerGameEngine // Returns a clone of the engine, e.g. to use in MCTS.
+	// Returns a clone of the engine, e.g. to use in MCTS.
+	// The source of randomness needs to be provided by callers. If the cloned
+	// engine is only used in the same goroutine as the original one G, it is safe
+	// to reuse G's source.
+	Clone(s rand.Source) SinglePlayerGameEngine
 }
 
 // Dispatches on the gameType to create a corresponding GameEngine.
@@ -837,10 +841,10 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 }
 
 func (g *GameEngineFlagz) Board() *Board { return g.board }
-func (g *GameEngineFlagz) Clone() SinglePlayerGameEngine {
+func (g *GameEngineFlagz) Clone(s rand.Source) SinglePlayerGameEngine {
 	return &GameEngineFlagz{
 		board:       g.board.copy(),
-		rnd:         g.rnd, // rand.New(rand.NewSource(time.Now().UnixNano())),
+		rnd:         rand.New(s),
 		freeCells:   g.freeCells,
 		normalMoves: g.normalMoves,
 	}
