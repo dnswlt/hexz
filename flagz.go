@@ -25,19 +25,14 @@ const (
 )
 
 func NewGameEngineFlagz(src rand.Source) *GameEngineFlagz {
-	return &GameEngineFlagz{
-		B:   NewBoard(),
+	g := &GameEngineFlagz{
 		rnd: rand.New(src),
 	}
+	g.Reset()
+	return g
 }
 
-func (g *GameEngineFlagz) Init() {
-	g.B = NewBoard()
-	g.B.Score = make([]int, 2)
-	g.InitializeResources()
-}
-
-func (g *GameEngineFlagz) Start() {
+func (g *GameEngineFlagz) PopulateInitialCells() {
 	i := 0
 	n := len(g.B.FlatFields)
 	// j is only a safeguard for invalid calls to this method on a non-empty board.
@@ -70,8 +65,6 @@ func (g *GameEngineFlagz) Start() {
 		}
 	}
 	g.NormalMoves = [2]int{0, 0}
-
-	g.B.State = Running
 }
 
 func (g *GameEngineFlagz) InitializeResources() {
@@ -85,8 +78,13 @@ func (g *GameEngineFlagz) InitializeResources() {
 }
 
 func (g *GameEngineFlagz) NumPlayers() int { return 2 }
+
 func (g *GameEngineFlagz) Reset() {
-	g.Init()
+	g.B = NewBoard()
+	g.B.Score = make([]int, 2)
+	g.InitializeResources()
+	g.PopulateInitialCells()
+	g.B.State = Running
 }
 
 func (g *GameEngineFlagz) recomputeState() {

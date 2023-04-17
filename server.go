@@ -435,9 +435,6 @@ func gameMaster(s *Server, game *GameHandle) {
 					added = true
 					playerNum = len(players) + 1
 					players[e.player.Id] = pInfo{playerNum, e.player}
-					if game.singlePlayer || len(players) == gameEngine.NumPlayers() {
-						gameEngine.Start()
-					}
 					if game.singlePlayer {
 						players[playerIdComputer] =
 							pInfo{playerNum: 2, Player: Player{Id: playerIdComputer, Name: "Computer"}}
@@ -517,11 +514,7 @@ func gameMaster(s *Server, game *GameHandle) {
 				if !ok {
 					break // Only players are allowed to reset
 				}
-				shouldRestart := gameEngine.Board().State != Initial
 				gameEngine.Reset()
-				if shouldRestart {
-					gameEngine.Start()
-				}
 				announcements := []string{
 					fmt.Sprintf("Player %s restarted the game.", p.Name),
 				}

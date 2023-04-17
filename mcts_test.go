@@ -13,8 +13,6 @@ var useFloat32 = flag.Bool("use-float32", false, "set to true to benchmark with 
 func BenchmarkMCTSPlayRandomGame(b *testing.B) {
 	src := rand.NewSource(123)
 	ge := NewGameEngineFlagz(src)
-	ge.Init() // init outside the loop to avoid calling rand.New often.
-	ge.Start()
 	mcts := NewMCTS()
 	for i := 0; i < b.N; i++ {
 		r := 0
@@ -45,8 +43,6 @@ func TestMCTSFull(t *testing.T) {
 
 	src := rand.NewSource(123)
 	ge := NewGameEngineFlagz(src)
-	ge.Init()
-	ge.Start()
 
 	mcts := []*MCTS{
 		NewMCTS(),

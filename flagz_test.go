@@ -10,8 +10,6 @@ func BenchmarkPlayFlagzGame(b *testing.B) {
 	src := rand.NewSource(123)
 	for i := 0; i < b.N; i++ {
 		ge := NewGameEngineFlagz(src)
-		ge.Init()
-		ge.Start()
 
 		for !ge.IsDone() {
 			m, err := ge.RandomMove()

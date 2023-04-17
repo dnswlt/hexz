@@ -25,15 +25,11 @@ func (g *GameEngineClassic) Init() {
 		b.Resources[i] = g.InitialResources()
 	}
 	g.board = b
-}
-
-func (g *GameEngineClassic) Start() {
 	g.board.State = Running
 }
 
 func (g *GameEngineClassic) Reset() {
 	g.Init()
-	g.Start()
 }
 
 func (g *GameEngineClassic) NumPlayers() int {
@@ -64,12 +60,13 @@ func (g *GameEngineClassic) recomputeScoreAndState() {
 	b := g.board
 	s := []int{0, 0}
 	openCells := 0
-	for _, row := range b.Fields {
-		for _, fld := range row {
+	for r, _ := range b.Fields {
+		for c, _ := range b.Fields[r] {
+			fld := &b.Fields[r][c]
 			if fld.Owner > 0 && !fld.Hidden {
 				s[fld.Owner-1]++
 			}
-			if !fld.occupied() || fld.Hidden {
+			if !fld.occupied() {
 				// Don't finish the game until all cells are owned and not hidden, or dead.
 				openCells++
 			}
@@ -78,6 +75,7 @@ func (g *GameEngineClassic) recomputeScoreAndState() {
 	b.Score = s
 	if openCells == 0 {
 		// No more inconclusive cells: game is finished
+		g.revealHiddenMoves()
 		b.State = Finished
 	}
 }
@@ -233,7 +231,15 @@ func (g *GameEngineClassic) applyPestEffect() {
 }
 
 func (g *GameEngineClassic) isPlayerPiece(c CellType) bool {
-	return c == cellNormal || c >= cellFire && c <= cellDead
+	return c == cellNormal || c >= cellFire && c <= cellDeath
+}
+
+func (g *GameEngineClassic) revealHiddenMoves() {
+	for r := 0; r < len(g.board.Fields); r++ {
+		for c := 0; c < len(g.board.Fields[r]); c++ {
+			g.board.Fields[r][c].Hidden = false
+		}
+	}
 }
 
 func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
@@ -297,12 +303,7 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 	}
 	if numOccupiedFields > 1 || board.Move-board.LastRevealed == 4 || revealBoard {
 		// Reveal hidden moves.
-		for r := 0; r < len(board.Fields); r++ {
-			for c := 0; c < len(board.Fields[r]); c++ {
-				f := &board.Fields[r][c]
-				f.Hidden = false
-			}
-		}
+		g.revealHiddenMoves()
 		g.applyPestEffect()
 		// Clean up old special cells.
 		for r := 0; r < len(board.Fields); r++ {

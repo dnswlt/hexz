@@ -22,10 +22,8 @@ type Board struct {
 }
 
 type GameEngine interface {
-	Init()
-	Start()
-	NumPlayers() int
 	Reset()
+	NumPlayers() int
 	MakeMove(move GameEngineMove) bool
 	Board() *Board
 	IsDone() bool
@@ -143,15 +141,18 @@ func NewGameEngine(gameType GameType, src rand.Source) GameEngine {
 	var ge GameEngine
 	switch gameType {
 	case gameTypeClassic:
-		ge = &GameEngineClassic{}
+		gec := &GameEngineClassic{}
+		gec.Init()
+		ge = gec
 	case gameTypeFlagz:
 		ge = NewGameEngineFlagz(src)
 	case gameTypeFreeform:
-		ge = &GameEngineFreeform{}
+		gef := &GameEngineFreeform{}
+		gef.Init()
+		ge = gef
 	default:
 		panic("Unconsidered game type: " + gameType)
 	}
-	ge.Init()
 	return ge
 }
 
