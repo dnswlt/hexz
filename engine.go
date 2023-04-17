@@ -21,6 +21,51 @@ type Board struct {
 	State        GameState
 }
 
+type GameEngine interface {
+	Init()
+	Start()
+	InitialResources() ResourceInfo
+	NumPlayers() int
+	Reset()
+	MakeMove(move GameEngineMove) bool
+	Board() *Board
+	IsDone() bool
+	Winner() (playerNum int) // Results are only meaningful if IsDone() is true. 0 for draw.
+	GameType() GameType
+}
+
+type SinglePlayerGameEngine interface {
+	GameEngine
+	// Returns a random move that can be played in the engine's current state.
+	RandomMove() (GameEngineMove, error)
+	// Returns a clone of the engine, e.g. to use in MCTS.
+	// The source of randomness needs to be provided by callers. If the cloned
+	// engine is only used in the same goroutine as the original one G, it is safe
+	// to reuse G's source.
+	Clone(s rand.Source) SinglePlayerGameEngine
+}
+
+type GameType string
+
+const (
+	gameTypeClassic  GameType = "Classic"
+	gameTypeFlagz    GameType = "Flagz"
+	gameTypeFreeform GameType = "Freeform"
+)
+
+func validGameType(gameType string) bool {
+	allGameTypes := map[GameType]bool{
+		gameTypeClassic:  true,
+		gameTypeFlagz:    true,
+		gameTypeFreeform: true,
+	}
+	return allGameTypes[GameType(gameType)]
+}
+
+func supportsSinglePlayer(t GameType) bool {
+	return t == gameTypeFlagz
+}
+
 // Each player has a different view of the board. In particular, player A
 // should not see the hidden moves of player B. To not give cheaters a chance,
 // we should never send the hidden moves out to other players at all
@@ -90,28 +135,7 @@ func (f *Field) occupied() bool {
 }
 
 func (f *Field) isAvail(playerNum int) bool {
-	return f.nextVal[playerNum-1] > 0
-}
-
-type GameType string
-
-const (
-	gameTypeClassic  GameType = "Classic"
-	gameTypeFlagz    GameType = "Flagz"
-	gameTypeFreeform GameType = "Freeform"
-)
-
-func validGameType(gameType string) bool {
-	allGameTypes := map[GameType]bool{
-		gameTypeClassic:  true,
-		gameTypeFlagz:    true,
-		gameTypeFreeform: true,
-	}
-	return allGameTypes[GameType(gameType)]
-}
-
-func supportsSinglePlayer(t GameType) bool {
-	return t == gameTypeFlagz
+	return f.NextVal[playerNum-1] > 0
 }
 
 type GameEngineMove struct {
@@ -124,30 +148,6 @@ type GameEngineMove struct {
 
 func (m *GameEngineMove) String() string {
 	return fmt.Sprintf("P%d@%d (%d,%d/%d)", m.playerNum, m.move, m.row, m.col, m.cellType)
-}
-
-type GameEngine interface {
-	Init()
-	Start()
-	InitialResources() ResourceInfo
-	NumPlayers() int
-	Reset()
-	MakeMove(move GameEngineMove) bool
-	Board() *Board
-	IsDone() bool
-	Winner() (playerNum int) // Results are only meaningful if IsDone() is true. 0 for draw.
-	GameType() GameType
-}
-
-type SinglePlayerGameEngine interface {
-	GameEngine
-	// Returns a random move that can be played in the engine's current state.
-	RandomMove() (GameEngineMove, error)
-	// Returns a clone of the engine, e.g. to use in MCTS.
-	// The source of randomness needs to be provided by callers. If the cloned
-	// engine is only used in the same goroutine as the original one G, it is safe
-	// to reuse G's source.
-	Clone(s rand.Source) SinglePlayerGameEngine
 }
 
 // Dispatches on the gameType to create a corresponding GameEngine.

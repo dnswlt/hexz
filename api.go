@@ -36,13 +36,14 @@ type BoardView struct {
 }
 
 type Field struct {
-	Type     CellType `json:"type"`
-	Owner    int      `json:"owner"` // Player number owning this field. 0 for unowned fields.
-	Hidden   bool     `json:"hidden,omitempty"`
-	Value    int      `json:"v"`                 // Some games assign different values to cells.
-	Blocked  int      `json:"blocked,omitempty"` // Bitmap indicating which players this field is blocked for.
-	lifetime int      // Moves left until this cell gets cleared. -1 means infinity.
-	nextVal  [2]int   // If this cell would be occupied, what value would it have? (For Flagz)
+	Type    CellType `json:"type"`
+	Owner   int      `json:"owner"` // Player number owning this field. 0 for unowned fields.
+	Hidden  bool     `json:"hidden,omitempty"`
+	Value   int      `json:"v"`                 // Some games assign different values to cells.
+	Blocked [2]bool  `json:"blocked,omitempty"` // Indicates which players this field is blocked for.
+	// Internal fields, not exported in JSON
+	Lifetime int    `json:"-"` // Moves left until this cell gets cleared. -1 means infinity.
+	NextVal  [2]int `json:"-"` // If this cell would be occupied, what value would it have? (For Flagz)
 }
 
 // Information about the resources each player has left.

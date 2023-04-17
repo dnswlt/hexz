@@ -124,7 +124,7 @@
                 players: ['#255ab4', '#f8d748'],
                 hiddenMoves: ['#92acd9', '#fbeba3'], // 50% alpha of players on white bg.
                 // blocked: ['rgba(248, 215, 72, 0.2)', 'rgba(37, 90, 180, 0.5)', '#3e3e3e'],  // same as hiddenMoves / unavailablePiece.
-                blocked: ['#fbeba3', '#92acd9', '#3e3e3e'],  // same as hiddenMoves / unavailablePiece.
+                blocked: ['#fbeba3', '#92acd9', '#5f5f5f'],  // same as hiddenMoves / rockCell.
                 cellIcons: ['#1e1e1e', '#7a6505'], // Blue: background. Yellow: 25% HSL luminance of player's color.
                 deadCell: '#d03d12',
                 grassCell: '#008048',
@@ -394,17 +394,18 @@
                             ctx.fillStyle = styles.colors.grassCellFg;
                             ctx.fillText(String(fld.v), 0, 0);
                         }
-                    } else if (fld.blocked > 0) {
-                        // blocked is a bitmap. Player 1 is at the first bit, player 2 at the second.
-                        if (fld.blocked == 1) {
-                            ctx.fillStyle = styles.colors.blocked[0];
-                        } else if (fld.blocked == 2) {
+                    } else if (fld.blocked) {
+                        if (fld.blocked[0]) {
+                            if (fld.blocked[1]) {
+                                ctx.fillStyle = styles.colors.blocked[2];
+                            } else {
+                                ctx.fillStyle = styles.colors.blocked[0];
+                            }
+                            ctx.fill(hex);
+                        } else if (fld.blocked[1]) {
                             ctx.fillStyle = styles.colors.blocked[1];
-                        } else {
-                            // both are blocked
-                            ctx.fillStyle = styles.colors.blocked[2];
+                            ctx.fill(hex);
                         }
-                        ctx.fill(hex);
                     }
                     ctx.strokeStyle = styles.colors.grid;
                     ctx.stroke(hex);

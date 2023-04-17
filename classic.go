@@ -107,7 +107,7 @@ func (g *GameEngineClassic) occupyFields(playerNum, r, c int, ct CellType) int {
 	f.Owner = playerNum
 	f.Type = ct
 	f.Hidden = true
-	f.lifetime = g.lifetime(ct)
+	f.Lifetime = g.lifetime(ct)
 	var areas [6]struct {
 		size      int    // Number of free cells in the area
 		flags     [2]int // Number of flags along the boundary
@@ -176,7 +176,7 @@ func (g *GameEngineClassic) occupyFields(playerNum, r, c int, ct CellType) int {
 				if ms[r][c] == minK && !f.occupied() {
 					numOccupiedFields++
 					f.Owner = occupator
-					f.lifetime = g.lifetime(cellNormal)
+					f.Lifetime = g.lifetime(cellNormal)
 				}
 			}
 		}
@@ -193,7 +193,7 @@ func (g *GameEngineClassic) applyFireEffect(r, c int) {
 		f.Owner = 0
 		f.Type = cellDead
 		f.Hidden = false
-		f.lifetime = g.lifetime(cellDead)
+		f.Lifetime = g.lifetime(cellDead)
 	}
 }
 
@@ -203,7 +203,7 @@ func (g *GameEngineClassic) applyPestEffect() {
 	for r := 0; r < len(b.Fields); r++ {
 		for c := 0; c < len(b.Fields[r]); c++ {
 			// A pest cell does not propagate in its first round.
-			if b.Fields[r][c].Type == cellPest && b.Fields[r][c].lifetime < g.lifetime(cellPest) {
+			if b.Fields[r][c].Type == cellPest && b.Fields[r][c].Lifetime < g.lifetime(cellPest) {
 				n := b.neighbors(idx{r, c}, ns[:])
 				for i := 0; i < n; i++ {
 					f := &b.Fields[ns[i].r][ns[i].c]
@@ -211,7 +211,7 @@ func (g *GameEngineClassic) applyPestEffect() {
 						// Pest only affects the opponent's normal cells.
 						f.Owner = b.Fields[r][c].Owner
 						f.Type = cellPest
-						f.lifetime = g.lifetime(cellPest)
+						f.Lifetime = g.lifetime(cellPest)
 					}
 				}
 			}
@@ -243,7 +243,7 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 			f := &board.Fields[m.row][m.col]
 			f.Owner = 0
 			f.Type = cellDead
-			f.lifetime = g.lifetime(cellDead)
+			f.Lifetime = g.lifetime(cellDead)
 			revealBoard = true
 		} else if m.cellType == cellDeath {
 			// Death cell can be placed anywhere and will "kill" whatever was there before.
@@ -251,7 +251,7 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 			f.Owner = turn
 			f.Type = cellDeath
 			f.Hidden = false
-			f.lifetime = g.lifetime(cellDeath)
+			f.Lifetime = g.lifetime(cellDeath)
 		} else {
 			// Cannot make move on already occupied field.
 			return false
@@ -264,7 +264,7 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 			// Fire cells take effect immediately.
 			f.Owner = turn
 			f.Type = m.cellType
-			f.lifetime = g.lifetime(cellFire)
+			f.Lifetime = g.lifetime(cellFire)
 			g.applyFireEffect(m.row, m.col)
 		} else {
 			numOccupiedFields = g.occupyFields(turn, m.row, m.col, m.cellType)
@@ -291,14 +291,14 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 		for r := 0; r < len(board.Fields); r++ {
 			for c := 0; c < len(board.Fields[r]); c++ {
 				f := &board.Fields[r][c]
-				if f.occupied() && f.lifetime == 0 {
+				if f.occupied() && f.Lifetime == 0 {
 					f.Owner = 0
 					f.Hidden = false
 					f.Type = cellNormal
-					f.lifetime = g.lifetime(cellNormal)
+					f.Lifetime = g.lifetime(cellNormal)
 				}
-				if f.lifetime > 0 {
-					f.lifetime--
+				if f.Lifetime > 0 {
+					f.Lifetime--
 				}
 			}
 		}

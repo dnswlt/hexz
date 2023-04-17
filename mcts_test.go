@@ -9,7 +9,7 @@ import (
 
 var useFloat32 = flag.Bool("use-float32", false, "set to true to benchmark with float32")
 
-func BenchmarkPlayRandomGame(b *testing.B) {
+func BenchmarkMCTSPlayRandomGame(b *testing.B) {
 	ge := &GameEngineFlagz{}
 	ge.Init() // init outside the loop to avoid calling rand.New often.
 	ge.Start()
@@ -18,9 +18,9 @@ func BenchmarkPlayRandomGame(b *testing.B) {
 		r := 0
 		c := 0
 	Outer:
-		for ; r < len(ge.board.Fields); r++ {
-			for ; c < len(ge.board.Fields[r]); c++ {
-				if !ge.board.Fields[r][c].occupied() {
+		for ; r < len(ge.B.Fields); r++ {
+			for ; c < len(ge.B.Fields[r]); c++ {
+				if !ge.B.Fields[r][c].occupied() {
 					break Outer
 				}
 			}
