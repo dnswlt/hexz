@@ -12,7 +12,20 @@ func (g *GameEngineFreeform) GameType() GameType { return gameTypeFreeform }
 func (g *GameEngineFreeform) Board() *Board      { return g.board }
 
 func (g *GameEngineFreeform) Init() {
-	g.board = InitBoard(g)
+	flatFields, fields := makeFields()
+	b := &Board{
+		Turn:       1, // Player 1 begins
+		FlatFields: flatFields,
+		Fields:     fields,
+		State:      Initial,
+	}
+	numPlayers := g.NumPlayers()
+	b.Score = make([]int, numPlayers)
+	b.Resources = make([]ResourceInfo, numPlayers)
+	for i := 0; i < numPlayers; i++ {
+		b.Resources[i] = g.InitialResources()
+	}
+	g.board = b
 }
 func (g *GameEngineFreeform) Start() {
 	g.board.State = Running

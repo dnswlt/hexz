@@ -24,7 +24,6 @@ type Board struct {
 type GameEngine interface {
 	Init()
 	Start()
-	InitialResources() ResourceInfo
 	NumPlayers() int
 	Reset()
 	MakeMove(move GameEngineMove) bool
@@ -104,11 +103,7 @@ func (b *Board) copy() *Board {
 	score := make([]int, len(b.Score))
 	copy(score, b.Score)
 	resources := make([]ResourceInfo, len(b.Resources))
-	for i, r := range b.Resources {
-		resources[i] = ResourceInfo{
-			NumPieces: r.NumPieces,
-		}
-	}
+	copy(resources, b.Resources)
 	flat, fields := copyFields(b)
 	return &Board{
 		Turn:         b.Turn,
@@ -144,13 +139,13 @@ func (m *GameEngineMove) String() string {
 
 // Dispatches on the gameType to create a corresponding GameEngine.
 // The returned GameEngine is initialized and ready to play.
-func NewGameEngine(gameType GameType) GameEngine {
+func NewGameEngine(gameType GameType, src rand.Source) GameEngine {
 	var ge GameEngine
 	switch gameType {
 	case gameTypeClassic:
 		ge = &GameEngineClassic{}
 	case gameTypeFlagz:
-		ge = &GameEngineFlagz{}
+		ge = NewGameEngineFlagz(src)
 	case gameTypeFreeform:
 		ge = &GameEngineFreeform{}
 	default:
@@ -190,21 +185,15 @@ func copyFields(b *Board) ([]Field, [][]Field) {
 	return flat, fields
 }
 
-func InitBoard(g GameEngine) *Board {
+// Creates a new, empty board with nil score and nil resources.
+func NewBoard() *Board {
 	flatFields, fields := makeFields()
-	b := &Board{
+	return &Board{
 		Turn:       1, // Player 1 begins
 		FlatFields: flatFields,
 		Fields:     fields,
 		State:      Initial,
 	}
-	numPlayers := g.NumPlayers()
-	b.Score = make([]int, numPlayers)
-	b.Resources = make([]ResourceInfo, numPlayers)
-	for i := 0; i < numPlayers; i++ {
-		b.Resources[i] = g.InitialResources()
-	}
-	return b
 }
 
 type idx struct {

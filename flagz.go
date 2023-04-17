@@ -5,7 +5,6 @@ package hexz
 import (
 	"fmt"
 	"math/rand"
-	"time"
 )
 
 type GameEngineFlagz struct {
@@ -25,9 +24,17 @@ const (
 	flagzMaxValue      = 5 // Maximum value a cell can take.
 )
 
+func NewGameEngineFlagz(src rand.Source) *GameEngineFlagz {
+	return &GameEngineFlagz{
+		B:   NewBoard(),
+		rnd: rand.New(src),
+	}
+}
+
 func (g *GameEngineFlagz) Init() {
-	g.B = InitBoard(g)
-	g.rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
+	g.B = NewBoard()
+	g.B.Score = make([]int, 2)
+	g.InitializeResources()
 }
 
 func (g *GameEngineFlagz) Start() {
@@ -67,12 +74,13 @@ func (g *GameEngineFlagz) Start() {
 	g.B.State = Running
 }
 
-func (g *GameEngineFlagz) InitialResources() ResourceInfo {
+func (g *GameEngineFlagz) InitializeResources() {
+	g.B.Resources = make([]ResourceInfo, 2)
 	var ps [cellTypeLen]int
 	ps[cellNormal] = -1
 	ps[cellFlag] = 3
-	return ResourceInfo{
-		NumPieces: ps,
+	for i := 0; i < len(g.B.Resources); i++ {
+		g.B.Resources[i].NumPieces = ps
 	}
 }
 

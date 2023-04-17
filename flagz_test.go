@@ -1,11 +1,15 @@
 package hexz
 
-import "testing"
+import (
+	"math/rand"
+	"testing"
+)
 
 func BenchmarkPlayFlagzGame(b *testing.B) {
 	winCounts := make(map[int]int)
+	src := rand.NewSource(123)
 	for i := 0; i < b.N; i++ {
-		ge := &GameEngineFlagz{}
+		ge := NewGameEngineFlagz(src)
 		ge.Init()
 		ge.Start()
 

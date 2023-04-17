@@ -349,7 +349,8 @@ func gameMaster(s *Server, game *GameHandle) {
 	const playerIdComputer = "comp"
 	s.IncCounter(fmt.Sprintf("/games/%s/started", game.gameType))
 	log.Printf("Started new %q game: %s", game.gameType, game.id)
-	gameEngine := NewGameEngine(game.gameType)
+	randomSrc := rand.NewSource(time.Now().UnixNano())
+	gameEngine := NewGameEngine(game.gameType, randomSrc)
 	// Player and spectator channels, keyed by playerId.
 	eventListeners := make(map[string]chan ServerEvent)
 	defer func() {

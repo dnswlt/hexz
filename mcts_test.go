@@ -3,6 +3,7 @@ package hexz
 import (
 	"flag"
 	"math"
+	"math/rand"
 	"testing"
 	"time"
 )
@@ -10,7 +11,8 @@ import (
 var useFloat32 = flag.Bool("use-float32", false, "set to true to benchmark with float32")
 
 func BenchmarkMCTSPlayRandomGame(b *testing.B) {
-	ge := &GameEngineFlagz{}
+	src := rand.NewSource(123)
+	ge := NewGameEngineFlagz(src)
 	ge.Init() // init outside the loop to avoid calling rand.New often.
 	ge.Start()
 	mcts := NewMCTS()
@@ -41,7 +43,8 @@ func TestMCTSFull(t *testing.T) {
 	// Play one full game without crashing
 	thinkTime := time.Duration(100) * time.Millisecond
 
-	ge := &GameEngineFlagz{}
+	src := rand.NewSource(123)
+	ge := NewGameEngineFlagz(src)
 	ge.Init()
 	ge.Start()
 
