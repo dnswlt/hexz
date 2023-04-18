@@ -244,10 +244,13 @@ type ControlEventReset struct {
 	message  string
 }
 
+type ControlEventKill struct{}
+
 func (e ControlEventRegister) controlEventImpl()   {}
 func (e ControlEventUnregister) controlEventImpl() {}
 func (e ControlEventMove) controlEventImpl()       {}
 func (e ControlEventReset) controlEventImpl()      {}
+func (e ControlEventKill) controlEventImpl()       {}
 
 func (g *GameHandle) sendEvent(e ControlEvent) bool {
 	select {

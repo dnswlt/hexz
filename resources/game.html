@@ -47,7 +47,8 @@
         #playerOneBadge,
         #playerTwoBadge {
             display: inline-block;
-            width: 7em;  /* TODO: make them occupy all space in the menu row. */
+            /* TODO: make them occupy all space in the menu row. */
+            width: 7em;
             text-align: center;
             padding: 5px;
         }
@@ -179,9 +180,7 @@
         var hexagonSideLength = 30;
 
         function handleServerEvent(sse, serverEvent) {
-            if (gstate.role == 0 && serverEvent.role > 0) {
-                gstate.role = serverEvent.role;
-            }
+            gstate.role = serverEvent.role;
             if (serverEvent.board != null) {
                 // new board received.
                 gstate.board = serverEvent.board;

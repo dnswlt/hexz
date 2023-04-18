@@ -25,7 +25,10 @@ func TestClassicFullGame(t *testing.T) {
 		}
 	}
 	if !ge.IsDone() {
-		t.Fatalf("Game is not done")
+		t.Error("Game is not done")
+	}
+	if ge.Winner() != 1 {
+		t.Errorf("Want winner 1, got %d", ge.Winner())
 	}
 	for r := 0; r < len(ge.board.Fields); r++ {
 		for c := 0; c < len(ge.board.Fields[r]); c++ {

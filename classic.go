@@ -59,25 +59,31 @@ func (g *GameEngineClassic) Winner() (playerNum int) {
 func (g *GameEngineClassic) recomputeScoreAndState() {
 	b := g.board
 	s := []int{0, 0}
-	openCells := 0
+	hasOpenCells := false
+	for r := range b.Fields {
+		for c := range b.Fields[r] {
+			if !b.Fields[r][c].occupied() {
+				// Don't finish the game until all cells are owned and not hidden, or dead.
+				hasOpenCells = true
+				break
+			}
+		}
+	}
+	if !hasOpenCells {
+		// No more inconclusive cells: game is finished. Reveal hidden moves before
+		// computing score.
+		g.revealHiddenMoves()
+		b.State = Finished
+	}
 	for r := range b.Fields {
 		for c := range b.Fields[r] {
 			fld := &b.Fields[r][c]
 			if fld.Owner > 0 && !fld.Hidden {
 				s[fld.Owner-1]++
 			}
-			if !fld.occupied() {
-				// Don't finish the game until all cells are owned and not hidden, or dead.
-				openCells++
-			}
 		}
 	}
 	b.Score = s
-	if openCells == 0 {
-		// No more inconclusive cells: game is finished
-		g.revealHiddenMoves()
-		b.State = Finished
-	}
 }
 
 func (g *GameEngineClassic) floodFill(x idx, cb func(idx) bool) {
