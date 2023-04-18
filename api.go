@@ -54,6 +54,7 @@ type ResourceInfo struct {
 type CellType int
 
 // Remember to update the known cell types in game.html if you make changes here!
+// Add new types at the end, since otherwise loading old games will break.
 const (
 	cellNormal CellType = iota // Empty cells if not owned, otherwise the player's regular cell.
 	// Non-player cells.
@@ -64,7 +65,8 @@ const (
 	cellFire
 	cellFlag
 	cellPest
-	cellDeath   // If you add one below cellDeath, update valid().
+	cellDeath
+	// Add new types here, right before cellTypeLen.
 	cellTypeLen // End marker for CellType. Should never be used.
 )
 

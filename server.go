@@ -178,7 +178,7 @@ type GameHandle struct {
 	host         string            // Name of the player hosting the game (the one who created it)
 	singlePlayer bool              // If true, only player 1 is human, the rest are computer-controlled.
 	controlEvent chan ControlEvent // The channel to communicate with the game coordinating goroutine.
-	done         chan struct{}     // Closed by the game master goroutine when it is done.
+	done         chan tok          // Closed by the game master goroutine when it is done.
 }
 
 // Player has JSON annotations for serialization to disk.
@@ -302,241 +302,6 @@ func gameIdFromPath(path string) string {
 	return ""
 }
 
-func cpuPlayer(s *Server, playerId string, thinkTime time.Duration, ge SinglePlayerGameEngine, req chan tok, ctrl chan ControlEvent) {
-	gameType := ge.GameType()
-	mcts := NewMCTS()
-	// Minimum time to spend thinking about a move, even if we're dead certain about the result.
-	minTime := time.Duration(100) * time.Millisecond
-	t := thinkTime
-	for range req {
-		m, stats := mcts.SuggestMove(ge, t)
-		if minQ := stats.MinQ(); minQ >= 0.98 || minQ <= 0.02 {
-			// Speed up if we think we (almost) won or lost.
-			t = t / 2
-			if t < minTime {
-				t = minTime
-			}
-		} else {
-			t = thinkTime // use full time allowed.
-		}
-		// Send move request
-		ctrl <- ControlEventMove{
-			playerId:   playerId,
-			confidence: stats.MaxQ(),
-			MoveRequest: MoveRequest{
-				Move: m.move,
-				Row:  m.row,
-				Col:  m.col,
-				Type: m.cellType,
-			},
-		}
-		// Update counters
-		s.IncCounter(fmt.Sprintf("/games/%s/mcts/suggested_moves", gameType))
-		if stats.FullyExplored {
-			s.IncCounter(fmt.Sprintf("/games/%s/mcts/fully_explored", gameType))
-		}
-		s.AddDistribValue(fmt.Sprintf("/games/%s/mcts/elapsed", gameType), stats.Elapsed.Seconds())
-		s.AddDistribValue(fmt.Sprintf("/games/%s/mcts/iterations", gameType), float64(stats.Iterations))
-		s.AddDistribValue(fmt.Sprintf("/games/%s/mcts/tree_size", gameType), float64(stats.TreeSize))
-		s.AddDistribValue(fmt.Sprintf("/games/%s/mcts/iterations_per_sec", gameType), float64(stats.Iterations)/stats.Elapsed.Seconds())
-	}
-}
-
-// Controller function for a running game. To be executed by a dedicated goroutine.
-func gameMaster(s *Server, game *GameHandle) {
-	defer close(game.done)
-	defer s.deleteGame(game.id)
-	const playerIdComputer = "comp"
-	s.IncCounter(fmt.Sprintf("/games/%s/started", game.gameType))
-	log.Printf("Started new %q game: %s", game.gameType, game.id)
-	randomSrc := rand.NewSource(time.Now().UnixNano())
-	gameEngine := NewGameEngine(game.gameType, randomSrc)
-	// Player and spectator channels, keyed by playerId.
-	eventListeners := make(map[string]chan ServerEvent)
-	defer func() {
-		// Signal that client SSE connections should be terminated.
-		for _, ch := range eventListeners {
-			close(ch)
-		}
-	}()
-	type pInfo struct {
-		playerNum int
-		Player
-	}
-	players := make(map[string]pInfo) // keyed by playerId
-	playerNames := func() []string {
-		r := make([]string, len(players))
-		for _, p := range players {
-			r[p.playerNum-1] = p.Name
-		}
-		return r
-	}
-	playerRmCancel := make(map[string]chan struct{})
-	playerRm := make(chan string)
-	broadcastPing := func(message string) {
-		now := time.Now().Format(time.RFC3339)
-		for _, ch := range eventListeners {
-			ch <- ServerEvent{Timestamp: now, DebugMessage: message}
-		}
-	}
-	broadcast := func(e *ServerEvent) {
-		e.Timestamp = time.Now().Format(time.RFC3339)
-		if gameEngine.Board().State != Initial {
-			e.PlayerNames = playerNames()
-		}
-		// Send event to all listeners. Avoid recomputing board for spectators.
-		var spectatorBoard *BoardView
-		for pId, ch := range eventListeners {
-			pNum := players[pId].playerNum
-			if pNum > 0 {
-				e.Board = gameEngine.Board().ViewFor(pNum)
-				e.Role = int(pNum)
-			} else {
-				if spectatorBoard == nil {
-					spectatorBoard = gameEngine.Board().ViewFor(0)
-				}
-				e.Board = spectatorBoard
-			}
-			ch <- *e
-		}
-	}
-	singlecast := func(playerId string, e *ServerEvent) {
-		if ch, ok := eventListeners[playerId]; ok {
-			e.Timestamp = time.Now().Format(time.RFC3339)
-			pNum := players[playerId].playerNum
-			e.Board = gameEngine.Board().ViewFor(pNum)
-			ch <- *e
-		}
-	}
-	var cpuCh chan tok
-	if game.singlePlayer {
-		// Start CPU player.
-		cpuCh = make(chan tok)
-		defer close(cpuCh)
-		go cpuPlayer(s, playerIdComputer, s.config.CompThinkTime, gameEngine.(SinglePlayerGameEngine), cpuCh, game.controlEvent)
-	}
-
-	for {
-		tick := time.After(5 * time.Second)
-		select {
-		case ce := <-game.controlEvent:
-			switch e := ce.(type) {
-			case ControlEventRegister:
-				var playerNum int
-				added := false
-				if p, ok := players[e.player.Id]; ok {
-					// Player reconnected. Cancel its removal.
-					if cancel, ok := playerRmCancel[e.player.Id]; ok {
-						close(cancel)
-						delete(playerRmCancel, e.player.Id)
-					}
-					playerNum = p.playerNum
-				} else if len(players) < gameEngine.NumPlayers() {
-					added = true
-					playerNum = len(players) + 1
-					players[e.player.Id] = pInfo{playerNum, e.player}
-					if game.singlePlayer {
-						players[playerIdComputer] =
-							pInfo{playerNum: 2, Player: Player{Id: playerIdComputer, Name: "Computer"}}
-					}
-				}
-				ch := make(chan ServerEvent)
-				eventListeners[e.player.Id] = ch
-				e.replyChan <- ch
-				// Send board and player role initially so client can display the UI.
-				singlecast(e.player.Id, &ServerEvent{Role: int(playerNum)})
-				announcements := []string{}
-				if added {
-					announcements = append(announcements, fmt.Sprintf("Welcome %s!", e.player.Name))
-				}
-				if added && gameEngine.Board().State == Running {
-					announcements = append(announcements, "The game begins!")
-				}
-				broadcast(&ServerEvent{Announcements: announcements})
-			case ControlEventUnregister:
-				delete(eventListeners, e.playerId)
-				if _, ok := playerRmCancel[e.playerId]; ok {
-					// A repeated unregister should not happen. If it does, we ignore
-					// it and just wait for the existing scheduled removal to trigger.
-					break
-				}
-				if _, ok := players[e.playerId]; ok {
-					// Remove player after timeout. Don't remove them immediately as they might
-					// just be reloading their page and rejoin soon.
-					cancel := make(chan struct{})
-					playerRmCancel[e.playerId] = cancel
-					go func(playerId string) {
-						t := time.After(s.config.PlayerRemoveDelay)
-						select {
-						case <-t:
-							playerRm <- playerId
-						case <-cancel:
-						}
-					}(e.playerId)
-				}
-			case ControlEventMove:
-				p, ok := players[e.playerId]
-				if !ok || gameEngine.Board().State != Running {
-					// Ignore invalid move request
-					break
-				}
-				before := time.Now()
-				if s.config.DebugMode {
-					debugReq, _ := json.Marshal(e.MoveRequest)
-					log.Printf("%s: move request: P%d %s", game.id, p.playerNum, debugReq)
-				}
-				if gameEngine.MakeMove(GameEngineMove{playerNum: p.playerNum, move: e.Move, row: e.Row, col: e.Col, cellType: e.Type}) {
-					evt := &ServerEvent{Announcements: []string{}}
-					if gameEngine.IsDone() {
-						s.IncCounter(fmt.Sprintf("/games/%s/finished", game.gameType))
-						if winner := gameEngine.Winner(); winner > 0 {
-							evt.Winner = winner
-							winnerName := playerNames()[winner-1]
-							evt.Announcements = append(evt.Announcements,
-								fmt.Sprintf("&#127942; &#127942; &#127942; %s won &#127942; &#127942; &#127942;",
-									winnerName))
-						}
-					}
-					if e.confidence > 0 {
-						evt.Announcements = append(evt.Announcements, fmt.Sprintf("CPU confidence: %.3f", e.confidence))
-					}
-					if game.singlePlayer && gameEngine.Board().Turn != 1 && !gameEngine.IsDone() {
-						// Ask CPU player to make a move.
-						cpuCh <- tok{}
-					}
-					broadcast(evt)
-				}
-				if s.config.DebugMode {
-					log.Printf("MakeMove took %dus.", time.Since(before).Microseconds())
-				}
-			case ControlEventReset:
-				p, ok := players[e.playerId]
-				if !ok {
-					break // Only players are allowed to reset
-				}
-				gameEngine.Reset()
-				announcements := []string{
-					fmt.Sprintf("Player %s restarted the game.", p.Name),
-				}
-				broadcast(&ServerEvent{Announcements: announcements})
-			}
-		case <-tick:
-			broadcastPing("ping")
-		case playerId := <-playerRm:
-			log.Printf("Player %s left game %s: game over", playerId, game.id)
-			playerName := "?"
-			if p, ok := players[playerId]; ok {
-				playerName = p.Name
-			}
-			broadcast(&ServerEvent{
-				// Send sad emoji.
-				Announcements: []string{fmt.Sprintf("Player %s left the game &#128546;. Game over.", playerName)},
-			})
-			return
-		}
-	}
-}
-
 func (s *Server) startNewGame(host string, gameType GameType, singlePlayer bool) (*GameHandle, error) {
 	// Try a few times to find an unused game Id, else give up.
 	// (I don't like forever loops... 100 attempts is plenty.)
@@ -552,13 +317,14 @@ func (s *Server) startNewGame(host string, gameType GameType, singlePlayer bool)
 				host:         host,
 				singlePlayer: singlePlayer,
 				controlEvent: make(chan ControlEvent),
-				done:         make(chan struct{}),
+				done:         make(chan tok),
 			}
 			s.ongoingGames[id] = game
 		}
 		s.ongoingGamesMut.Unlock()
 		if game != nil {
-			go gameMaster(s, game)
+			m := NewGameMaster(s, game)
+			go m.Run()
 			return game, nil
 		}
 	}

@@ -35,30 +35,6 @@ func TestValidPlayerName(t *testing.T) {
 	}
 }
 
-func TestValidCellTypes(t *testing.T) {
-	tests := []struct {
-		value CellType
-		want  bool
-	}{
-		{-1, false},
-		{cellNormal, true},
-		{cellDead, true},
-		{cellRock, true},
-		{cellFire, true},
-		{cellFlag, true},
-		{cellPest, true},
-		{cellDeath, true},
-		{cellDeath + 1, false},
-	}
-	for i, test := range tests {
-		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			if got := test.value.valid(); got != test.want {
-				t.Errorf("unexpected result %t for value %v", got, test.value)
-			}
-		})
-	}
-}
-
 func TestSha256HexDigest(t *testing.T) {
 	got := sha256HexDigest("foo")
 	want := "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"

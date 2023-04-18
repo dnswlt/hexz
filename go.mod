@@ -1,4 +1,4 @@
-module github.com/dnswlt/hackz/hexz
+module github.com/dnswlt/hexz
 
 go 1.20
 

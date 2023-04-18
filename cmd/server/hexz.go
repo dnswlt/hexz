@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/dnswlt/hackz/hexz"
+	"github.com/dnswlt/hexz"
 )
 
 var ()

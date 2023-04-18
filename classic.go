@@ -60,8 +60,8 @@ func (g *GameEngineClassic) recomputeScoreAndState() {
 	b := g.board
 	s := []int{0, 0}
 	openCells := 0
-	for r, _ := range b.Fields {
-		for c, _ := range b.Fields[r] {
+	for r := range b.Fields {
+		for c := range b.Fields[r] {
 			fld := &b.Fields[r][c]
 			if fld.Owner > 0 && !fld.Hidden {
 				s[fld.Owner-1]++

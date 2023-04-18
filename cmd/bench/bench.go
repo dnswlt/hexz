@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dnswlt/hackz/hexz"
+	"github.com/dnswlt/hexz"
 )
 
 var cpuProfile = flag.String("cpuprofile", "", "write cpu profile to file")
