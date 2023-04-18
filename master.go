@@ -18,13 +18,14 @@ type GameMaster struct {
 	game       *GameHandle
 	randSrc    rand.Source
 	gameEngine GameEngine
-	// Player and spectator channels, keyed by playerId.
-	eventListeners map[string]chan ServerEvent
-	players        map[string]pInfo
+	// Player and spectator channels.
+	eventListeners map[PlayerId]chan ServerEvent
+	// Players registered for this game.
+	players map[PlayerId]pInfo
 	// Channels to coordinate delays of ending the game after a player left
 	// (they )
-	removePlayer       chan string
-	removePlayerCancel map[string]chan tok
+	removePlayer       chan PlayerId
+	removePlayerCancel map[PlayerId]chan tok
 	// Channel to request a move by the CPU player. Nil for 2P games.
 	cpuCh chan tok
 }
@@ -41,14 +42,14 @@ func (m *GameMaster) playerNames() []string {
 	return r
 }
 
-func (m *GameMaster) BroadcastPing(debugMessage string) {
+func (m *GameMaster) broadcastPing(debugMessage string) {
 	now := time.Now().Format(time.RFC3339)
 	for _, ch := range m.eventListeners {
 		ch <- ServerEvent{Timestamp: now, DebugMessage: debugMessage}
 	}
 }
 
-func (m *GameMaster) Broadcast(e *ServerEvent) {
+func (m *GameMaster) broadcast(e *ServerEvent) {
 	e.Timestamp = time.Now().Format(time.RFC3339)
 	if m.gameEngine.Board().State != Initial {
 		e.PlayerNames = m.playerNames()
@@ -70,7 +71,7 @@ func (m *GameMaster) Broadcast(e *ServerEvent) {
 	}
 }
 
-func (m *GameMaster) Singlecast(playerId string, e *ServerEvent) {
+func (m *GameMaster) singlecast(playerId PlayerId, e *ServerEvent) {
 	if ch, ok := m.eventListeners[playerId]; ok {
 		e.Timestamp = time.Now().Format(time.RFC3339)
 		pNum := m.players[playerId].playerNum
@@ -122,7 +123,7 @@ func (m *GameMaster) Run() {
 				m.eventListeners[e.player.Id] = ch
 				e.replyChan <- ch
 				// Send board and player role initially so client can display the UI.
-				m.Singlecast(e.player.Id, &ServerEvent{Role: int(playerNum)})
+				m.singlecast(e.player.Id, &ServerEvent{Role: int(playerNum)})
 				announcements := []string{}
 				if added {
 					announcements = append(announcements, fmt.Sprintf("Welcome %s!", e.player.Name))
@@ -130,7 +131,7 @@ func (m *GameMaster) Run() {
 				if added && m.gameEngine.Board().State == Running {
 					announcements = append(announcements, "The game begins!")
 				}
-				m.Broadcast(&ServerEvent{Announcements: announcements})
+				m.broadcast(&ServerEvent{Announcements: announcements})
 			case ControlEventUnregister:
 				delete(m.eventListeners, e.playerId)
 				if _, ok := m.removePlayerCancel[e.playerId]; ok {
@@ -143,7 +144,7 @@ func (m *GameMaster) Run() {
 					// just be reloading their page and rejoin soon.
 					cancel := make(chan tok)
 					m.removePlayerCancel[e.playerId] = cancel
-					go func(playerId string) {
+					go func(playerId PlayerId) {
 						t := time.After(m.s.config.PlayerRemoveDelay)
 						select {
 						case <-t:
@@ -182,7 +183,7 @@ func (m *GameMaster) Run() {
 						// Ask CPU player to make a move.
 						m.cpuCh <- tok{}
 					}
-					m.Broadcast(evt)
+					m.broadcast(evt)
 				}
 				if m.s.config.DebugMode {
 					log.Printf("MakeMove took %dus.", time.Since(before).Microseconds())
@@ -196,17 +197,17 @@ func (m *GameMaster) Run() {
 				announcements := []string{
 					fmt.Sprintf("Player %s restarted the game.", p.Name),
 				}
-				m.Broadcast(&ServerEvent{Announcements: announcements})
+				m.broadcast(&ServerEvent{Announcements: announcements})
 			}
 		case <-tick:
-			m.BroadcastPing("ping")
+			m.broadcastPing("ping")
 		case playerId := <-m.removePlayer:
 			log.Printf("Player %s left game %s: game over", playerId, m.game.id)
 			playerName := "?"
 			if p, ok := m.players[playerId]; ok {
 				playerName = p.Name
 			}
-			m.Broadcast(&ServerEvent{
+			m.broadcast(&ServerEvent{
 				// Send sad emoji.
 				Announcements: []string{fmt.Sprintf("Player %s left the game &#128546;. Game over.", playerName)},
 			})
@@ -223,15 +224,15 @@ func NewGameMaster(s *Server, game *GameHandle) *GameMaster {
 		game:               game,
 		randSrc:            randSrc,
 		gameEngine:         NewGameEngine(game.gameType, randSrc),
-		eventListeners:     make(map[string]chan ServerEvent),
-		players:            make(map[string]pInfo),
-		removePlayer:       make(chan string),
-		removePlayerCancel: make(map[string]chan tok),
+		eventListeners:     make(map[PlayerId]chan ServerEvent),
+		players:            make(map[PlayerId]pInfo),
+		removePlayer:       make(chan PlayerId),
+		removePlayerCancel: make(map[PlayerId]chan tok),
 	}
 	return m
 }
 
-func (m *GameMaster) cpuPlayer(cpuPlayerId string) {
+func (m *GameMaster) cpuPlayer(cpuPlayerId PlayerId) {
 	gameType := m.gameEngine.GameType()
 	mcts := NewMCTS()
 	// Minimum time to spend thinking about a move, even if we're dead certain about the result.

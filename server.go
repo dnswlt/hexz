@@ -48,7 +48,7 @@ type Server struct {
 	ongoingGamesMut sync.Mutex
 
 	// Contains all logged in players, mapped by their (cookie) playerId.
-	loggedInPlayers    map[string]*Player
+	loggedInPlayers    map[PlayerId]*Player
 	loggedInPlayersMut sync.Mutex
 
 	// Server configuration (set from command-line flags).
@@ -68,7 +68,7 @@ type Server struct {
 func NewServer(cfg *ServerConfig) *Server {
 	s := &Server{
 		ongoingGames:    make(map[string]*GameHandle),
-		loggedInPlayers: make(map[string]*Player),
+		loggedInPlayers: make(map[PlayerId]*Player),
 		config:          cfg,
 		counters:        make(map[string]*Counter),
 		distrib:         make(map[string]*Distribution),
@@ -184,12 +184,12 @@ type GameHandle struct {
 // Player has JSON annotations for serialization to disk.
 // It is not used in the public API.
 type Player struct {
-	Id         string    `json:"id"`
+	Id         PlayerId  `json:"id"`
 	Name       string    `json:"name"`
 	LastActive time.Time `json:"lastActive"`
 }
 
-func (s *Server) lookupPlayer(playerId string) (Player, bool) {
+func (s *Server) lookupPlayer(playerId PlayerId) (Player, bool) {
 	s.loggedInPlayersMut.Lock()
 	defer s.loggedInPlayersMut.Unlock()
 
@@ -201,7 +201,7 @@ func (s *Server) lookupPlayer(playerId string) (Player, bool) {
 	return *p, true
 }
 
-func (s *Server) loginPlayer(playerId string, name string) bool {
+func (s *Server) loginPlayer(playerId PlayerId, name string) bool {
 	s.loggedInPlayersMut.Lock()
 	defer s.loggedInPlayersMut.Unlock()
 
@@ -230,17 +230,17 @@ type ControlEventRegister struct {
 }
 
 type ControlEventUnregister struct {
-	playerId string
+	playerId PlayerId
 }
 
 type ControlEventMove struct {
-	playerId string
+	playerId PlayerId
 	MoveRequest
 	confidence float64 // In [0..1], can be populated by CPU players to express their confidence in winning.
 }
 
 type ControlEventReset struct {
-	playerId string
+	playerId PlayerId
 	message  string
 }
 
@@ -266,7 +266,7 @@ func (g *GameHandle) registerPlayer(p Player) (chan ServerEvent, error) {
 	return nil, fmt.Errorf("cannot register player %s in game %s: game over", p.Id, g.id)
 }
 
-func (g *GameHandle) unregisterPlayer(playerId string) {
+func (g *GameHandle) unregisterPlayer(playerId PlayerId) {
 	g.sendEvent(ControlEventUnregister{playerId: playerId})
 }
 
@@ -276,10 +276,10 @@ func (s *Server) readFile(filename string) ([]byte, error) {
 }
 
 // Generates a random 128-bit hex string representing a player ID.
-func generatePlayerId() string {
+func generatePlayerId() PlayerId {
 	p := make([]byte, 16)
 	crand.Read(p)
-	return hex.EncodeToString(p)
+	return PlayerId(hex.EncodeToString(p))
 }
 
 // Generates a 6-letter game ID.
@@ -378,10 +378,10 @@ func isValidPlayerName(name string) bool {
 	return len(name) >= 3 && len(name) <= 20 && playernameRegexp.MatchString(name)
 }
 
-func makePlayerCookie(playerId string, ttl time.Duration) *http.Cookie {
+func makePlayerCookie(playerId PlayerId, ttl time.Duration) *http.Cookie {
 	return &http.Cookie{
 		Name:     playerIdCookieName,
-		Value:    playerId,
+		Value:    string(playerId),
 		Path:     "/hexz",
 		MaxAge:   int(ttl.Seconds()),
 		HttpOnly: true,  // Don't let JS access the cookie
@@ -496,7 +496,7 @@ func (s *Server) lookupPlayerFromCookie(r *http.Request) (Player, error) {
 	if err != nil {
 		return Player{}, fmt.Errorf("missing cookie")
 	}
-	p, ok := s.lookupPlayer(cookie.Value)
+	p, ok := s.lookupPlayer(PlayerId(cookie.Value))
 	if !ok {
 		return Player{}, fmt.Errorf("player not found")
 	}
