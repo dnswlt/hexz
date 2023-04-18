@@ -28,7 +28,12 @@ type GameMaster struct {
 	removePlayer       chan PlayerId
 	removePlayerCancel map[PlayerId]chan tok
 	// Channel to request a move by the CPU player. Nil for 2P games.
-	cpuCh chan tok
+	cpuCh chan GameEngine
+
+	// If undo/redo is enabled, these fields contain the
+	// steps that can be undone/redone.
+	undo []GameEngine
+	redo []GameEngine
 }
 
 const (
@@ -67,6 +72,7 @@ func (m *GameMaster) broadcast(e *ServerEvent) {
 				spectatorBoard = m.gameEngine.Board().ViewFor(0)
 			}
 			e.Board = spectatorBoard
+			e.Role = 0
 		}
 		ch <- *e
 	}
@@ -86,7 +92,7 @@ func (m *GameMaster) processControlEventRegister(e ControlEventRegister) {
 		playerNum = len(m.players) + 1
 		m.players[e.player.Id] = pInfo{playerNum, e.player}
 		if m.game.singlePlayer {
-			m.cpuCh = make(chan tok)
+			m.cpuCh = make(chan GameEngine)
 			go m.cpuPlayer(playerIdCPU)
 			m.players[playerIdCPU] =
 				pInfo{playerNum: 2, Player: Player{Id: playerIdCPU, Name: "Computer"}}
@@ -143,7 +149,17 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 		debugReq, _ := json.Marshal(e.MoveRequest)
 		log.Printf("%s: move request: P%d %s", m.game.id, p.playerNum, debugReq)
 	}
+	var histEntry GameEngine
+	if m.s.config.EnableUndo {
+		if he, ok := m.gameEngine.(SinglePlayerGameEngine); ok {
+			histEntry = he.Clone(m.randSrc)
+		}
+	}
 	if m.gameEngine.MakeMove(GameEngineMove{playerNum: p.playerNum, move: e.Move, row: e.Row, col: e.Col, cellType: e.Type}) {
+		if histEntry != nil {
+			m.undo = append(m.undo, histEntry)
+			m.redo = nil
+		}
 		evt := &ServerEvent{Announcements: []string{}}
 		if m.gameEngine.IsDone() {
 			m.s.IncCounter(fmt.Sprintf("/games/%s/finished", m.game.gameType))
@@ -160,7 +176,7 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 		}
 		if m.game.singlePlayer && m.gameEngine.Board().Turn != 1 && !m.gameEngine.IsDone() {
 			// Ask CPU player to make a move.
-			m.cpuCh <- tok{}
+			m.cpuCh <- m.gameEngine
 		}
 		m.broadcast(evt)
 	}
@@ -176,6 +192,36 @@ func (m *GameMaster) processControlEventReset(e ControlEventReset) {
 		fmt.Sprintf("Player %s restarted the game.", p.Name),
 	}
 	m.broadcast(&ServerEvent{Announcements: announcements})
+}
+
+func (m *GameMaster) processControlEventUndo(e ControlEventUndo) {
+	if len(m.undo) == 0 {
+		return
+	}
+	_, ok := m.players[e.playerId]
+	if !ok || m.gameEngine.Board().Move != e.Move {
+		// Only undo if it was requested for the current move by one of the players.
+		return
+	}
+	m.redo = append(m.redo, m.gameEngine)
+	m.gameEngine = m.undo[len(m.undo)-1]
+	m.undo = m.undo[:len(m.undo)-1]
+	m.broadcast(&ServerEvent{Announcements: []string{"Undo"}})
+}
+
+func (m *GameMaster) processControlEventRedo(e ControlEventRedo) {
+	if len(m.redo) == 0 {
+		return
+	}
+	_, ok := m.players[e.playerId]
+	if !ok || m.gameEngine.Board().Move != e.Move {
+		// Only undo if it was requested for the current move by one of the players.
+		return
+	}
+	m.undo = append(m.undo, m.gameEngine)
+	m.gameEngine = m.redo[len(m.redo)-1]
+	m.redo = m.redo[:len(m.redo)-1]
+	m.broadcast(&ServerEvent{Announcements: []string{"Redo"}})
 }
 
 func (m *GameMaster) Run() {
@@ -206,6 +252,10 @@ func (m *GameMaster) Run() {
 				m.processControlEventMove(e)
 			case ControlEventReset:
 				m.processControlEventReset(e)
+			case ControlEventUndo:
+				m.processControlEventUndo(e)
+			case ControlEventRedo:
+				m.processControlEventRedo(e)
 			case ControlEventKill:
 				m.broadcast(&ServerEvent{
 					// Send sad emoji.
@@ -252,14 +302,9 @@ func (m *GameMaster) cpuPlayer(cpuPlayerId PlayerId) {
 	// Minimum time to spend thinking about a move, even if we're dead certain about the result.
 	minTime := time.Duration(100) * time.Millisecond
 	thinkTime := m.s.config.CompThinkTime
-	ge, ok := m.gameEngine.(SinglePlayerGameEngine)
-	if !ok {
-		log.Printf("Tried to create a CPU player for a non-CPU game type: %s", m.gameEngine.GameType())
-		return
-	}
 	t := m.s.config.CompThinkTime
-	for range m.cpuCh {
-		mv, stats := mcts.SuggestMove(ge, t)
+	for ge := range m.cpuCh {
+		mv, stats := mcts.SuggestMove(ge.(SinglePlayerGameEngine), t)
 		if minQ := stats.MinQ(); minQ >= 0.98 || minQ <= 0.02 {
 			// Speed up if we think we (almost) won or lost.
 			t = t / 2

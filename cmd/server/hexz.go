@@ -30,6 +30,7 @@ func main() {
 	flag.StringVar(&cfg.AuthTokenSha256, "auth-token", "", "SHA256 token for access to restricted paths (http authentication)")
 	flag.StringVar(&cfg.TlsCertChain, "tls-cert", "", "Path to chain.pem for TLS")
 	flag.StringVar(&cfg.TlsPrivKey, "tls-key", "", "Path to privkey.pem for TLS")
+	flag.BoolVar(&cfg.EnableUndo, "enable-undo", true, "If true, games support undo/redo")
 	flag.Parse()
 
 	if cfg.AuthTokenSha256 != "" {

@@ -31,10 +31,10 @@ type ServerConfig struct {
 	LoginTtl          time.Duration
 	CompThinkTime     time.Duration
 	AuthTokenSha256   string // Used in http Basic authentication for /statusz. Must be a SHA256 checksum.
-
-	TlsCertChain string
-	TlsPrivKey   string
-	DebugMode    bool
+	EnableUndo        bool   // If true, Undo/Redo is enabled for all games
+	TlsCertChain      string
+	TlsPrivKey        string
+	DebugMode         bool
 }
 
 var (
@@ -244,12 +244,23 @@ type ControlEventReset struct {
 	message  string
 }
 
+type ControlEventUndo struct {
+	playerId PlayerId
+	UndoRequest
+}
+type ControlEventRedo struct {
+	playerId PlayerId
+	RedoRequest
+}
+
 type ControlEventKill struct{}
 
 func (e ControlEventRegister) controlEventImpl()   {}
 func (e ControlEventUnregister) controlEventImpl() {}
 func (e ControlEventMove) controlEventImpl()       {}
 func (e ControlEventReset) controlEventImpl()      {}
+func (e ControlEventUndo) controlEventImpl()       {}
+func (e ControlEventRedo) controlEventImpl()       {}
 func (e ControlEventKill) controlEventImpl()       {}
 
 func (g *GameHandle) sendEvent(e ControlEvent) bool {
@@ -511,6 +522,12 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
+	gameId := gameIdFromPath(r.URL.Path)
+	game := s.lookupGame(gameId)
+	if game == nil {
+		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
+		return
+	}
 	dec := json.NewDecoder(r.Body)
 	var req MoveRequest
 	if err := dec.Decode(&req); err != nil {
@@ -521,12 +538,6 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid cell type", http.StatusBadRequest)
 		return
 	}
-	gameId := gameIdFromPath(r.URL.Path)
-	game := s.lookupGame(gameId)
-	if game == nil {
-		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
-		return
-	}
 	game.sendEvent(ControlEventMove{playerId: player.Id, MoveRequest: req})
 }
 
@@ -535,9 +546,23 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
+	gameId := gameIdFromPath(r.URL.Path)
+	game := s.lookupGame(gameId)
+	if game == nil {
+		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
+		return
+	}
 	dec := json.NewDecoder(r.Body)
 	var req ResetRequest
 	if err := dec.Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+	game.sendEvent(ControlEventReset{playerId: p.Id, message: req.Message})
+}
+
+func (s *Server) handleUndo(w http.ResponseWriter, r *http.Request) {
+	p, err := s.validatePostRequest(r)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 	gameId := gameIdFromPath(r.URL.Path)
@@ -546,8 +571,31 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
 		return
 	}
-	game.sendEvent(ControlEventReset{playerId: p.Id, message: req.Message})
+	dec := json.NewDecoder(r.Body)
+	var req UndoRequest
+	if err := dec.Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+	game.sendEvent(ControlEventUndo{playerId: p.Id, UndoRequest: req})
+}
 
+func (s *Server) handleRedo(w http.ResponseWriter, r *http.Request) {
+	p, err := s.validatePostRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+	gameId := gameIdFromPath(r.URL.Path)
+	game := s.lookupGame(gameId)
+	if game == nil {
+		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
+		return
+	}
+	dec := json.NewDecoder(r.Body)
+	var req RedoRequest
+	if err := dec.Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+	game.sendEvent(ControlEventRedo{playerId: p.Id, RedoRequest: req})
 }
 
 func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
@@ -921,6 +969,8 @@ func (s *Server) Serve() {
 	}
 	mux.HandleFunc("/hexz/move/", s.handleMove)
 	mux.HandleFunc("/hexz/reset/", s.handleReset)
+	mux.HandleFunc("/hexz/undo/", s.handleUndo)
+	mux.HandleFunc("/hexz/redo/", s.handleRedo)
 	mux.HandleFunc("/hexz/sse/", s.handleSse)
 	mux.HandleFunc("/hexz/login", s.handleLoginRequest)
 	mux.HandleFunc("/hexz/rules", func(w http.ResponseWriter, r *http.Request) {

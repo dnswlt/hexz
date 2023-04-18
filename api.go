@@ -89,6 +89,14 @@ type ResetRequest struct {
 	Message string `json:"message"`
 }
 
+type UndoRequest struct {
+	Move int `json:"move"`
+}
+
+type RedoRequest struct {
+	Move int `json:"move"`
+}
+
 type StatuszCounter struct {
 	Name  string `json:"name"`
 	Value int64  `json:"value"`

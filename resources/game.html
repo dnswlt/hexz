@@ -112,6 +112,10 @@
         <div class="menurow">
             <button id="home" class="menuitem">New Game</button>
             <button id="reset" class="menuitem">Reset</button>
+        </div>
+        <div class="menurow">
+            <button id="undo" class="menuitem">Undo</button>
+            <button id="redo" class="menuitem">Redo</button>
             <div class="menuitem" id="shareLink">&#x1F517; Share</div>
         </div>
     </div>
@@ -165,7 +169,24 @@
                 body: JSON.stringify({
                     message: "reset",
                 }),
-            })
+            });
+        }
+
+        function undoRedoMove(command) {
+            return async function () {
+                if (!gstate.board) {
+                    return
+                }
+                return fetch(`/hexz/${command}/${gameId()}`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        move: gstate.board.move,
+                    }),
+                });
+            };
         }
 
         // Represents the game state.
@@ -322,10 +343,10 @@
         let buttonCells = [];
 
         function initializeButtonCells() {
-            let playerIdx = gstate.role - 1;
-            if (!gstate.board) {
+            if (!gstate.board || gstate.role == 0) {
                 return;
             }
+            let playerIdx = gstate.role - 1;
             buttonCells = [];
             res = gstate.board.resources[playerIdx];
             for (let i = 0; i < allButtonCells.length; i++) {
@@ -507,6 +528,8 @@
             });
             document.getElementById("home").addEventListener('click', newGame);
             document.getElementById("reset").addEventListener('click', resetGame);
+            document.getElementById("undo").addEventListener('click', undoRedoMove("undo"));
+            document.getElementById("redo").addEventListener('click', undoRedoMove("redo"));
             document.getElementById("shareLink").addEventListener('click', async function () {
                 try {
                     await navigator.clipboard.writeText(window.location.href);
