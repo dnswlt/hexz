@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math"
 	"math/rand"
 	"net"
 	"net/http"
@@ -758,11 +757,11 @@ func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
 			var b StatuszDistribBucket
 			b.Count = d.counts[j]
 			if j == 0 {
-				b.Lower = math.Inf(-1)
+				b.Lower = d.min
 				b.Upper = d.upperBounds[j]
 			} else if j == len(d.counts)-1 {
 				b.Lower = d.upperBounds[j-1]
-				b.Upper = math.Inf(1)
+				b.Upper = d.max
 			} else {
 				b.Lower = d.upperBounds[j-1]
 				b.Upper = d.upperBounds[j]

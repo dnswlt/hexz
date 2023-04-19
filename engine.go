@@ -50,12 +50,15 @@ const (
 	gameTypeFreeform GameType = "Freeform"
 )
 
-func validGameType(gameType string) bool {
-	allGameTypes := map[GameType]bool{
+var (
+	allGameTypes = map[GameType]bool{
 		gameTypeClassic:  true,
 		gameTypeFlagz:    true,
 		gameTypeFreeform: true,
 	}
+)
+
+func validGameType(gameType string) bool {
 	return allGameTypes[GameType(gameType)]
 }
 
