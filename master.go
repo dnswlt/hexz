@@ -49,10 +49,7 @@ func (m *GameMaster) playerNames() []string {
 }
 
 func (m *GameMaster) broadcastPing(debugMessage string) {
-	now := time.Now().Format(time.RFC3339)
-	for _, ch := range m.eventListeners {
-		ch <- ServerEvent{Timestamp: now, DebugMessage: debugMessage}
-	}
+	m.broadcast(&ServerEvent{DebugMessage: debugMessage})
 }
 
 func (m *GameMaster) broadcast(e *ServerEvent) {

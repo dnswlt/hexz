@@ -136,7 +136,7 @@ type GameEngineMove struct {
 }
 
 func (m *GameEngineMove) String() string {
-	return fmt.Sprintf("P%d@%d (%d,%d/%d)", m.playerNum, m.move, m.row, m.col, m.cellType)
+	return fmt.Sprintf("P%d#%d (%d,%d/%d)", m.playerNum, m.move, m.row, m.col, m.cellType)
 }
 
 // Dispatches on the gameType to create a corresponding GameEngine.

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -16,24 +17,33 @@ import (
 
 var cpuProfile = flag.String("cpuprofile", "", "write cpu profile to file")
 var maxRuntime = flag.Duration("maxruntime", time.Duration(30)*time.Second, "maximum time to run the benchmark")
-var maxFlagPositions = flag.Int("maxflagpos", 5, "maximum number of positions to randomly try placing a flag on")
+var numGames = flag.Int("numgames", 1, "Number of games to play")
+var maxFlagPositions = flag.Int("maxflagpos", -1, "maximum number of positions to randomly try placing a flag on")
 var uctFactor = flag.Float64("uctfactor", 1.0, "weight of the exploration component in the UCT")
 var thinkTime = flag.Duration("thinktime", time.Duration(2)*time.Second, "Think time per player and move")
 var oppThinkTime = flag.Duration("oppthinktime", time.Duration(2)*time.Second, "Think time per player and move")
 var flagsFirst = flag.Bool("flagsfirst", false, "If true, flags will be played first")
 
 // Compute the think time we'll give to the player.
-// If the player was 98% confident to win with any move on the last move,
-// we only grant it a very small amount of think time, to speed up the
-// process. Same if it thinks it will lose.
+// The more confident a player is that they'll win/lose, the less time we give them
+// for the next move.
 func getThinkTime(stats []*hexz.MCTSStats, isBenchPlayer bool) time.Duration {
 	moveThinkTime := *oppThinkTime
 	if isBenchPlayer {
 		moveThinkTime = *thinkTime
 	}
 	l := len(stats)
-	if l > 0 && (stats[l-1].MinQ() >= 0.98 || stats[l-1].MinQ() <= 0.02) {
+	if l == 0 {
+		return moveThinkTime
+	}
+	minQ := stats[l-1].MinQ()
+	maxQ := stats[l-1].MaxQ()
+	uncertainty := math.Min(1-minQ, maxQ)
+	if uncertainty < 0.01 {
 		moveThinkTime = time.Duration(100) * time.Millisecond
+	} else {
+		d := float64(moveThinkTime.Microseconds()) * uncertainty
+		moveThinkTime = time.Duration(int(d)) * time.Microsecond
 	}
 	return moveThinkTime
 }
@@ -73,7 +83,7 @@ func main() {
 	nRuns := 0
 	cancelled := false
 	src := rand.NewSource(time.Now().UnixNano())
-	for time.Since(started) < *maxRuntime && !cancelled {
+	for time.Since(started) < *maxRuntime && nRuns < *numGames && !cancelled {
 		nMoves := 0
 		ge := hexz.NewGameEngineFlagz(src)
 
@@ -100,11 +110,11 @@ func main() {
 			moveThinkTime := getThinkTime(moveStats[t], benchPlayer == ge.Board().Turn)
 			m, stats := mcts[t].SuggestMove(ge, moveThinkTime)
 			moveStats[t] = append(moveStats[t], stats)
-			fmt.Print(stats)
+			// fmt.Print(stats)
 			if !ge.MakeMove(m) {
 				log.Fatal("Cannot make move")
 			}
-			fmt.Printf("game:%d move:%d score:%v turn:%d\n", nRuns, nMoves, ge.Board().Score, t+1)
+			fmt.Printf("game:%d move:%s Q:%.3f q:%.3f score:%v t:%v\n", nRuns, m.String(), stats.MaxQ(), stats.MinQ(), ge.Board().Score, stats.Elapsed)
 			nMoves++
 		}
 		if ge.IsDone() {

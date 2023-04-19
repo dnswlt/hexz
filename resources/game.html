@@ -201,7 +201,9 @@
         var hexagonSideLength = 30;
 
         function handleServerEvent(sse, serverEvent) {
-            gstate.role = serverEvent.role;
+            if (serverEvent.role > 0) {
+                gstate.role = serverEvent.role;
+            }
             if (serverEvent.board != null) {
                 // new board received.
                 gstate.board = serverEvent.board;
