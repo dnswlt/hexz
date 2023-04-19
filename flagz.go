@@ -32,6 +32,10 @@ func NewGameEngineFlagz(src rand.Source) *GameEngineFlagz {
 	return g
 }
 
+func (g *GameEngineFlagz) ValidCellTypes() []CellType {
+	return []CellType{cellNormal, cellFlag}
+}
+
 func (g *GameEngineFlagz) PopulateInitialCells() {
 	i := 0
 	n := len(g.B.FlatFields)

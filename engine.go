@@ -24,6 +24,7 @@ type Board struct {
 type GameEngine interface {
 	Reset()
 	NumPlayers() int
+	ValidCellTypes() []CellType
 	MakeMove(move GameEngineMove) bool
 	Board() *Board
 	IsDone() bool

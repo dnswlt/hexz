@@ -36,6 +36,16 @@ func (g *GameEngineClassic) NumPlayers() int {
 	return 2
 }
 
+func (g *GameEngineClassic) ValidCellTypes() []CellType {
+	r := make([]CellType, 0, cellTypeLen)
+	for i, v := range g.InitialResources().NumPieces {
+		if v != 0 {
+			r = append(r, CellType(i))
+		}
+	}
+	return r
+}
+
 func (g *GameEngineClassic) InitialResources() ResourceInfo {
 	var ps [cellTypeLen]int
 	ps[cellNormal] = -1 // unlimited

@@ -1,6 +1,10 @@
 package hexz
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/google/go-cmp/cmp"
+)
 
 func mov(ge *GameEngineClassic, row, col int, ct CellType) GameEngineMove {
 	return GameEngineMove{
@@ -9,6 +13,18 @@ func mov(ge *GameEngineClassic, row, col int, ct CellType) GameEngineMove {
 		col:       col,
 		move:      ge.board.Move,
 		cellType:  ct,
+	}
+}
+
+func TestClassicValidCellTypes(t *testing.T) {
+	ge := &GameEngineClassic{}
+	if diff := cmp.Diff(ge.ValidCellTypes(), []CellType{
+		cellNormal,
+		cellFire,
+		cellFlag,
+		cellPest,
+		cellDeath}); diff != "" {
+		t.Errorf("Diff: -want +got: %s", diff)
 	}
 }
 

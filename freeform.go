@@ -34,6 +34,16 @@ func (g *GameEngineFreeform) NumPlayers() int {
 	return 1
 }
 
+func (g *GameEngineFreeform) ValidCellTypes() []CellType {
+	r := make([]CellType, 0, cellTypeLen)
+	for i, v := range g.InitialResources().NumPieces {
+		if v != 0 {
+			r = append(r, CellType(i))
+		}
+	}
+	return r
+}
+
 func (g *GameEngineFreeform) InitialResources() ResourceInfo {
 	var ps [cellTypeLen]int
 	ps[cellNormal] = -1 // unlimited

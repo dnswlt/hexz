@@ -78,6 +78,15 @@ func (m *GameMaster) broadcast(e *ServerEvent) {
 	}
 }
 
+// Creates a ServerEvent in which fields are populated that are only relevant
+// for initialization of the client.
+func (m *GameMaster) makeInitialServerEvent(announcements []string) *ServerEvent {
+	return &ServerEvent{
+		Announcements:  announcements,
+		ValidCellTypes: m.gameEngine.ValidCellTypes(),
+	}
+}
+
 func (m *GameMaster) processControlEventRegister(e ControlEventRegister) {
 	var playerNum int
 	added := false
@@ -108,7 +117,7 @@ func (m *GameMaster) processControlEventRegister(e ControlEventRegister) {
 	if added && len(m.players) == m.gameEngine.NumPlayers() {
 		announcements = append(announcements, "The game begins!")
 	}
-	m.broadcast(&ServerEvent{Announcements: announcements})
+	m.broadcast(m.makeInitialServerEvent(announcements))
 }
 
 func (m *GameMaster) processControlEventUnregister(e ControlEventUnregister) {

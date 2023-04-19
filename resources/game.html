@@ -205,8 +205,8 @@
             if (serverEvent.board != null) {
                 // new board received.
                 gstate.board = serverEvent.board;
-                if (buttonCells.length == 0 || gstate.board.move == 0) {
-                    initializeButtonCells();
+                if (serverEvent.validCellTypes) {
+                    initializeButtonCells(serverEvent.validCellTypes);
                 }
                 redraw();
                 updateTurnInfo();
@@ -342,15 +342,14 @@
         // be used in the current game.
         let buttonCells = [];
 
-        function initializeButtonCells() {
+        function initializeButtonCells(validCellTypes) {
             if (!gstate.board || gstate.role == 0) {
                 return;
             }
             let playerIdx = gstate.role - 1;
             buttonCells = [];
-            res = gstate.board.resources[playerIdx];
             for (let i = 0; i < allButtonCells.length; i++) {
-                if (allButtonCells[i].type in res.numPieces && res.numPieces[allButtonCells[i].type] != 0) {
+                if (validCellTypes.includes(allButtonCells[i].type)) {
                     buttonCells.push(allButtonCells[i]);
                 }
             }
