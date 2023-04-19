@@ -299,10 +299,12 @@ func NewGameMaster(s *Server, game *GameHandle) *GameMaster {
 func (m *GameMaster) cpuPlayer(cpuPlayerId PlayerId) {
 	gameType := m.gameEngine.GameType()
 	mcts := NewMCTS()
+	mcts.MaxFlagPositions = m.s.config.CpuMaxFlags
+
 	// Minimum time to spend thinking about a move, even if we're dead certain about the result.
 	minTime := time.Duration(100) * time.Millisecond
-	thinkTime := m.s.config.CompThinkTime
-	t := m.s.config.CompThinkTime
+	thinkTime := m.s.config.CpuThinkTime
+	t := m.s.config.CpuThinkTime
 	for ge := range m.cpuCh {
 		mv, stats := mcts.SuggestMove(ge.(SinglePlayerGameEngine), t)
 		if minQ := stats.MinQ(); minQ >= 0.98 || minQ <= 0.02 {

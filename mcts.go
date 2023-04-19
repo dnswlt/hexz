@@ -104,6 +104,9 @@ func (mcts *MCTS) nextMoves(node *mcNode, b *Board) []*mcNode {
 	cs := make([]*mcNode, 0, 16)
 	hasFlag := b.Resources[b.Turn-1].NumPieces[cellFlag] > 0
 	maxFlags := mcts.MaxFlagPositions
+	if maxFlags <= 0 {
+		maxFlags = len(b.FlatFields)
+	}
 	var flagMoves []*mcNode
 	if hasFlag {
 		flagMoves = make([]*mcNode, maxFlags)
@@ -264,7 +267,7 @@ func (s *MCTSStats) String() string {
 func NewMCTS() *MCTS {
 	return &MCTS{
 		rnd:              rand.New(rand.NewSource(time.Now().UnixNano())),
-		MaxFlagPositions: 5,
+		MaxFlagPositions: -1, // Unlimited
 		UctFactor:        1.0,
 		FlagsFirst:       false,
 	}

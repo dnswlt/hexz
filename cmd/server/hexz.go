@@ -23,8 +23,10 @@ func main() {
 		"Time to wait before removing a disconnected player from a game")
 	flag.DurationVar(&cfg.LoginTtl, "login-ttl", time.Duration(24)*time.Hour,
 		"Time to wait logging a player out after inactivity")
-	flag.DurationVar(&cfg.CompThinkTime, "comp-think-time", time.Duration(5)*time.Second,
+	flag.DurationVar(&cfg.CpuThinkTime, "cpu-think-time", time.Duration(5)*time.Second,
 		"Time the computer has to think about a move")
+	flag.IntVar(&cfg.CpuMaxFlags, "cpu-max-flags", 5,
+		"Maximum flag moves to consider in any turn. <= 0 means unlimited")
 	flag.BoolVar(&cfg.DebugMode, "debug", false,
 		"Run server in debug mode. Only set to true during development.")
 	flag.StringVar(&cfg.AuthTokenSha256, "auth-token", "", "SHA256 token for access to restricted paths (http authentication)")

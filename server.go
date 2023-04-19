@@ -28,7 +28,8 @@ type ServerConfig struct {
 	DocumentRoot      string
 	PlayerRemoveDelay time.Duration
 	LoginTtl          time.Duration
-	CompThinkTime     time.Duration
+	CpuThinkTime      time.Duration
+	CpuMaxFlags       int
 	AuthTokenSha256   string // Used in http Basic authentication for /statusz. Must be a SHA256 checksum.
 	EnableUndo        bool   // If true, Undo/Redo is enabled for all games
 	TlsCertChain      string
