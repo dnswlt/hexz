@@ -33,6 +33,9 @@ func (g *GameEngineFreeform) Start() {
 func (g *GameEngineFreeform) NumPlayers() int {
 	return 1
 }
+func (g *GameEngineFreeform) MoveHistory() []GameEngineMove {
+	panic("Not implemented")
+}
 
 func (g *GameEngineFreeform) ValidCellTypes() []CellType {
 	r := make([]CellType, 0, cellTypeLen)

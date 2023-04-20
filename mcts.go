@@ -53,11 +53,41 @@ func (root *mcNode) size() int {
 	return s
 }
 
+// Returns the number of leaf nodes on each depth level, starting from 0 for the root.
+func (root *mcNode) leafNodesPerDepth() []int {
+	c := []int{}
+	type ni struct {
+		n *mcNode
+		d int
+	}
+	q := make([]ni, 1, 1024)
+	q[0] = ni{root, 0}
+	for len(q) > 0 {
+		n := q[len(q)-1]
+		q = q[:len(q)-1]
+		if len(n.n.children) == 0 {
+			if len(c) <= n.d {
+				c1 := make([]int, n.d+1)
+				copy(c1, c)
+				c = c1
+			}
+			c[n.d]++
+		}
+		for _, c := range n.n.children {
+			q = append(q, ni{c, n.d + 1})
+		}
+	}
+	return c
+}
+
 type MCTS struct {
 	rnd              *rand.Rand
 	MaxFlagPositions int // maximum number of (random) positions to consider for placing a flag in a single move.
 	UctFactor        float64
 	FlagsFirst       bool // If true, flags will be played whenever possible.
+	ReuseTree        bool
+	root             *mcNode
+	rootMove         int // Move number corresponding to the state at root.
 }
 
 func (mcts *MCTS) playRandomGame(ge SinglePlayerGameEngine, firstMove *mcNode) (winner int) {
@@ -225,6 +255,7 @@ type MCTSStats struct {
 	Iterations    int
 	MaxDepth      int
 	TreeSize      int
+	LeafNodes     []int // Per depth level, 0=root
 	Elapsed       time.Duration
 	FullyExplored bool
 	Moves         []MCTSMoveStats
@@ -273,8 +304,86 @@ func NewMCTS() *MCTS {
 	}
 }
 
+func (mcts *MCTS) findBestMoveAndBuildStats(n *mcNode, elapsed time.Duration, maxDepth int, move int) (GameEngineMove, *MCTSStats) {
+
+	// Return some stats
+	stats := &MCTSStats{
+		Iterations:    int(n.count),
+		MaxDepth:      maxDepth,
+		Elapsed:       elapsed,
+		FullyExplored: n.done,
+		TreeSize:      n.size(),
+		LeafNodes:     n.leafNodesPerDepth(),
+		Moves:         make([]MCTSMoveStats, len(n.children)),
+	}
+	var best *mcNode
+	for i, c := range n.children {
+		if best == nil || c.Q() > best.Q() {
+			best = c
+		}
+		stats.Moves[i] = MCTSMoveStats{
+			row:        c.r,
+			col:        c.c,
+			cellType:   c.cellType,
+			iterations: int(c.count),
+			U:          c.U(n.count, mcts.UctFactor),
+			Q:          c.Q(),
+		}
+	}
+	m := GameEngineMove{
+		playerNum: best.turn,
+		move:      move,
+		row:       best.r,
+		col:       best.c,
+		cellType:  best.cellType,
+	}
+	return m, stats
+}
+
 func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration time.Duration) (GameEngineMove, *MCTSStats) {
-	root := &mcNode{turn: gameEngine.Board().Turn}
+	var root *mcNode
+	moveHist := gameEngine.MoveHistory()
+	if !mcts.ReuseTree || mcts.root == nil || len(moveHist) <= mcts.rootMove {
+		// Start a new root.
+		root = &mcNode{turn: gameEngine.Board().Turn}
+	} else {
+		// Try to find and resume a subtree for the current state of the board.
+		r := mcts.root
+		ok := true
+		for i := 0; i < len(moveHist)-mcts.rootMove; i++ {
+			found := false
+			for _, c := range r.children {
+				if c.r == moveHist[mcts.rootMove+i].row &&
+					c.c == moveHist[mcts.rootMove+i].col &&
+					c.turn == moveHist[mcts.rootMove+i].playerNum &&
+					c.cellType == moveHist[mcts.rootMove+i].cellType {
+					r = c
+					found = true
+					break
+				}
+			}
+			if !found {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			root = r
+			fmt.Printf("Reusing tree of size %d\n", root.size())
+		} else {
+			root = &mcNode{turn: gameEngine.Board().Turn}
+		}
+	}
+	mcts.root = root
+	mcts.rootMove = gameEngine.Board().Move
+	// Since we are reusing subtrees, we might already have fully explored
+	// the subtree. In that case, pick the best child immediately
+	if root.done {
+		if len(root.children) == 0 {
+			panic("No children, but root is done")
+		}
+		return mcts.findBestMoveAndBuildStats(root, time.Duration(0), 0, gameEngine.Board().Move)
+	}
 	started := time.Now()
 	maxDepth := 0
 	for n := 0; ; n++ {
@@ -303,6 +412,7 @@ func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration tim
 		Elapsed:       elapsed,
 		FullyExplored: root.done,
 		TreeSize:      root.size(),
+		LeafNodes:     root.leafNodesPerDepth(),
 		Moves:         make([]MCTSMoveStats, len(root.children)),
 	}
 	var best *mcNode

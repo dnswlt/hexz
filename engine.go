@@ -26,6 +26,7 @@ type GameEngine interface {
 	NumPlayers() int
 	ValidCellTypes() []CellType
 	MakeMove(move GameEngineMove) bool
+	MoveHistory() []GameEngineMove
 	Board() *Board
 	IsDone() bool
 	Winner() (playerNum int) // Results are only meaningful if IsDone() is true. 0 for draw.

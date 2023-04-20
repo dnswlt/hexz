@@ -38,12 +38,8 @@ func getThinkTime(stats []*hexz.MCTSStats, isBenchPlayer bool) time.Duration {
 	}
 	minQ := stats[l-1].MinQ()
 	maxQ := stats[l-1].MaxQ()
-	uncertainty := math.Min(1-minQ, maxQ)
-	if uncertainty < 0.01 {
+	if math.Min(1-minQ, maxQ) < 0.02 {
 		moveThinkTime = time.Duration(100) * time.Millisecond
-	} else {
-		d := float64(moveThinkTime.Microseconds()) * uncertainty
-		moveThinkTime = time.Duration(int(d)) * time.Microsecond
 	}
 	return moveThinkTime
 }
@@ -97,6 +93,7 @@ func main() {
 		mcts[benchPlayer-1].MaxFlagPositions = *maxFlagPositions
 		mcts[benchPlayer-1].UctFactor = *uctFactor
 		mcts[benchPlayer-1].FlagsFirst = *flagsFirst
+		mcts[benchPlayer-1].ReuseTree = true
 
 	Gameloop:
 		for !ge.IsDone() && time.Since(started) < *maxRuntime {
@@ -114,7 +111,9 @@ func main() {
 			if !ge.MakeMove(m) {
 				log.Fatal("Cannot make move")
 			}
-			fmt.Printf("game:%d move:%s Q:%.3f q:%.3f score:%v t:%v\n", nRuns, m.String(), stats.MaxQ(), stats.MinQ(), ge.Board().Score, stats.Elapsed)
+			fmt.Printf("Leaf nodes per depth: %v\n", stats.LeafNodes)
+			fmt.Printf("game:%d move:%s S:%d Q:%.3f q:%.3f score:%v t:%v\n",
+				nRuns, m.String(), stats.TreeSize, stats.MaxQ(), stats.MinQ(), ge.Board().Score, stats.Elapsed)
 			nMoves++
 		}
 		if ge.IsDone() {

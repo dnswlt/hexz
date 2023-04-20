@@ -14,6 +14,8 @@ type GameEngineFlagz struct {
 	NormalMoves [2]int // Number of normal cell moves the players can make
 	// Source of random numbers. Useful to make games repeatable.
 	rnd *rand.Rand
+	// History of moves made so far
+	Moves []GameEngineMove
 }
 
 func (g *GameEngineFlagz) GameType() GameType { return gameTypeFlagz }
@@ -34,6 +36,10 @@ func NewGameEngineFlagz(src rand.Source) *GameEngineFlagz {
 
 func (g *GameEngineFlagz) ValidCellTypes() []CellType {
 	return []CellType{cellNormal, cellFlag}
+}
+
+func (g *GameEngineFlagz) MoveHistory() []GameEngineMove {
+	return g.Moves
 }
 
 func (g *GameEngineFlagz) PopulateInitialCells() {
@@ -219,6 +225,7 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 	b.Turn = 3 - b.Turn // Usually it's the other player's turn. If not, recomputeState will fix that.
 	b.Move++
 	g.recomputeState()
+	g.Moves = append(g.Moves, m)
 	return true
 }
 
