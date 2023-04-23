@@ -15,17 +15,27 @@ type PlayerId string
 
 // JSON for server responses.
 
+// Sent in an initial message to clients.
+type ServerEventGameInfo struct {
+	// Indicates which cell types exist in this type of game.
+	ValidCellTypes []CellType `json:"validCellTypes"`
+	// The type of game we're playing.
+	GameType GameType `json:"gameType"`
+}
+
 type ServerEvent struct {
-	Timestamp      string     `json:"timestamp"`
-	Board          *BoardView `json:"board"`
-	Role           int        `json:"role"` // 0: spectator, 1, 2: players
-	PlayerNames    []string   `json:"playerNames"`
-	Announcements  []string   `json:"announcements"`
-	DebugMessage   string     `json:"debugMessage"`
-	Winner         int        `json:"winner,omitempty"` // Number of the player that wins. 0 if no winner yet or draw.
-	LastEvent      bool       `json:"lastEvent"`        // Signals to clients that this is the last event they will receive.
-	GameType       GameType   `json:"gameType"`
-	ValidCellTypes []CellType `json:"validCellTypes"` // Sent in an initial message to clients to indicate which cell types exist in this type of game.
+	Timestamp string     `json:"timestamp"`
+	Board     *BoardView `json:"board"`
+	// Role of the client receiving the event. 0: spectator, 1, 2: players.
+	Role          int      `json:"role"`
+	PlayerNames   []string `json:"playerNames"`
+	Announcements []string `json:"announcements"`
+	DebugMessage  string   `json:"debugMessage"`
+	// Number of the player that wins. 0 if no winner yet or draw.
+	Winner int `json:"winner,omitempty"`
+	// Signals to clients that this is the last event they will receive.
+	LastEvent bool                 `json:"lastEvent"`
+	GameInfo  *ServerEventGameInfo `json:"gameInfo,omitempty"`
 }
 
 // A player's or spectator's view of the board.

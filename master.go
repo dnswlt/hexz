@@ -79,8 +79,11 @@ func (m *GameMaster) broadcast(e *ServerEvent) {
 // for initialization of the client.
 func (m *GameMaster) makeInitialServerEvent(announcements []string) *ServerEvent {
 	return &ServerEvent{
-		Announcements:  announcements,
-		ValidCellTypes: m.gameEngine.ValidCellTypes(),
+		Announcements: announcements,
+		GameInfo: &ServerEventGameInfo{
+			ValidCellTypes: m.gameEngine.ValidCellTypes(),
+			GameType:       m.game.gameType,
+		},
 	}
 }
 
@@ -197,7 +200,7 @@ func (m *GameMaster) processControlEventReset(e ControlEventReset) {
 	announcements := []string{
 		fmt.Sprintf("Player %s restarted the game.", p.Name),
 	}
-	m.broadcast(&ServerEvent{Announcements: announcements})
+	m.broadcast(m.makeInitialServerEvent(announcements))
 }
 
 func (m *GameMaster) processControlEventUndo(e ControlEventUndo) {
