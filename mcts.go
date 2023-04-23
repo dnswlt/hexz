@@ -308,6 +308,7 @@ func NewMCTS() *MCTS {
 		MaxFlagPositions: -1, // Unlimited
 		UctFactor:        1.0,
 		FlagsFirst:       false,
+		ReuseTree:        true,
 	}
 }
 
