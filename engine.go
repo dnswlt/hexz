@@ -26,6 +26,7 @@ type GameEngine interface {
 	NumPlayers() int
 	ValidCellTypes() []CellType
 	MakeMove(move GameEngineMove) bool
+	// All moves made so far. Game engines that don't support history may return nil.
 	MoveHistory() []GameEngineMove
 	Board() *Board
 	IsDone() bool

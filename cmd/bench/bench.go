@@ -112,6 +112,11 @@ func main() {
 				log.Fatal("Cannot make move")
 			}
 			fmt.Printf("Leaf nodes per depth: %v\n", stats.LeafNodes)
+			var lPct strings.Builder
+			for i := range stats.LeafNodes {
+				fmt.Fprintf(&lPct, " %.1f", (1-float64(stats.LeafNodes[i])/(float64(stats.LeafNodes[i]+stats.BranchNodes[i])))*100)
+			}
+			fmt.Printf("%% Explored nodes per depth: [%s]\n", lPct.String())
 			fmt.Printf("game:%d move:%s S:%d Q:%.3f q:%.3f score:%v t:%v\n",
 				nRuns, m.String(), stats.TreeSize, stats.MaxQ(), stats.MinQ(), ge.Board().Score, stats.Elapsed)
 			nMoves++
