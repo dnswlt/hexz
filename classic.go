@@ -265,32 +265,32 @@ func (g *GameEngineClassic) revealHiddenMoves() {
 func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 	board := g.board
 	turn := board.Turn
-	if m.playerNum != turn || m.move != board.Move {
+	if m.PlayerNum != turn || m.Move != board.Move {
 		// Only allow moves by players whose turn it is.
 		return false
 	}
-	if !board.valid(idx{m.row, m.col}) || !g.isPlayerPiece(m.cellType) {
+	if !board.valid(idx{m.Row, m.Col}) || !g.isPlayerPiece(m.CellType) {
 		// Invalid move request.
 		return false
 	}
-	if m.cellType != cellNormal && board.Resources[turn-1].NumPieces[m.cellType] == 0 {
+	if m.CellType != cellNormal && board.Resources[turn-1].NumPieces[m.CellType] == 0 {
 		// No pieces left of requested type
 		return false
 	}
 	numOccupiedFields := 0
-	revealBoard := m.cellType != cellNormal && m.cellType != cellFlag
-	if board.Fields[m.row][m.col].occupied() {
-		if board.Fields[m.row][m.col].Hidden && board.Fields[m.row][m.col].Owner == (3-turn) {
+	revealBoard := m.CellType != cellNormal && m.CellType != cellFlag
+	if board.Fields[m.Row][m.Col].occupied() {
+		if board.Fields[m.Row][m.Col].Hidden && board.Fields[m.Row][m.Col].Owner == (3-turn) {
 			// Conflicting hidden moves. Leads to dead cell.
 			board.Move++
-			f := &board.Fields[m.row][m.col]
+			f := &board.Fields[m.Row][m.Col]
 			f.Owner = 0
 			f.Type = cellDead
 			f.Lifetime = g.lifetime(cellDead)
 			revealBoard = true
-		} else if m.cellType == cellDeath {
+		} else if m.CellType == cellDeath {
 			// Death cell can be placed anywhere and will "kill" whatever was there before.
-			f := &board.Fields[m.row][m.col]
+			f := &board.Fields[m.Row][m.Col]
 			f.Owner = turn
 			f.Type = cellDeath
 			f.Hidden = false
@@ -302,19 +302,19 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 	} else {
 		// Free cell: occupy it.
 		board.Move++
-		f := &board.Fields[m.row][m.col]
-		if m.cellType == cellFire {
+		f := &board.Fields[m.Row][m.Col]
+		if m.CellType == cellFire {
 			// Fire cells take effect immediately.
 			f.Owner = turn
-			f.Type = m.cellType
+			f.Type = m.CellType
 			f.Lifetime = g.lifetime(cellFire)
-			g.applyFireEffect(m.row, m.col)
+			g.applyFireEffect(m.Row, m.Col)
 		} else {
-			numOccupiedFields = g.occupyFields(turn, m.row, m.col, m.cellType)
+			numOccupiedFields = g.occupyFields(turn, m.Row, m.Col, m.CellType)
 		}
 	}
-	if m.cellType != cellNormal {
-		board.Resources[turn-1].NumPieces[m.cellType]--
+	if m.CellType != cellNormal {
+		board.Resources[turn-1].NumPieces[m.CellType]--
 	}
 	// Update turn.
 	board.Turn++

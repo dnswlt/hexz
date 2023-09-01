@@ -26,10 +26,9 @@ func (g *GameEngineFreeform) Init() {
 		b.Resources[i] = g.InitialResources()
 	}
 	g.board = b
-}
-func (g *GameEngineFreeform) Start() {
 	g.board.State = Running
 }
+
 func (g *GameEngineFreeform) NumPlayers() int {
 	return 1
 }
@@ -66,14 +65,14 @@ func (g *GameEngineFreeform) Winner() (playerNum int) {
 
 func (g *GameEngineFreeform) MakeMove(m GameEngineMove) bool {
 	board := g.board
-	if !board.valid(idx{m.row, m.col}) {
+	if !board.valid(idx{m.Row, m.Col}) {
 		// Invalid move request.
 		return false
 	}
 	board.Move++
-	f := &board.Fields[m.row][m.col]
+	f := &board.Fields[m.Row][m.Col]
 	f.Owner = board.Turn
-	f.Type = m.cellType
+	f.Type = m.CellType
 	board.Turn++
 	if board.Turn > 2 {
 		board.Turn = 1

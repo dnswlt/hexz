@@ -129,16 +129,17 @@ func (f *Field) isAvail(playerNum int) bool {
 	return f.NextVal[playerNum-1] > 0
 }
 
+// Public fields since moves are serialized (in tests only, for now).
 type GameEngineMove struct {
-	playerNum int
-	move      int
-	row       int
-	col       int
-	cellType  CellType
+	PlayerNum int
+	Move      int
+	Row       int
+	Col       int
+	CellType  CellType
 }
 
 func (m *GameEngineMove) String() string {
-	return fmt.Sprintf("P%d#%d (%d,%d/%d)", m.playerNum, m.move, m.row, m.col, m.cellType)
+	return fmt.Sprintf("P%d#%d (%d,%d/%d)", m.PlayerNum, m.Move, m.Row, m.Col, m.CellType)
 }
 
 // Dispatches on the gameType to create a corresponding GameEngine.

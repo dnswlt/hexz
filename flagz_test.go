@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -105,6 +106,7 @@ func TestPlayGreedyFlagzGame(t *testing.T) {
 }
 
 func TestCompareCellValueByRandomGamePlay(t *testing.T) {
+	// Count % of won games if the first move is a flag placed in cell (r, c), for all r, c.
 	if testing.Short() {
 		return
 	}
@@ -126,7 +128,7 @@ func TestCompareCellValueByRandomGamePlay(t *testing.T) {
 					continue
 				}
 				ge := ge0.Clone(src)
-				if !ge.MakeMove(GameEngineMove{playerNum: 1, move: 0, row: r, col: c, cellType: cellFlag}) {
+				if !ge.MakeMove(GameEngineMove{PlayerNum: 1, Move: 0, Row: r, Col: c, CellType: cellFlag}) {
 					t.Fatal("cannot make initial move")
 				}
 				for !ge.IsDone() {
@@ -166,28 +168,142 @@ func TestCompareCellValueByRandomGamePlay(t *testing.T) {
 	t.Errorf("Max: %d, min: %d, %v", maxWins, minWins, string(j))
 }
 
+type fieldDesc struct {
+	freeNeighbors int // Number of free neighboring cells.
+	areas         int // Number of areas that this cell connects.
+	dist          int // min distance to the edge of the board.
+}
+
+func getFd(b *Board, r, c int) fieldDesc {
+	var fd fieldDesc
+	var ns [6]idx
+	n := b.neighbors(idx{r, c}, ns[:])
+	inArea := false
+	for i := 0; i < n; i++ {
+		if !b.Fields[ns[i].r][ns[i].c].occupied() {
+			fd.freeNeighbors++
+			if !inArea {
+				fd.areas++
+			}
+			inArea = true
+		} else {
+			inArea = false
+		}
+	}
+	// correct areas if first and last cell (out of 6) were both not occupied.
+	// since they belong to the same area.
+	if n == 6 && !b.Fields[ns[0].r][ns[0].c].occupied() && !b.Fields[ns[n-1].r][ns[n-1].c].occupied() && fd.areas > 1 {
+		fd.areas--
+	}
+	fd.dist = r
+	if c < r {
+		fd.dist = c
+	}
+	if len(b.Fields)-r-1 < fd.dist {
+		fd.dist = len(b.Fields) - r - 1
+	}
+	if len(b.Fields[r])-c-1 < fd.dist {
+		fd.dist = len(b.Fields[r]) - c - 1
+	}
+	return fd
+}
+
+func TestCompareCellValueByCharacteristic(t *testing.T) {
+	// Characterise each cell by a few properties such as free neighbor cells.
+	// Then compute % of won games that had a flag in those cell "types".
+	if testing.Short() {
+		return
+	}
+	const nRounds = 1000000
+	src := rand.NewSource(123)
+	wins := make(map[fieldDesc]int)
+	played := make(map[fieldDesc]int)
+
+	for i := 0; i < nRounds; i++ {
+		ge := NewGameEngineFlagz(src)
+		// Compute cell characteristics before playing the game, as they will change during the game.
+		b := ge.B
+		fds := make([][]fieldDesc, len(b.Fields))
+		for r := range b.Fields {
+			fds[r] = make([]fieldDesc, len(b.Fields[r]))
+			for c := range b.Fields[r] {
+				fds[r][c] = getFd(b, r, c)
+			}
+		}
+		for !ge.IsDone() {
+			m, err := ge.RandomMove()
+			if err != nil {
+				t.Fatal("Could not suggest a move:", err.Error())
+			}
+			if !ge.MakeMove(m) {
+				t.Fatal("Could not make a move")
+				return
+			}
+		}
+		// Find cells where flags were placed.
+		winner := ge.Winner()
+		for r := range b.Fields {
+			for c := range b.Fields[r] {
+				if b.Fields[r][c].Type == cellFlag {
+					fd := fds[r][c]
+					played[fd]++
+					if b.Fields[r][c].Owner == winner {
+						wins[fd]++
+					}
+				}
+			}
+		}
+	}
+	type kv struct {
+		fieldDesc
+		winRate float64
+		played  int
+	}
+	st := make([]kv, len(played))
+	i := 0
+	for fd, n := range played {
+		st[i] = kv{
+			fieldDesc: fd, played: n, winRate: float64(wins[fd]) / float64(played[fd]),
+		}
+		i++
+	}
+	sort.Slice(st, func(i, j int) bool {
+		return st[i].winRate > st[j].winRate
+	})
+	var sb strings.Builder
+	for i := range st {
+		sb.WriteString(fmt.Sprintf("free_nb:%d areas:%d dist:%d winr:%.3f N:%d\n", st[i].freeNeighbors, st[i].areas, st[i].dist,
+			st[i].winRate, st[i].played))
+	}
+	t.Errorf("Stats: %v", sb.String())
+}
+
 func TestGobEncodeGameEngineFlagz(t *testing.T) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	src := rand.NewSource(123)
 	g1 := NewGameEngineFlagz(src)
 	g2 := NewGameEngineFlagz(src)
-	enc.Encode(g1)
-	enc.Encode(g2)
+	if err := enc.Encode(g1); err != nil {
+		t.Fatal("Cannot encode first: ", err)
+	}
+	if err := enc.Encode(g2); err != nil {
+		t.Fatal("Cannot encode second: ", err)
+	}
 	if buf.Len() > 5000 {
 		t.Errorf("Want buffer length <=%d, got %d", 5000, buf.Len())
 	}
 	dec := gob.NewDecoder(&buf)
 	var r1 *GameEngineFlagz
 	if err := dec.Decode(&r1); err != nil {
-		t.Error("Cannot decode: ", err)
+		t.Fatal("Cannot decode: ", err)
 	}
 	if r1.FreeCells != g1.FreeCells {
 		t.Errorf("Wrong FreeCells: want %d, got %d", g1.FreeCells, r1.FreeCells)
 	}
 	var r2 *GameEngineFlagz
 	if err := dec.Decode(&r2); err != nil {
-		t.Error("Cannot decode: ", err)
+		t.Fatal("Cannot decode: ", err)
 	}
 	var r3 *GameEngineFlagz
 	if err := dec.Decode(&r3); err != io.EOF {

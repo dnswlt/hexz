@@ -8,11 +8,11 @@ import (
 
 func mov(ge *GameEngineClassic, row, col int, ct CellType) GameEngineMove {
 	return GameEngineMove{
-		playerNum: ge.board.Turn,
-		row:       row,
-		col:       col,
-		move:      ge.board.Move,
-		cellType:  ct,
+		PlayerNum: ge.board.Turn,
+		Row:       row,
+		Col:       col,
+		Move:      ge.board.Move,
+		CellType:  ct,
 	}
 }
 

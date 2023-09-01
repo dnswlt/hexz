@@ -169,23 +169,23 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 	b := g.B
 	turn := b.Turn
 	pIdx := turn - 1
-	if m.playerNum != turn || m.move != b.Move {
+	if m.PlayerNum != turn || m.Move != b.Move {
 		// Only allow moves by players whose turn it is.
 		return false
 	}
-	if !b.valid(idx{m.row, m.col}) {
+	if !b.valid(idx{m.Row, m.Col}) {
 		// Invalid move request.
 		return false
 	}
-	f := &b.Fields[m.row][m.col]
+	f := &b.Fields[m.Row][m.Col]
 	if f.occupied() {
 		return false
 	}
-	if b.Resources[pIdx].NumPieces[m.cellType] == 0 {
+	if b.Resources[pIdx].NumPieces[m.CellType] == 0 {
 		// No pieces left of requested type
 		return false
 	}
-	if m.cellType == cellNormal {
+	if m.CellType == cellNormal {
 		val := f.NextVal[pIdx]
 		if val <= 0 {
 			return false
@@ -201,8 +201,8 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 		if f.NextVal[1-pIdx] > 0 {
 			g.NormalMoves[1-pIdx]--
 		}
-		g.updateNeighborCells(m.row, m.col)
-	} else if m.cellType == cellFlag {
+		g.updateNeighborCells(m.Row, m.Col)
+	} else if m.CellType == cellFlag {
 		// A flag can be placed on any free cell. It does not add to the score.
 		f.Owner = turn
 		f.Type = cellFlag
@@ -218,7 +218,7 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 		if f.NextVal[1-pIdx] > 0 {
 			g.NormalMoves[1-pIdx]--
 		}
-		g.updateNeighborCells(m.row, m.col)
+		g.updateNeighborCells(m.Row, m.Col)
 	} else {
 		// Invalid piece. Should be caught by resource check already, so never reached.
 		return false
@@ -273,7 +273,7 @@ func (g *GameEngineFlagz) RandomMove() (GameEngineMove, error) {
 			for c := range b.Fields[r] {
 				if !b.Fields[r][c].occupied() {
 					if n == nthFlag {
-						return GameEngineMove{playerNum: b.Turn, move: b.Move, row: r, col: c, cellType: cellFlag}, nil
+						return GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellFlag}, nil
 					}
 					n++
 				}
@@ -288,7 +288,7 @@ func (g *GameEngineFlagz) RandomMove() (GameEngineMove, error) {
 				f := &b.Fields[r][c]
 				if !f.occupied() && f.isAvail(b.Turn) {
 					if n == nthMove {
-						return GameEngineMove{playerNum: b.Turn, move: b.Move, row: r, col: c, cellType: cellNormal}, nil
+						return GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellNormal}, nil
 					}
 					n++
 				}
@@ -328,11 +328,11 @@ func (g *GameEngineFlagz) RandomMoveGreedy() (GameEngineMove, error) {
 						}
 					}
 					if val > maxVal {
-						move = GameEngineMove{playerNum: b.Turn, move: b.Move, row: r, col: c, cellType: cellFlag}
+						move = GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellFlag}
 						maxVal = val
 						maxValCnt = 1
 					} else if val == maxVal && g.rnd.Float64() < 1/float64(maxValCnt+1) {
-						move = GameEngineMove{playerNum: b.Turn, move: b.Move, row: r, col: c, cellType: cellFlag}
+						move = GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellFlag}
 						maxValCnt++
 					}
 				}
@@ -359,18 +359,18 @@ func (g *GameEngineFlagz) RandomMoveGreedy() (GameEngineMove, error) {
 						}
 					}
 					if val > maxVal {
-						move = GameEngineMove{playerNum: b.Turn, move: b.Move, row: r, col: c, cellType: cellNormal}
+						move = GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellNormal}
 						maxVal = val
 						maxValCnt = 1
 					} else if val == maxVal && g.rnd.Float64() < 1/float64(maxValCnt+1) {
-						move = GameEngineMove{playerNum: b.Turn, move: b.Move, row: r, col: c, cellType: cellNormal}
+						move = GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellNormal}
 						maxValCnt++
 					}
 				}
 			}
 		}
 	}
-	if move.playerNum == 0 {
+	if move.PlayerNum == 0 {
 		panic("Did not make a move")
 	}
 	return move, nil

@@ -164,7 +164,7 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 			histEntry = he.Clone(m.randSrc)
 		}
 	}
-	if m.gameEngine.MakeMove(GameEngineMove{playerNum: p.playerNum, move: e.Move, row: e.Row, col: e.Col, cellType: e.Type}) {
+	if m.gameEngine.MakeMove(GameEngineMove{PlayerNum: p.playerNum, Move: e.Move, Row: e.Row, Col: e.Col, CellType: e.Type}) {
 		if histEntry != nil {
 			m.undo = append(m.undo, histEntry)
 			m.redo = nil
@@ -330,10 +330,10 @@ func (m *GameMaster) cpuPlayer(cpuPlayerId PlayerId) {
 			playerId:   cpuPlayerId,
 			confidence: stats.MaxQ(),
 			MoveRequest: MoveRequest{
-				Move: mv.move,
-				Row:  mv.row,
-				Col:  mv.col,
-				Type: mv.cellType,
+				Move: mv.Move,
+				Row:  mv.Row,
+				Col:  mv.Col,
+				Type: mv.CellType,
 			},
 		}
 		// Update counters

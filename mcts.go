@@ -53,8 +53,8 @@ func (root *mcNode) size() int {
 	return s
 }
 
-// Returns the number of leaf nodes on each depth level, starting from 0 for the root.
-func (root *mcNode) leafNodesPerDepth() (size int, leafNodes []int, branchNodes []int) {
+// Returns the number of leaf and branch nodes on each depth level, starting from 0 for the root.
+func (root *mcNode) nodesPerDepth() (size int, leafNodes []int, branchNodes []int) {
 	ls := []int{}
 	bs := []int{}
 	s := 0
@@ -99,11 +99,11 @@ type MCTS struct {
 func (mcts *MCTS) playRandomGame(ge SinglePlayerGameEngine, firstMove *mcNode) (winner int) {
 	b := ge.Board()
 	if !ge.MakeMove(GameEngineMove{
-		playerNum: firstMove.turn,
-		move:      b.Move,
-		row:       firstMove.r,
-		col:       firstMove.c,
-		cellType:  firstMove.cellType,
+		PlayerNum: firstMove.turn,
+		Move:      b.Move,
+		Row:       firstMove.r,
+		Col:       firstMove.c,
+		CellType:  firstMove.cellType,
 	}) {
 		panic("Invalid move")
 	}
@@ -222,7 +222,7 @@ func (mcts *MCTS) run(ge SinglePlayerGameEngine, path []*mcNode) (depth int) {
 		panic(fmt.Sprintf("No children left for node: %s", node.String()))
 	}
 	move := GameEngineMove{
-		playerNum: c.turn, move: b.Move, row: c.r, col: c.c, cellType: c.cellType,
+		PlayerNum: c.turn, Move: b.Move, Row: c.r, Col: c.c, CellType: c.cellType,
 	}
 	if !ge.MakeMove(move) {
 		panic(fmt.Sprintf("Failed to make move %s", move.String()))
@@ -249,12 +249,12 @@ func (mcts *MCTS) run(ge SinglePlayerGameEngine, path []*mcNode) (depth int) {
 }
 
 type MCTSMoveStats struct {
-	row        int
-	col        int
-	cellType   CellType
+	Row        int
+	Col        int
+	CellType   CellType
 	U          float64
 	Q          float64
-	iterations int
+	Iterations int
 }
 
 type MCTSStats struct {
@@ -294,10 +294,10 @@ func (s *MCTSStats) String() string {
 		s.Iterations, s.MaxDepth, s.TreeSize, s.Elapsed.Seconds(), float64(s.Iterations)/s.Elapsed.Seconds())
 	for _, m := range s.Moves {
 		cellType := ""
-		if m.cellType == cellFlag {
+		if m.CellType == cellFlag {
 			cellType = " F"
 		}
-		fmt.Fprintf(&sb, "  (%d,%d%s) U:%.3f Q:%.2f N:%d\n", m.row, m.col, cellType, m.U, m.Q, m.iterations)
+		fmt.Fprintf(&sb, "  (%d,%d%s) U:%.3f Q:%.2f N:%d\n", m.Row, m.Col, cellType, m.U, m.Q, m.Iterations)
 	}
 	return sb.String()
 }
@@ -312,8 +312,8 @@ func NewMCTS() *MCTS {
 	}
 }
 
-func (mcts *MCTS) findBestMoveAndBuildStats(n *mcNode, elapsed time.Duration, maxDepth int, move int) (GameEngineMove, *MCTSStats) {
-	size, leafNodes, branchNodes := mcts.root.leafNodesPerDepth()
+func (mcts *MCTS) bestNextMoveWithStats(n *mcNode, elapsed time.Duration, maxDepth int, move int) (GameEngineMove, *MCTSStats) {
+	size, leafNodes, branchNodes := mcts.root.nodesPerDepth()
 	stats := &MCTSStats{
 		Iterations:    int(n.count),
 		MaxDepth:      maxDepth,
@@ -330,20 +330,20 @@ func (mcts *MCTS) findBestMoveAndBuildStats(n *mcNode, elapsed time.Duration, ma
 			best = c
 		}
 		stats.Moves[i] = MCTSMoveStats{
-			row:        c.r,
-			col:        c.c,
-			cellType:   c.cellType,
-			iterations: int(c.count),
+			Row:        c.r,
+			Col:        c.c,
+			CellType:   c.cellType,
+			Iterations: int(c.count),
 			U:          c.U(n.count, mcts.UctFactor),
 			Q:          c.Q(),
 		}
 	}
 	m := GameEngineMove{
-		playerNum: best.turn,
-		move:      move,
-		row:       best.r,
-		col:       best.c,
-		cellType:  best.cellType,
+		PlayerNum: best.turn,
+		Move:      move,
+		Row:       best.r,
+		Col:       best.c,
+		CellType:  best.cellType,
 	}
 	return m, stats
 }
@@ -361,10 +361,10 @@ func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration tim
 		for i := 0; i < len(moveHist)-mcts.rootMove; i++ {
 			found := false
 			for _, c := range r.children {
-				if c.r == moveHist[mcts.rootMove+i].row &&
-					c.c == moveHist[mcts.rootMove+i].col &&
-					c.turn == moveHist[mcts.rootMove+i].playerNum &&
-					c.cellType == moveHist[mcts.rootMove+i].cellType {
+				if c.r == moveHist[mcts.rootMove+i].Row &&
+					c.c == moveHist[mcts.rootMove+i].Col &&
+					c.turn == moveHist[mcts.rootMove+i].PlayerNum &&
+					c.cellType == moveHist[mcts.rootMove+i].CellType {
 					r = c
 					found = true
 					break
@@ -382,15 +382,17 @@ func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration tim
 			root = &mcNode{turn: gameEngine.Board().Turn}
 		}
 	}
-	mcts.root = root
-	mcts.rootMove = gameEngine.Board().Move
-	// Since we are reusing subtrees, we might already have fully explored
+	if mcts.ReuseTree {
+		mcts.root = root
+		mcts.rootMove = gameEngine.Board().Move
+	}
+	// If we are reusing subtrees, we might already have fully explored
 	// the subtree. In that case, pick the best child immediately
 	if root.done {
 		if len(root.children) == 0 {
 			panic("No children, but root is done")
 		}
-		return mcts.findBestMoveAndBuildStats(root, time.Duration(0), 0, gameEngine.Board().Move)
+		return mcts.bestNextMoveWithStats(root, time.Duration(0), 0, gameEngine.Board().Move)
 	}
 	started := time.Now()
 	maxDepth := 0
@@ -412,5 +414,5 @@ func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration tim
 		}
 	}
 	elapsed := time.Since(started)
-	return mcts.findBestMoveAndBuildStats(root, elapsed, maxDepth, gameEngine.Board().Move)
+	return mcts.bestNextMoveWithStats(root, elapsed, maxDepth, gameEngine.Board().Move)
 }
