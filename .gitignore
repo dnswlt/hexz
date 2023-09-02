@@ -4,3 +4,4 @@ _users.json
 *.test
 /bench
 *.txt
+/hist

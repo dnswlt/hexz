@@ -110,21 +110,68 @@
             </div>
         </div>
         <div class="menurow">
-            <button id="home" class="menuitem">New Game</button>
-            <button id="reset" class="menuitem">Reset</button>
-        </div>
-        <div class="menurow">
-            <button id="undo" class="menuitem">Undo</button>
-            <button id="redo" class="menuitem">Redo</button>
-            <div class="menuitem" id="shareLink">&#x1F517; Share</div>
+            <button id="prevMove" class="menuitem">Prev</button>
+            <button id="nextMove" class="menuitem">Next</button>
         </div>
     </div>
     <div class="widget" id="announcements"></div>
 
     <script src="/hexz/static/js/game.js"></script>
- 
+
     <script type="text/javascript">
-        initialize();
+
+        let board = null;
+
+        async function updateMove(moveDelta) {
+            const pathSegs = window.location.pathname.split("/");
+            // Expect /hexz/viewer/{gameId}/{moveNum}.
+            if (pathSegs.length < 2) {
+                throw new Error("Invalid path for viewer: " + window.location.pathname);
+            }
+            const gameId = pathSegs[pathSegs.length - 2];
+            const currentMove = parseInt(pathSegs[pathSegs.length - 1]);
+            const newMove = currentMove + moveDelta;
+            if (newMove < 0) {
+                return;
+            }
+            const resp = await fetch(`/hexz/board/${gameId}/${newMove}`);
+            if (!resp.ok) {
+                console.error("Couldn't fetch:", resp.status);
+                return;
+            }
+            const data = await resp.json();
+            gstate.board = data.board;
+            // Update URL to the new move
+            let url = new URL(window.location);
+            pathSegs[pathSegs.length-1] = newMove.toString();
+            url.pathname = pathSegs.join("/");
+            window.history.pushState({}, "", url);
+            redraw();
+            updateTurnInfo();
+            updateScore();
+        }
+
+        function initializeViewer() {
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            const canvas = document.getElementById("canvas");
+            // In the viewer, do nothing on a canvas click.
+            canvas.addEventListener("contextmenu", e => {
+                // Don't open the browser's context menu on right-click.
+                e.preventDefault();
+                onCanvasClicked(e);
+            });
+            document.getElementById("prevMove").addEventListener('click', async function () {
+                await updateMove(-1);
+            });
+            document.getElementById("nextMove").addEventListener('click', async function () {
+                await updateMove(1);
+            });
+            updateMove(0);
+        }
+
+        initializeViewer();
     </script>
 </body>
 

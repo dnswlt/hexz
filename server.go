@@ -138,6 +138,7 @@ const (
 
 	playerIdCookieName   = "playerId"
 	gameHtmlFilename     = "game.html"
+	viewHtmlFilename     = "view.html"
 	loginHtmlFilename    = "login.html"
 	newGameHtmlFilename  = "new.html"
 	rulesHtmlFilename    = "rules.html"
@@ -151,6 +152,7 @@ var (
 		".html": "text/html",
 		".png":  "image/png",
 		".gif":  "image/gif",
+		".js":   "text/javascript",
 	}
 	// Paths that browsers may request to retrieve a favicon.
 	// Keep in sync with files in the images/ folder.
@@ -286,6 +288,9 @@ func (g *GameHandle) unregisterPlayer(playerId PlayerId) {
 
 func (s *Server) readFile(filename string) ([]byte, error) {
 	s.IncCounter("/storage/files/readfile")
+	if strings.Contains(filename, "..") {
+		return nil, fmt.Errorf("refusing to read %q", filename)
+	}
 	return os.ReadFile(path.Join(s.config.DocumentRoot, filename))
 }
 
@@ -297,7 +302,7 @@ func generatePlayerId() PlayerId {
 }
 
 // Generates a 6-letter game ID.
-func generateGameId() string {
+func GenerateGameId() string {
 	var alphabet = []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	var b strings.Builder
 	for i := 0; i < 6; i++ {
@@ -321,7 +326,7 @@ func (s *Server) startNewGame(host string, gameType GameType, singlePlayer bool)
 	// (I don't like forever loops... 100 attempts is plenty.)
 	var game *GameHandle
 	for i := 0; i < 100; i++ {
-		id := generateGameId()
+		id := GenerateGameId()
 		s.ongoingGamesMut.Lock()
 		if _, ok := s.ongoingGames[id]; !ok {
 			game = &GameHandle{
@@ -688,6 +693,75 @@ func (s *Server) handleGame(w http.ResponseWriter, r *http.Request) {
 	w.Write(gameHtml)
 }
 
+var (
+	viewPathRegexp = regexp.MustCompile(`^(/hexz/(view|board)/([A-Z0-9]+))(/(\d+))?$`)
+)
+
+func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
+	groups := viewPathRegexp.FindStringSubmatch(r.URL.Path)
+	if groups == nil {
+		http.Error(w, "", http.StatusNotFound)
+		return
+	}
+	if groups[4] == "" {
+		// No move number specified. Redirect to move 0.
+		http.Redirect(w, r, fmt.Sprintf("%s/0", groups[1]), http.StatusSeeOther)
+		return
+	}
+	viewHtml, err := s.readFile(viewHtmlFilename)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(viewHtml)
+}
+
+func (s *Server) readBoardFromFile(gameId string, moveNum int) (*BoardView, error) {
+	// TODO: configure hist path properly
+	log.Printf("Reading board %s:%d", gameId, moveNum)
+	data, err := os.ReadFile(path.Join("hist", gameId+".json"))
+	if err != nil {
+		return nil, err
+	}
+	bs := []*BoardView{}
+	err = json.Unmarshal(data, &bs)
+	if err != nil {
+		return nil, err
+	}
+	if moveNum >= len(bs) {
+		return nil, fmt.Errorf("moveNum out of range")
+	}
+	return bs[moveNum], nil
+}
+
+func (s *Server) handleBoard(w http.ResponseWriter, r *http.Request) {
+	groups := viewPathRegexp.FindStringSubmatch(r.URL.Path)
+	gameId := groups[3]
+	moveNumStr := groups[5]
+	if groups == nil || moveNumStr == "" {
+		http.Error(w, "", http.StatusNotFound)
+		return
+	}
+	moveNum, err := strconv.Atoi(moveNumStr)
+	if err != nil || moveNum < 0 {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	board, err := s.readBoardFromFile(gameId, moveNum)
+	if err != nil {
+		http.Error(w, "", http.StatusNotFound)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	data, err := json.Marshal(ServerEvent{
+		Board: board,
+	})
+	if err != nil {
+		http.Error(w, "", http.StatusInternalServerError)
+		panic("Cannot marshal ServerEvent: " + err.Error())
+	}
+	w.Write(data)
+}
+
 func (s *Server) handleFile(filepath string, w http.ResponseWriter, r *http.Request) {
 	contentType, ok := validResourceFileExts[path.Ext(filepath)]
 	if !ok {
@@ -704,12 +778,12 @@ func (s *Server) handleFile(filepath string, w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) handleStaticResource(w http.ResponseWriter, r *http.Request) {
-	hexz := "/hexz/"
-	if !strings.HasPrefix(r.URL.Path, hexz) {
+	prefix := "/hexz/static/"
+	if !strings.HasPrefix(r.URL.Path, prefix) {
 		http.Error(w, "", http.StatusNotFound)
 		return
 	}
-	s.handleFile(r.URL.Path[len(hexz):], w, r)
+	s.handleFile(r.URL.Path[len(prefix):], w, r)
 }
 
 func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
@@ -976,10 +1050,12 @@ func (s *Server) Serve() {
 	mux.HandleFunc("/hexz/rules", func(w http.ResponseWriter, r *http.Request) {
 		s.handleFile(rulesHtmlFilename, w, r)
 	})
-	mux.HandleFunc("/hexz/images/", s.handleStaticResource)
+	mux.HandleFunc("/hexz/static/", s.handleStaticResource)
 	mux.HandleFunc("/hexz", s.handleHexz)
 	mux.HandleFunc("/hexz/new", s.handleNewGame)
 	mux.HandleFunc("/hexz/gamez", s.handleGamez)
+	mux.HandleFunc("/hexz/view/", s.handleView)
+	mux.HandleFunc("/hexz/board/", s.handleBoard)
 	mux.HandleFunc("/hexz/", s.handleGame)
 	mux.Handle("/statusz", s.basicAuthHandlerFunc(s.handleStatusz))
 	mux.HandleFunc("/", s.defaultHandler)

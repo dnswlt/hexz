@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"sort"
 	"strconv"
@@ -148,24 +149,25 @@ func TestCompareCellValueByRandomGamePlay(t *testing.T) {
 			}
 		}
 	}
-	maxWins := 0
-	minWins := nRounds + 1
-	allWins := make(map[int]int)
+	maxWinRate := 0.0
+	minWinRate := math.MaxFloat64
+	allWins := make(map[string]float64)
 	for r := range wins {
 		for c := range wins[r] {
-			if wins[r][c] > maxWins {
-				maxWins = wins[r][c]
-			}
 			if played[r][c] > 0 {
-				allWins[wins[r][c]]++
-				if wins[r][c] < minWins {
-					minWins = wins[r][c]
+				winRate := float64(wins[r][c]) / float64(played[r][c])
+				allWins[fmt.Sprintf("%d:%d", r, c)] = winRate
+				if winRate < minWinRate {
+					minWinRate = winRate
+				}
+				if winRate > maxWinRate {
+					maxWinRate = winRate
 				}
 			}
 		}
 	}
 	j, _ := json.Marshal(allWins)
-	t.Errorf("Max: %d, min: %d, %v", maxWins, minWins, string(j))
+	t.Errorf("Max: %f, min: %f, %v", maxWinRate, minWinRate, string(j))
 }
 
 type fieldDesc struct {
