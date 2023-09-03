@@ -136,7 +136,9 @@ func main() {
 					Board: ge.Board().ViewFor(0),
 					// No MoveScores for terminal board.
 				})
-				hexz.WriteGameHistory(*gameHistoryDir, hexz.GenerateGameId(), history)
+				gameId := hexz.GenerateGameId()
+				hexz.WriteGameHistory(*gameHistoryDir, gameId, history)
+				fmt.Printf("Wrote game history with gameId %s\n", gameId)
 			}
 			winner := ge.Winner()
 			if winner == benchPlayer {

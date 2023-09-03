@@ -399,7 +399,6 @@ func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration tim
 		}
 		if ok {
 			root = r
-			fmt.Printf("Reusing tree of size %d\n", root.size())
 		} else {
 			root = &mcNode{turn: gameEngine.Board().Turn}
 		}

@@ -41,6 +41,9 @@ const gstate = {
     role: 0,
     done: false,
     selectedCellType: 0,
+    // Optional information about the scores a CPU assigns to each move.
+    moveScores: null,
+    renderMoveScores: false,
 };
 
 // Gets dynamically updated depending on the canvas size.
@@ -315,12 +318,54 @@ function drawBoard(ctx) {
                     ctx.fill(hex);
                 }
             }
+            if (fld.owner == 0 && gstate.renderMoveScores && gstate.moveScores) {
+                const n = gstate.moveScores.normalCell[i][j];
+                const f = gstate.moveScores.flag[i][j];
+                function cellValue(v) {
+                    const oldFont = ctx.font;
+                    const fontSize = Math.floor(0.4 * a);
+                    ctx.font = `${fontSize}px sans-serif`;
+                    ctx.fillStyle = "#303030";
+                    ctx.fillText(v.toFixed(3), 0, 0);
+                    ctx.font = oldFont;
+                }
+                if (n > f) {
+                    //#800080
+                    //#ffc0cb
+                    ctx.fillStyle = scaleColor("#ffc0cb", "#800080", n);
+                    ctx.fill(hex);
+                    cellValue(n);
+                } else if (f > n) {
+                    ctx.fillStyle = scaleColor("#ffc0cb", "#800080", f);
+                    ctx.fill(hex);
+                    cellValue(f);
+                } else if (n == f && n > 0) {
+                    // Both scores are equal, let's choose placing a normal cell.
+                    ctx.fillStyle = scaleColor("#ffc0cb", "#800080", n);
+                    ctx.fill(hex);
+                }
+            }
             ctx.strokeStyle = styles.colors.grid;
             ctx.stroke(hex);
             // Undo transform.
             ctx.translate(-x, -y);
         }
     }
+}
+
+function scaleColor(startColor, endColor, scale) {
+    const r1 = parseInt(startColor.slice(1, 3), 16);
+    const g1 = parseInt(startColor.slice(3, 5), 16);
+    const b1 = parseInt(startColor.slice(5, 7), 16);
+    const r2 = parseInt(endColor.slice(1, 3), 16);
+    const g2 = parseInt(endColor.slice(3, 5), 16);
+    const b2 = parseInt(endColor.slice(5, 7), 16);
+    const r = Math.round(r1 + (r2 - r1) * scale);
+    const g = Math.round(g1 + (g2 - g1) * scale);
+    const b = Math.round(b1 + (b2 - b1) * scale);
+    return "#" + r.toString(16).padStart(2, "0")
+        + g.toString(16).padStart(2, "0")
+        + b.toString(16).padStart(2, "0");
 }
 
 function drawButtons(ctx) {

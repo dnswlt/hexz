@@ -122,6 +122,12 @@
 
         let board = null;
 
+        function refreshView() {
+            redraw();
+            updateTurnInfo();
+            updateScore();
+        }
+
         async function updateMove(moveDelta) {
             const pathSegs = window.location.pathname.split("/");
             // Expect /hexz/viewer/{gameId}/{moveNum}.
@@ -141,14 +147,13 @@
             }
             const data = await resp.json();
             gstate.board = data.board;
+            gstate.moveScores = data.moveScores;
             // Update URL to the new move
             let url = new URL(window.location);
-            pathSegs[pathSegs.length-1] = newMove.toString();
+            pathSegs[pathSegs.length - 1] = newMove.toString();
             url.pathname = pathSegs.join("/");
             window.history.pushState({}, "", url);
-            redraw();
-            updateTurnInfo();
-            updateScore();
+            refreshView();
         }
 
         function initializeViewer() {
@@ -167,6 +172,15 @@
             });
             document.getElementById("nextMove").addEventListener('click', async function () {
                 await updateMove(1);
+            });
+            document.addEventListener("keypress", function onPress(event) {
+                if (event.repeat) {
+                    return;
+                }
+                if (event.key === "\\") {
+                    gstate.renderMoveScores = !gstate.renderMoveScores;
+                    refreshView();
+                }
             });
             updateMove(0);
         }
