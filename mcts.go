@@ -288,6 +288,28 @@ func (s *MCTSStats) MaxQ() float64 {
 	return r
 }
 
+func (s *MCTSStats) MoveScores() *MoveScores {
+	normalCell := make([][]float64, numBoardRows)
+	flag := make([][]float64, numBoardRows)
+	for i := 0; i < numBoardRows; i++ {
+		nCols := numFieldsFirstRow - i%2
+		normalCell[i] = make([]float64, nCols)
+		flag[i] = make([]float64, nCols)
+	}
+	for _, m := range s.Moves {
+		switch m.CellType {
+		case cellNormal:
+			normalCell[m.Row][m.Col] = m.Q
+		case cellFlag:
+			flag[m.Row][m.Col] = m.Q
+		}
+	}
+	return &MoveScores{
+		NormalCell: normalCell,
+		Flag:       flag,
+	}
+}
+
 func (s *MCTSStats) String() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "N: %d\nmaxDepth:%d\nsize:%d\nelapsed:%.3f\nN/sec:%.1f\n",

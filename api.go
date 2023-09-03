@@ -36,6 +36,8 @@ type ServerEvent struct {
 	// Signals to clients that this is the last event they will receive.
 	LastEvent bool                 `json:"lastEvent"`
 	GameInfo  *ServerEventGameInfo `json:"gameInfo,omitempty"`
+	// For single-player flagz: scores that the CPU assigns to each move.
+	MoveScores *MoveScores `json:"moveScores,omitempty"`
 }
 
 // A player's or spectator's view of the board.
@@ -48,6 +50,11 @@ type BoardView struct {
 	Score       []int          `json:"score"` // Depending on the number of players, 1 or 2 elements.
 	Resources   []ResourceInfo `json:"resources"`
 	State       GameState      `json:"state"`
+}
+
+type MoveScores struct {
+	NormalCell [][]float64 `json:"normalCell"` // Scores for placing a normal cell on a field.
+	Flag       [][]float64 `json:"flag"`       // Scores for placing a flag on a field.
 }
 
 type Field struct {

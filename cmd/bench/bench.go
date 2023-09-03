@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -9,7 +8,6 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
-	"path"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -25,7 +23,7 @@ var uctFactor = flag.Float64("uctfactor", 1.0, "weight of the exploration compon
 var thinkTime = flag.Duration("thinktime", time.Duration(2)*time.Second, "Think time per player and move")
 var oppThinkTime = flag.Duration("oppthinktime", time.Duration(2)*time.Second, "Think time per player and move")
 var flagsFirst = flag.Bool("flagsfirst", false, "If true, flags will be played first")
-var boardHistoryDir = flag.String("boardhistorydir", "", "Directory to which board history of each game is written")
+var gameHistoryDir = flag.String("gamehistorydir", "", "Directory to which game history of each played game is written")
 
 // Compute the think time we'll give to the player.
 // The more confident a player is that they'll win/lose, the less time we give them
@@ -45,20 +43,6 @@ func getThinkTime(stats []*hexz.MCTSStats, isBenchPlayer bool) time.Duration {
 		moveThinkTime = time.Duration(100) * time.Millisecond
 	}
 	return moveThinkTime
-}
-
-func writeBoardHistory(boards []*hexz.BoardView) error {
-	gameId := hexz.GenerateGameId()
-	w, err := os.Create(path.Join(*boardHistoryDir, fmt.Sprintf("%s.json", gameId)))
-	if err != nil {
-		return err
-	}
-	defer w.Close()
-	enc := json.NewEncoder(w)
-	if err := enc.Encode(boards); err != nil {
-		return err
-	}
-	return nil
 }
 
 func main() {
@@ -111,13 +95,10 @@ func main() {
 		mcts[benchPlayer-1].UctFactor = *uctFactor
 		mcts[benchPlayer-1].FlagsFirst = *flagsFirst
 		mcts[benchPlayer-1].ReuseTree = true
-		collectBoardHistory := *boardHistoryDir != ""
-		boardHistory := []*hexz.BoardView{}
+		collectBoardHistory := *gameHistoryDir != ""
+		history := []*hexz.GameHistoryEntry{}
 	Gameloop:
 		for !ge.IsDone() && time.Since(started) < *maxRuntime {
-			if collectBoardHistory {
-				boardHistory = append(boardHistory, ge.Board().ViewFor(0))
-			}
 			select {
 			case <-interrupted:
 				cancelled = true
@@ -127,6 +108,13 @@ func main() {
 			t := ge.Board().Turn - 1
 			moveThinkTime := getThinkTime(moveStats[t], benchPlayer == ge.Board().Turn)
 			m, stats := mcts[t].SuggestMove(ge, moveThinkTime)
+			if collectBoardHistory {
+				boardView := ge.Board().ViewFor(0)
+				history = append(history, &hexz.GameHistoryEntry{
+					Board:      boardView,
+					MoveScores: stats.MoveScores(),
+				})
+			}
 			moveStats[t] = append(moveStats[t], stats)
 			// fmt.Print(stats)
 			if !ge.MakeMove(m) {
@@ -144,8 +132,11 @@ func main() {
 		}
 		if ge.IsDone() {
 			if collectBoardHistory {
-				boardHistory = append(boardHistory, ge.Board().ViewFor(0))
-				writeBoardHistory(boardHistory)
+				history = append(history, &hexz.GameHistoryEntry{
+					Board: ge.Board().ViewFor(0),
+					// No MoveScores for terminal board.
+				})
+				hexz.WriteGameHistory(*gameHistoryDir, hexz.GenerateGameId(), history)
 			}
 			winner := ge.Winner()
 			if winner == benchPlayer {

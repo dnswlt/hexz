@@ -716,22 +716,17 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 	w.Write(viewHtml)
 }
 
-func (s *Server) readBoardFromFile(gameId string, moveNum int) (*BoardView, error) {
+func (s *Server) readGameHistoryFromFile(gameId string, moveNum int) (*GameHistoryEntry, error) {
 	// TODO: configure hist path properly
 	log.Printf("Reading board %s:%d", gameId, moveNum)
-	data, err := os.ReadFile(path.Join("hist", gameId+".json"))
+	hist, err := ReadGameHistory("hist", gameId)
 	if err != nil {
 		return nil, err
 	}
-	bs := []*BoardView{}
-	err = json.Unmarshal(data, &bs)
-	if err != nil {
-		return nil, err
-	}
-	if moveNum >= len(bs) {
+	if moveNum >= len(hist) {
 		return nil, fmt.Errorf("moveNum out of range")
 	}
-	return bs[moveNum], nil
+	return hist[moveNum], nil
 }
 
 func (s *Server) handleBoard(w http.ResponseWriter, r *http.Request) {
@@ -747,13 +742,15 @@ func (s *Server) handleBoard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	board, err := s.readBoardFromFile(gameId, moveNum)
+	histEntry, err := s.readGameHistoryFromFile(gameId, moveNum)
 	if err != nil {
 		http.Error(w, "", http.StatusNotFound)
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	data, err := json.Marshal(ServerEvent{
-		Board: board,
+		Board:      histEntry.Board,
+		MoveScores: histEntry.MoveScores,
 	})
 	if err != nil {
 		http.Error(w, "", http.StatusInternalServerError)
