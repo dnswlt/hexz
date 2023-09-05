@@ -327,7 +327,7 @@ func GenerateGameId() string {
 	return b.String()
 }
 
-// Looks up the game ID from the URL path.
+// Looks up the game ID as the last element of the URL path.
 func gameIdFromPath(path string) string {
 	pathSegs := strings.Split(path, "/")
 	l := len(pathSegs)

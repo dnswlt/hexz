@@ -2,6 +2,8 @@ package hexz
 
 import (
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestGameIdPath(t *testing.T) {
@@ -23,5 +25,25 @@ func TestGameIdPath(t *testing.T) {
 				t.Errorf("Unexpected path for gameId: want: %q, got: %q", test.want, got)
 			}
 		})
+	}
+}
+
+func TestSaveReadGame(t *testing.T) {
+	dir := t.TempDir()
+	gameId := GenerateGameId()
+	board := NewBoard().ViewFor(0)
+	hist := []*GameHistoryEntry{
+		{Board: board},
+	}
+	WriteGameHistory(dir, gameId, hist)
+	readHist, err := ReadGameHistory(dir, gameId)
+	if err != nil {
+		t.Fatalf("cannot read game history: %s", err.Error())
+	}
+	if len(readHist) != len(hist) {
+		t.Fatalf("wrong number of history entries: want %d, got %d", len(hist), len(readHist))
+	}
+	if diff := cmp.Diff(hist, readHist); diff != "" {
+		t.Errorf("read history not equal to write history: -want +got: %s", diff)
 	}
 }

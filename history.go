@@ -27,7 +27,7 @@ func gameIdPath(gameId string) string {
 }
 
 func ReadGameHistory(historyDir string, gameId string) ([]*GameHistoryEntry, error) {
-	data, err := os.ReadFile(gameIdPath(gameId))
+	data, err := os.ReadFile(path.Join(historyDir, gameIdPath(gameId)))
 	if err != nil {
 		return nil, err
 	}
