@@ -25,7 +25,8 @@ type tok struct{}
 type ServerConfig struct {
 	ServerAddress     string
 	ServerPort        int
-	DocumentRoot      string
+	DocumentRoot      string // Path to static resource files.
+	GameHistoryRoot   string // Path to game history files.
 	PlayerRemoveDelay time.Duration
 	LoginTtl          time.Duration
 	CpuThinkTime      time.Duration
@@ -286,12 +287,27 @@ func (g *GameHandle) unregisterPlayer(playerId PlayerId) {
 	g.sendEvent(ControlEventUnregister{playerId: playerId})
 }
 
-func (s *Server) readFile(filename string) ([]byte, error) {
+func (s *Server) readStaticResource(filename string) ([]byte, error) {
 	s.IncCounter("/storage/files/readfile")
 	if strings.Contains(filename, "..") {
 		return nil, fmt.Errorf("refusing to read %q", filename)
 	}
 	return os.ReadFile(path.Join(s.config.DocumentRoot, filename))
+}
+
+func (s *Server) readGameHistoryFromFile(gameId string, moveNum int) (*GameHistoryEntry, error) {
+	s.IncCounter("/storage/files/gamehistory")
+	if strings.Contains(gameId, "..") || strings.Contains(gameId, "/") {
+		return nil, fmt.Errorf("refusing to read game %q", gameId)
+	}
+	hist, err := ReadGameHistory(s.config.GameHistoryRoot, gameId)
+	if err != nil {
+		return nil, err
+	}
+	if moveNum >= len(hist) {
+		return nil, fmt.Errorf("moveNum out of range")
+	}
+	return hist[moveNum], nil
 }
 
 // Generates a random 128-bit hex string representing a player ID.
@@ -384,7 +400,7 @@ func (s *Server) listRecentGames(limit int) []*GameInfo {
 }
 
 func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
-	html, err := s.readFile(loginHtmlFilename)
+	html, err := s.readStaticResource(loginHtmlFilename)
 	if err != nil {
 		http.Error(w, "Failed to load login screen", http.StatusInternalServerError)
 		log.Fatal("Cannot read login HTML page: ", err.Error())
@@ -444,7 +460,7 @@ func (s *Server) handleHexz(w http.ResponseWriter, r *http.Request) {
 		s.handleLoginPage(w, r)
 		return
 	}
-	html, err := s.readFile(newGameHtmlFilename)
+	html, err := s.readStaticResource(newGameHtmlFilename)
 	if err != nil {
 		http.Error(w, "Failed to load html", http.StatusInternalServerError)
 		log.Fatal("Cannot read new game HTML page: ", err.Error())
@@ -683,7 +699,7 @@ func (s *Server) handleGame(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 		return
 	}
-	gameHtml, err := s.readFile(gameHtmlFilename)
+	gameHtml, err := s.readStaticResource(gameHtmlFilename)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -694,21 +710,23 @@ func (s *Server) handleGame(w http.ResponseWriter, r *http.Request) {
 }
 
 var (
-	viewPathRegexp = regexp.MustCompile(`^(/hexz/(view|board)/([A-Z0-9]+))(/(\d+))?$`)
+	viewURLPathRE  = regexp.MustCompile(`^(/hexz/view/(?P<gameId>[A-Z0-9]+))(/(?P<moveNum>\d+))?$`)
+	boardURLPathRE = regexp.MustCompile(`^(/hexz/board/(?P<gameId>[A-Z0-9]+))(/(?P<moveNum>\d+))?$`)
 )
 
 func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
-	groups := viewPathRegexp.FindStringSubmatch(r.URL.Path)
+	groups := viewURLPathRE.FindStringSubmatch(r.URL.Path)
 	if groups == nil {
 		http.Error(w, "", http.StatusNotFound)
 		return
 	}
-	if groups[4] == "" {
+	moveNum := groups[viewURLPathRE.SubexpIndex("moveNum")]
+	if moveNum == "" {
 		// No move number specified. Redirect to move 0.
 		http.Redirect(w, r, fmt.Sprintf("%s/0", groups[1]), http.StatusSeeOther)
 		return
 	}
-	viewHtml, err := s.readFile(viewHtmlFilename)
+	viewHtml, err := s.readStaticResource(viewHtmlFilename)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -716,30 +734,21 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 	w.Write(viewHtml)
 }
 
-func (s *Server) readGameHistoryFromFile(gameId string, moveNum int) (*GameHistoryEntry, error) {
-	// TODO: configure hist path properly
-	log.Printf("Reading board %s:%d", gameId, moveNum)
-	hist, err := ReadGameHistory("hist", gameId)
-	if err != nil {
-		return nil, err
-	}
-	if moveNum >= len(hist) {
-		return nil, fmt.Errorf("moveNum out of range")
-	}
-	return hist[moveNum], nil
-}
-
 func (s *Server) handleBoard(w http.ResponseWriter, r *http.Request) {
-	groups := viewPathRegexp.FindStringSubmatch(r.URL.Path)
-	gameId := groups[3]
-	moveNumStr := groups[5]
-	if groups == nil || moveNumStr == "" {
+	groups := boardURLPathRE.FindStringSubmatch(r.URL.Path)
+	if groups == nil {
+		http.Error(w, "", http.StatusNotFound)
+		return
+	}
+	gameId := groups[boardURLPathRE.SubexpIndex("gameId")]
+	moveNumStr := groups[boardURLPathRE.SubexpIndex("moveNum")]
+	if moveNumStr == "" {
 		http.Error(w, "", http.StatusNotFound)
 		return
 	}
 	moveNum, err := strconv.Atoi(moveNumStr)
 	if err != nil || moveNum < 0 {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "invalid move number", http.StatusBadRequest)
 		return
 	}
 	histEntry, err := s.readGameHistoryFromFile(gameId, moveNum)
@@ -765,7 +774,7 @@ func (s *Server) handleFile(filepath string, w http.ResponseWriter, r *http.Requ
 		http.Error(w, "", http.StatusNotFound)
 		return
 	}
-	contents, err := s.readFile(filepath)
+	contents, err := s.readStaticResource(filepath)
 	if err != nil {
 		http.Error(w, "", http.StatusNotFound)
 		return
@@ -865,7 +874,7 @@ func (s *Server) defaultHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if isFavicon(r.URL.Path) {
 		s.IncCounter("/requests/favicon")
-		ico, err := s.readFile(path.Join("images", path.Base(r.URL.Path)))
+		ico, err := s.readStaticResource(path.Join("images", path.Base(r.URL.Path)))
 		if err != nil {
 			http.Error(w, "favicon not found", http.StatusNotFound)
 			return
@@ -1035,7 +1044,7 @@ func (s *Server) Serve() {
 	}
 
 	// Quick sanity check that we have access to the game HTML file.
-	if _, err := s.readFile(gameHtmlFilename); err != nil {
+	if _, err := s.readStaticResource(gameHtmlFilename); err != nil {
 		log.Fatal("Cannot load game HTML: ", err)
 	}
 	mux.HandleFunc("/hexz/move/", s.handleMove)

@@ -19,6 +19,8 @@ func main() {
 	flag.IntVar(&cfg.ServerPort, "port", 8084, "Port on which to listen")
 	flag.StringVar(&cfg.DocumentRoot, "resources-dir", "./resources",
 		"Root directory from which to serve files")
+	flag.StringVar(&cfg.GameHistoryRoot, "history-dir", "./hist",
+		"Root directory from which to read game history files")
 	flag.DurationVar(&cfg.PlayerRemoveDelay, "remove-delay", time.Duration(60)*time.Second,
 		"Time to wait before removing a disconnected player from a game")
 	flag.DurationVar(&cfg.LoginTtl, "login-ttl", time.Duration(24)*time.Hour,
