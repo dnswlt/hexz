@@ -147,7 +147,7 @@ func (g *GameEngineFlagz) updateNeighborCells(r, c int) {
 				if nb.NextVal[pIdx] > 0 {
 					g.NormalMoves[pIdx]--
 				}
-				nb.Blocked[pIdx] = true
+				nb.Blocked |= 1 << pIdx
 				nb.NextVal[pIdx] = -1
 			} else if nb.NextVal[pIdx] == 0 {
 				g.NormalMoves[pIdx]++

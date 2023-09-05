@@ -40,19 +40,6 @@ func (n *mcNode) U(parentCount float64, uctFactor float64) float64 {
 	return n.wins/n.count + uctFactor*math.Sqrt(math.Log(parentCount)/n.count)
 }
 
-func (root *mcNode) size() int {
-	s := 0
-	q := make([]*mcNode, 1, 1024)
-	q[0] = root
-	for len(q) > 0 {
-		n := q[len(q)-1]
-		q = q[:len(q)-1]
-		s++
-		q = append(q, n.children...)
-	}
-	return s
-}
-
 // Returns the number of leaf and branch nodes on each depth level, starting from 0 for the root.
 func (root *mcNode) nodesPerDepth() (size int, leafNodes []int, branchNodes []int) {
 	ls := []int{}

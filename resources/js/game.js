@@ -268,7 +268,7 @@ function drawBoard(ctx) {
             let y = i * a * 3 / 2 + a;
             let fld = board.fields[i][j];
             ctx.translate(x, y);
-            if (fld.owner > 0) {
+            if (fld.owner) {
                 if (fld.hidden) {
                     ctx.fillStyle = styles.colors.hiddenMoves[fld.owner - 1];
                     ctx.fill(hex);
@@ -306,19 +306,21 @@ function drawBoard(ctx) {
                     ctx.fillText(String(fld.v), 0, 0);
                 }
             } else if (fld.blocked) {
-                if (fld.blocked[0]) {
-                    if (fld.blocked[1]) {
+                const blockedP1 = fld.blocked & 1;
+                const blockedP2 = fld.blocked & 2;
+                if (blockedP1) {
+                    if (blockedP2) {
                         ctx.fillStyle = styles.colors.blocked[2];
                     } else {
                         ctx.fillStyle = styles.colors.blocked[0];
                     }
                     ctx.fill(hex);
-                } else if (fld.blocked[1]) {
+                } else if (blockedP2) {
                     ctx.fillStyle = styles.colors.blocked[1];
                     ctx.fill(hex);
                 }
             }
-            if (fld.owner == 0 && gstate.renderMoveScores && gstate.moveScores) {
+            if (!fld.owner && gstate.renderMoveScores && gstate.moveScores) {
                 const n = gstate.moveScores.normalCell[i][j];
                 const f = gstate.moveScores.flag[i][j];
                 function cellValue(v) {
