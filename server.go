@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"math/rand"
 	"net"
@@ -287,6 +289,29 @@ func (g *GameHandle) unregisterPlayer(playerId PlayerId) {
 	g.sendEvent(ControlEventUnregister{playerId: playerId})
 }
 
+// Sends the contents of filename to the ResponseWriter.
+func (s *Server) serveHtmlFile(w http.ResponseWriter, filename string) {
+	s.IncCounter("/storage/files/servehtml")
+	if path.Ext(filename) != ".html" || strings.Contains(filename, "..") || strings.Contains(filename, "/") {
+		// It's a programming error to call this method with non-html files.
+		log.Fatalf("not a valid HTML file: %q\n", filename)
+	}
+	p := path.Join(s.config.DocumentRoot, filename)
+	html, err := os.ReadFile(p)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			// We should only call this method for existing html files.
+			log.Fatalf("cannot read %s: %s", p, err.Error())
+		} else {
+			// Whatever might cause us to fail reading our own files...
+			http.Error(w, "", http.StatusInternalServerError)
+			return
+		}
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(html)
+}
+
 func (s *Server) readStaticResource(filename string) ([]byte, error) {
 	s.IncCounter("/storage/files/readfile")
 	if strings.Contains(filename, "..") {
@@ -399,16 +424,6 @@ func (s *Server) listRecentGames(limit int) []*GameInfo {
 	return gameInfos[:limit]
 }
 
-func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
-	html, err := s.readStaticResource(loginHtmlFilename)
-	if err != nil {
-		http.Error(w, "Failed to load login screen", http.StatusInternalServerError)
-		log.Fatal("Cannot read login HTML page: ", err.Error())
-	}
-	w.Header().Set("Content-Type", "text/html")
-	w.Write(html)
-}
-
 func isValidPlayerName(name string) bool {
 	return len(name) >= 3 && len(name) <= 20 && playernameRegexp.MatchString(name)
 }
@@ -457,18 +472,12 @@ func (s *Server) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleHexz(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
-		s.handleLoginPage(w, r)
+		s.serveHtmlFile(w, loginHtmlFilename)
 		return
 	}
-	html, err := s.readStaticResource(newGameHtmlFilename)
-	if err != nil {
-		http.Error(w, "Failed to load html", http.StatusInternalServerError)
-		log.Fatal("Cannot read new game HTML page: ", err.Error())
-	}
-	w.Header().Set("Content-Type", "text/html")
 	// Prolong cookie ttl.
 	http.SetCookie(w, makePlayerCookie(p.Id, s.config.LoginTtl))
-	w.Write(html)
+	s.serveHtmlFile(w, newGameHtmlFilename)
 }
 
 func (s *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
@@ -478,7 +487,7 @@ func (s *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
-		s.handleLoginPage(w, r)
+		s.serveHtmlFile(w, loginHtmlFilename)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -509,7 +518,8 @@ func (s *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
 	}
 	game, err := s.startNewGame(p.Name, GameType(typeParam), singlePlayer)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusPreconditionFailed)
+		log.Printf("cannot start new game: %s\n", err.Error())
+		http.Error(w, "", http.StatusPreconditionFailed)
 	}
 	s.IncCounter("/games/started")
 	http.Redirect(w, r, fmt.Sprintf("/hexz/%s", game.id), http.StatusSeeOther)
@@ -541,7 +551,7 @@ func (s *Server) lookupPlayerFromCookie(r *http.Request) (Player, error) {
 func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 	player, err := s.validatePostRequest(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "", http.StatusBadRequest)
 	}
 	gameId := gameIdFromPath(r.URL.Path)
 	game := s.lookupGame(gameId)
@@ -552,7 +562,7 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 	dec := json.NewDecoder(r.Body)
 	var req MoveRequest
 	if err := dec.Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "unmarshal error", http.StatusBadRequest)
 		return
 	}
 	if !req.Type.valid() {
@@ -565,7 +575,7 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 	p, err := s.validatePostRequest(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "", http.StatusBadRequest)
 	}
 	gameId := gameIdFromPath(r.URL.Path)
 	game := s.lookupGame(gameId)
@@ -576,7 +586,7 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 	dec := json.NewDecoder(r.Body)
 	var req ResetRequest
 	if err := dec.Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "unmarshal error", http.StatusBadRequest)
 	}
 	game.sendEvent(ControlEventReset{playerId: p.Id, message: req.Message})
 }
@@ -584,7 +594,7 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUndo(w http.ResponseWriter, r *http.Request) {
 	p, err := s.validatePostRequest(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "", http.StatusBadRequest)
 	}
 	gameId := gameIdFromPath(r.URL.Path)
 	game := s.lookupGame(gameId)
@@ -595,7 +605,7 @@ func (s *Server) handleUndo(w http.ResponseWriter, r *http.Request) {
 	dec := json.NewDecoder(r.Body)
 	var req UndoRequest
 	if err := dec.Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "", http.StatusBadRequest)
 	}
 	game.sendEvent(ControlEventUndo{playerId: p.Id, UndoRequest: req})
 }
@@ -603,7 +613,7 @@ func (s *Server) handleUndo(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRedo(w http.ResponseWriter, r *http.Request) {
 	p, err := s.validatePostRequest(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "", http.StatusBadRequest)
 	}
 	gameId := gameIdFromPath(r.URL.Path)
 	game := s.lookupGame(gameId)
@@ -614,7 +624,7 @@ func (s *Server) handleRedo(w http.ResponseWriter, r *http.Request) {
 	dec := json.NewDecoder(r.Body)
 	var req RedoRequest
 	if err := dec.Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "", http.StatusBadRequest)
 	}
 	game.sendEvent(ControlEventRedo{playerId: p.Id, RedoRequest: req})
 }
@@ -624,7 +634,7 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 	// We expect a cookie to identify the p.
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "", http.StatusBadRequest)
 		return
 	}
 	gameId := gameIdFromPath(r.URL.Path)
@@ -635,7 +645,7 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 	}
 	serverEventChan, err := game.registerPlayer(p)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusPreconditionFailed)
+		http.Error(w, "", http.StatusPreconditionFailed)
 		return
 	}
 	s.IncCounter("/requests/sse/accepted")
@@ -656,7 +666,7 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 			var buf strings.Builder
 			enc := json.NewEncoder(&buf)
 			if err := enc.Encode(ev); err != nil {
-				http.Error(w, "Serialization error", http.StatusInternalServerError)
+				http.Error(w, "marshal error", http.StatusInternalServerError)
 				panic(fmt.Sprintf("Cannot serialize my own structs?! %s", err))
 			}
 			// log.Printf("Sending %d bytes over SSE", buf.Len())
@@ -699,14 +709,9 @@ func (s *Server) handleGame(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 		return
 	}
-	gameHtml, err := s.readStaticResource(gameHtmlFilename)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-	w.Header().Set("Content-Type", "text/html")
 	// Prolong cookie ttl.
 	http.SetCookie(w, makePlayerCookie(p.Id, s.config.LoginTtl))
-	w.Write(gameHtml)
+	s.serveHtmlFile(w, gameHtmlFilename)
 }
 
 var (
@@ -726,12 +731,7 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, fmt.Sprintf("%s/0", groups[1]), http.StatusSeeOther)
 		return
 	}
-	viewHtml, err := s.readStaticResource(viewHtmlFilename)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-	w.Header().Set("Content-Type", "text/html")
-	w.Write(viewHtml)
+	s.serveHtmlFile(w, viewHtmlFilename)
 }
 
 func (s *Server) handleBoard(w http.ResponseWriter, r *http.Request) {
@@ -766,30 +766,6 @@ func (s *Server) handleBoard(w http.ResponseWriter, r *http.Request) {
 		panic("Cannot marshal ServerEvent: " + err.Error())
 	}
 	w.Write(data)
-}
-
-func (s *Server) handleFile(filepath string, w http.ResponseWriter, r *http.Request) {
-	contentType, ok := validResourceFileExts[path.Ext(filepath)]
-	if !ok {
-		http.Error(w, "", http.StatusNotFound)
-		return
-	}
-	contents, err := s.readStaticResource(filepath)
-	if err != nil {
-		http.Error(w, "", http.StatusNotFound)
-		return
-	}
-	w.Header().Set("Content-Type", contentType)
-	w.Write(contents)
-}
-
-func (s *Server) handleStaticResource(w http.ResponseWriter, r *http.Request) {
-	prefix := "/hexz/static/"
-	if !strings.HasPrefix(r.URL.Path, prefix) {
-		http.Error(w, "", http.StatusNotFound)
-		return
-	}
-	s.handleFile(r.URL.Path[len(prefix):], w, r)
 }
 
 func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
@@ -862,7 +838,7 @@ func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(resp); err != nil {
-		http.Error(w, "Serialization error", http.StatusInternalServerError)
+		http.Error(w, "marshal error", http.StatusInternalServerError)
 		panic(fmt.Sprintf("Cannot serialize my own structs?! %s", err))
 	}
 }
@@ -1012,7 +988,7 @@ func (s *Server) basicAuthHandlerFunc(h http.HandlerFunc) http.HandlerFunc {
 			if s.config.AuthTokenSha256 == "" {
 				// No auth token: only local access is allowed.
 				s.IncCounter("/auth/rejected/nonlocal")
-				http.Error(w, "Forbidden", http.StatusForbidden)
+				http.Error(w, "", http.StatusForbidden)
 				return
 			}
 			_, pass, ok := r.BasicAuth()
@@ -1027,7 +1003,7 @@ func (s *Server) basicAuthHandlerFunc(h http.HandlerFunc) http.HandlerFunc {
 			}
 			if rejected {
 				w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				http.Error(w, "", http.StatusUnauthorized)
 				return
 			}
 			s.IncCounter("/auth/granted/basic_auth")
@@ -1054,9 +1030,10 @@ func (s *Server) Serve() {
 	mux.HandleFunc("/hexz/sse/", s.handleSse)
 	mux.HandleFunc("/hexz/login", s.handleLoginRequest)
 	mux.HandleFunc("/hexz/rules", func(w http.ResponseWriter, r *http.Request) {
-		s.handleFile(rulesHtmlFilename, w, r)
+		s.serveHtmlFile(w, rulesHtmlFilename)
 	})
-	mux.HandleFunc("/hexz/static/", s.handleStaticResource)
+	mux.Handle("/hexz/static/", http.StripPrefix("/hexz/static/",
+		http.FileServer(http.Dir(s.config.DocumentRoot))))
 	mux.HandleFunc("/hexz", s.handleHexz)
 	mux.HandleFunc("/hexz/new", s.handleNewGame)
 	mux.HandleFunc("/hexz/gamez", s.handleGamez)
