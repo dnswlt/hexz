@@ -477,7 +477,7 @@ func (s *Server) handleHexz(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
-		s.serveHtmlFile(w, loginHtmlFilename)
+		http.Error(w, "Player not logged in", http.StatusPreconditionFailed)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
