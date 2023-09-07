@@ -43,6 +43,10 @@ type ServerConfig struct {
 var (
 	// Regexp used to validate player names.
 	playernameRegexp = regexp.MustCompile(`^[\p{Latin}0-9_.-]+$`)
+
+	// Loggers
+	infoLog  = log.New(os.Stderr, "I ", log.Ldate|log.Ltime|log.Lshortfile)
+	errorLog = log.New(os.Stderr, "E ", log.Ldate|log.Ltime|log.Lshortfile)
 )
 
 type Server struct {
@@ -286,16 +290,17 @@ func (s *Server) serveHtmlFile(w http.ResponseWriter, filename string) {
 	s.IncCounter("/storage/files/servehtml")
 	if path.Ext(filename) != ".html" || strings.Contains(filename, "..") || strings.Contains(filename, "/") {
 		// It's a programming error to call this method with non-html files.
-		log.Fatalf("not a valid HTML file: %q\n", filename)
+		errorLog.Fatalf("Not a valid HTML file: %q\n", filename)
 	}
 	p := path.Join(s.config.DocumentRoot, filename)
 	html, err := os.ReadFile(p)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			// We should only call this method for existing html files.
-			log.Fatalf("cannot read %s: %s", p, err.Error())
+			errorLog.Fatalf("Cannot read %s: %s", p, err.Error())
 		} else {
 			// Whatever might cause us to fail reading our own files...
+			errorLog.Printf("Could not read existing file %s: %s", p, err.Error())
 			http.Error(w, "", http.StatusInternalServerError)
 			return
 		}
@@ -441,15 +446,16 @@ func (s *Server) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
 	name := r.Form.Get("name")
 	name = strings.TrimSpace(name)
 	if name == "" {
-		http.Error(w, "Missing 'user' form parameter", http.StatusBadRequest)
+		http.Error(w, "Missing 'name' form parameter", http.StatusBadRequest)
 		return
 	}
 	if !isValidPlayerName(name) {
-		http.Error(w, fmt.Sprintf("Invalid username %q", name), http.StatusBadRequest)
+		http.Error(w, "Invalid username", http.StatusBadRequest)
 		return
 	}
 	playerId := generatePlayerId()
 	if !s.loginPlayer(playerId, name) {
+		infoLog.Printf("Rejected login for player %s", name)
 		http.Error(w, "Cannot log in right now", http.StatusPreconditionFailed)
 	}
 	s.IncCounter("/requests/login/success")
@@ -502,7 +508,7 @@ func (s *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
 	}
 	game, err := s.startNewGame(p.Name, GameType(typeParam), singlePlayer)
 	if err != nil {
-		log.Printf("cannot start new game: %s\n", err.Error())
+		errorLog.Printf("cannot start new game: %s\n", err.Error())
 		http.Error(w, "", http.StatusPreconditionFailed)
 	}
 	s.IncCounter("/games/started")
@@ -529,7 +535,7 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 	gameId := gameIdFromPath(r.URL.Path)
 	game := s.lookupGame(gameId)
 	if game == nil {
-		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
+		http.Error(w, "Invalid game ID", http.StatusNotFound)
 		return
 	}
 	dec := json.NewDecoder(r.Body)
@@ -553,7 +559,7 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 	gameId := gameIdFromPath(r.URL.Path)
 	game := s.lookupGame(gameId)
 	if game == nil {
-		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
+		http.Error(w, "Invalid game ID", http.StatusNotFound)
 		return
 	}
 	dec := json.NewDecoder(r.Body)
@@ -572,7 +578,7 @@ func (s *Server) handleUndo(w http.ResponseWriter, r *http.Request) {
 	gameId := gameIdFromPath(r.URL.Path)
 	game := s.lookupGame(gameId)
 	if game == nil {
-		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
+		http.Error(w, "No such game", http.StatusNotFound)
 		return
 	}
 	dec := json.NewDecoder(r.Body)
@@ -591,7 +597,7 @@ func (s *Server) handleRedo(w http.ResponseWriter, r *http.Request) {
 	gameId := gameIdFromPath(r.URL.Path)
 	game := s.lookupGame(gameId)
 	if game == nil {
-		http.Error(w, fmt.Sprintf("No game with ID %q", gameId), http.StatusNotFound)
+		http.Error(w, "No such game", http.StatusNotFound)
 		return
 	}
 	dec := json.NewDecoder(r.Body)
@@ -613,7 +619,7 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 	gameId := gameIdFromPath(r.URL.Path)
 	game := s.lookupGame(gameId)
 	if game == nil {
-		http.Error(w, fmt.Sprintf("Game %s does not exist", gameId), http.StatusNotFound)
+		http.Error(w, "No such game", http.StatusNotFound)
 		return
 	}
 	serverEventChan, err := game.registerPlayer(p)
@@ -630,7 +636,7 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 		case ev, ok := <-serverEventChan:
 			s.IncCounter("/requests/sse/events")
 			if !ok {
-				log.Printf("Closing SSE channel for player %s in game %s", p.Id, gameId)
+				infoLog.Printf("Closing SSE channel for player %s in game %s", p.Id, gameId)
 				ev = ServerEvent{
 					LastEvent: true,
 				}
@@ -640,9 +646,8 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 			enc := json.NewEncoder(&buf)
 			if err := enc.Encode(ev); err != nil {
 				http.Error(w, "marshal error", http.StatusInternalServerError)
-				panic(fmt.Sprintf("Cannot serialize my own structs?! %s", err))
+				errorLog.Fatalf("Failed to marshal server event: %s", err)
 			}
-			// log.Printf("Sending %d bytes over SSE", buf.Len())
 			fmt.Fprintf(w, "data: %s\n\n", buf.String())
 			if f, canFlush := w.(http.Flusher); canFlush {
 				f.Flush()
@@ -652,7 +657,7 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-r.Context().Done():
-			log.Printf("%s Player %s closed SSE channel", r.RemoteAddr, p.Id)
+			infoLog.Printf("%s Player %s closed SSE channel", r.RemoteAddr, p.Id)
 			game.unregisterPlayer(p.Id)
 			return
 		}
@@ -665,7 +670,7 @@ func (s *Server) handleGamez(w http.ResponseWriter, r *http.Request) {
 	json, err := json.Marshal(gameInfos)
 	if err != nil {
 		http.Error(w, "marshal error", http.StatusInternalServerError)
-		panic("Cannot marshal []GameInfo: " + err.Error())
+		errorLog.Fatal("Cannot marshal []GameInfo: " + err.Error())
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(json)
@@ -736,7 +741,7 @@ func (s *Server) handleBoard(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		http.Error(w, "", http.StatusInternalServerError)
-		panic("Cannot marshal ServerEvent: " + err.Error())
+		errorLog.Fatalf("Failed to marshal server event: %s", err)
 	}
 	w.Write(data)
 }
@@ -812,7 +817,7 @@ func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(resp); err != nil {
 		http.Error(w, "marshal error", http.StatusInternalServerError)
-		panic(fmt.Sprintf("Cannot serialize my own structs?! %s", err))
+		errorLog.Printf("Failed to marshal /statusz response: %s", err)
 	}
 }
 
@@ -840,7 +845,7 @@ func (s *Server) loadUserDatabase() {
 	r, err := os.Open(userDatabaseFilename)
 	if err != nil {
 		if err != os.ErrNotExist {
-			log.Print("Failed to read user database: ", err.Error())
+			errorLog.Println("Failed to read user database:", err.Error())
 		}
 		return
 	}
@@ -848,9 +853,9 @@ func (s *Server) loadUserDatabase() {
 	dec := json.NewDecoder(r)
 	var players []*Player
 	if err := dec.Decode(&players); err != nil {
-		log.Print("Corrupted user database: ", err.Error())
+		errorLog.Println("Corrupted user database:", err.Error())
 	}
-	log.Printf("Loaded %d users from user db", len(players))
+	infoLog.Printf("Loaded %d users from user db", len(players))
 	s.loggedInPlayersMut.Lock()
 	defer s.loggedInPlayersMut.Unlock()
 	for _, p := range players {
@@ -864,15 +869,15 @@ func (s *Server) loadUserDatabase() {
 func (s *Server) saveUserDatabase(players []Player) {
 	w, err := os.Create(userDatabaseFilename)
 	if err != nil {
-		log.Print("userMaintenance: cannot save user db: ", err.Error())
+		errorLog.Print("Cannot save user db: ", err.Error())
 		return
 	}
 	defer w.Close()
 	enc := json.NewEncoder(w)
 	if err := enc.Encode(players); err != nil {
-		log.Print("userMaintenance: error saving user db: ", err.Error())
+		errorLog.Fatal("Cannot encode user db: ", err.Error())
 	}
-	log.Printf("Saved user db (%d users)", len(players))
+	infoLog.Printf("Saved user db (%d users)", len(players))
 	s.IncCounter("/storage/userdb/saved")
 }
 
@@ -904,7 +909,7 @@ func (s *Server) updateLoggedInPlayers() {
 		s.loggedInPlayersMut.Unlock()
 		// Do I/O outside the mutex.
 		for _, p := range del {
-			log.Printf("Logged out player %s(%s)", p.Name, p.Id)
+			infoLog.Printf("Logged out player %s(%s)", p.Name, p.Id)
 		}
 		if activity || len(del) > 0 {
 			s.loggedInPlayersMut.Lock()
@@ -926,7 +931,7 @@ func (s *Server) updateLoggedInPlayers() {
 func (s *Server) loggingHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.IncCounter("/requests/total")
-		log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.URL.String())
+		infoLog.Printf("Incoming request: %s %s %s", r.RemoteAddr, r.Method, r.URL.String())
 		h.ServeHTTP(w, r)
 	})
 }
@@ -1005,7 +1010,7 @@ func (s *Server) Serve() {
 
 	// Quick sanity check that we have access to the game HTML file.
 	if _, err := s.readStaticResource(gameHtmlFilename); err != nil {
-		log.Fatal("Cannot load game HTML: ", err)
+		errorLog.Fatal("Cannot load game HTML: ", err)
 	}
 	// Static resources (images, JavaScript, ...) live under DocumentRoot.
 	mux.Handle("/hexz/static/", http.StripPrefix("/hexz/static/",
@@ -1036,12 +1041,12 @@ func (s *Server) Serve() {
 
 	s.loadUserDatabase()
 
-	log.Printf("Listening on %s", addr)
+	infoLog.Printf("Listening on %s", addr)
 	// Start login GC routine
 	go s.updateLoggedInPlayers()
 
 	if s.config.TlsCertChain != "" && s.config.TlsPrivKey != "" {
-		log.Fatal(srv.ListenAndServeTLS(s.config.TlsCertChain, s.config.TlsPrivKey))
+		errorLog.Fatal(srv.ListenAndServeTLS(s.config.TlsCertChain, s.config.TlsPrivKey))
 	}
-	log.Fatal(srv.ListenAndServe())
+	errorLog.Fatal(srv.ListenAndServe())
 }
