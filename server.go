@@ -149,14 +149,6 @@ const (
 )
 
 var (
-	// File extensions of resources we are willing to serve.
-	// Mostly a safety measure against directory scanning attacks.
-	validResourceFileExts = map[string]string{
-		".html": "text/html",
-		".png":  "image/png",
-		".gif":  "image/gif",
-		".js":   "text/javascript",
-	}
 	// Paths that browsers may request to retrieve a favicon.
 	// Keep in sync with files in the images/ folder.
 	faviconUrlPaths = []string{
@@ -442,10 +434,6 @@ func makePlayerCookie(playerId PlayerId, ttl time.Duration) *http.Cookie {
 
 func (s *Server) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
 	s.IncCounter("/requests/login/total")
-	if r.Method != http.MethodPost {
-		http.Error(w, "Only POST allowed", http.StatusBadRequest)
-		return
-	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid form", http.StatusBadRequest)
 		return
@@ -481,10 +469,6 @@ func (s *Server) handleHexz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Invalid method", http.StatusBadRequest)
-		return
-	}
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
 		s.serveHtmlFile(w, loginHtmlFilename)
@@ -525,17 +509,6 @@ func (s *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, fmt.Sprintf("/hexz/%s", game.id), http.StatusSeeOther)
 }
 
-func (s *Server) validatePostRequest(r *http.Request) (Player, error) {
-	if r.Method != http.MethodPost {
-		return Player{}, fmt.Errorf("invalid method")
-	}
-	p, err := s.lookupPlayerFromCookie(r)
-	if err != nil {
-		return Player{}, fmt.Errorf("invalid method")
-	}
-	return p, nil
-}
-
 func (s *Server) lookupPlayerFromCookie(r *http.Request) (Player, error) {
 	cookie, err := r.Cookie(playerIdCookieName)
 	if err != nil {
@@ -549,9 +522,9 @@ func (s *Server) lookupPlayerFromCookie(r *http.Request) (Player, error) {
 }
 
 func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
-	player, err := s.validatePostRequest(r)
+	player, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
-		http.Error(w, "", http.StatusBadRequest)
+		http.Error(w, "unknown player", http.StatusPreconditionFailed)
 	}
 	gameId := gameIdFromPath(r.URL.Path)
 	game := s.lookupGame(gameId)
@@ -573,9 +546,9 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
-	p, err := s.validatePostRequest(r)
+	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
-		http.Error(w, "", http.StatusBadRequest)
+		http.Error(w, "unknown player", http.StatusPreconditionFailed)
 	}
 	gameId := gameIdFromPath(r.URL.Path)
 	game := s.lookupGame(gameId)
@@ -592,7 +565,7 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUndo(w http.ResponseWriter, r *http.Request) {
-	p, err := s.validatePostRequest(r)
+	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
 		http.Error(w, "", http.StatusBadRequest)
 	}
@@ -611,7 +584,7 @@ func (s *Server) handleUndo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRedo(w http.ResponseWriter, r *http.Request) {
-	p, err := s.validatePostRequest(r)
+	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
 		http.Error(w, "", http.StatusBadRequest)
 	}
@@ -952,9 +925,20 @@ func (s *Server) updateLoggedInPlayers() {
 
 func (s *Server) loggingHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// t := time.Now().Format("2006-01-02 15:04:05.999Z07:00")
 		s.IncCounter("/requests/total")
 		log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.URL.String())
+		h.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) postHandlerFunc(h http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			s.IncCounter("/requests/bad/methodnotallowed")
+			w.Header().Set("Allow", "POST")
+			http.Error(w, "", http.StatusMethodNotAllowed)
+			return
+		}
 		h.ServeHTTP(w, r)
 	})
 }
@@ -1023,29 +1007,36 @@ func (s *Server) Serve() {
 	if _, err := s.readStaticResource(gameHtmlFilename); err != nil {
 		log.Fatal("Cannot load game HTML: ", err)
 	}
-	mux.HandleFunc("/hexz/move/", s.handleMove)
-	mux.HandleFunc("/hexz/reset/", s.handleReset)
-	mux.HandleFunc("/hexz/undo/", s.handleUndo)
-	mux.HandleFunc("/hexz/redo/", s.handleRedo)
+	// Static resources (images, JavaScript, ...) live under DocumentRoot.
+	mux.Handle("/hexz/static/", http.StripPrefix("/hexz/static/",
+		http.FileServer(http.Dir(s.config.DocumentRoot))))
+	// POST method API
+	mux.HandleFunc("/hexz/login", s.postHandlerFunc(s.handleLoginRequest))
+	mux.HandleFunc("/hexz/new", s.postHandlerFunc(s.handleNewGame))
+	mux.HandleFunc("/hexz/move/", s.postHandlerFunc(s.handleMove))
+	mux.HandleFunc("/hexz/reset/", s.postHandlerFunc(s.handleReset))
+	mux.HandleFunc("/hexz/undo/", s.postHandlerFunc(s.handleUndo))
+	mux.HandleFunc("/hexz/redo/", s.postHandlerFunc(s.handleRedo))
+	// Server-sent Event handling
 	mux.HandleFunc("/hexz/sse/", s.handleSse)
-	mux.HandleFunc("/hexz/login", s.handleLoginRequest)
+
 	mux.HandleFunc("/hexz/rules", func(w http.ResponseWriter, r *http.Request) {
 		s.serveHtmlFile(w, rulesHtmlFilename)
 	})
-	mux.Handle("/hexz/static/", http.StripPrefix("/hexz/static/",
-		http.FileServer(http.Dir(s.config.DocumentRoot))))
+	// GET method API
 	mux.HandleFunc("/hexz", s.handleHexz)
-	mux.HandleFunc("/hexz/new", s.handleNewGame)
 	mux.HandleFunc("/hexz/gamez", s.handleGamez)
 	mux.HandleFunc("/hexz/view/", s.handleView)
 	mux.HandleFunc("/hexz/board/", s.handleBoard)
-	mux.HandleFunc("/hexz/", s.handleGame)
+	mux.HandleFunc("/hexz/", s.handleGame) // /hexz/<GameId>
+	// Technical services
 	mux.Handle("/statusz", s.basicAuthHandlerFunc(s.handleStatusz))
+
 	mux.HandleFunc("/", s.defaultHandler)
 
-	log.Printf("Listening on %s", addr)
-
 	s.loadUserDatabase()
+
+	log.Printf("Listening on %s", addr)
 	// Start login GC routine
 	go s.updateLoggedInPlayers()
 
