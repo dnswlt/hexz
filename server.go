@@ -254,6 +254,10 @@ type ControlEventRedo struct {
 	RedoRequest
 }
 
+type ControlEventValidMoves struct {
+	reply chan<- []*MoveRequest
+}
+
 type ControlEventKill struct{}
 
 func (e ControlEventRegister) controlEventImpl()   {}
@@ -262,6 +266,7 @@ func (e ControlEventMove) controlEventImpl()       {}
 func (e ControlEventReset) controlEventImpl()      {}
 func (e ControlEventUndo) controlEventImpl()       {}
 func (e ControlEventRedo) controlEventImpl()       {}
+func (e ControlEventValidMoves) controlEventImpl() {}
 func (e ControlEventKill) controlEventImpl()       {}
 
 func (g *GameHandle) sendEvent(e ControlEvent) bool {
@@ -283,6 +288,17 @@ func (g *GameHandle) registerPlayer(p Player) (chan ServerEvent, error) {
 
 func (g *GameHandle) unregisterPlayer(playerId PlayerId) {
 	g.sendEvent(ControlEventUnregister{playerId: playerId})
+}
+
+func (g *GameHandle) validMoves() []*MoveRequest {
+	ch := make(chan []*MoveRequest)
+	moves := []*MoveRequest{}
+	if g.sendEvent(ControlEventValidMoves{reply: ch}) {
+		if ms := <-ch; ms != nil {
+			moves = ms
+		}
+	}
+	return moves
 }
 
 // Sends the contents of filename to the ResponseWriter.
@@ -466,10 +482,12 @@ func (s *Server) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleHexz(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
+		infoLog.Printf("Foosen cookie: %s", err)
 		s.serveHtmlFile(w, loginHtmlFilename)
 		return
 	}
 	// Prolong cookie ttl.
+	infoLog.Print("Prolonging cookie")
 	http.SetCookie(w, makePlayerCookie(p.Id, s.config.LoginTtl))
 	s.serveHtmlFile(w, newGameHtmlFilename)
 }
@@ -613,7 +631,7 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 	// We expect a cookie to identify the p.
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
-		http.Error(w, "", http.StatusBadRequest)
+		http.Error(w, "unknown player", http.StatusPreconditionFailed)
 		return
 	}
 	gameId := gameIdFromPath(r.URL.Path)
@@ -690,6 +708,22 @@ func (s *Server) handleGame(w http.ResponseWriter, r *http.Request) {
 	// Prolong cookie ttl.
 	http.SetCookie(w, makePlayerCookie(p.Id, s.config.LoginTtl))
 	s.serveHtmlFile(w, gameHtmlFilename)
+}
+
+func (s *Server) handleValidMoves(w http.ResponseWriter, r *http.Request) {
+	gameId := gameIdFromPath(r.URL.Path)
+	game := s.lookupGame(gameId)
+	if game == nil {
+		http.Error(w, "No such game", http.StatusNotFound)
+		return
+	}
+	json, err := json.Marshal(game.validMoves())
+	if err != nil {
+		http.Error(w, "marshal error", http.StatusInternalServerError)
+		errorLog.Fatal("Cannot marshal valid moves: " + err.Error())
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(json)
 }
 
 var (
@@ -1000,18 +1034,8 @@ func (s *Server) basicAuthHandlerFunc(h http.HandlerFunc) http.HandlerFunc {
 		})
 }
 
-func (s *Server) Serve() {
-	addr := fmt.Sprintf("%s:%d", s.config.ServerAddress, s.config.ServerPort)
+func (s *Server) createMux() *http.ServeMux {
 	mux := &http.ServeMux{}
-	srv := &http.Server{
-		Addr:    addr,
-		Handler: s.loggingHandler(mux),
-	}
-
-	// Quick sanity check that we have access to the game HTML file.
-	if _, err := s.readStaticResource(gameHtmlFilename); err != nil {
-		errorLog.Fatal("Cannot load game HTML: ", err)
-	}
 	// Static resources (images, JavaScript, ...) live under DocumentRoot.
 	mux.Handle("/hexz/static/", http.StripPrefix("/hexz/static/",
 		http.FileServer(http.Dir(s.config.DocumentRoot))))
@@ -1033,11 +1057,28 @@ func (s *Server) Serve() {
 	mux.HandleFunc("/hexz/gamez", s.handleGamez)
 	mux.HandleFunc("/hexz/view/", s.handleView)
 	mux.HandleFunc("/hexz/board/", s.handleBoard)
+	mux.HandleFunc("/hexz/moves/", s.handleValidMoves)
 	mux.HandleFunc("/hexz/", s.handleGame) // /hexz/<GameId>
 	// Technical services
 	mux.Handle("/statusz", s.basicAuthHandlerFunc(s.handleStatusz))
 
 	mux.HandleFunc("/", s.defaultHandler)
+
+	return mux
+}
+
+func (s *Server) Serve() {
+	addr := fmt.Sprintf("%s:%d", s.config.ServerAddress, s.config.ServerPort)
+	mux := s.createMux()
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: s.loggingHandler(mux),
+	}
+
+	// Quick sanity check that we have access to the game HTML file.
+	if _, err := s.readStaticResource(gameHtmlFilename); err != nil {
+		errorLog.Fatal("Cannot load game HTML: ", err)
+	}
 
 	s.loadUserDatabase()
 

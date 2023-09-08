@@ -3,7 +3,6 @@ package hexz
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/rand"
 	"time"
 )
@@ -48,8 +47,14 @@ func (m *GameMaster) playerNames() []string {
 	return r
 }
 
-func (m *GameMaster) broadcastPing(debugMessage string) {
-	m.broadcast(&ServerEvent{DebugMessage: debugMessage})
+func (m *GameMaster) broadcastPing() {
+	e := &ServerEvent{
+		Timestamp:    time.Now().Format(time.RFC3339),
+		DebugMessage: "ping",
+	}
+	for _, ch := range m.eventListeners {
+		ch <- *e
+	}
 }
 
 func (m *GameMaster) broadcast(e *ServerEvent) {
@@ -156,7 +161,7 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 	}
 	if m.s.config.DebugMode {
 		debugReq, _ := json.Marshal(e.MoveRequest)
-		log.Printf("%s: move request: P%d %s", m.game.id, p.playerNum, debugReq)
+		infoLog.Printf("%s: move request: P%d %s", m.game.id, p.playerNum, debugReq)
 	}
 	var histEntry GameEngine
 	if m.s.config.EnableUndo {
@@ -233,9 +238,28 @@ func (m *GameMaster) processControlEventRedo(e ControlEventRedo) {
 	m.broadcast(&ServerEvent{Announcements: []string{"Redo"}})
 }
 
+func (m *GameMaster) processControlEventValidMoves(e ControlEventValidMoves) {
+	// TODO: Return all valid moves, not just a single random one.
+	defer close(e.reply)
+	if engine, ok := m.gameEngine.(SinglePlayerGameEngine); ok {
+		m, err := engine.RandomMove()
+		if err != nil {
+			return
+		}
+		e.reply <- []*MoveRequest{
+			{
+				Move: engine.Board().Move,
+				Row:  m.Row,
+				Col:  m.Col,
+				Type: m.CellType,
+			},
+		}
+	}
+}
+
 func (m *GameMaster) Run() {
 	m.s.IncCounter(fmt.Sprintf("/games/%s/started", m.game.gameType))
-	log.Printf("Started new %q game: %s", m.game.gameType, m.game.id)
+	infoLog.Printf("Started new %q game: %s", m.game.gameType, m.game.id)
 	defer func() {
 		close(m.game.done)
 		m.s.deleteGame(m.game.id)
@@ -265,6 +289,8 @@ func (m *GameMaster) Run() {
 				m.processControlEventUndo(e)
 			case ControlEventRedo:
 				m.processControlEventRedo(e)
+			case ControlEventValidMoves:
+				m.processControlEventValidMoves(e)
 			case ControlEventKill:
 				m.broadcast(&ServerEvent{
 					// Send sad emoji.
@@ -273,9 +299,9 @@ func (m *GameMaster) Run() {
 				return
 			}
 		case <-tick:
-			m.broadcastPing("ping")
+			m.broadcastPing()
 		case playerId := <-m.removePlayer:
-			log.Printf("Player %s left game %s: game over", playerId, m.game.id)
+			infoLog.Printf("Player %s left game %s: game over", playerId, m.game.id)
 			playerName := "?"
 			if p, ok := m.players[playerId]; ok {
 				playerName = p.Name
@@ -313,7 +339,7 @@ func (m *GameMaster) cpuPlayer(cpuPlayerId PlayerId) {
 	// Minimum time to spend thinking about a move, even if we're dead certain about the result.
 	minTime := time.Duration(100) * time.Millisecond
 	thinkTime := m.s.config.CpuThinkTime
-	t := m.s.config.CpuThinkTime
+	t := thinkTime
 	for ge := range m.cpuCh {
 		mv, stats := mcts.SuggestMove(ge.(SinglePlayerGameEngine), t)
 		if minQ := stats.MinQ(); minQ >= 0.98 || minQ <= 0.02 {
