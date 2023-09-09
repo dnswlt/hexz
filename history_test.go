@@ -13,12 +13,12 @@ func TestGameIdPath(t *testing.T) {
 		gameId string
 		want   string
 	}{
-		{"lowercase", "abcdef", "AB/abcdef.gob"},
-		{"uppercase", "ABCDEF", "AB/ABCDEF.gob"},
-		{"empty", "", "_/_.gob"},
-		{"short", "A", "A/A.gob"},
-		{"short", "AB", "AB/AB.gob"},
-		{"long", "ABCDEF123123", "AB/ABCDEF123123.gob"},
+		{"lowercase", "abcdef", "AB/abcdef.ggz"},
+		{"uppercase", "ABCDEF", "AB/ABCDEF.ggz"},
+		{"empty", "", "_/_.ggz"},
+		{"short", "A", "A/A.ggz"},
+		{"short", "AB", "AB/AB.ggz"},
+		{"long", "ABCDEF123123", "AB/ABCDEF123123.ggz"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

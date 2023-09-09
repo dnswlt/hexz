@@ -27,9 +27,10 @@ type tok struct{}
 type ServerConfig struct {
 	ServerAddress     string
 	ServerPort        int
-	DocumentRoot      string // Path to static resource files.
-	GameHistoryRoot   string // Path to game history files.
-	PlayerRemoveDelay time.Duration
+	DocumentRoot      string        // Path to static resource files.
+	GameHistoryRoot   string        // Path to game history files.
+	InactivityTimeout time.Duration // Time after which a game is ended due to inactivity.
+	PlayerRemoveDelay time.Duration // Time to wait before removing an unregistered player from the game.
 	LoginTtl          time.Duration
 	CpuThinkTime      time.Duration
 	CpuMaxFlags       int

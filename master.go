@@ -33,6 +33,8 @@ type GameMaster struct {
 	// steps that can be undone/redone.
 	undo []GameEngine
 	redo []GameEngine
+
+	historyWriter *HistoryWriter
 }
 
 const (
@@ -163,16 +165,14 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 		debugReq, _ := json.Marshal(e.MoveRequest)
 		infoLog.Printf("%s: move request: P%d %s", m.game.id, p.playerNum, debugReq)
 	}
-	var histEntry GameEngine
-	if m.s.config.EnableUndo {
-		if he, ok := m.gameEngine.(SinglePlayerGameEngine); ok {
-			histEntry = he.Clone(m.randSrc)
-		}
-	}
 	if m.gameEngine.MakeMove(GameEngineMove{PlayerNum: p.playerNum, Move: e.Move, Row: e.Row, Col: e.Col, CellType: e.Type}) {
-		if histEntry != nil {
-			m.undo = append(m.undo, histEntry)
-			m.redo = nil
+		if m.s.config.EnableUndo {
+			var histEntry GameEngine
+			if he, ok := m.gameEngine.(SinglePlayerGameEngine); ok {
+				histEntry = he.Clone(m.randSrc)
+				m.undo = append(m.undo, histEntry)
+				m.redo = nil
+			}
 		}
 		evt := &ServerEvent{Announcements: []string{}}
 		if m.gameEngine.IsDone() {
@@ -184,6 +184,9 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 					fmt.Sprintf("&#127942; &#127942; &#127942; %s won &#127942; &#127942; &#127942;",
 						winnerName))
 			}
+			if m.historyWriter != nil {
+				m.historyWriter.Close()
+			}
 		}
 		if e.confidence > 0 {
 			evt.Announcements = append(evt.Announcements, fmt.Sprintf("CPU confidence: %.3f", e.confidence))
@@ -191,6 +194,11 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 		if m.game.singlePlayer && m.gameEngine.Board().Turn != 1 && !m.gameEngine.IsDone() {
 			// Ask CPU player to make a move.
 			m.cpuCh <- m.gameEngine
+		}
+		if m.historyWriter != nil {
+			m.historyWriter.Write(&GameHistoryEntry{
+				Board: m.gameEngine.Board().ViewFor(0),
+			})
 		}
 		m.broadcast(evt)
 	}
@@ -258,6 +266,7 @@ func (m *GameMaster) processControlEventValidMoves(e ControlEventValidMoves) {
 }
 
 func (m *GameMaster) Run() {
+	// TODO: Exit the goroutine after N minutes of idle time. (And even when the game is done?)
 	m.s.IncCounter(fmt.Sprintf("/games/%s/started", m.game.gameType))
 	infoLog.Printf("Started new %q game: %s", m.game.gameType, m.game.id)
 	defer func() {
@@ -270,12 +279,18 @@ func (m *GameMaster) Run() {
 		if m.cpuCh != nil {
 			close(m.cpuCh)
 		}
+		if m.historyWriter != nil {
+			// historyWriter is closed when the game is done, but we
+			// also want to retain history when players leave mid-game.
+			m.historyWriter.Close()
+		}
 	}()
-
+	var lastEventReceived time.Time
 	for {
 		tick := time.After(5 * time.Second)
 		select {
 		case ce := <-m.game.controlEvent:
+			lastEventReceived = time.Now()
 			switch e := ce.(type) {
 			case ControlEventRegister:
 				m.processControlEventRegister(e)
@@ -299,6 +314,13 @@ func (m *GameMaster) Run() {
 				return
 			}
 		case <-tick:
+			if time.Since(lastEventReceived) > m.s.config.InactivityTimeout {
+				// TODO make 60min configurable.
+				m.broadcast(&ServerEvent{
+					Announcements: []string{"Game was terminated after 1 hour of inactivity."},
+				})
+				return
+			}
 			m.broadcastPing()
 		case playerId := <-m.removePlayer:
 			infoLog.Printf("Player %s left game %s: game over", playerId, m.game.id)
@@ -318,6 +340,14 @@ func (m *GameMaster) Run() {
 // Controller function for a running game. To be executed by a dedicated goroutine.
 func NewGameMaster(s *Server, game *GameHandle) *GameMaster {
 	randSrc := rand.NewSource(time.Now().UnixNano())
+	var historyWriter *HistoryWriter
+	if s.config.GameHistoryRoot != "" {
+		var err error
+		historyWriter, err = NewHistoryWriter(s.config.GameHistoryRoot, game.id)
+		if err != nil {
+			errorLog.Printf("Cannot create history writer for game %s: %s", game.id, err)
+		}
+	}
 	m := &GameMaster{
 		s:                  s,
 		game:               game,
@@ -327,6 +357,7 @@ func NewGameMaster(s *Server, game *GameHandle) *GameMaster {
 		players:            make(map[PlayerId]pInfo),
 		removePlayer:       make(chan PlayerId),
 		removePlayerCancel: make(map[PlayerId]chan tok),
+		historyWriter:      historyWriter,
 	}
 	return m
 }

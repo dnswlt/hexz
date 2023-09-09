@@ -21,11 +21,13 @@ func main() {
 		"Root directory from which to serve files")
 	flag.StringVar(&cfg.GameHistoryRoot, "history-dir", "./hist",
 		"Root directory from which to read game history files")
-	flag.DurationVar(&cfg.PlayerRemoveDelay, "remove-delay", time.Duration(60)*time.Second,
+	flag.DurationVar(&cfg.InactivityTimeout, "inactivity-timeout", 60*time.Minute,
+		"Time to wait before ending a game due to inactivity")
+	flag.DurationVar(&cfg.PlayerRemoveDelay, "remove-delay", 60*time.Second,
 		"Time to wait before removing a disconnected player from a game")
-	flag.DurationVar(&cfg.LoginTtl, "login-ttl", time.Duration(24)*time.Hour,
+	flag.DurationVar(&cfg.LoginTtl, "login-ttl", 24*time.Hour,
 		"Time to wait logging a player out after inactivity")
-	flag.DurationVar(&cfg.CpuThinkTime, "cpu-think-time", time.Duration(5)*time.Second,
+	flag.DurationVar(&cfg.CpuThinkTime, "cpu-think-time", 5*time.Second,
 		"Time the computer has to think about a move")
 	flag.IntVar(&cfg.CpuMaxFlags, "cpu-max-flags", 5,
 		"Maximum flag moves to consider in any turn. <= 0 means unlimited")
