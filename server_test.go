@@ -98,7 +98,9 @@ func TestHandleNewGame(t *testing.T) {
 	if pattern := `/hexz/[A-Z]{6}`; !regexp.MustCompile(pattern).MatchString(loc) {
 		t.Errorf("Wrong Location header: want: %s, got: %q", pattern, loc)
 	}
-	t.Errorf("Ongoing games: %d", len(s.ongoingGames))
+	if len(s.ongoingGames) != 1 {
+		t.Errorf("Ongoing games: %d, want: 1", len(s.ongoingGames))
+	}
 }
 
 type SSEClient struct {

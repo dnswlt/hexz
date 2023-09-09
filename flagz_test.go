@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"math"
@@ -13,6 +14,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+)
+
+var (
+	runExperimentsAsTests = flag.Bool("run-experiments-as-tests", false,
+		"Set to true to run (failing) test cases that are used for experiments")
 )
 
 func (b *Board) DebugString() string {
@@ -108,7 +114,7 @@ func TestPlayGreedyFlagzGame(t *testing.T) {
 
 func TestCompareCellValueByRandomGamePlay(t *testing.T) {
 	// Count % of won games if the first move is a flag placed in cell (r, c), for all r, c.
-	if testing.Short() {
+	if !*runExperimentsAsTests {
 		return
 	}
 	src := rand.NewSource(123)
@@ -213,7 +219,7 @@ func getFd(b *Board, r, c int) fieldDesc {
 func TestCompareCellValueByCharacteristic(t *testing.T) {
 	// Characterise each cell by a few properties such as free neighbor cells.
 	// Then compute % of won games that had a flag in those cell "types".
-	if testing.Short() {
+	if !*runExperimentsAsTests {
 		return
 	}
 	const nRounds = 1000000

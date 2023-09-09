@@ -96,7 +96,16 @@ func main() {
 		mcts[benchPlayer-1].FlagsFirst = *flagsFirst
 		mcts[benchPlayer-1].ReuseTree = true
 		collectBoardHistory := *gameHistoryDir != ""
-		history := []*hexz.GameHistoryEntry{}
+		gameId := hexz.GenerateGameId()
+		var historyWriter *hexz.HistoryWriter
+		if collectBoardHistory {
+			var err error
+			historyWriter, err = hexz.NewHistoryWriter(*gameHistoryDir, gameId)
+			if err != nil {
+				log.Fatal("cannot create history writer: ", err)
+			}
+			defer historyWriter.Close()
+		}
 	Gameloop:
 		for !ge.IsDone() && time.Since(started) < *maxRuntime {
 			select {
@@ -110,7 +119,7 @@ func main() {
 			m, stats := mcts[t].SuggestMove(ge, moveThinkTime)
 			if collectBoardHistory {
 				boardView := ge.Board().ViewFor(0)
-				history = append(history, &hexz.GameHistoryEntry{
+				historyWriter.Write(&hexz.GameHistoryEntry{
 					Board:      boardView,
 					MoveScores: stats.MoveScores(),
 				})
@@ -132,12 +141,10 @@ func main() {
 		}
 		if ge.IsDone() {
 			if collectBoardHistory {
-				history = append(history, &hexz.GameHistoryEntry{
+				historyWriter.Write(&hexz.GameHistoryEntry{
 					Board: ge.Board().ViewFor(0),
 					// No MoveScores for terminal board.
 				})
-				gameId := hexz.GenerateGameId()
-				hexz.WriteGameHistory(*gameHistoryDir, gameId, history)
 				fmt.Printf("Wrote game history with gameId %s\n", gameId)
 			}
 			winner := ge.Winner()

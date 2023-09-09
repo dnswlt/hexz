@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func TestGameIdPath(t *testing.T) {
@@ -12,12 +13,12 @@ func TestGameIdPath(t *testing.T) {
 		gameId string
 		want   string
 	}{
-		{"lowercase", "abcdef", "AB/abcdef.json"},
-		{"uppercase", "ABCDEF", "AB/ABCDEF.json"},
-		{"empty", "", "_/_.json"},
-		{"short", "A", "A/A.json"},
-		{"short", "AB", "AB/AB.json"},
-		{"long", "ABCDEF123123", "AB/ABCDEF123123.json"},
+		{"lowercase", "abcdef", "AB/abcdef.gob"},
+		{"uppercase", "ABCDEF", "AB/ABCDEF.gob"},
+		{"empty", "", "_/_.gob"},
+		{"short", "A", "A/A.gob"},
+		{"short", "AB", "AB/AB.gob"},
+		{"long", "ABCDEF123123", "AB/ABCDEF123123.gob"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -31,19 +32,30 @@ func TestGameIdPath(t *testing.T) {
 func TestSaveReadGame(t *testing.T) {
 	dir := t.TempDir()
 	gameId := GenerateGameId()
-	board := NewBoard().ViewFor(0)
+	board0 := NewBoard().ViewFor(0)
+	board1 := NewBoard().ViewFor(0)
+	board1.Move = board0.Move + 1 // Ensure board1 is different from board0
 	hist := []*GameHistoryEntry{
-		{Board: board},
+		{Board: board0},
+		{Board: board1},
 	}
-	WriteGameHistory(dir, gameId, hist)
+	w, err := NewHistoryWriter(dir, gameId)
+	if err != nil {
+		t.Fatalf("could not create history writer: %s", err)
+	}
+	for _, h := range hist {
+		w.Write(h)
+	}
+	w.Close()
 	readHist, err := ReadGameHistory(dir, gameId)
 	if err != nil {
 		t.Fatalf("cannot read game history: %s", err.Error())
 	}
 	if len(readHist) != len(hist) {
-		t.Fatalf("wrong number of history entries: want %d, got %d", len(hist), len(readHist))
+		t.Errorf("wrong number of history entries: want %d, got %d", len(hist), len(readHist))
 	}
-	if diff := cmp.Diff(hist, readHist); diff != "" {
+	// Use EquateEmpty here b/c gob decodes empty slices as nil.
+	if diff := cmp.Diff(hist, readHist, cmpopts.EquateEmpty()); diff != "" {
 		t.Errorf("read history not equal to write history: -want +got: %s", diff)
 	}
 }

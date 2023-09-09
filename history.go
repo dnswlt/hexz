@@ -1,8 +1,11 @@
 package hexz
 
 import (
-	"encoding/json"
+	"bufio"
+	"encoding/gob"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"strings"
@@ -13,6 +16,31 @@ type GameHistoryEntry struct {
 	MoveScores *MoveScores
 }
 
+type HistoryWriter struct {
+	w   io.WriteCloser
+	buf *bufio.Writer
+	enc *gob.Encoder
+}
+
+func NewHistoryWriter(historyDir, gameId string) (*HistoryWriter, error) {
+	p := path.Join(historyDir, gameIdPath(gameId))
+	err := os.MkdirAll(path.Dir(p), 0755)
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.Create(p)
+	if err != nil {
+		return nil, err
+	}
+	buf := bufio.NewWriter(f)
+	enc := gob.NewEncoder(buf)
+	return &HistoryWriter{
+		w:   f,
+		buf: buf,
+		enc: enc,
+	}, nil
+}
+
 // Returns a relative file path for the given gameId.
 // Games are stored in subdirectories named after the first two uppercase(d) letters.
 func gameIdPath(gameId string) string {
@@ -20,39 +48,41 @@ func gameIdPath(gameId string) string {
 		gameId = "_"
 	}
 	if len(gameId) < 2 {
-		return fmt.Sprintf("%s/%s.json", strings.ToUpper(gameId), gameId)
+		return fmt.Sprintf("%s/%s.gob", strings.ToUpper(gameId), gameId)
 	}
 	dir := strings.ToUpper(gameId[:2])
-	return fmt.Sprintf("%s/%s.json", dir, gameId)
+	return fmt.Sprintf("%s/%s.gob", dir, gameId)
 }
 
 func ReadGameHistory(historyDir string, gameId string) ([]*GameHistoryEntry, error) {
-	data, err := os.ReadFile(path.Join(historyDir, gameIdPath(gameId)))
+	f, err := os.Open(path.Join(historyDir, gameIdPath(gameId)))
 	if err != nil {
 		return nil, err
 	}
-	entries := []*GameHistoryEntry{}
-	err = json.Unmarshal(data, &entries)
-	if err != nil {
-		return nil, err
+	defer f.Close()
+	dec := gob.NewDecoder(bufio.NewReader(f))
+	result := []*GameHistoryEntry{}
+	for {
+		var entry *GameHistoryEntry
+		err := dec.Decode(&entry)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, entry)
 	}
-	return entries, nil
+	return result, nil
 }
 
-func WriteGameHistory(historyDir string, gameId string, hist []*GameHistoryEntry) error {
-	p := path.Join(historyDir, gameIdPath(gameId))
-	err := os.MkdirAll(path.Dir(p), 0755)
-	if err != nil {
+func (w *HistoryWriter) Write(entry *GameHistoryEntry) error {
+	return w.enc.Encode(entry)
+}
+
+func (w *HistoryWriter) Close() error {
+	if err := w.buf.Flush(); err != nil {
 		return err
 	}
-	w, err := os.Create(p)
-	if err != nil {
-		return err
-	}
-	defer w.Close()
-	enc := json.NewEncoder(w)
-	if err := enc.Encode(hist); err != nil {
-		return err
-	}
-	return nil
+	return w.w.Close()
 }
