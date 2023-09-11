@@ -47,7 +47,7 @@ func TestSaveReadGame(t *testing.T) {
 		w.Write(h)
 	}
 	w.Close()
-	readHist, err := ReadGameHistory(dir, gameId)
+	_, readHist, err := ReadGameHistory(dir, gameId)
 	if err != nil {
 		t.Fatalf("cannot read game history: %s", err.Error())
 	}
@@ -57,5 +57,32 @@ func TestSaveReadGame(t *testing.T) {
 	// Use EquateEmpty here b/c gob decodes empty slices as nil.
 	if diff := cmp.Diff(hist, readHist, cmpopts.EquateEmpty()); diff != "" {
 		t.Errorf("read history not equal to write history: -want +got: %s", diff)
+	}
+}
+
+func TestReadGameHistoryHeader(t *testing.T) {
+	dir := t.TempDir()
+	gameId := GenerateGameId()
+	w, err := NewHistoryWriter(dir, gameId)
+	if err != nil {
+		t.Fatalf("could not create history writer: %s", err)
+	}
+	origHdr := &GameHistoryHeader{
+		GameId: gameId,
+	}
+	w.WriteHeader(origHdr)
+	w.Close()
+	hdr, _, err := ReadGameHistory(dir, gameId)
+	if err != nil {
+		t.Fatalf("cannot read game history: %s", err.Error())
+	}
+	if hdr == nil {
+		t.Fatalf("no header read")
+	}
+	if hdr.GameId != gameId {
+		t.Errorf("wrong game ID in header: got: %s, want: %s", hdr.GameId, gameId)
+	}
+	if diff := cmp.Diff(hdr, origHdr, cmpopts.EquateEmpty()); diff != "" {
+		t.Errorf("read header not equal to original: -want +got: %s", diff)
 	}
 }

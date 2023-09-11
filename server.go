@@ -339,7 +339,7 @@ func (s *Server) readGameHistoryFromFile(gameId string, moveNum int) (*GameHisto
 	if strings.Contains(gameId, "..") || strings.Contains(gameId, "/") {
 		return nil, fmt.Errorf("refusing to read game %q", gameId)
 	}
-	hist, err := ReadGameHistory(s.config.GameHistoryRoot, gameId)
+	_, hist, err := ReadGameHistory(s.config.GameHistoryRoot, gameId)
 	if err != nil {
 		return nil, err
 	}

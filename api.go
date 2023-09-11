@@ -43,13 +43,12 @@ type ServerEvent struct {
 // A player's or spectator's view of the board.
 // See type Board for the internal representation that holds the complete information.
 type BoardView struct {
-	Turn        int            `json:"turn"`
-	Move        int            `json:"move"`
-	Fields      [][]Field      `json:"fields"` // The board's fields.
-	PlayerNames []string       `json:"playerNames"`
-	Score       []int          `json:"score"` // Depending on the number of players, 1 or 2 elements.
-	Resources   []ResourceInfo `json:"resources"`
-	State       GameState      `json:"state"`
+	Turn      int            `json:"turn"`
+	Move      int            `json:"move"`
+	Fields    [][]Field      `json:"fields"` // The board's fields.
+	Score     []int          `json:"score"`  // Depending on the number of players, 1 or 2 elements.
+	Resources []ResourceInfo `json:"resources"`
+	State     GameState      `json:"state"`
 }
 
 type MoveScores struct {
