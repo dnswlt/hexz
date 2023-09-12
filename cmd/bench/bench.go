@@ -120,6 +120,7 @@ func main() {
 			if collectBoardHistory {
 				boardView := ge.Board().ViewFor(0)
 				historyWriter.Write(&hexz.GameHistoryEntry{
+					EntryType:  "move",
 					Board:      boardView,
 					MoveScores: stats.MoveScores(),
 				})
@@ -142,7 +143,8 @@ func main() {
 		if ge.IsDone() {
 			if collectBoardHistory {
 				historyWriter.Write(&hexz.GameHistoryEntry{
-					Board: ge.Board().ViewFor(0),
+					EntryType: "move",
+					Board:     ge.Board().ViewFor(0),
 					// No MoveScores for terminal board.
 				})
 				fmt.Printf("Wrote game history with gameId %s\n", gameId)

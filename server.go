@@ -236,9 +236,9 @@ type ControlEventUnregister struct {
 }
 
 type ControlEventMove struct {
-	playerId PlayerId
-	MoveRequest
-	confidence float64 // In [0..1], can be populated by CPU players to express their confidence in winning.
+	playerId    PlayerId
+	moveRequest *MoveRequest
+	mctsStats   *MCTSStats // Optional, only populated by CPU players.
 }
 
 type ControlEventReset struct {
@@ -481,7 +481,6 @@ func (s *Server) handleHexz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Prolong cookie ttl.
-	infoLog.Print("Prolonging cookie")
 	http.SetCookie(w, makePlayerCookie(p.Id, s.config.LoginTtl))
 	s.serveHtmlFile(w, newGameHtmlFilename)
 }
@@ -551,7 +550,7 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dec := json.NewDecoder(r.Body)
-	var req MoveRequest
+	var req *MoveRequest
 	if err := dec.Decode(&req); err != nil {
 		http.Error(w, "unmarshal error", http.StatusBadRequest)
 		return
@@ -560,7 +559,7 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid cell type", http.StatusBadRequest)
 		return
 	}
-	game.sendEvent(ControlEventMove{playerId: player.Id, MoveRequest: req})
+	game.sendEvent(ControlEventMove{playerId: player.Id, moveRequest: req})
 }
 
 func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
@@ -721,8 +720,8 @@ func (s *Server) handleValidMoves(w http.ResponseWriter, r *http.Request) {
 }
 
 var (
-	viewURLPathRE  = regexp.MustCompile(`^(/hexz/view/(?P<gameId>[A-Z0-9]+))(/(?P<moveNum>\d+))?$`)
-	boardURLPathRE = regexp.MustCompile(`^(/hexz/board/(?P<gameId>[A-Z0-9]+))(/(?P<moveNum>\d+))?$`)
+	viewURLPathRE    = regexp.MustCompile(`^(/hexz/view/(?P<gameId>[A-Z0-9]+))(/(?P<seqNum>\d+))?$`)
+	historyURLPathRE = regexp.MustCompile(`^(/hexz/history/(?P<gameId>[A-Z0-9]+))(/(?P<seqNum>\d+))?$`)
 )
 
 func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
@@ -731,8 +730,8 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "", http.StatusNotFound)
 		return
 	}
-	moveNum := groups[viewURLPathRE.SubexpIndex("moveNum")]
-	if moveNum == "" {
+	seqNum := groups[viewURLPathRE.SubexpIndex("seqNum")]
+	if seqNum == "" {
 		// No move number specified. Redirect to move 0.
 		http.Redirect(w, r, fmt.Sprintf("%s/0", groups[1]), http.StatusSeeOther)
 		return
@@ -740,20 +739,20 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 	s.serveHtmlFile(w, viewHtmlFilename)
 }
 
-func (s *Server) handleBoard(w http.ResponseWriter, r *http.Request) {
-	groups := boardURLPathRE.FindStringSubmatch(r.URL.Path)
+func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
+	groups := historyURLPathRE.FindStringSubmatch(r.URL.Path)
 	if groups == nil {
 		http.Error(w, "", http.StatusNotFound)
 		return
 	}
-	gameId := groups[boardURLPathRE.SubexpIndex("gameId")]
-	moveNumStr := groups[boardURLPathRE.SubexpIndex("moveNum")]
-	if moveNumStr == "" {
+	gameId := groups[historyURLPathRE.SubexpIndex("gameId")]
+	seqNumStr := groups[historyURLPathRE.SubexpIndex("seqNum")]
+	if seqNumStr == "" {
 		http.Error(w, "", http.StatusNotFound)
 		return
 	}
-	moveNum, err := strconv.Atoi(moveNumStr)
-	if err != nil || moveNum < 0 {
+	seqNum, err := strconv.Atoi(seqNumStr)
+	if err != nil || seqNum < 0 {
 		http.Error(w, "invalid move number", http.StatusBadRequest)
 		return
 	}
@@ -762,13 +761,14 @@ func (s *Server) handleBoard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "", http.StatusNotFound)
 		return
 	}
-	if moveNum >= len(hist.Entries) {
+	if seqNum >= len(hist.Entries) {
 		http.Error(w, "", http.StatusNotFound)
 		return
 	}
-	entry := hist.Entries[moveNum]
+	entry := hist.Entries[seqNum]
 	w.Header().Set("Content-Type", "application/json")
 	data, err := json.Marshal(ServerEvent{
+		Timestamp:   entry.Timestamp.Format(time.RFC3339),
 		PlayerNames: hist.Header.PlayerNames,
 		Board:       entry.Board,
 		MoveScores:  entry.MoveScores,
@@ -1056,7 +1056,7 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("/hexz", s.handleHexz)
 	mux.HandleFunc("/hexz/gamez", s.handleGamez)
 	mux.HandleFunc("/hexz/view/", s.handleView)
-	mux.HandleFunc("/hexz/board/", s.handleBoard)
+	mux.HandleFunc("/hexz/history/", s.handleHistory)
 	mux.HandleFunc("/hexz/moves/", s.handleValidMoves)
 	mux.HandleFunc("/hexz/", s.handleGame) // /hexz/<GameId>
 	// Technical services

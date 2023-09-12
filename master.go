@@ -1,7 +1,6 @@
 package hexz
 
 import (
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"time"
@@ -123,6 +122,12 @@ func (m *GameMaster) processControlEventRegister(e ControlEventRegister) {
 	}
 	if added && len(m.players) == m.gameEngine.NumPlayers() {
 		announcements = append(announcements, "The game begins!")
+		if m.historyWriter != nil {
+			m.historyWriter.WriteHeader(&GameHistoryHeader{
+				GameId:      m.game.id,
+				PlayerNames: m.playerNames(),
+			})
+		}
 	}
 	m.broadcast(m.makeInitialServerEvent(announcements))
 }
@@ -161,11 +166,8 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 		// Ignore invalid move request
 		return
 	}
-	if m.s.config.DebugMode {
-		debugReq, _ := json.Marshal(e.MoveRequest)
-		infoLog.Printf("%s: move request: P%d %s", m.game.id, p.playerNum, debugReq)
-	}
-	if m.gameEngine.MakeMove(GameEngineMove{PlayerNum: p.playerNum, Move: e.Move, Row: e.Row, Col: e.Col, CellType: e.Type}) {
+	mr := e.moveRequest
+	if m.gameEngine.MakeMove(GameEngineMove{PlayerNum: p.playerNum, Move: mr.Move, Row: mr.Row, Col: mr.Col, CellType: mr.Type}) {
 		if m.s.config.EnableUndo {
 			var histEntry GameEngine
 			if he, ok := m.gameEngine.(SinglePlayerGameEngine); ok {
@@ -188,16 +190,23 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 				m.historyWriter.Close()
 			}
 		}
-		if e.confidence > 0 {
-			evt.Announcements = append(evt.Announcements, fmt.Sprintf("CPU confidence: %.3f", e.confidence))
+		if e.mctsStats != nil && e.mctsStats.MaxQ() > 0 {
+			evt.Announcements = append(evt.Announcements, fmt.Sprintf("CPU confidence: %.3f", e.mctsStats.MaxQ()))
 		}
 		if m.game.singlePlayer && m.gameEngine.Board().Turn != 1 && !m.gameEngine.IsDone() {
 			// Ask CPU player to make a move.
 			m.cpuCh <- m.gameEngine
 		}
 		if m.historyWriter != nil {
+			var moveScores *MoveScores
+			if e.mctsStats != nil {
+				moveScores = e.mctsStats.MoveScores()
+			}
 			m.historyWriter.Write(&GameHistoryEntry{
-				Board: m.gameEngine.Board().ViewFor(0),
+				EntryType:  "move",
+				Move:       e.moveRequest,
+				Board:      m.gameEngine.Board().ViewFor(0),
+				MoveScores: moveScores,
 			})
 		}
 		m.broadcast(evt)
@@ -210,6 +219,12 @@ func (m *GameMaster) processControlEventReset(e ControlEventReset) {
 		return // Only players are allowed to reset
 	}
 	m.gameEngine.Reset()
+	if m.historyWriter != nil {
+		m.historyWriter.Write(&GameHistoryEntry{
+			EntryType: "reset",
+			Board:     m.gameEngine.Board().ViewFor(0),
+		})
+	}
 	announcements := []string{
 		fmt.Sprintf("Player %s restarted the game.", p.Name),
 	}
@@ -228,6 +243,12 @@ func (m *GameMaster) processControlEventUndo(e ControlEventUndo) {
 	m.redo = append(m.redo, m.gameEngine)
 	m.gameEngine = m.undo[len(m.undo)-1]
 	m.undo = m.undo[:len(m.undo)-1]
+	if m.historyWriter != nil {
+		m.historyWriter.Write(&GameHistoryEntry{
+			EntryType: "undo",
+			Board:     m.gameEngine.Board().ViewFor(0),
+		})
+	}
 	m.broadcast(&ServerEvent{Announcements: []string{"Undo"}})
 }
 
@@ -243,6 +264,12 @@ func (m *GameMaster) processControlEventRedo(e ControlEventRedo) {
 	m.undo = append(m.undo, m.gameEngine)
 	m.gameEngine = m.redo[len(m.redo)-1]
 	m.redo = m.redo[:len(m.redo)-1]
+	if m.historyWriter != nil {
+		m.historyWriter.Write(&GameHistoryEntry{
+			EntryType: "redo",
+			Board:     m.gameEngine.Board().ViewFor(0),
+		})
+	}
 	m.broadcast(&ServerEvent{Announcements: []string{"Redo"}})
 }
 
@@ -314,7 +341,6 @@ func (m *GameMaster) Run() {
 			}
 		case <-tick:
 			if time.Since(lastEventReceived) > m.s.config.InactivityTimeout {
-				// TODO make 60min configurable.
 				m.broadcast(&ServerEvent{
 					Announcements: []string{"Game was terminated after 1 hour of inactivity."},
 				})
@@ -383,9 +409,9 @@ func (m *GameMaster) cpuPlayer(cpuPlayerId PlayerId) {
 		}
 		// Send move request
 		m.game.controlEvent <- ControlEventMove{
-			playerId:   cpuPlayerId,
-			confidence: stats.MaxQ(),
-			MoveRequest: MoveRequest{
+			playerId:  cpuPlayerId,
+			mctsStats: stats,
+			moveRequest: &MoveRequest{
 				Move: mv.Move,
 				Row:  mv.Row,
 				Col:  mv.Col,

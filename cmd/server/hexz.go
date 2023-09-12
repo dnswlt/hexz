@@ -39,6 +39,10 @@ func main() {
 	flag.BoolVar(&cfg.EnableUndo, "enable-undo", true, "If true, games support undo/redo")
 	flag.Parse()
 
+	if len(flag.Args()) > 0 {
+		fmt.Fprintf(os.Stderr, "unexpected extra arguments: %v\n", flag.Args())
+		os.Exit(1)
+	}
 	if cfg.AuthTokenSha256 != "" {
 		if len(cfg.AuthTokenSha256) != 64 || !regexp.MustCompile("[a-fA-F0-9]+").MatchString(cfg.AuthTokenSha256) {
 			fmt.Fprint(os.Stderr, "-auth-token must be a SHA256 hex digest")

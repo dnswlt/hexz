@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 )
 
 type GameHistory struct {
@@ -22,6 +23,9 @@ type GameHistoryHeader struct {
 }
 
 type GameHistoryEntry struct {
+	Timestamp  time.Time // Will be added automatically by the .Write method if not specified.
+	EntryType  string    // One of {"move", "undo", "redo", "reset"}.
+	Move       *MoveRequest
 	Board      *BoardView
 	MoveScores *MoveScores
 }
@@ -83,6 +87,9 @@ func (w *HistoryWriter) WriteHeader(header *GameHistoryHeader) error {
 }
 
 func (w *HistoryWriter) Write(entry *GameHistoryEntry) error {
+	if entry.Timestamp.IsZero() {
+		entry.Timestamp = time.Now()
+	}
 	w.numRecords++
 	return w.enc.Encode(gameHistoryRecord{Entry: entry})
 }
@@ -109,9 +116,7 @@ func ReadGameHistory(historyDir string, gameId string) (*GameHistory, error) {
 		return nil, err
 	}
 	dec := gob.NewDecoder(r)
-	var header *GameHistoryHeader
-	entries := []*GameHistoryEntry{}
-	lastMove := -1
+	hist := &GameHistory{}
 	for {
 		var record gameHistoryRecord
 		err := dec.Decode(&record)
@@ -122,25 +127,10 @@ func ReadGameHistory(historyDir string, gameId string) (*GameHistory, error) {
 			return nil, err
 		}
 		if record.Header != nil {
-			header = record.Header
+			hist.Header = record.Header
 		} else if record.Entry != nil {
-			// Handle undo/redo
-			lastMove = record.Entry.Board.Move
-			if lastMove < len(entries) {
-				// Undo
-				entries[lastMove] = record.Entry
-			} else if lastMove == len(entries) {
-				// Regular move
-				entries = append(entries, record.Entry)
-			} else {
-				// We don't expect to see move N if we never saw move N-1.
-				return nil, fmt.Errorf("invalid history: move jumped to %d, expected at most %d",
-					lastMove, len(entries))
-			}
+			hist.Entries = append(hist.Entries, record.Entry)
 		}
 	}
-	return &GameHistory{
-		Header:  header,
-		Entries: entries[:lastMove+1],
-	}, nil
+	return hist, nil
 }

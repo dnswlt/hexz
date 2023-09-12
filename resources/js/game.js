@@ -41,6 +41,7 @@ const gstate = {
     role: 0,
     done: false,
     selectedCellType: 0,
+    playerNames: [],
     // Optional information about the scores a CPU assigns to each move.
     moveScores: null,
     renderMoveScores: false,
@@ -119,13 +120,8 @@ function handleServerEvent(sse, serverEvent) {
         }
     }
     if (serverEvent.playerNames) {
-        let ps = [
-            document.getElementById("playerOneBadge"),
-            document.getElementById("playerTwoBadge"),
-        ];
-        for (let i = 0; i < serverEvent.playerNames.length; i++) {
-            ps[i].innerHTML = serverEvent.playerNames[i];
-        }
+        gstate.playerNames = serverEvent.playerNames;
+        updatePlayerNames();
     }
     if (serverEvent.debugMessage.length > 0) {
         console.log(serverEvent.timestamp + ": " + serverEvent.debugMessage);
@@ -170,6 +166,16 @@ function updateTurnInfo() {
     let turn = gstate.board.turn - 1;
     ts[turn].style.visibility = 'visible';
     ts[(turn + 1) % 2].style.visibility = 'hidden';
+}
+
+function updatePlayerNames() {
+    let ps = [
+        document.getElementById("playerOneBadge"),
+        document.getElementById("playerTwoBadge"),
+    ];
+    for (let i = 0; i < gstate.playerNames.length; i++) {
+        ps[i].innerHTML = gstate.playerNames[i];
+    }
 }
 
 function newGame() {

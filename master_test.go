@@ -151,7 +151,7 @@ func TestGameMasterPlayFullGame(t *testing.T) {
 		for c := range b.Fields[r] {
 			g.controlEvent <- ControlEventMove{
 				playerId: PlayerId(playerIds[n%2]),
-				MoveRequest: MoveRequest{
+				moveRequest: &MoveRequest{
 					Move: n,
 					Row:  r,
 					Col:  c,

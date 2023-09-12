@@ -36,8 +36,8 @@ func TestSaveReadGame(t *testing.T) {
 	board1 := NewBoard().ViewFor(0)
 	board1.Move = board0.Move + 1 // Ensure board1 is different from board0
 	entries := []*GameHistoryEntry{
-		{Board: board0},
-		{Board: board1},
+		{EntryType: "move", Board: board0},
+		{EntryType: "move", Board: board1},
 	}
 	w, err := NewHistoryWriter(dir, gameId)
 	if err != nil {

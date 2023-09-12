@@ -126,21 +126,22 @@
             redraw();
             updateTurnInfo();
             updateScore();
+            updatePlayerNames();
         }
 
         async function updateMove(moveDelta) {
             const pathSegs = window.location.pathname.split("/");
-            // Expect /hexz/viewer/{gameId}/{moveNum}.
+            // Expect /hexz/viewer/{gameId}/{seqNum}.
             if (pathSegs.length < 2) {
                 throw new Error("Invalid path for viewer: " + window.location.pathname);
             }
             const gameId = pathSegs[pathSegs.length - 2];
-            const currentMove = parseInt(pathSegs[pathSegs.length - 1]);
-            const newMove = currentMove + moveDelta;
-            if (newMove < 0) {
+            const currentSeqNum = parseInt(pathSegs[pathSegs.length - 1]);
+            const newSeqNum = currentSeqNum + moveDelta;
+            if (newSeqNum < 0) {
                 return;
             }
-            const resp = await fetch(`/hexz/board/${gameId}/${newMove}`);
+            const resp = await fetch(`/hexz/history/${gameId}/${newSeqNum}`);
             if (!resp.ok) {
                 console.error("Couldn't fetch:", resp.status);
                 return;
@@ -148,9 +149,10 @@
             const data = await resp.json();
             gstate.board = data.board;
             gstate.moveScores = data.moveScores;
+            gstate.playerNames = data.playerNames;
             // Update URL to the new move
             let url = new URL(window.location);
-            pathSegs[pathSegs.length - 1] = newMove.toString();
+            pathSegs[pathSegs.length - 1] = newSeqNum.toString();
             url.pathname = pathSegs.join("/");
             window.history.pushState({}, "", url);
             refreshView();
