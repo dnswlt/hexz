@@ -266,7 +266,6 @@ func (m *GameMaster) processControlEventValidMoves(e ControlEventValidMoves) {
 }
 
 func (m *GameMaster) Run() {
-	// TODO: Exit the goroutine after N minutes of idle time. (And even when the game is done?)
 	m.s.IncCounter(fmt.Sprintf("/games/%s/started", m.game.gameType))
 	infoLog.Printf("Started new %q game: %s", m.game.gameType, m.game.id)
 	defer func() {

@@ -82,6 +82,9 @@ func BenchmarkPlayFlagzGame(b *testing.B) {
 }
 
 func TestPlayGreedyFlagzGame(t *testing.T) {
+	if testing.Short() {
+		return
+	}
 	const nRuns = 10000
 	var winCounts [3]int
 	src := rand.NewSource(time.Now().UnixNano())

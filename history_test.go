@@ -35,7 +35,7 @@ func TestSaveReadGame(t *testing.T) {
 	board0 := NewBoard().ViewFor(0)
 	board1 := NewBoard().ViewFor(0)
 	board1.Move = board0.Move + 1 // Ensure board1 is different from board0
-	hist := []*GameHistoryEntry{
+	entries := []*GameHistoryEntry{
 		{Board: board0},
 		{Board: board1},
 	}
@@ -43,19 +43,19 @@ func TestSaveReadGame(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not create history writer: %s", err)
 	}
-	for _, h := range hist {
+	for _, h := range entries {
 		w.Write(h)
 	}
 	w.Close()
-	_, readHist, err := ReadGameHistory(dir, gameId)
+	hist, err := ReadGameHistory(dir, gameId)
 	if err != nil {
 		t.Fatalf("cannot read game history: %s", err.Error())
 	}
-	if len(readHist) != len(hist) {
-		t.Errorf("wrong number of history entries: want %d, got %d", len(hist), len(readHist))
+	if len(hist.Entries) != len(entries) {
+		t.Errorf("wrong number of history entries: want %d, got %d", len(entries), len(hist.Entries))
 	}
 	// Use EquateEmpty here b/c gob decodes empty slices as nil.
-	if diff := cmp.Diff(hist, readHist, cmpopts.EquateEmpty()); diff != "" {
+	if diff := cmp.Diff(entries, hist.Entries, cmpopts.EquateEmpty()); diff != "" {
 		t.Errorf("read history not equal to write history: -want +got: %s", diff)
 	}
 }
@@ -67,22 +67,19 @@ func TestReadGameHistoryHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not create history writer: %s", err)
 	}
-	origHdr := &GameHistoryHeader{
+	header := &GameHistoryHeader{
 		GameId: gameId,
 	}
-	w.WriteHeader(origHdr)
+	w.WriteHeader(header)
 	w.Close()
-	hdr, _, err := ReadGameHistory(dir, gameId)
+	hist, err := ReadGameHistory(dir, gameId)
 	if err != nil {
 		t.Fatalf("cannot read game history: %s", err.Error())
 	}
-	if hdr == nil {
+	if hist.Header == nil {
 		t.Fatalf("no header read")
 	}
-	if hdr.GameId != gameId {
-		t.Errorf("wrong game ID in header: got: %s, want: %s", hdr.GameId, gameId)
-	}
-	if diff := cmp.Diff(hdr, origHdr, cmpopts.EquateEmpty()); diff != "" {
+	if diff := cmp.Diff(hist.Header, header, cmpopts.EquateEmpty()); diff != "" {
 		t.Errorf("read header not equal to original: -want +got: %s", diff)
 	}
 }

@@ -11,6 +11,11 @@ import (
 	"strings"
 )
 
+type GameHistory struct {
+	Header  *GameHistoryHeader
+	Entries []*GameHistoryEntry
+}
+
 type GameHistoryHeader struct {
 	GameId      string
 	PlayerNames []string
@@ -21,9 +26,9 @@ type GameHistoryEntry struct {
 	MoveScores *MoveScores
 }
 
-// GameHistoryRecord is the struct that is persisted on disk
+// gameHistoryRecord is the struct that is persisted on disk
 // as a sequence of gobs.
-type GameHistoryRecord struct {
+type gameHistoryRecord struct {
 	// Only one of the fields will ever be populated.
 	Header *GameHistoryHeader
 	Entry  *GameHistoryEntry
@@ -74,12 +79,12 @@ func (w *HistoryWriter) WriteHeader(header *GameHistoryHeader) error {
 		return fmt.Errorf("header must be the first record written")
 	}
 	w.numRecords++
-	return w.enc.Encode(GameHistoryRecord{Header: header})
+	return w.enc.Encode(gameHistoryRecord{Header: header})
 }
 
 func (w *HistoryWriter) Write(entry *GameHistoryEntry) error {
 	w.numRecords++
-	return w.enc.Encode(GameHistoryRecord{Entry: entry})
+	return w.enc.Encode(gameHistoryRecord{Entry: entry})
 }
 
 func (w *HistoryWriter) Close() error {
@@ -93,28 +98,28 @@ func (w *HistoryWriter) Close() error {
 	return w.w.Close()
 }
 
-func ReadGameHistory(historyDir string, gameId string) (*GameHistoryHeader, []*GameHistoryEntry, error) {
+func ReadGameHistory(historyDir string, gameId string) (*GameHistory, error) {
 	f, err := os.Open(path.Join(historyDir, gameIdPath(gameId)))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer f.Close()
 	r, err := gzip.NewReader(f)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	dec := gob.NewDecoder(r)
 	var header *GameHistoryHeader
 	entries := []*GameHistoryEntry{}
 	lastMove := -1
 	for {
-		var record GameHistoryRecord
+		var record gameHistoryRecord
 		err := dec.Decode(&record)
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		if record.Header != nil {
 			header = record.Header
@@ -129,10 +134,13 @@ func ReadGameHistory(historyDir string, gameId string) (*GameHistoryHeader, []*G
 				entries = append(entries, record.Entry)
 			} else {
 				// We don't expect to see move N if we never saw move N-1.
-				return nil, nil, fmt.Errorf("invalid history: move jumped to %d, expected at most %d",
+				return nil, fmt.Errorf("invalid history: move jumped to %d, expected at most %d",
 					lastMove, len(entries))
 			}
 		}
 	}
-	return header, entries[:lastMove+1], nil
+	return &GameHistory{
+		Header:  header,
+		Entries: entries[:lastMove+1],
+	}, nil
 }

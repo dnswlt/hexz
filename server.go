@@ -334,19 +334,12 @@ func (s *Server) readStaticResource(filename string) ([]byte, error) {
 	return os.ReadFile(path.Join(s.config.DocumentRoot, filename))
 }
 
-func (s *Server) readGameHistoryFromFile(gameId string, moveNum int) (*GameHistoryEntry, error) {
+func (s *Server) readGameHistoryFromFile(gameId string) (*GameHistory, error) {
 	s.IncCounter("/storage/files/gamehistory")
 	if strings.Contains(gameId, "..") || strings.Contains(gameId, "/") {
 		return nil, fmt.Errorf("refusing to read game %q", gameId)
 	}
-	_, hist, err := ReadGameHistory(s.config.GameHistoryRoot, gameId)
-	if err != nil {
-		return nil, err
-	}
-	if moveNum >= len(hist) {
-		return nil, fmt.Errorf("moveNum out of range")
-	}
-	return hist[moveNum], nil
+	return ReadGameHistory(s.config.GameHistoryRoot, gameId)
 }
 
 // Generates a random 128-bit hex string representing a player ID.
@@ -764,15 +757,21 @@ func (s *Server) handleBoard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid move number", http.StatusBadRequest)
 		return
 	}
-	histEntry, err := s.readGameHistoryFromFile(gameId, moveNum)
+	hist, err := s.readGameHistoryFromFile(gameId)
 	if err != nil {
 		http.Error(w, "", http.StatusNotFound)
 		return
 	}
+	if moveNum >= len(hist.Entries) {
+		http.Error(w, "", http.StatusNotFound)
+		return
+	}
+	entry := hist.Entries[moveNum]
 	w.Header().Set("Content-Type", "application/json")
 	data, err := json.Marshal(ServerEvent{
-		Board:      histEntry.Board,
-		MoveScores: histEntry.MoveScores,
+		PlayerNames: hist.Header.PlayerNames,
+		Board:       entry.Board,
+		MoveScores:  entry.MoveScores,
 	})
 	if err != nil {
 		http.Error(w, "", http.StatusInternalServerError)

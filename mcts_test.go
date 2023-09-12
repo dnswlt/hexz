@@ -39,7 +39,7 @@ func TestMCTSFull(t *testing.T) {
 		return
 	}
 	// Play one full game without crashing
-	thinkTime := time.Duration(100) * time.Millisecond
+	thinkTime := time.Duration(10) * time.Millisecond
 
 	src := rand.NewSource(123)
 	ge := NewGameEngineFlagz(src)
