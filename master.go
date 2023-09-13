@@ -26,8 +26,7 @@ type GameMaster struct {
 	// and accidentally closed tabs.
 	removePlayer       chan PlayerId
 	removePlayerCancel map[PlayerId]chan tok
-	// Channel to request a move by the CPU player. Nil for 2P games.
-	cpuCh chan GameEngine
+	cpuPlayer          *CPUPlayer // Nil for 2P games.
 
 	// If undo/redo is enabled, these fields contain the
 	// steps that can be undone/redone.
@@ -108,8 +107,7 @@ func (m *GameMaster) processControlEventRegister(e ControlEventRegister) {
 		playerNum = len(m.players) + 1
 		m.players[e.player.Id] = pInfo{playerNum, e.player}
 		if m.game.singlePlayer {
-			m.cpuCh = make(chan GameEngine)
-			go m.cpuPlayer(playerIdCPU)
+			m.cpuPlayer = NewCPUPlayer(playerIdCPU)
 			m.players[playerIdCPU] =
 				pInfo{playerNum: 2, Player: Player{Id: playerIdCPU, Name: "Computer"}}
 		}
@@ -190,10 +188,10 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 		if e.mctsStats != nil && e.mctsStats.MaxQ() > 0 {
 			evt.Announcements = append(evt.Announcements, fmt.Sprintf("CPU confidence: %.3f", e.mctsStats.MaxQ()))
 		}
-		if m.game.singlePlayer && m.gameEngine.Board().Turn != 1 && !m.gameEngine.IsDone() {
-			// Ask CPU player to make a move.
-			// TODO: Race condition! Should we pass a copy here?
-			m.cpuCh <- m.gameEngine
+		if m.cpuPlayer != nil && m.gameEngine.Board().Turn != 1 && !m.gameEngine.IsDone() {
+			// Ask CPU player to make a move (on a cloned game engine).
+			ge := m.gameEngine.(SinglePlayerGameEngine).Clone(nil)
+			go m.cpuPlayer.SuggestMove(m.game.ctx, m.game.controlEvent, ge, m.s.config.CpuThinkTime)
 		}
 		var moveScores *MoveScores
 		if e.mctsStats != nil {
@@ -295,9 +293,6 @@ func (m *GameMaster) Run(cancel context.CancelFunc) {
 			// it doesn't hurt to close these channels as well.
 			close(ch)
 		}
-		if m.cpuCh != nil {
-			close(m.cpuCh)
-		}
 		// historyWriter is closed when the game is done, but we
 		// also want to retain history when players leave mid-game.
 		m.historyWriter.Close()
@@ -373,47 +368,4 @@ func NewGameMaster(s *Server, game *GameHandle) *GameMaster {
 		historyWriter:      historyWriter,
 	}
 	return m
-}
-
-func (m *GameMaster) cpuPlayer(cpuPlayerId PlayerId) {
-	gameType := m.gameEngine.GameType()
-	mcts := NewMCTS()
-	mcts.MaxFlagPositions = m.s.config.CpuMaxFlags
-
-	// Minimum time to spend thinking about a move, even if we're dead certain about the result.
-	minTime := time.Duration(100) * time.Millisecond
-	thinkTime := m.s.config.CpuThinkTime
-	t := thinkTime
-	for ge := range m.cpuCh {
-		mv, stats := mcts.SuggestMove(ge.(SinglePlayerGameEngine), t)
-		if minQ := stats.MinQ(); minQ >= 0.98 || minQ <= 0.02 {
-			// Speed up if we think we (almost) won or lost.
-			t = t / 2
-			if t < minTime {
-				t = minTime
-			}
-		} else {
-			t = thinkTime // use full time allowed.
-		}
-		// Send move request
-		m.game.controlEvent <- ControlEventMove{
-			playerId:  cpuPlayerId,
-			mctsStats: stats,
-			moveRequest: &MoveRequest{
-				Move: mv.Move,
-				Row:  mv.Row,
-				Col:  mv.Col,
-				Type: mv.CellType,
-			},
-		}
-		// Update counters
-		m.s.IncCounter(fmt.Sprintf("/games/%s/mcts/suggested_moves", gameType))
-		if stats.FullyExplored {
-			m.s.IncCounter(fmt.Sprintf("/games/%s/mcts/fully_explored", gameType))
-		}
-		m.s.AddDistribValue(fmt.Sprintf("/games/%s/mcts/elapsed", gameType), stats.Elapsed.Seconds())
-		m.s.AddDistribValue(fmt.Sprintf("/games/%s/mcts/iterations", gameType), float64(stats.Iterations))
-		m.s.AddDistribValue(fmt.Sprintf("/games/%s/mcts/tree_size", gameType), float64(stats.TreeSize))
-		m.s.AddDistribValue(fmt.Sprintf("/games/%s/mcts/iterations_per_sec", gameType), float64(stats.Iterations)/stats.Elapsed.Seconds())
-	}
 }

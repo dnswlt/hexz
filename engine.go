@@ -45,6 +45,11 @@ type SinglePlayerGameEngine interface {
 	// engine is only used in the same goroutine as the original one G, it is safe
 	// to reuse G's source.
 	Clone(s rand.Source) SinglePlayerGameEngine
+	// Sets the random source for this game engine.
+	// This is mostly useful in combination with Clone(nil) in scenarios where
+	// a copy of the game engine should be passed to a separate goroutine, which
+	// uses its own random source.
+	SetSource(s rand.Source)
 }
 
 type GameType string
