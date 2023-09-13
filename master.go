@@ -50,7 +50,7 @@ func (m *GameMaster) playerNames() []string {
 
 func (m *GameMaster) broadcastPing() {
 	e := &ServerEvent{
-		Timestamp:    time.Now().Format(time.RFC3339),
+		Timestamp:    time.Now(),
 		DebugMessage: "ping",
 	}
 	for _, ch := range m.eventListeners {
@@ -59,7 +59,7 @@ func (m *GameMaster) broadcastPing() {
 }
 
 func (m *GameMaster) broadcast(e *ServerEvent) {
-	e.Timestamp = time.Now().Format(time.RFC3339)
+	e.Timestamp = time.Now()
 	if m.gameEngine.Board().State != Initial {
 		e.PlayerNames = m.playerNames()
 	}
@@ -125,6 +125,7 @@ func (m *GameMaster) processControlEventRegister(e ControlEventRegister) {
 		if m.historyWriter != nil {
 			m.historyWriter.WriteHeader(&GameHistoryHeader{
 				GameId:      m.game.id,
+				GameType:    m.game.gameType,
 				PlayerNames: m.playerNames(),
 			})
 		}

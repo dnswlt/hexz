@@ -19,6 +19,7 @@ type GameHistory struct {
 
 type GameHistoryHeader struct {
 	GameId      string
+	GameType    GameType
 	PlayerNames []string
 }
 

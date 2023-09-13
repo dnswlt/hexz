@@ -11,7 +11,6 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"strconv"
-	"strings"
 )
 
 type HexzTestClient struct {
@@ -79,10 +78,10 @@ func (c *HexzTestClient) validMoves(gameId string) ([]*MoveRequest, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot get valid moves: %s", err)
 	}
-	defer validMovesResp.Body.Close()
 	if validMovesResp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("cannot get valid moves: %s", validMovesResp.Status)
 	}
+	defer validMovesResp.Body.Close()
 	dec := json.NewDecoder(validMovesResp.Body)
 	var validMoves []*MoveRequest
 	if err := dec.Decode(&validMoves); err != nil {
@@ -91,11 +90,35 @@ func (c *HexzTestClient) validMoves(gameId string) ([]*MoveRequest, error) {
 	return validMoves, nil
 }
 
+func (c *HexzTestClient) history(gameId string) (*GameHistoryResponse, error) {
+	historyResp, err := c.client.Get(fmt.Sprintf("%s/hexz/history/%s", c.serverURL, gameId))
+	if err != nil {
+		return nil, fmt.Errorf("cannot get history: %s", err)
+	}
+	if historyResp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("cannot get history: %s", historyResp.Status)
+	}
+	defer historyResp.Body.Close()
+	dec := json.NewDecoder(historyResp.Body)
+	var hist *GameHistoryResponse
+	if err := dec.Decode(&hist); err != nil {
+		return nil, fmt.Errorf("cannot unmarshal %T: %s", hist, err)
+	}
+	return hist, nil
+}
+
+// Test client server event. Used to signal SSE errors back to clients.
+type tcServerEvent struct {
+	// Only one of the fields is populated
+	s   *ServerEvent
+	err error
+}
+
 // Establishes a SSE connection with the given URL and sends the "data:" part
 // of each event through the returned channel. Clients should close the done channel
 // to abort the SSE connection.
-func (c *HexzTestClient) receiveEvents(ctx context.Context, url string) (<-chan string, error) {
-	ch := make(chan string)
+func (c *HexzTestClient) receiveEvents(ctx context.Context, url string) (<-chan tcServerEvent, error) {
+	ch := make(chan tcServerEvent)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -115,15 +138,19 @@ func (c *HexzTestClient) receiveEvents(ctx context.Context, url string) (<-chan 
 		defer close(ch)
 		scanner := bufio.NewScanner(resp.Body)
 		for scanner.Scan() {
-			line := scanner.Text()
-			if line == "" || line[0] == ':' {
+			line := scanner.Bytes()
+			if len(line) == 0 || line[0] == ':' {
 				// SSE separates messages by empty lines. Lines starting with a colon are ignored.
 				continue
 			}
-			dataPrefix := "data: "
-			if strings.HasPrefix(line, dataPrefix) {
+			dataPrefix := []byte("data: ")
+			if bytes.HasPrefix(line, dataPrefix) {
+				var e tcServerEvent
+				if err := json.Unmarshal(line[len(dataPrefix):], &e.s); err != nil {
+					e.err = err
+				}
 				select {
-				case ch <- line[len(dataPrefix):]:
+				case ch <- e:
 					break // sending the event was successful
 				case <-ctx.Done():
 					return

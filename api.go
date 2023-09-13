@@ -15,16 +15,8 @@ type PlayerId string
 
 // JSON for server responses.
 
-// Sent in an initial message to clients.
-type ServerEventGameInfo struct {
-	// Indicates which cell types exist in this type of game.
-	ValidCellTypes []CellType `json:"validCellTypes"`
-	// The type of game we're playing.
-	GameType GameType `json:"gameType"`
-}
-
 type ServerEvent struct {
-	Timestamp string     `json:"timestamp"`
+	Timestamp time.Time  `json:"timestamp"` // RFC3339 formatted.
 	Board     *BoardView `json:"board"`
 	// Role of the client receiving the event. 0: spectator, 1, 2: players.
 	Role          int      `json:"role"`
@@ -36,8 +28,14 @@ type ServerEvent struct {
 	// Signals to clients that this is the last event they will receive.
 	LastEvent bool                 `json:"lastEvent"`
 	GameInfo  *ServerEventGameInfo `json:"gameInfo,omitempty"`
-	// For single-player flagz: scores that the CPU assigns to each move.
-	MoveScores *MoveScores `json:"moveScores,omitempty"`
+}
+
+// Sent in an initial message to clients.
+type ServerEventGameInfo struct {
+	// Indicates which cell types exist in this type of game.
+	ValidCellTypes []CellType `json:"validCellTypes"`
+	// The type of game we're playing.
+	GameType GameType `json:"gameType"`
 }
 
 // A player's or spectator's view of the board.
@@ -93,6 +91,23 @@ const (
 
 func (c CellType) valid() bool {
 	return c >= cellNormal && c < cellTypeLen
+}
+
+// JSON for game history.
+type GameHistoryResponse struct {
+	GameId      string                      `json:"gameId"`
+	PlayerNames []string                    `json:"playerNames"`
+	GameType    GameType                    `json:"gameType,omitempty"`
+	Entries     []*GameHistoryResponseEntry `json:"entries"`
+}
+
+type GameHistoryResponseEntry struct {
+	Timestamp time.Time    `json:"timestamp"` // RFC3339 formatted.
+	EntryType string       `json:"entryType"` // One of {"move", "undo", "redo", "reset"}.
+	Move      *MoveRequest `json:"move"`      // Only populated if the EntryType is "move"
+	Board     *BoardView   `json:"board"`
+	// For single-player flagz: scores that the CPU assigns to each move.
+	MoveScores *MoveScores `json:"moveScores,omitempty"`
 }
 
 // JSON for incoming requests from UI clients.

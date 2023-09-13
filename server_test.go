@@ -2,7 +2,6 @@ package hexz
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestValidPlayerName(t *testing.T) {
@@ -102,7 +103,7 @@ func TestHandleNewGame(t *testing.T) {
 }
 
 // Process SSE ServerEvents and return boards with strictly monotonically increasing move numbers.
-func receiveBoards(ctx context.Context, eventCh <-chan string) <-chan *BoardView {
+func receiveBoards(ctx context.Context, eventCh <-chan tcServerEvent) <-chan *BoardView {
 	boardCh := make(chan *BoardView)
 	go func() {
 		defer close(boardCh)
@@ -110,14 +111,11 @@ func receiveBoards(ctx context.Context, eventCh <-chan string) <-chan *BoardView
 		for {
 			select {
 			case e := <-eventCh:
-				var se ServerEvent
-				if err := json.Unmarshal([]byte(e), &se); err != nil {
-					continue // Ignore everything else
+				if e.s.Board != nil && e.s.Board.Move > moveNum {
+					moveNum = e.s.Board.Move
+					boardCh <- e.s.Board
 				}
-				if se.Board != nil && se.Board.Move > moveNum {
-					moveNum = se.Board.Move
-					boardCh <- se.Board
-				}
+				// Ignore errors and events without a new board.
 			case <-ctx.Done():
 				return
 			}
@@ -140,7 +138,7 @@ func TestFlagzSinglePlayer(t *testing.T) {
 
 	c, err := newHexzTestClient(testServer.URL)
 	if err != nil {
-		t.Fatalf("could not create SSEClient: %s", err)
+		t.Fatalf("could not create client: %s", err)
 	}
 	// Log in.
 	if err := c.login("testuser"); err != nil {
@@ -192,5 +190,94 @@ func TestFlagzSinglePlayer(t *testing.T) {
 	}
 	if !finished {
 		t.Errorf("did not finish the game after %d moves", maxMoves)
+	}
+}
+
+// History should be written for each move and be available once the game
+// is finished.
+func TestFlagzSinglePlayerHistory(t *testing.T) {
+	histDir := t.TempDir()
+	if testing.Short() {
+		return // This test takes >1s...
+	}
+	cfg := serverConfigForTest(t)
+	cfg.CpuThinkTime = 1 * time.Millisecond // We want a fast test, not smart moves.
+	cfg.GameHistoryRoot = histDir
+	srv := NewServer(cfg)
+	testServer := httptest.NewServer(srv.createMux())
+	defer testServer.Close()
+
+	c, err := newHexzTestClient(testServer.URL)
+	if err != nil {
+		t.Fatalf("could not create client: %s", err)
+	}
+	// Log in.
+	testuser := "testuser"
+	if err := c.login(testuser); err != nil {
+		t.Fatal(err)
+	}
+	// Start a new single player game.
+	gameId, err := c.newFlagzGame(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Receive SSE events.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	eventCh, err := c.receiveEvents(ctx, testServer.URL+"/hexz/sse/"+gameId)
+	if err != nil {
+		t.Fatal("cannot receive events:", err)
+	}
+	boardCh := receiveBoards(ctx, eventCh)
+	<-boardCh // Ignore first broadcast of the initial board.
+	finished := false
+	maxMoves := numFieldsFirstRow * numBoardRows // upper bound for possible moves
+	for i := 0; !finished && i < maxMoves; i++ {
+		// Get valid moves.
+		validMoves, err := c.validMoves(gameId)
+		if err != nil {
+			t.Error(err)
+			break
+		}
+		if len(validMoves) == 0 {
+			t.Errorf("No valid move despite game not having finished")
+			break
+		}
+		// Make move.
+		if err := c.makeMove(gameId, validMoves[0]); err != nil {
+			t.Error(err)
+			break
+		}
+		// Receive boards until the game is finished or it's our turn again.
+		for {
+			board := <-boardCh
+			if board.State == Finished {
+				finished = true
+				break
+			}
+			if board.Turn == 1 {
+				break
+			}
+		}
+	}
+	if !finished {
+		t.Fatalf("did not finish the game after %d moves", maxMoves)
+	}
+	// Finally: Read game history.
+	hist, err := c.history(gameId)
+	if err != nil {
+		t.Fatal("failed to get game history: ", err)
+	}
+	if len(hist.Entries) < 50 {
+		t.Errorf("wrong number of history entries: want >= 50, got %d", len(hist.Entries))
+	}
+	if hist.GameId != gameId {
+		t.Errorf("wrong gameId in history: want %s, got %s", gameId, hist.GameId)
+	}
+	if hist.GameType != gameTypeFlagz {
+		t.Errorf("wrong game type in history: want %s, got %s", gameTypeFlagz, hist.GameType)
+	}
+	if diff := cmp.Diff([]string{testuser, "Computer"}, hist.PlayerNames); diff != "" {
+		t.Errorf("wrong player names in history: -want +got: %s", diff)
 	}
 }

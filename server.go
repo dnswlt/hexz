@@ -1,12 +1,14 @@
 package hexz
 
 import (
+	"compress/gzip"
 	crand "crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"math/rand"
@@ -721,7 +723,7 @@ func (s *Server) handleValidMoves(w http.ResponseWriter, r *http.Request) {
 
 var (
 	viewURLPathRE    = regexp.MustCompile(`^(/hexz/view/(?P<gameId>[A-Z0-9]+))(/(?P<seqNum>\d+))?$`)
-	historyURLPathRE = regexp.MustCompile(`^(/hexz/history/(?P<gameId>[A-Z0-9]+))(/(?P<seqNum>\d+))?$`)
+	historyURLPathRE = regexp.MustCompile(`^(/hexz/history/(?P<gameId>[A-Z0-9]+))$`)
 )
 
 func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
@@ -739,6 +741,25 @@ func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
 	s.serveHtmlFile(w, viewHtmlFilename)
 }
 
+func NewGameHistoryResponse(hist *GameHistory) *GameHistoryResponse {
+	entries := make([]*GameHistoryResponseEntry, len(hist.Entries))
+	for i, e := range hist.Entries {
+		entries[i] = &GameHistoryResponseEntry{
+			Timestamp:  e.Timestamp,
+			EntryType:  e.EntryType,
+			Move:       e.Move,
+			Board:      e.Board,
+			MoveScores: e.MoveScores,
+		}
+	}
+	return &GameHistoryResponse{
+		GameId:      hist.Header.GameId,
+		PlayerNames: hist.Header.PlayerNames,
+		GameType:    hist.Header.GameType,
+		Entries:     entries,
+	}
+}
+
 func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	groups := historyURLPathRE.FindStringSubmatch(r.URL.Path)
 	if groups == nil {
@@ -746,38 +767,25 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	gameId := groups[historyURLPathRE.SubexpIndex("gameId")]
-	seqNumStr := groups[historyURLPathRE.SubexpIndex("seqNum")]
-	if seqNumStr == "" {
-		http.Error(w, "", http.StatusNotFound)
-		return
-	}
-	seqNum, err := strconv.Atoi(seqNumStr)
-	if err != nil || seqNum < 0 {
-		http.Error(w, "invalid move number", http.StatusBadRequest)
-		return
-	}
 	hist, err := s.readGameHistoryFromFile(gameId)
 	if err != nil {
 		http.Error(w, "", http.StatusNotFound)
 		return
 	}
-	if seqNum >= len(hist.Entries) {
-		http.Error(w, "", http.StatusNotFound)
-		return
-	}
-	entry := hist.Entries[seqNum]
 	w.Header().Set("Content-Type", "application/json")
-	data, err := json.Marshal(ServerEvent{
-		Timestamp:   entry.Timestamp.Format(time.RFC3339),
-		PlayerNames: hist.Header.PlayerNames,
-		Board:       entry.Board,
-		MoveScores:  entry.MoveScores,
-	})
+	var z io.Writer = w
+	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		z = gz
+	}
+	dec := json.NewEncoder(z)
+	err = dec.Encode(NewGameHistoryResponse(hist))
 	if err != nil {
 		http.Error(w, "", http.StatusInternalServerError)
-		errorLog.Fatalf("Failed to marshal server event: %s", err)
+		errorLog.Fatalf("Failed to marshal history response: %s", err)
 	}
-	w.Write(data)
 }
 
 func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {

@@ -68,7 +68,9 @@ func TestReadGameHistoryHeader(t *testing.T) {
 		t.Fatalf("could not create history writer: %s", err)
 	}
 	header := &GameHistoryHeader{
-		GameId: gameId,
+		GameId:      gameId,
+		GameType:    gameTypeFlagz,
+		PlayerNames: []string{"peter", "paul"},
 	}
 	w.WriteHeader(header)
 	w.Close()

@@ -1,8 +1,10 @@
 package hexz
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 )
 
 func TestValidCellTypes(t *testing.T) {
@@ -53,5 +55,33 @@ func TestCellTypesValuesAreConstant(t *testing.T) {
 				t.Errorf("Numeric value of CellType has changed: want: %d, got: %d", test.want, got)
 			}
 		})
+	}
+}
+
+func TestMarshalTime(t *testing.T) {
+	// What does a time.Time get JSON-marshalled to?
+	type tm struct {
+		T time.Time
+	}
+	loc, err := time.LoadLocation("Europe/Zurich")
+	if err != nil {
+		t.Fatal("cannot load location: ", err)
+	}
+	data, _ := json.Marshal(tm{time.Date(2023, 12, 31, 23, 59, 0, 123_000_000, loc)})
+	want := `{"T":"2023-12-31T23:59:00.123+01:00"}`
+	if string(data) != want {
+		t.Errorf("Want: %s, got: %s", want, string(data))
+	}
+}
+
+func TestFormatTimeRFC(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Zurich")
+	if err != nil {
+		t.Fatal("cannot load location: ", err)
+	}
+	got := time.Date(2023, 12, 31, 23, 59, 0, 123_000_000, loc).Format(time.RFC3339)
+	want := `2023-12-31T23:59:00+01:00`
+	if got != want {
+		t.Errorf("Want: %s, got: %s", want, got)
 	}
 }
