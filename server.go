@@ -673,7 +673,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 				return // close the connection, let the client reconnect if it wants to.
 			}
 		case <-r.Context().Done():
-			infoLog.Printf("%s Player %s closed SSE channel", r.RemoteAddr, p.Id)
+			infoLog.Printf("%s player %s closed SSE channel for game %s", r.RemoteAddr, p.Name, game.id)
 			game.unregisterPlayer(p.Id)
 			return
 		case <-game.ctx.Done():
