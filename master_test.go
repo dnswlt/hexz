@@ -1,6 +1,7 @@
 package hexz
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -12,13 +13,13 @@ func TestGameMasterRegisterUnregister(t *testing.T) {
 	// Both players should receive two events:
 	// P1: Welcome P1, Welcome P2
 	// P2: Welcome P2, Player 1 left.
-
+	ctx, cancel := context.WithCancel(context.Background())
 	g := &GameHandle{
 		id:           "game1",
 		gameType:     gameTypeFlagz,
 		host:         "testhost",
 		singlePlayer: false,
-		done:         make(chan tok),
+		ctx:          ctx,
 		controlEvent: make(chan ControlEvent),
 	}
 	cfg := &ServerConfig{
@@ -26,7 +27,7 @@ func TestGameMasterRegisterUnregister(t *testing.T) {
 	}
 	s := NewServer(cfg)
 	m := NewGameMaster(s, g)
-	go m.Run()
+	go m.Run(cancel)
 	allEvents := make(chan ServerEvent)
 	type eventStats struct {
 		events int
@@ -92,21 +93,21 @@ func TestGameMasterPlayFullGame(t *testing.T) {
 	// It then plays all moves for a full game.
 	// It finally checks that both players received an
 	// event indicating the winner.
-
+	ctx, cancel := context.WithCancel(context.Background())
 	g := &GameHandle{
 		id:           "game1",
 		gameType:     gameTypeClassic,
 		host:         "testhost",
 		singlePlayer: false,
-		done:         make(chan tok),
 		controlEvent: make(chan ControlEvent),
+		ctx:          ctx,
 	}
 	cfg := &ServerConfig{
 		PlayerRemoveDelay: time.Duration(1) * time.Microsecond,
 	}
 	s := NewServer(cfg)
 	m := NewGameMaster(s, g)
-	go m.Run()
+	go m.Run(cancel)
 	allEvents := make(chan ServerEvent)
 	type eventStats struct {
 		winner    int
@@ -161,7 +162,7 @@ func TestGameMasterPlayFullGame(t *testing.T) {
 			n++
 		}
 	}
-	g.controlEvent <- ControlEventKill{}
+	cancel()
 
 	// Wait for both player goroutines to finish. They should finish, because
 	// the GameMaster should close their event channels.

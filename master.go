@@ -1,6 +1,7 @@
 package hexz
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"time"
@@ -191,6 +192,7 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 		}
 		if m.game.singlePlayer && m.gameEngine.Board().Turn != 1 && !m.gameEngine.IsDone() {
 			// Ask CPU player to make a move.
+			// TODO: Race condition! Should we pass a copy here?
 			m.cpuCh <- m.gameEngine
 		}
 		var moveScores *MoveScores
@@ -283,14 +285,14 @@ func (m *GameMaster) processControlEventValidMoves(e ControlEventValidMoves) {
 	}
 }
 
-func (m *GameMaster) Run() {
+func (m *GameMaster) Run(cancel context.CancelFunc) {
 	m.s.IncCounter(fmt.Sprintf("/games/%s/started", m.game.gameType))
 	infoLog.Printf("Started new %q game: %s", m.game.gameType, m.game.id)
 	defer func() {
-		close(m.game.done)
-		m.s.deleteGame(m.game.id)
-		// Signal that client SSE connections should be terminated.
+		cancel()
 		for _, ch := range m.eventListeners {
+			// SSE clients should react to context cancellation, but
+			// it doesn't hurt to close these channels as well.
 			close(ch)
 		}
 		if m.cpuCh != nil {
@@ -321,12 +323,6 @@ func (m *GameMaster) Run() {
 				m.processControlEventRedo(e)
 			case ControlEventValidMoves:
 				m.processControlEventValidMoves(e)
-			case ControlEventKill:
-				m.broadcast(&ServerEvent{
-					// Send sad emoji.
-					Announcements: []string{"The game was terminated."},
-				})
-				return
 			}
 		case <-tick:
 			if time.Since(lastEventReceived) > m.s.config.InactivityTimeout {
@@ -347,7 +343,10 @@ func (m *GameMaster) Run() {
 				Announcements: []string{fmt.Sprintf("Player %s left the game &#128546;. Game over.", playerName)},
 			})
 			return
+		case <-m.game.ctx.Done():
+			return // game was cancelled externally.
 		}
+
 	}
 }
 

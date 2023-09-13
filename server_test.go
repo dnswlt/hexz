@@ -154,7 +154,7 @@ func TestFlagzSinglePlayer(t *testing.T) {
 	defer cancel()
 	eventCh, err := c.receiveEvents(ctx, testServer.URL+"/hexz/sse/"+gameId)
 	if err != nil {
-		t.Fatal("cannot receive events:", err)
+		t.Fatalf("cannot receive events for game %s: %s", gameId, err)
 	}
 	boardCh := receiveBoards(ctx, eventCh)
 	<-boardCh // Ignore first broadcast of the initial board.

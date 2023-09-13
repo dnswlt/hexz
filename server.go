@@ -2,6 +2,7 @@ package hexz
 
 import (
 	"compress/gzip"
+	"context"
 	crand "crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -182,7 +183,7 @@ type GameHandle struct {
 	host         string            // Name of the player hosting the game (the one who created it)
 	singlePlayer bool              // If true, only player 1 is human, the rest are computer-controlled.
 	controlEvent chan ControlEvent // The channel to communicate with the game coordinating goroutine.
-	done         chan tok          // Closed by the game master goroutine when it is done.
+	ctx          context.Context   // This game's context. Closed by the game master when the game is done.
 }
 
 // Player has JSON annotations for serialization to disk.
@@ -261,8 +262,6 @@ type ControlEventValidMoves struct {
 	reply chan<- []*MoveRequest
 }
 
-type ControlEventKill struct{}
-
 func (e ControlEventRegister) controlEventImpl()   {}
 func (e ControlEventUnregister) controlEventImpl() {}
 func (e ControlEventMove) controlEventImpl()       {}
@@ -270,13 +269,12 @@ func (e ControlEventReset) controlEventImpl()      {}
 func (e ControlEventUndo) controlEventImpl()       {}
 func (e ControlEventRedo) controlEventImpl()       {}
 func (e ControlEventValidMoves) controlEventImpl() {}
-func (e ControlEventKill) controlEventImpl()       {}
 
 func (g *GameHandle) sendEvent(e ControlEvent) bool {
 	select {
 	case g.controlEvent <- e:
 		return true
-	case <-g.done:
+	case <-g.ctx.Done():
 		return false
 	}
 }
@@ -375,6 +373,7 @@ func (s *Server) startNewGame(host string, gameType GameType, singlePlayer bool)
 	// Try a few times to find an unused game Id, else give up.
 	// (I don't like forever loops... 100 attempts is plenty.)
 	var game *GameHandle
+	ctx, cancel := context.WithCancel(context.Background())
 	for i := 0; i < 100; i++ {
 		id := GenerateGameId()
 		s.ongoingGamesMut.Lock()
@@ -386,17 +385,21 @@ func (s *Server) startNewGame(host string, gameType GameType, singlePlayer bool)
 				host:         host,
 				singlePlayer: singlePlayer,
 				controlEvent: make(chan ControlEvent),
-				done:         make(chan tok),
+				ctx:          ctx,
 			}
 			s.ongoingGames[id] = game
 		}
 		s.ongoingGamesMut.Unlock()
 		if game != nil {
 			m := NewGameMaster(s, game)
-			go m.Run()
+			go func() {
+				m.Run(cancel)
+				s.deleteGame(game.id)
+			}()
 			return game, nil
 		}
 	}
+	cancel() // Avoid context leak
 	return nil, fmt.Errorf("cannot start a new game")
 }
 
@@ -621,7 +624,24 @@ func (s *Server) handleRedo(w http.ResponseWriter, r *http.Request) {
 	game.sendEvent(ControlEventRedo{playerId: p.Id, RedoRequest: req})
 }
 
-func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
+func sendSSEEvent(w http.ResponseWriter, ev ServerEvent) error {
+	if _, err := io.WriteString(w, "data: "); err != nil {
+		return err
+	}
+	enc := json.NewEncoder(w)
+	if err := enc.Encode(ev); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(w, "\n\n"); err != nil {
+		return err
+	}
+	if f, canFlush := w.(http.Flusher); canFlush {
+		f.Flush()
+	}
+	return nil
+}
+
+func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	s.IncCounter("/requests/sse/incoming")
 	// We expect a cookie to identify the p.
 	p, err := s.lookupPlayerFromCookie(r)
@@ -646,32 +666,22 @@ func (s *Server) handleSse(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	for {
 		select {
-		case ev, ok := <-serverEventChan:
+		case ev := <-serverEventChan:
 			s.IncCounter("/requests/sse/events")
-			if !ok {
-				infoLog.Printf("Closing SSE channel for player %s in game %s", p.Id, gameId)
-				ev = ServerEvent{
-					LastEvent: true,
-				}
-			}
-			// Send ServerEvent JSON on SSE connection.
-			var buf strings.Builder
-			enc := json.NewEncoder(&buf)
-			if err := enc.Encode(ev); err != nil {
-				http.Error(w, "marshal error", http.StatusInternalServerError)
-				errorLog.Fatalf("Failed to marshal server event: %s", err)
-			}
-			fmt.Fprintf(w, "data: %s\n\n", buf.String())
-			if f, canFlush := w.(http.Flusher); canFlush {
-				f.Flush()
-			}
-			if !ok {
-				// The game is over, time to close the SSE channel.
-				return
+			if err := sendSSEEvent(w, ev); err != nil {
+				errorLog.Print("failed to send SSE: ", err)
+				return // close the connection, let the client reconnect if it wants to.
 			}
 		case <-r.Context().Done():
 			infoLog.Printf("%s Player %s closed SSE channel", r.RemoteAddr, p.Id)
 			game.unregisterPlayer(p.Id)
+			return
+		case <-game.ctx.Done():
+			// The game is over, time to close the SSE channel.
+			infoLog.Printf("Closing SSE channel for player %s in game %s", p.Id, gameId)
+			if err := sendSSEEvent(w, ServerEvent{LastEvent: true}); err != nil {
+				errorLog.Print("failed to send SSE: ", err)
+			}
 			return
 		}
 	}
@@ -1055,7 +1065,7 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("/hexz/undo/", s.postHandlerFunc(s.handleUndo))
 	mux.HandleFunc("/hexz/redo/", s.postHandlerFunc(s.handleRedo))
 	// Server-sent Event handling
-	mux.HandleFunc("/hexz/sse/", s.handleSse)
+	mux.HandleFunc("/hexz/sse/", s.handleSSE)
 
 	mux.HandleFunc("/hexz/rules", func(w http.ResponseWriter, r *http.Request) {
 		s.serveHtmlFile(w, rulesHtmlFilename)
