@@ -712,13 +712,13 @@ func (s *Server) handleValidMoves(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "No such game", http.StatusNotFound)
 		return
 	}
-	json, err := json.Marshal(game.validMoves())
+	w.Header().Set("Content-Type", "application/json")
+	dec := json.NewEncoder(w)
+	err := dec.Encode(game.validMoves())
 	if err != nil {
 		http.Error(w, "marshal error", http.StatusInternalServerError)
 		errorLog.Fatal("Cannot marshal valid moves: " + err.Error())
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(json)
 }
 
 var (

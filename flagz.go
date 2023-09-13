@@ -253,9 +253,9 @@ func (g *GameEngineFlagz) Winner() (playerNum int) {
 
 // Suggests a move for the player whose turn it is.
 // Uses a random strategy. Probably not very smart.
-func (g *GameEngineFlagz) RandomMove() (GameEngineMove, error) {
+func (g *GameEngineFlagz) RandomMove() (*GameEngineMove, error) {
 	if g.B.State != Running {
-		return GameEngineMove{}, fmt.Errorf("game is not running")
+		return nil, fmt.Errorf("game is not running")
 	}
 	b := g.B
 	pIdx := b.Turn - 1
@@ -273,7 +273,7 @@ func (g *GameEngineFlagz) RandomMove() (GameEngineMove, error) {
 			for c := range b.Fields[r] {
 				if !b.Fields[r][c].occupied() {
 					if n == nthFlag {
-						return GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellFlag}, nil
+						return &GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellFlag}, nil
 					}
 					n++
 				}
@@ -283,12 +283,12 @@ func (g *GameEngineFlagz) RandomMove() (GameEngineMove, error) {
 		// Pick a normal move
 		nthMove := g.rnd.Intn(nMoves)
 		n := 0
-		for r := 0; r < len(b.Fields); r++ {
-			for c := 0; c < len(b.Fields[r]); c++ {
+		for r := range b.Fields {
+			for c := range b.Fields[r] {
 				f := &b.Fields[r][c]
 				if !f.occupied() && f.isAvail(b.Turn) {
 					if n == nthMove {
-						return GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellNormal}, nil
+						return &GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellNormal}, nil
 					}
 					n++
 				}
@@ -298,80 +298,25 @@ func (g *GameEngineFlagz) RandomMove() (GameEngineMove, error) {
 	panic("no legal move found")
 }
 
-// Suggests a move for the player whose turn it is.
-// Greedily picks the move that has the maximum sum of
-// nextVal of both players. (Idea: by moving there you get
-// your points and avoid that the other player gets theirs).
-func (g *GameEngineFlagz) RandomMoveGreedy() (GameEngineMove, error) {
+func (g *GameEngineFlagz) ValidMoves() []*GameEngineMove {
+	result := make([]*GameEngineMove, 0, 64)
 	if g.B.State != Running {
-		return GameEngineMove{}, fmt.Errorf("game is not running")
+		return result
 	}
 	b := g.B
-	pIdx := b.Turn - 1
-	flagsLeft := b.Resources[pIdx].NumPieces[cellFlag] > 0
-	maxVal := -(1 << 30)
-	maxValCnt := 0
-	var move GameEngineMove
+	flagsLeft := b.Resources[b.Turn-1].NumPieces[cellFlag] > 0
 	for r := range b.Fields {
 		for c := range b.Fields[r] {
 			f := &b.Fields[r][c]
-			if !f.occupied() {
-				// Maybe place flag
-				if flagsLeft {
-					var ns [6]idx
-					n := b.neighbors(idx{r, c}, ns[:])
-					val := f.NextVal[1-pIdx] - f.NextVal[pIdx] // We block the other player, but also ourselves.
-					for i := 0; i < n; i++ {
-						nf := &b.Fields[ns[i].r][ns[i].c]
-						if !nf.occupied() {
-							val++
-						}
-					}
-					if val > maxVal {
-						move = GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellFlag}
-						maxVal = val
-						maxValCnt = 1
-					} else if val == maxVal && g.rnd.Float64() < 1/float64(maxValCnt+1) {
-						move = GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellFlag}
-						maxValCnt++
-					}
-				}
-				// Maybe place a normal cell
-				if f.isAvail(b.Turn) {
-					var ns [6]idx
-					n := b.neighbors(idx{r, c}, ns[:])
-					fv := b.Fields[r][c].NextVal[pIdx]
-					val := fv
-					for i := 0; i < n; i++ {
-						nf := b.Fields[ns[i].r][ns[i].c]
-						nv := nf.NextVal[pIdx]
-						if f.NextVal[pIdx] == 5 {
-							// Placing a 5 blocks all neighbor cells
-							if nv > 2 {
-								val -= nv // nextval blocked
-							} else {
-								val -= 2 // assume on average 2 pts lost
-							}
-						} else if nf.NextVal[pIdx] > fv {
-							val += nv
-						} else {
-							val += fv + 1
-						}
-					}
-					if val > maxVal {
-						move = GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellNormal}
-						maxVal = val
-						maxValCnt = 1
-					} else if val == maxVal && g.rnd.Float64() < 1/float64(maxValCnt+1) {
-						move = GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellNormal}
-						maxValCnt++
-					}
-				}
+			if !f.occupied() && flagsLeft {
+				result = append(result, &GameEngineMove{
+					PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellFlag,
+				})
+			}
+			if !f.occupied() && f.isAvail(b.Turn) {
+				result = append(result, &GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellNormal})
 			}
 		}
 	}
-	if move.PlayerNum == 0 {
-		panic("Did not make a move")
-	}
-	return move, nil
+	return result
 }

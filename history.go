@@ -79,7 +79,13 @@ func NewHistoryWriter(historyDir, gameId string) (*HistoryWriter, error) {
 	}, nil
 }
 
+// Writes the given header to the writer's game history.
+// This method must be called only once, and before any calls to Write.
+// w may be a nil receiver, in which case this method does nothing.
 func (w *HistoryWriter) WriteHeader(header *GameHistoryHeader) error {
+	if w == nil {
+		return nil
+	}
 	if w.numRecords != 0 {
 		return fmt.Errorf("header must be the first record written")
 	}
@@ -87,7 +93,12 @@ func (w *HistoryWriter) WriteHeader(header *GameHistoryHeader) error {
 	return w.enc.Encode(gameHistoryRecord{Header: header})
 }
 
+// Appends the given entry to the writer's game history.
+// w may be a nil receiver, in which case this method does nothing.
 func (w *HistoryWriter) Write(entry *GameHistoryEntry) error {
+	if w == nil {
+		return nil
+	}
 	if entry.Timestamp.IsZero() {
 		entry.Timestamp = time.Now()
 	}
@@ -96,6 +107,9 @@ func (w *HistoryWriter) Write(entry *GameHistoryEntry) error {
 }
 
 func (w *HistoryWriter) Close() error {
+	if w == nil {
+		return nil
+	}
 	if w.closed {
 		return nil
 	}

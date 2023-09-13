@@ -122,13 +122,11 @@ func (m *GameMaster) processControlEventRegister(e ControlEventRegister) {
 	}
 	if added && len(m.players) == m.gameEngine.NumPlayers() {
 		announcements = append(announcements, "The game begins!")
-		if m.historyWriter != nil {
-			m.historyWriter.WriteHeader(&GameHistoryHeader{
-				GameId:      m.game.id,
-				GameType:    m.game.gameType,
-				PlayerNames: m.playerNames(),
-			})
-		}
+		m.historyWriter.WriteHeader(&GameHistoryHeader{
+			GameId:      m.game.id,
+			GameType:    m.game.gameType,
+			PlayerNames: m.playerNames(),
+		})
 	}
 	m.broadcast(m.makeInitialServerEvent(announcements))
 }
@@ -187,9 +185,6 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 					fmt.Sprintf("&#127942; &#127942; &#127942; %s won &#127942; &#127942; &#127942;",
 						winnerName))
 			}
-			if m.historyWriter != nil {
-				m.historyWriter.Close()
-			}
 		}
 		if e.mctsStats != nil && e.mctsStats.MaxQ() > 0 {
 			evt.Announcements = append(evt.Announcements, fmt.Sprintf("CPU confidence: %.3f", e.mctsStats.MaxQ()))
@@ -198,17 +193,20 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 			// Ask CPU player to make a move.
 			m.cpuCh <- m.gameEngine
 		}
-		if m.historyWriter != nil {
-			var moveScores *MoveScores
-			if e.mctsStats != nil {
-				moveScores = e.mctsStats.MoveScores()
-			}
-			m.historyWriter.Write(&GameHistoryEntry{
-				EntryType:  "move",
-				Move:       e.moveRequest,
-				Board:      m.gameEngine.Board().ViewFor(0),
-				MoveScores: moveScores,
-			})
+		var moveScores *MoveScores
+		if e.mctsStats != nil {
+			moveScores = e.mctsStats.MoveScores()
+		}
+		m.historyWriter.Write(&GameHistoryEntry{
+			EntryType:  "move",
+			Move:       e.moveRequest,
+			Board:      m.gameEngine.Board().ViewFor(0),
+			MoveScores: moveScores,
+		})
+		if m.gameEngine.IsDone() {
+			// Make history available immediately.
+			// TODO: if a player clicks "Reset" after the game is done, subsequent moves won't be recorded.
+			m.historyWriter.Close()
 		}
 		m.broadcast(evt)
 	}
@@ -220,12 +218,10 @@ func (m *GameMaster) processControlEventReset(e ControlEventReset) {
 		return // Only players are allowed to reset
 	}
 	m.gameEngine.Reset()
-	if m.historyWriter != nil {
-		m.historyWriter.Write(&GameHistoryEntry{
-			EntryType: "reset",
-			Board:     m.gameEngine.Board().ViewFor(0),
-		})
-	}
+	m.historyWriter.Write(&GameHistoryEntry{
+		EntryType: "reset",
+		Board:     m.gameEngine.Board().ViewFor(0),
+	})
 	announcements := []string{
 		fmt.Sprintf("Player %s restarted the game.", p.Name),
 	}
@@ -244,12 +240,10 @@ func (m *GameMaster) processControlEventUndo(e ControlEventUndo) {
 	m.redo = append(m.redo, m.gameEngine)
 	m.gameEngine = m.undo[len(m.undo)-1]
 	m.undo = m.undo[:len(m.undo)-1]
-	if m.historyWriter != nil {
-		m.historyWriter.Write(&GameHistoryEntry{
-			EntryType: "undo",
-			Board:     m.gameEngine.Board().ViewFor(0),
-		})
-	}
+	m.historyWriter.Write(&GameHistoryEntry{
+		EntryType: "undo",
+		Board:     m.gameEngine.Board().ViewFor(0),
+	})
 	m.broadcast(&ServerEvent{Announcements: []string{"Undo"}})
 }
 
@@ -265,31 +259,27 @@ func (m *GameMaster) processControlEventRedo(e ControlEventRedo) {
 	m.undo = append(m.undo, m.gameEngine)
 	m.gameEngine = m.redo[len(m.redo)-1]
 	m.redo = m.redo[:len(m.redo)-1]
-	if m.historyWriter != nil {
-		m.historyWriter.Write(&GameHistoryEntry{
-			EntryType: "redo",
-			Board:     m.gameEngine.Board().ViewFor(0),
-		})
-	}
+	m.historyWriter.Write(&GameHistoryEntry{
+		EntryType: "redo",
+		Board:     m.gameEngine.Board().ViewFor(0),
+	})
 	m.broadcast(&ServerEvent{Announcements: []string{"Redo"}})
 }
 
 func (m *GameMaster) processControlEventValidMoves(e ControlEventValidMoves) {
-	// TODO: Return all valid moves, not just a single random one.
 	defer close(e.reply)
 	if engine, ok := m.gameEngine.(SinglePlayerGameEngine); ok {
-		m, err := engine.RandomMove()
-		if err != nil {
-			return
-		}
-		e.reply <- []*MoveRequest{
-			{
-				Move: engine.Board().Move,
+		validMoves := engine.ValidMoves()
+		moves := make([]*MoveRequest, len(validMoves))
+		for i, m := range validMoves {
+			moves[i] = &MoveRequest{
+				Move: m.Move,
 				Row:  m.Row,
 				Col:  m.Col,
 				Type: m.CellType,
-			},
+			}
 		}
+		e.reply <- moves
 	}
 }
 
@@ -306,11 +296,9 @@ func (m *GameMaster) Run() {
 		if m.cpuCh != nil {
 			close(m.cpuCh)
 		}
-		if m.historyWriter != nil {
-			// historyWriter is closed when the game is done, but we
-			// also want to retain history when players leave mid-game.
-			m.historyWriter.Close()
-		}
+		// historyWriter is closed when the game is done, but we
+		// also want to retain history when players leave mid-game.
+		m.historyWriter.Close()
 	}()
 	var lastEventReceived time.Time
 	for {

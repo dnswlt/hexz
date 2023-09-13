@@ -232,6 +232,7 @@ func TestFlagzSinglePlayerHistory(t *testing.T) {
 	<-boardCh // Ignore first broadcast of the initial board.
 	finished := false
 	maxMoves := numFieldsFirstRow * numBoardRows // upper bound for possible moves
+	nMoves := 0
 	for i := 0; !finished && i < maxMoves; i++ {
 		// Get valid moves.
 		validMoves, err := c.validMoves(gameId)
@@ -251,6 +252,7 @@ func TestFlagzSinglePlayerHistory(t *testing.T) {
 		// Receive boards until the game is finished or it's our turn again.
 		for {
 			board := <-boardCh
+			nMoves++
 			if board.State == Finished {
 				finished = true
 				break
@@ -268,8 +270,8 @@ func TestFlagzSinglePlayerHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal("failed to get game history: ", err)
 	}
-	if len(hist.Entries) < 50 {
-		t.Errorf("wrong number of history entries: want >= 50, got %d", len(hist.Entries))
+	if len(hist.Entries) != nMoves {
+		t.Errorf("wrong number of history entries: want %d, got %d", nMoves, len(hist.Entries))
 	}
 	if hist.GameId != gameId {
 		t.Errorf("wrong gameId in history: want %s, got %s", gameId, hist.GameId)

@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 )
 
 var (
@@ -71,7 +70,7 @@ func BenchmarkPlayFlagzGame(b *testing.B) {
 			if err != nil {
 				b.Fatal("Could not suggest a move:", err.Error())
 			}
-			if !ge.MakeMove(m) {
+			if !ge.MakeMove(*m) {
 				b.Fatal("Could not make a move")
 				return
 			}
@@ -79,40 +78,6 @@ func BenchmarkPlayFlagzGame(b *testing.B) {
 		winCounts[ge.Winner()]++
 	}
 	b.Logf("winCounts: %v", winCounts)
-}
-
-func TestPlayGreedyFlagzGame(t *testing.T) {
-	if testing.Short() {
-		return
-	}
-	const nRuns = 10000
-	var winCounts [3]int
-	src := rand.NewSource(time.Now().UnixNano())
-	for i := 0; i < nRuns; i++ {
-		ge := NewGameEngineFlagz(src)
-		for !ge.IsDone() {
-			var m GameEngineMove
-			var err error
-			if ge.B.Turn == 1 {
-				m, err = ge.RandomMove()
-			} else {
-				m, err = ge.RandomMoveGreedy()
-			}
-			if err != nil {
-				t.Fatal("Could not suggest a move:", err.Error())
-			}
-			if !ge.MakeMove(m) {
-				t.Fatal("Could not make a move")
-				return
-			}
-			if nRuns == 1 {
-				// Only debug first game.
-				fmt.Println(ge.B.DebugString())
-			}
-		}
-		winCounts[ge.Winner()]++
-	}
-	t.Logf("winCounts: %v", winCounts)
 }
 
 func TestCompareCellValueByRandomGamePlay(t *testing.T) {
@@ -146,7 +111,7 @@ func TestCompareCellValueByRandomGamePlay(t *testing.T) {
 					if err != nil {
 						t.Fatal("Could not suggest a move:", err.Error())
 					}
-					if !ge.MakeMove(m) {
+					if !ge.MakeMove(*m) {
 						t.Fatal("Could not make a move")
 						return
 					}
@@ -246,7 +211,7 @@ func TestCompareCellValueByCharacteristic(t *testing.T) {
 			if err != nil {
 				t.Fatal("Could not suggest a move:", err.Error())
 			}
-			if !ge.MakeMove(m) {
+			if !ge.MakeMove(*m) {
 				t.Fatal("Could not make a move")
 				return
 			}
