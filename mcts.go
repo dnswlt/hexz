@@ -405,8 +405,8 @@ func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration tim
 	started := time.Now()
 	maxDepth := 0
 	for n := 0; ; n++ {
-		// Check every N rounds if we're done.
-		if n&63 == 0 && time.Since(started) >= maxDuration {
+		// Check every N rounds if we're done. Run at least once.
+		if (n-1)&63 == 0 && time.Since(started) >= maxDuration {
 			break
 		}
 		ge := gameEngine.Clone(mcts.rnd)

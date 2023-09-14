@@ -1,14 +1,11 @@
 package hexz
 
 import (
-	"flag"
 	"math"
 	"math/rand"
 	"testing"
 	"time"
 )
-
-var useFloat32 = flag.Bool("use-float32", false, "set to true to benchmark with float32")
 
 func BenchmarkMCTSPlayRandomGame(b *testing.B) {
 	src := rand.NewSource(123)
@@ -57,6 +54,24 @@ func TestMCTSFull(t *testing.T) {
 	}
 }
 
+func TestMCTSNoThinkTime(t *testing.T) {
+	// Even with zero and negative think time, MCTS should yield a valid move suggestion.
+	src := rand.NewSource(123)
+	ge := NewGameEngineFlagz(src)
+
+	mcts := NewMCTS()
+	thinkTime := time.Duration(0)
+	m, _ := mcts.SuggestMove(ge, thinkTime)
+	if !ge.MakeMove(m) {
+		t.Errorf("Cannot make move %v", m)
+	}
+	thinkTime = -3 * time.Second
+	m, _ = mcts.SuggestMove(ge, thinkTime)
+	if !ge.MakeMove(m) {
+		t.Errorf("Cannot make move %v", m)
+	}
+}
+
 // Quick check that sqrt and log are just as fast on float32 as they are on
 // float64, despite the casting nuisances.
 
@@ -74,27 +89,28 @@ Sqrt-4   417.6µ ± 0%   626.7µ ± 0%  +50.06% (p=0.000 n=10)
 
 */
 
-func BenchmarkSqrt(b *testing.B) {
+func BenchmarkSqrt32(b *testing.B) {
 	const iterations = 1000
-	if *useFloat32 {
-		for i := 0; i < b.N; i++ {
-			var s float32
-			for x := float32(1); x < iterations; x += 1 {
-				s += float32(math.Sqrt(float64(x)))
-			}
-			if s < 0 {
-				b.Errorf("Wrong sum: %f", s)
-			}
+	for i := 0; i < b.N; i++ {
+		var s float32
+		for x := float32(1); x < iterations; x += 1 {
+			s += float32(math.Sqrt(float64(x)))
 		}
-	} else {
-		for i := 0; i < b.N; i++ {
-			var s float64
-			for x := float64(1); x < iterations; x += 1 {
-				s += math.Sqrt(x)
-			}
-			if s < 0 {
-				b.Errorf("Wrong sum: %f", s)
-			}
+		if s < 0 {
+			b.Errorf("Wrong sum: %f", s)
+		}
+	}
+}
+
+func BenchmarkSqrt64(b *testing.B) {
+	const iterations = 1000
+	for i := 0; i < b.N; i++ {
+		var s float64
+		for x := float64(1); x < iterations; x += 1 {
+			s += math.Sqrt(x)
+		}
+		if s < 0 {
+			b.Errorf("Wrong sum: %f", s)
 		}
 	}
 }
@@ -127,27 +143,28 @@ How does this make any sense?!
 
 */
 
-func BenchmarkLog(b *testing.B) {
+func BenchmarkLog32(b *testing.B) {
 	const iterations = 1000
-	if *useFloat32 {
-		for i := 0; i < b.N; i++ {
-			var s float32
-			for x := float32(1); x < iterations; x += 1 {
-				s += float32(math.Log(float64(x)))
-			}
-			if s < 0 {
-				b.Errorf("Wrong sum: %f", s)
-			}
+	for i := 0; i < b.N; i++ {
+		var s float32
+		for x := float32(1); x < iterations; x += 1 {
+			s += float32(math.Log(float64(x)))
 		}
-	} else {
-		for i := 0; i < b.N; i++ {
-			var s float64
-			for x := float64(1); x < iterations; x += 1 {
-				s += math.Log(x)
-			}
-			if s < 0 {
-				b.Errorf("Wrong sum: %f", s)
-			}
+		if s < 0 {
+			b.Errorf("Wrong sum: %f", s)
+		}
+	}
+}
+
+func BenchmarkLog64(b *testing.B) {
+	const iterations = 1000
+	for i := 0; i < b.N; i++ {
+		var s float64
+		for x := float64(1); x < iterations; x += 1 {
+			s += math.Log(x)
+		}
+		if s < 0 {
+			b.Errorf("Wrong sum: %f", s)
 		}
 	}
 }

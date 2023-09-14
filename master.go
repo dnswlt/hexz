@@ -26,7 +26,7 @@ type GameMaster struct {
 	// and accidentally closed tabs.
 	removePlayer       chan PlayerId
 	removePlayerCancel map[PlayerId]chan tok
-	cpuPlayer          *CPUPlayer // Nil for 2P games.
+	cpuPlayer          CPUPlayer // Nil for 2P games.
 
 	// If undo/redo is enabled, these fields contain the
 	// steps that can be undone/redone.
@@ -107,7 +107,7 @@ func (m *GameMaster) processControlEventRegister(e ControlEventRegister) {
 		playerNum = len(m.players) + 1
 		m.players[e.player.Id] = pInfo{playerNum, e.player}
 		if m.game.singlePlayer {
-			m.cpuPlayer = NewCPUPlayer(playerIdCPU)
+			m.cpuPlayer = NewLocalCPUPlayer(playerIdCPU, m.s.config.CpuThinkTime)
 			m.players[playerIdCPU] =
 				pInfo{playerNum: 2, Player: Player{Id: playerIdCPU, Name: "Computer"}}
 		}
@@ -189,9 +189,8 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 			evt.Announcements = append(evt.Announcements, fmt.Sprintf("CPU confidence: %.3f", e.mctsStats.MaxQ()))
 		}
 		if m.cpuPlayer != nil && m.gameEngine.Board().Turn != 1 && !m.gameEngine.IsDone() {
-			// Ask CPU player to make a move (on a cloned game engine).
-			ge := m.gameEngine.(SinglePlayerGameEngine).Clone(nil)
-			go m.cpuPlayer.SuggestMove(m.game.ctx, m.game.controlEvent, ge, m.s.config.CpuThinkTime)
+			// Ask CPU player to make a move.
+			go m.cpuPlayer.MakeMove(m.game.ctx, m.game.controlEvent, m.gameEngine.(SinglePlayerGameEngine))
 		}
 		var moveScores *MoveScores
 		if e.mctsStats != nil {
