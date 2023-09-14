@@ -58,7 +58,7 @@ func (c *HexzTestClient) newFlagzGame(singlePlayer bool) (gameId string, err err
 	if newGameResp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("could not start new game: %s", newGameResp.Status)
 	}
-	return gameIdFromPath(newGameResp.Request.URL.Path), nil
+	return gameIdFromPath(newGameResp.Request.URL.Path)
 }
 
 func (c *HexzTestClient) makeMove(gameId string, m *MoveRequest) error {

@@ -22,7 +22,7 @@ func TestGameIdPath(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := gameIdPath(test.gameId); got != test.want {
+			if got := gameIdFile(test.gameId); got != test.want {
 				t.Errorf("Unexpected path for gameId: want: %q, got: %q", test.want, got)
 			}
 		})

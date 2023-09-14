@@ -185,7 +185,7 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 						winnerName))
 			}
 		}
-		if e.mctsStats != nil && e.mctsStats.MaxQ() > 0 {
+		if e.mctsStats != nil {
 			evt.Announcements = append(evt.Announcements, fmt.Sprintf("CPU confidence: %.3f", e.mctsStats.MaxQ()))
 		}
 		if m.cpuPlayer != nil && m.gameEngine.Board().Turn != 1 && !m.gameEngine.IsDone() {

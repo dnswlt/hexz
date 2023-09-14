@@ -336,9 +336,6 @@ func (s *Server) readStaticResource(filename string) ([]byte, error) {
 
 func (s *Server) readGameHistoryFromFile(gameId string) (*GameHistory, error) {
 	s.IncCounter("/storage/files/gamehistory")
-	if strings.Contains(gameId, "..") || strings.Contains(gameId, "/") {
-		return nil, fmt.Errorf("refusing to read game %q", gameId)
-	}
 	return ReadGameHistory(s.config.GameHistoryRoot, gameId)
 }
 
@@ -359,14 +356,33 @@ func GenerateGameId() string {
 	return b.String()
 }
 
+func isValidGameId(gameId string) bool {
+	if len(gameId) != 6 {
+		return false
+	}
+	for i := 0; i < len(gameId); i++ {
+		if gameId[i] < 'A' || gameId[i] > 'Z' {
+			return false
+		}
+	}
+	return true
+}
+
+var (
+	errInvalidGameId = errors.New("invalid game ID")
+)
+
 // Looks up the game ID as the last element of the URL path.
-func gameIdFromPath(path string) string {
+func gameIdFromPath(path string) (gameId string, err error) {
 	pathSegs := strings.Split(path, "/")
 	l := len(pathSegs)
 	if l >= 2 && pathSegs[1] == "hexz" {
-		return pathSegs[l-1]
+		gameId = pathSegs[l-1]
+		if isValidGameId(gameId) {
+			return
+		}
 	}
-	return ""
+	return "", errInvalidGameId
 }
 
 func (s *Server) startNewGame(host string, gameType GameType, singlePlayer bool) (*GameHandle, error) {
@@ -548,10 +564,14 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "unknown player", http.StatusPreconditionFailed)
 	}
-	gameId := gameIdFromPath(r.URL.Path)
+	gameId, err := gameIdFromPath(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
+		return
+	}
 	game := s.lookupGame(gameId)
 	if game == nil {
-		http.Error(w, "Invalid game ID", http.StatusNotFound)
+		http.Error(w, "No such game", http.StatusNotFound)
 		return
 	}
 	dec := json.NewDecoder(r.Body)
@@ -572,10 +592,14 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "unknown player", http.StatusPreconditionFailed)
 	}
-	gameId := gameIdFromPath(r.URL.Path)
+	gameId, err := gameIdFromPath(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
+		return
+	}
 	game := s.lookupGame(gameId)
 	if game == nil {
-		http.Error(w, "Invalid game ID", http.StatusNotFound)
+		http.Error(w, "No such game", http.StatusNotFound)
 		return
 	}
 	dec := json.NewDecoder(r.Body)
@@ -591,7 +615,11 @@ func (s *Server) handleUndo(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "", http.StatusBadRequest)
 	}
-	gameId := gameIdFromPath(r.URL.Path)
+	gameId, err := gameIdFromPath(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
+		return
+	}
 	game := s.lookupGame(gameId)
 	if game == nil {
 		http.Error(w, "No such game", http.StatusNotFound)
@@ -610,7 +638,11 @@ func (s *Server) handleRedo(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "", http.StatusBadRequest)
 	}
-	gameId := gameIdFromPath(r.URL.Path)
+	gameId, err := gameIdFromPath(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
+		return
+	}
 	game := s.lookupGame(gameId)
 	if game == nil {
 		http.Error(w, "No such game", http.StatusNotFound)
@@ -649,7 +681,11 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown player", http.StatusPreconditionFailed)
 		return
 	}
-	gameId := gameIdFromPath(r.URL.Path)
+	gameId, err := gameIdFromPath(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
+		return
+	}
 	game := s.lookupGame(gameId)
 	if game == nil {
 		http.Error(w, "No such game", http.StatusNotFound)
@@ -705,8 +741,19 @@ func (s *Server) handleGame(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 		return
 	}
-	g := s.lookupGame(gameIdFromPath(r.URL.Path))
+	gameId, err := gameIdFromPath(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
+		return
+	}
+	g := s.lookupGame(gameId)
 	if g == nil {
+		if GameHistoryExists(s.config.GameHistoryRoot, gameId) {
+			// This game was played before, redirect to history viewer.
+			http.Redirect(w, r, "/hexz/view/"+gameId, http.StatusSeeOther)
+			return
+		}
+		// Offer to start a new game.
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 		return
 	}
@@ -716,7 +763,11 @@ func (s *Server) handleGame(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleValidMoves(w http.ResponseWriter, r *http.Request) {
-	gameId := gameIdFromPath(r.URL.Path)
+	gameId, err := gameIdFromPath(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
+		return
+	}
 	game := s.lookupGame(gameId)
 	if game == nil {
 		http.Error(w, "No such game", http.StatusNotFound)
@@ -724,7 +775,7 @@ func (s *Server) handleValidMoves(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	dec := json.NewEncoder(w)
-	err := dec.Encode(game.validMoves())
+	err = dec.Encode(game.validMoves())
 	if err != nil {
 		http.Error(w, "marshal error", http.StatusInternalServerError)
 		errorLog.Fatal("Cannot marshal valid moves: " + err.Error())
@@ -732,8 +783,8 @@ func (s *Server) handleValidMoves(w http.ResponseWriter, r *http.Request) {
 }
 
 var (
-	viewURLPathRE    = regexp.MustCompile(`^(/hexz/view/(?P<gameId>[A-Z0-9]+))(/(?P<seqNum>\d+))?$`)
-	historyURLPathRE = regexp.MustCompile(`^(/hexz/history/(?P<gameId>[A-Z0-9]+))$`)
+	viewURLPathRE    = regexp.MustCompile(`^(/hexz/view/(?P<gameId>[A-Z]{6}))(/(?P<seqNum>\d+))?$`)
+	historyURLPathRE = regexp.MustCompile(`^(/hexz/history/(?P<gameId>[A-Z]{6}))$`)
 )
 
 func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {

@@ -47,9 +47,13 @@ type HistoryWriter struct {
 	closed     bool
 }
 
+func gameIdPath(historyDir, gameId string) string {
+	return path.Join(historyDir, gameIdFile(gameId))
+}
+
 // Returns a relative file path for the given gameId.
 // Games are stored in subdirectories named after the first two uppercase(d) letters.
-func gameIdPath(gameId string) string {
+func gameIdFile(gameId string) string {
 	if gameId == "" {
 		gameId = "_"
 	}
@@ -61,7 +65,7 @@ func gameIdPath(gameId string) string {
 }
 
 func NewHistoryWriter(historyDir, gameId string) (*HistoryWriter, error) {
-	p := path.Join(historyDir, gameIdPath(gameId))
+	p := gameIdPath(historyDir, gameId)
 	err := os.MkdirAll(path.Dir(p), 0755)
 	if err != nil {
 		return nil, err
@@ -136,8 +140,16 @@ func (w *HistoryWriter) Close() error {
 	return w.w.Close()
 }
 
+func GameHistoryExists(historyDir string, gameId string) bool {
+	fi, err := os.Stat(gameIdPath(historyDir, gameId))
+	if err != nil {
+		return false
+	}
+	return fi.Mode().IsRegular() && fi.Size() > 0
+}
+
 func ReadGameHistory(historyDir string, gameId string) (*GameHistory, error) {
-	f, err := os.Open(path.Join(historyDir, gameIdPath(gameId)))
+	f, err := os.Open(gameIdPath(historyDir, gameId))
 	if err != nil {
 		return nil, err
 	}
