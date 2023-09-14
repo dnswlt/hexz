@@ -41,7 +41,7 @@ type gameHistoryRecord struct {
 
 type HistoryWriter struct {
 	w          io.WriteCloser
-	gz         *gzip.Writer
+	zw         *gzip.Writer
 	enc        *gob.Encoder
 	numRecords int // Number of records written so far
 	closed     bool
@@ -70,11 +70,11 @@ func NewHistoryWriter(historyDir, gameId string) (*HistoryWriter, error) {
 	if err != nil {
 		return nil, err
 	}
-	gz := gzip.NewWriter(f)
-	enc := gob.NewEncoder(gz)
+	zw := gzip.NewWriter(f)
+	enc := gob.NewEncoder(zw)
 	return &HistoryWriter{
 		w:   f,
-		gz:  gz,
+		zw:  zw,
 		enc: enc,
 	}, nil
 }
@@ -106,6 +106,22 @@ func (w *HistoryWriter) Write(entry *GameHistoryEntry) error {
 	return w.enc.Encode(gameHistoryRecord{Entry: entry})
 }
 
+func (w *HistoryWriter) Flush() error {
+	if w == nil {
+		return nil
+	}
+	if err := w.zw.Flush(); err != nil {
+		return err
+	}
+	// if f, ok := w.w.(*os.File); ok {
+	// 	// Sync is not strictly necessary, since .Write on an os.File is unbuffered.
+	// 	if err := f.Sync(); err != nil {
+	// 		return err
+	// 	}
+	// }
+	return nil
+}
+
 func (w *HistoryWriter) Close() error {
 	if w == nil {
 		return nil
@@ -114,7 +130,7 @@ func (w *HistoryWriter) Close() error {
 		return nil
 	}
 	w.closed = true
-	if err := w.gz.Close(); err != nil {
+	if err := w.zw.Close(); err != nil {
 		return err
 	}
 	return w.w.Close()
@@ -135,7 +151,9 @@ func ReadGameHistory(historyDir string, gameId string) (*GameHistory, error) {
 	for {
 		var record gameHistoryRecord
 		err := dec.Decode(&record)
-		if errors.Is(err, io.EOF) {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			// Ignore ErrUnexpectedEOF as well, since that's what we'll get
+			// when we try to read a history file that's flushed, but not closed yet.
 			break
 		}
 		if err != nil {

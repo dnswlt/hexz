@@ -203,9 +203,9 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 			MoveScores: moveScores,
 		})
 		if m.gameEngine.IsDone() {
-			// Make history available immediately.
-			// TODO: if a player clicks "Reset" after the game is done, subsequent moves won't be recorded.
-			m.historyWriter.Close()
+			// Make history available immediately. Do not close the writer yet,
+			// because a subsequent Reset might lead to more entries being written.
+			m.historyWriter.Flush()
 		}
 		m.broadcast(evt)
 	}
