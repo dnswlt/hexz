@@ -6,10 +6,6 @@ import (
 	"time"
 )
 
-type CPUMove struct {
-	Move *MoveRequest
-}
-
 type CPUPlayer interface {
 	MakeMove(ctx context.Context, respCh chan<- ControlEvent, ge SinglePlayerGameEngine) bool
 }
