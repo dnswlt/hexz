@@ -34,8 +34,8 @@ func (n *mcNode) Q() float64 {
 
 func (n *mcNode) U(parentCount float64, uctFactor float64) float64 {
 	if n.count == 0.0 {
-		// Never played => infinitely interesting
-		return math.Inf(1)
+		// Never played => infinitely interesting.
+		return math.MaxFloat64
 	}
 	return n.wins/n.count + uctFactor*math.Sqrt(math.Log(parentCount)/n.count)
 }

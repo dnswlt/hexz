@@ -240,6 +240,10 @@ func (g *GameEngineFlagz) Clone(s rand.Source) SinglePlayerGameEngine {
 	}
 }
 
+func (g *GameEngineFlagz) SetSource(s rand.Source) {
+	g.rnd = rand.New(s)
+}
+
 func (g *GameEngineFlagz) IsDone() bool {
 	return g.B.State == Finished
 }

@@ -190,7 +190,18 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 		}
 		if m.cpuPlayer != nil && m.gameEngine.Board().Turn != 1 && !m.gameEngine.IsDone() {
 			// Ask CPU player to make a move.
-			go m.cpuPlayer.MakeMove(m.game.ctx, m.game.controlEvent, m.gameEngine.(SinglePlayerGameEngine))
+			go func(ctx context.Context) {
+				mv, err := m.cpuPlayer.SuggestMove(ctx, m.gameEngine.(SinglePlayerGameEngine))
+				if err != nil {
+					// TODO: the game will be stuck now. We should probably cancel it.
+					errorLog.Print("Couldn't get CPU move: ", err)
+					return
+				}
+				select {
+				case m.game.controlEvent <- mv:
+				case <-ctx.Done():
+				}
+			}(m.game.ctx)
 		}
 		var moveScores *MoveScores
 		if e.mctsStats != nil {
