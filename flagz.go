@@ -3,6 +3,9 @@ package hexz
 // The Flagz game. The best one we have.
 
 import (
+	"bytes"
+	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 )
@@ -240,8 +243,49 @@ func (g *GameEngineFlagz) Clone(s rand.Source) SinglePlayerGameEngine {
 	}
 }
 
-func (g *GameEngineFlagz) SetSource(s rand.Source) {
-	g.rnd = rand.New(s)
+// Serializes the state of this game engine.
+// Currently the encoding is as a Gob, but that can change at any time.
+func (g *GameEngineFlagz) Encode() ([]byte, error) {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	flds := g.B.Fields
+	g.B.Fields = nil // Don't serialize the fields, since they are redundant.
+	defer func() { g.B.Fields = flds }()
+	if err := enc.Encode(g); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// Decodes the given encoded state of a game engine and sets this game engine to the given state.
+// The random source of the existing game engine is kept, since the serialized state does not contain one.
+func (g *GameEngineFlagz) Decode(encoded []byte) error {
+	dec := gob.NewDecoder(bytes.NewReader(encoded))
+	var ge GameEngineFlagz
+	if err := dec.Decode(&ge); err != nil {
+		return err
+	}
+	if ge.B == nil {
+		return fmt.Errorf("board is nil")
+	}
+	// Check that the board has the expected size.
+	const numFields = numFieldsFirstRow*((numBoardRows+1)/2) + (numFieldsFirstRow-1)*(numBoardRows/2)
+	if len(ge.B.FlatFields) != numFields {
+		return fmt.Errorf("board has %d fields, want %d", len(ge.B.Fields), numFields)
+	}
+	// Regenerate fields slices.
+	ge.B.Fields = make([][]Field, numBoardRows)
+	start := 0
+	for i := 0; i < len(ge.B.Fields); i++ {
+		end := start + numFieldsFirstRow - i%2
+		ge.B.Fields[i] = ge.B.FlatFields[start:end]
+		start = end
+	}
+	// Keep old random source, which is not serialized.
+	rnd := g.rnd
+	*g = ge
+	g.rnd = rnd
+	return nil
 }
 
 func (g *GameEngineFlagz) IsDone() bool {
@@ -299,7 +343,8 @@ func (g *GameEngineFlagz) RandomMove() (*GameEngineMove, error) {
 			}
 		}
 	}
-	panic("no legal move found")
+	data, _ := json.MarshalIndent(g, "", "  ")
+	panic(fmt.Sprintf("no legal move found: %v", string(data)))
 }
 
 func (g *GameEngineFlagz) ValidMoves() []*GameEngineMove {

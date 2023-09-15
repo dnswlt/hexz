@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 var (
@@ -284,5 +286,27 @@ func TestGobEncodeGameEngineFlagz(t *testing.T) {
 	var r3 *GameEngineFlagz
 	if err := dec.Decode(&r3); err != io.EOF {
 		t.Error("Expected EOF, got: ", err)
+	}
+}
+
+func TestEncodeDecode(t *testing.T) {
+	g1 := NewGameEngineFlagz(rand.NewSource(123))
+	encoded, err := g1.Encode()
+	if err != nil {
+		t.Fatal("Cannot encode: ", err)
+	}
+	g2 := NewGameEngineFlagz(rand.NewSource(987))
+	rnd := g2.rnd
+	if err := g2.Decode(encoded); err != nil {
+		t.Fatal("Cannot decode: ", err)
+	}
+	if rnd != g2.rnd {
+		t.Errorf("Random source has changed")
+	}
+	if g1.FreeCells != g2.FreeCells {
+		t.Errorf("Wrong FreeCells: want %d, got %d", g1.FreeCells, g2.FreeCells)
+	}
+	if diff := cmp.Diff(g1.B, g2.B); diff != "" {
+		t.Errorf("Boards differ: -want +got: %s", diff)
 	}
 }

@@ -156,20 +156,27 @@ func TestRemoteCPUPlayerInvalidRequestData(t *testing.T) {
 func TestRemoteCPUPlayerIncompleteRequestData(t *testing.T) {
 	// This test shows that we should not send a whole GameEngine across the wire.
 	// We should instead have a proper Encode/Decode API that game engines should implement.
-	t.Skip("Deactivated b/c the handler currently crashes when given invalid inputs.")
+	// t.Skip("Deactivated b/c the handler currently crashes when given invalid inputs.")
 	// Test that the handler defensively checks its inputs and does not crash on incomplete data.
 	s := NewCPUPlayerServer(&CPUPlayerServerConfig{})
 	w := httptest.NewRecorder()
-	// This is valid JSON, but does not set all required fields of a game engine.
+	ge := NewGameEngineFlagz(rand.NewSource(0))
+	ge.B.FlatFields = []Field{
+		{Type: cellFlag, Owner: 1},
+	} // Make board invalid.
+	data, _ := ge.Encode()
 	requestData, _ := json.Marshal(&SuggestMoveRequest{
-		MaxThinkTime: 10 * time.Millisecond,
-		GameEngine: &GameEngineFlagz{
-			FreeCells: 0,
-		},
+		MaxThinkTime:    10 * time.Millisecond,
+		GameType:        gameTypeFlagz,
+		GameEngineState: data,
 	})
 	r := httptest.NewRequest(http.MethodPost, CpuSuggestMoveURLPath, bytes.NewReader(requestData))
 	s.handleSuggestMove(w, r) // TODO: this will crash!
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected status code 400, got %d", w.Code)
+	}
+	wantErr := "invalid game engine state"
+	if !strings.Contains(w.Body.String(), wantErr) {
+		t.Errorf("expected error message %q, got: %q", wantErr, w.Body.String())
 	}
 }

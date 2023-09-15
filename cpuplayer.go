@@ -103,9 +103,14 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, spge SinglePlayerGa
 	if !ok {
 		return nil, fmt.Errorf("remote CPU player only supports flagz engines")
 	}
+	geState, err := ge.Encode()
+	if err != nil {
+		return nil, err
+	}
 	data, err := json.Marshal(&SuggestMoveRequest{
-		MaxThinkTime: cpu.maxThinkTime,
-		GameEngine:   ge,
+		MaxThinkTime:    cpu.maxThinkTime,
+		GameType:        ge.GameType(),
+		GameEngineState: geState,
 	})
 	if err != nil {
 		return nil, err
@@ -141,8 +146,10 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, spge SinglePlayerGa
 // API for remote CPU player.
 
 type SuggestMoveRequest struct {
-	MaxThinkTime time.Duration    `json:"maxThinkTime"`
-	GameEngine   *GameEngineFlagz `json:"gameEngine"`
+	MaxThinkTime time.Duration `json:"maxThinkTime"`
+	GameType     GameType      `json:"gameType"`
+	// Encoded game engine state (obtained via SinglePlayerGameEngine.Encode).
+	GameEngineState []byte `json:"gameEngineState"`
 }
 
 type SuggestMoveResponse struct {
@@ -182,12 +189,24 @@ func (s *CPUPlayerServer) handleSuggestMove(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
-	if req.GameEngine == nil {
+	if req.GameEngineState == nil {
 		http.Error(w, "missing game engine", http.StatusBadRequest)
 		return
 	}
+	// Reconstruct game engine from encoded state.
+	var ge SinglePlayerGameEngine
 	src := s.randSourcePool.Get().(rand.Source)
-	req.GameEngine.SetSource(src)
+	switch req.GameType {
+	case gameTypeFlagz:
+		ge = NewGameEngineFlagz(src)
+		if err := ge.Decode(req.GameEngineState); err != nil {
+			http.Error(w, "invalid game engine state", http.StatusBadRequest)
+			return
+		}
+	default:
+		http.Error(w, "unsupported game type", http.StatusBadRequest)
+		return
+	}
 	mcts := NewMCTS()
 	thinkTime := req.MaxThinkTime
 	if s.config.CpuThinkTime > 0 && thinkTime > s.config.CpuThinkTime {
@@ -200,7 +219,7 @@ func (s *CPUPlayerServer) handleSuggestMove(w http.ResponseWriter, r *http.Reque
 			thinkTime = timeLeft
 		}
 	}
-	mv, stats := mcts.SuggestMove(req.GameEngine, thinkTime)
+	mv, stats := mcts.SuggestMove(ge, thinkTime)
 	s.randSourcePool.Put(src)
 	src = nil // Don't use anymore
 
