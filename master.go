@@ -25,7 +25,7 @@ type GameMaster struct {
 	// They can rejoin for a while, e.g. to gracefully handle page reloads
 	// and accidentally closed tabs.
 	removePlayer       chan PlayerId
-	removePlayerCancel map[PlayerId]chan tok
+	removePlayerCancel map[PlayerId]context.CancelFunc
 	cpuPlayer          CPUPlayer // Nil for 2P games.
 
 	// If undo/redo is enabled, these fields contain the
@@ -99,7 +99,7 @@ func (m *GameMaster) processControlEventRegister(e ControlEventRegister) {
 	if _, ok := m.players[e.player.Id]; ok {
 		// Player reconnected. Cancel its removal.
 		if cancel, ok := m.removePlayerCancel[e.player.Id]; ok {
-			close(cancel)
+			cancel()
 			delete(m.removePlayerCancel, e.player.Id)
 		}
 	} else if len(m.players) < m.gameEngine.NumPlayers() {
@@ -145,16 +145,18 @@ func (m *GameMaster) processControlEventUnregister(e ControlEventUnregister) {
 	if _, ok := m.players[e.playerId]; ok {
 		// Remove player after timeout. Don't remove them immediately as they might
 		// just be reloading their page and rejoin soon.
-		cancel := make(chan tok)
+		ctx, cancel := context.WithCancel(m.game.ctx)
 		m.removePlayerCancel[e.playerId] = cancel
-		go func(playerId PlayerId) {
-			t := time.After(m.s.config.PlayerRemoveDelay)
+		go func(ctx context.Context, playerId PlayerId) {
+			t := time.NewTimer(m.s.config.PlayerRemoveDelay)
 			select {
-			case <-t:
+			case <-t.C:
 				m.removePlayer <- playerId
-			case <-cancel:
+			case <-ctx.Done():
+				// Game over or removal was cancelled.
+				t.Stop()
 			}
-		}(e.playerId)
+		}(ctx, e.playerId)
 	}
 }
 
@@ -366,15 +368,17 @@ func NewGameMaster(s *Server, game *GameHandle) *GameMaster {
 			errorLog.Printf("Cannot create history writer for game %s: %s", game.id, err)
 		}
 	}
+	ge := NewGameEngine(game.gameType, randSrc)
 	m := &GameMaster{
-		s:                  s,
-		game:               game,
-		randSrc:            randSrc,
-		gameEngine:         NewGameEngine(game.gameType, randSrc),
-		eventListeners:     make(map[PlayerId]chan ServerEvent),
-		players:            make(map[PlayerId]pInfo),
-		removePlayer:       make(chan PlayerId),
-		removePlayerCancel: make(map[PlayerId]chan tok),
+		s:              s,
+		game:           game,
+		randSrc:        randSrc,
+		gameEngine:     ge,
+		eventListeners: make(map[PlayerId]chan ServerEvent),
+		players:        make(map[PlayerId]pInfo),
+		// Use a buffered channel to avoid blocking the cancellation goroutines in case the game ends before they call back.
+		removePlayer:       make(chan PlayerId, ge.NumPlayers()),
+		removePlayerCancel: make(map[PlayerId]context.CancelFunc),
 		historyWriter:      historyWriter,
 	}
 	return m

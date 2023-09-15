@@ -25,8 +25,6 @@ import (
 	"time"
 )
 
-type tok struct{}
-
 type ServerConfig struct {
 	ServerAddress     string
 	ServerPort        int

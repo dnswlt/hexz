@@ -184,3 +184,107 @@ func TestGameMasterPlayFullGame(t *testing.T) {
 		t.Errorf("Want winner %d, got %d", wantWinner, got)
 	}
 }
+
+func TestRejoinGame(t *testing.T) {
+	// This test checks that a player can rejoin a game if they reconnect
+	// before the removal timeout expires.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // Terminate the game master goroutine eventually.
+	g := &GameHandle{
+		id:           "game1",
+		gameType:     gameTypeFlagz,
+		host:         "testhost",
+		singlePlayer: true,
+		ctx:          ctx,
+		controlEvent: make(chan ControlEvent),
+	}
+	cfg := &ServerConfig{
+		PlayerRemoveDelay: 500 * time.Millisecond, // Should be plenty to allow for a rejoin.
+	}
+	s := NewServer(cfg)
+	m := NewGameMaster(s, g)
+	// Start the game.
+	done := make(chan struct{}, 1)
+	go func() {
+		m.Run(cancel)
+		done <- struct{}{}
+	}()
+	// Register player 1 (the only player).
+	playerId := PlayerId("P1")
+	replyChan := make(chan chan ServerEvent)
+	g.controlEvent <- ControlEventRegister{
+		player:    Player{Id: playerId, Name: "Horst"},
+		replyChan: replyChan,
+	}
+	eventCh := <-replyChan
+	// Expect and ignore the welcome event.
+	<-eventCh
+	// Unregister player 1. Should not trigger an event.
+	g.controlEvent <- ControlEventUnregister{
+		playerId: playerId,
+	}
+	// Re-register player 1 almost immediately.
+	time.Sleep(1 * time.Millisecond)
+	replyChan = make(chan chan ServerEvent)
+	select {
+	case g.controlEvent <- ControlEventRegister{
+		player:    Player{Id: playerId, Name: "Horst"},
+		replyChan: replyChan,
+	}:
+	case <-done:
+		t.Fatal("GameMaster unexpectedly stopped.")
+	}
+	eventCh = <-replyChan
+	<-eventCh
+}
+
+func TestRejoinGameTimeout(t *testing.T) {
+	// This test checks that a player gets logged out of a game and the game ends
+	// if they do not reconnect before the removal timeout.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // Terminate the game master goroutine eventually.
+	g := &GameHandle{
+		id:           "game1",
+		gameType:     gameTypeFlagz,
+		host:         "testhost",
+		singlePlayer: true,
+		ctx:          ctx,
+		controlEvent: make(chan ControlEvent),
+	}
+	cfg := &ServerConfig{
+		PlayerRemoveDelay: 10 * time.Microsecond, // Log out player quickly for a fast test.
+	}
+	s := NewServer(cfg)
+	m := NewGameMaster(s, g)
+	// Start the game.
+	done := make(chan struct{}, 1)
+	go func() {
+		m.Run(cancel)
+		done <- struct{}{}
+	}()
+	// Register player 1 (the only player).
+	playerId := PlayerId("P1")
+	replyChan := make(chan chan ServerEvent)
+	g.controlEvent <- ControlEventRegister{
+		player:    Player{Id: playerId, Name: "Horst"},
+		replyChan: replyChan,
+	}
+	eventCh := <-replyChan
+	// Expect and ignore the welcome event.
+	<-eventCh
+	// Unregister player 1. Should not trigger an event.
+	g.controlEvent <- ControlEventUnregister{
+		playerId: playerId,
+	}
+	// Try to re-register player 1, but too late.
+	time.Sleep(5 * time.Millisecond) // 5ms >> 10us
+	replyChan = make(chan chan ServerEvent)
+	select {
+	case g.controlEvent <- ControlEventRegister{
+		player:    Player{Id: playerId, Name: "Horst"},
+		replyChan: replyChan,
+	}:
+		t.Fatal("Player 1 could unexpectedly re-register.")
+	case <-done:
+	}
+}
