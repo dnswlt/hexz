@@ -71,16 +71,18 @@ func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge SinglePlayerGameE
 }
 
 type RemoteCPUPlayer struct {
-	playerId     PlayerId
-	url          string // Base URL of the remote CPU player server.
-	maxThinkTime time.Duration
+	playerId             PlayerId
+	url                  string // Base URL of the remote CPU player server.
+	maxThinkTime         time.Duration
+	propagateRPCDeadline bool // Experimental: set to true to propagate the RPC deadline to the server.
 }
 
 func NewRemoteCPUPlayer(playerId PlayerId, url string, maxThinkTime time.Duration) *RemoteCPUPlayer {
 	return &RemoteCPUPlayer{
-		playerId:     playerId,
-		url:          url,
-		maxThinkTime: maxThinkTime,
+		playerId:             playerId,
+		url:                  url,
+		maxThinkTime:         maxThinkTime,
+		propagateRPCDeadline: false,
 	}
 }
 
@@ -89,7 +91,10 @@ func (cpu *RemoteCPUPlayer) MaxThinkTime() time.Duration {
 }
 
 const (
-	cpuSuggestMoveURLPath = "/hexz/cpu/suggest"
+	// URL path used by the CPU player server.
+	CpuSuggestMoveURLPath = "/hexz/cpu/suggest"
+	// Used to propagate deadlines from clients to the server.
+	HttpHeaderXRequestDeadline = "X-Request-Deadline"
 )
 
 func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, spge SinglePlayerGameEngine) (ControlEvent, error) {
@@ -105,9 +110,13 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, spge SinglePlayerGa
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cpu.url+cpuSuggestMoveURLPath, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cpu.url+CpuSuggestMoveURLPath, bytes.NewReader(data))
 	if err != nil {
 		return nil, err
+	}
+	if requestDeadline, ok := ctx.Deadline(); ok && cpu.propagateRPCDeadline {
+		// Propagate deadline to the server. It will use this to limit the time it spends thinking.
+		req.Header.Set(HttpHeaderXRequestDeadline, requestDeadline.Format(time.RFC3339Nano))
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -184,6 +193,13 @@ func (s *CPUPlayerServer) handleSuggestMove(w http.ResponseWriter, r *http.Reque
 	if s.config.CpuThinkTime > 0 && thinkTime > s.config.CpuThinkTime {
 		thinkTime = s.config.CpuThinkTime
 	}
+	// If the request has a deadline, don't run longer than that.
+	if deadline, ok := r.Context().Deadline(); ok {
+		timeLeft := time.Until(deadline)
+		if timeLeft < thinkTime {
+			thinkTime = timeLeft
+		}
+	}
 	mv, stats := mcts.SuggestMove(req.GameEngine, thinkTime)
 	s.randSourcePool.Put(src)
 	src = nil // Don't use anymore
@@ -205,9 +221,29 @@ func (s *CPUPlayerServer) handleSuggestMove(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// requestDeadlineHandler sets the request deadline based on the X-Request-Deadline header, if present.
+func requestDeadlineHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		d := r.Header.Get(HttpHeaderXRequestDeadline)
+		if d == "" {
+			next.ServeHTTP(w, r) // No deadline specified.
+			return
+		}
+		deadline, err := time.Parse(time.RFC3339Nano, d)
+		if err != nil {
+			errorLog.Printf("invalid deadline: %s", err)
+			http.Error(w, "invalid deadline", http.StatusBadRequest)
+			return
+		}
+		ctx, cancel := context.WithDeadline(r.Context(), deadline)
+		defer cancel()
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 func (s *CPUPlayerServer) createMux() *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc(cpuSuggestMoveURLPath, s.handleSuggestMove)
+	mux.Handle(CpuSuggestMoveURLPath, requestDeadlineHandler(http.HandlerFunc(s.handleSuggestMove)))
 	return mux
 }
 
