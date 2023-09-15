@@ -128,7 +128,7 @@ func receiveBoards(ctx context.Context, eventCh <-chan tcServerEvent) <-chan *Bo
 // single-player flagz game and plays it till the end using random moves.
 func TestFlagzSinglePlayer(t *testing.T) {
 	if testing.Short() {
-		return // This test takes >1s...
+		t.Skip("Don't run http tests in -short mode.")
 	}
 	cfg := serverConfigForTest(t)
 	cfg.CpuThinkTime = 1 * time.Millisecond // We want a fast test, not smart moves.
@@ -198,7 +198,7 @@ func TestFlagzSinglePlayer(t *testing.T) {
 func TestFlagzSinglePlayerHistory(t *testing.T) {
 	histDir := t.TempDir()
 	if testing.Short() {
-		return // This test takes >1s...
+		t.Skip("Don't run http tests in -short mode.")
 	}
 	cfg := serverConfigForTest(t)
 	cfg.CpuThinkTime = 1 * time.Millisecond // We want a fast test, not smart moves.

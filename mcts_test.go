@@ -33,7 +33,7 @@ func BenchmarkMCTSPlayRandomGame(b *testing.B) {
 
 func TestMCTSFull(t *testing.T) {
 	if testing.Short() {
-		return
+		t.Skip("Don't run full MCTS simulation in -short mode.")
 	}
 	// Play one full game without crashing
 	thinkTime := time.Duration(10) * time.Millisecond
