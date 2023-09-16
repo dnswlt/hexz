@@ -28,5 +28,10 @@ RUN set -x && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -
 
 # Copy the binary to the production image from the builder stage.
 COPY --from=builder /app/server /app/server
+# Copy static resources, too.
+COPY --from=builder /app/resources /app/resources
 
-CMD ["/app/server"]
+# Run the server in its "home" directory.
+WORKDIR /app
+
+CMD ["/app/server", "-cpu-think-time=5s", "-cpu-max-flags=-1", "-remove-delay=1m", "-inactivity-timeout=1h"]
