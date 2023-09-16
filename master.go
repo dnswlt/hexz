@@ -109,7 +109,7 @@ func (m *GameMaster) processControlEventRegister(e ControlEventRegister) {
 		if m.game.singlePlayer {
 			m.cpuPlayer = NewLocalCPUPlayer(playerIdCPU, m.s.config.CpuThinkTime)
 			m.players[playerIdCPU] =
-				pInfo{playerNum: 2, Player: Player{Id: playerIdCPU, Name: "Computer"}}
+				pInfo{playerNum: 2, Player: Player{Id: playerIdCPU, Name: "CPU"}}
 		}
 	}
 	ch := make(chan ServerEvent)
