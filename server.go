@@ -26,7 +26,7 @@ import (
 )
 
 type ServerConfig struct {
-	ServerAddress     string
+	ServerHost        string
 	ServerPort        int
 	DocumentRoot      string        // Path to static resource files.
 	GameHistoryRoot   string        // Path to game history files.
@@ -1135,7 +1135,7 @@ func (s *Server) createMux() *http.ServeMux {
 }
 
 func (s *Server) Serve() {
-	addr := fmt.Sprintf("%s:%d", s.config.ServerAddress, s.config.ServerPort)
+	addr := fmt.Sprintf("%s:%d", s.config.ServerHost, s.config.ServerPort)
 	mux := s.createMux()
 	srv := &http.Server{
 		Addr:    addr,

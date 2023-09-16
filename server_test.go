@@ -56,7 +56,7 @@ func TestSha256HexDigest(t *testing.T) {
 func serverConfigForTest(t *testing.T) *ServerConfig {
 	historyRoot := t.TempDir()
 	return &ServerConfig{
-		ServerAddress:   "localhost",
+		ServerHost:      "localhost",
 		ServerPort:      8999,
 		DocumentRoot:    "./resources",
 		GameHistoryRoot: historyRoot,

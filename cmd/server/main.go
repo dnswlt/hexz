@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/dnswlt/hexz"
@@ -15,12 +16,12 @@ var ()
 func main() {
 	cfg := &hexz.ServerConfig{}
 
-	flag.StringVar(&cfg.ServerAddress, "address", "", "Address on which to listen")
-	flag.IntVar(&cfg.ServerPort, "port", 8084, "Port on which to listen")
+	flag.StringVar(&cfg.ServerHost, "host", "", "Hostname/IP on which to listen. Leave empty to listen on all interfaces.")
+	flag.IntVar(&cfg.ServerPort, "port", 8080, "Port on which to listen")
 	flag.StringVar(&cfg.DocumentRoot, "resources-dir", "./resources",
 		"Root directory from which to serve files")
-	flag.StringVar(&cfg.GameHistoryRoot, "history-dir", "./hist",
-		"Root directory from which to read game history files")
+	flag.StringVar(&cfg.GameHistoryRoot, "history-dir", "",
+		"Root directory in whicih to read/write history files. If empty, history is disabled.")
 	flag.DurationVar(&cfg.InactivityTimeout, "inactivity-timeout", 60*time.Minute,
 		"Time to wait before ending a game due to inactivity")
 	flag.DurationVar(&cfg.PlayerRemoveDelay, "remove-delay", 60*time.Second,
@@ -38,7 +39,22 @@ func main() {
 	flag.StringVar(&cfg.TlsPrivKey, "tls-key", "", "Path to privkey.pem for TLS")
 	flag.BoolVar(&cfg.EnableUndo, "enable-undo", true, "If true, games support undo/redo")
 	flag.Parse()
-
+	isPortSet := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "port" {
+			isPortSet = true
+		}
+	})
+	// If -port was not specified explicitly, try the $PORT environment variable.
+	envPort := os.Getenv("PORT")
+	if !isPortSet && envPort != "" {
+		port, err := strconv.Atoi(envPort)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "invalid port: %v\n", envPort)
+			os.Exit(1)
+		}
+		cfg.ServerPort = port
+	}
 	if len(flag.Args()) > 0 {
 		fmt.Fprintf(os.Stderr, "unexpected extra arguments: %v\n", flag.Args())
 		os.Exit(1)
