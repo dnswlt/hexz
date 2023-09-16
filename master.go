@@ -169,10 +169,8 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 	mr := e.moveRequest
 	if m.gameEngine.MakeMove(GameEngineMove{PlayerNum: p.playerNum, Move: mr.Move, Row: mr.Row, Col: mr.Col, CellType: mr.Type}) {
 		if m.s.config.EnableUndo {
-			var histEntry GameEngine
 			if he, ok := m.gameEngine.(SinglePlayerGameEngine); ok {
-				histEntry = he.Clone(m.randSrc)
-				m.undo = append(m.undo, histEntry)
+				m.undo = append(m.undo, he.Clone())
 				m.redo = nil
 			}
 		}

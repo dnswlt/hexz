@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"math/rand"
 	"os"
 	"os/signal"
 	"runtime/pprof"
@@ -79,10 +78,9 @@ func main() {
 	var wstats [2]wstat
 	nRuns := 0
 	cancelled := false
-	src := rand.NewSource(time.Now().UnixNano())
 	for time.Since(started) < *maxRuntime && nRuns < *numGames && !cancelled {
 		nMoves := 0
-		ge := hexz.NewGameEngineFlagz(src)
+		ge := hexz.NewGameEngineFlagz()
 
 		var moveStats [2][]*hexz.MCTSStats
 		mcts := []*hexz.MCTS{

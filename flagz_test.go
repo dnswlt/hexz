@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"math/rand"
 	"sort"
 	"strconv"
 	"strings"
@@ -63,9 +62,8 @@ func (b *Board) DebugString() string {
 
 func BenchmarkPlayFlagzGame(b *testing.B) {
 	winCounts := make(map[int]int)
-	src := rand.NewSource(123)
 	for i := 0; i < b.N; i++ {
-		ge := NewGameEngineFlagz(src)
+		ge := NewGameEngineFlagz()
 
 		for !ge.IsDone() {
 			m, err := ge.RandomMove()
@@ -79,7 +77,7 @@ func BenchmarkPlayFlagzGame(b *testing.B) {
 		}
 		winCounts[ge.Winner()]++
 	}
-	b.Logf("winCounts: %v", winCounts)
+	// b.Logf("winCounts: %v", winCounts)
 }
 
 func TestCompareCellValueByRandomGamePlay(t *testing.T) {
@@ -87,8 +85,7 @@ func TestCompareCellValueByRandomGamePlay(t *testing.T) {
 	if !*runExperimentsAsTests {
 		return
 	}
-	src := rand.NewSource(123)
-	ge0 := NewGameEngineFlagz(src)
+	ge0 := NewGameEngineFlagz()
 	wins := make([][]int, len(ge0.Board().Fields))
 	played := make([][]int, len(ge0.Board().Fields))
 	for r := range ge0.Board().Fields {
@@ -104,7 +101,7 @@ func TestCompareCellValueByRandomGamePlay(t *testing.T) {
 				if b0.Fields[r][c].occupied() {
 					continue
 				}
-				ge := ge0.Clone(src)
+				ge := ge0.Clone()
 				if !ge.MakeMove(GameEngineMove{PlayerNum: 1, Move: 0, Row: r, Col: c, CellType: cellFlag}) {
 					t.Fatal("cannot make initial move")
 				}
@@ -193,12 +190,11 @@ func TestCompareCellValueByCharacteristic(t *testing.T) {
 		return
 	}
 	const nRounds = 1000000
-	src := rand.NewSource(123)
 	wins := make(map[fieldDesc]int)
 	played := make(map[fieldDesc]int)
 
 	for i := 0; i < nRounds; i++ {
-		ge := NewGameEngineFlagz(src)
+		ge := NewGameEngineFlagz()
 		// Compute cell characteristics before playing the game, as they will change during the game.
 		b := ge.B
 		fds := make([][]fieldDesc, len(b.Fields))
@@ -259,9 +255,8 @@ func TestCompareCellValueByCharacteristic(t *testing.T) {
 func TestGobEncodeGameEngineFlagz(t *testing.T) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
-	src := rand.NewSource(123)
-	g1 := NewGameEngineFlagz(src)
-	g2 := NewGameEngineFlagz(src)
+	g1 := NewGameEngineFlagz()
+	g2 := NewGameEngineFlagz()
 	if err := enc.Encode(g1); err != nil {
 		t.Fatal("Cannot encode first: ", err)
 	}
@@ -290,18 +285,14 @@ func TestGobEncodeGameEngineFlagz(t *testing.T) {
 }
 
 func TestEncodeDecode(t *testing.T) {
-	g1 := NewGameEngineFlagz(rand.NewSource(123))
+	g1 := NewGameEngineFlagz()
 	encoded, err := g1.Encode()
 	if err != nil {
 		t.Fatal("Cannot encode: ", err)
 	}
-	g2 := NewGameEngineFlagz(rand.NewSource(987))
-	rnd := g2.rnd
+	g2 := NewGameEngineFlagz()
 	if err := g2.Decode(encoded); err != nil {
 		t.Fatal("Cannot decode: ", err)
-	}
-	if rnd != g2.rnd {
-		t.Errorf("Random source has changed")
 	}
 	if g1.FreeCells != g2.FreeCells {
 		t.Errorf("Wrong FreeCells: want %d, got %d", g1.FreeCells, g2.FreeCells)

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"math/rand"
 	"strings"
 	"time"
 )
@@ -74,7 +73,6 @@ func (root *mcNode) nodesPerDepth() (size int, leafNodes []int, branchNodes []in
 }
 
 type MCTS struct {
-	rnd              *rand.Rand
 	MaxFlagPositions int // maximum number of (random) positions to consider for placing a flag in a single move.
 	UctFactor        float64
 	FlagsFirst       bool // If true, flags will be played whenever possible.
@@ -146,11 +144,11 @@ func (mcts *MCTS) nextMoves(node *mcNode, b *Board) []*mcNode {
 					r: r, c: c, turn: b.Turn,
 				})
 			}
-			if hasFlag && (mcts.rnd.Float64() < float64(maxFlags)/(float64(nFlags)+1)) {
+			if hasFlag && (randFloat64() < float64(maxFlags)/(float64(nFlags)+1)) {
 				// reservoir sampling to pick maxFlags with equal probability among all possibilities.
 				k := nFlags
 				if k >= maxFlags {
-					k = mcts.rnd.Intn(maxFlags)
+					k = randIntn(maxFlags)
 				}
 				flagMoves[k] = &mcNode{
 					r: r, c: c, turn: b.Turn, cellType: cellFlag,
@@ -196,7 +194,7 @@ func (mcts *MCTS) run(ge SinglePlayerGameEngine, path []*mcNode) (depth int) {
 		node.children = cs
 		node.liveChildren = len(cs)
 		// Play a random child (rollout)
-		c := cs[mcts.rnd.Intn(len(cs))]
+		c := cs[randIntn(len(cs))]
 		winner := mcts.playRandomGame(ge, c)
 		path = append(path, c)
 		mcts.backpropagate(path, winner)
@@ -313,7 +311,6 @@ func (s *MCTSStats) String() string {
 
 func NewMCTS() *MCTS {
 	return &MCTS{
-		rnd:              rand.New(rand.NewSource(time.Now().UnixNano())),
 		MaxFlagPositions: -1, // Unlimited
 		UctFactor:        1.0,
 		FlagsFirst:       false,
@@ -409,7 +406,7 @@ func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration tim
 		if (n-1)&63 == 0 && time.Since(started) >= maxDuration {
 			break
 		}
-		ge := gameEngine.Clone(mcts.rnd)
+		ge := gameEngine.Clone()
 		path := make([]*mcNode, 1, 100)
 		path[0] = root
 		depth := mcts.run(ge, path)

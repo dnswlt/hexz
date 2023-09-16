@@ -5,9 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net/http"
-	"sync"
 	"time"
 )
 
@@ -22,7 +20,6 @@ type LocalCPUPlayer struct {
 	mcts         *MCTS
 	thinkTime    time.Duration // Current think time (auto-adjusted based on confidence)
 	maxThinkTime time.Duration // Maximum think time. Upper bound, independent of the context's deadline.
-	src          rand.Source
 }
 
 func NewLocalCPUPlayer(playerId PlayerId, maxThinkTime time.Duration) *LocalCPUPlayer {
@@ -42,9 +39,6 @@ func (cpu *LocalCPUPlayer) MaxThinkTime() time.Duration {
 // This method should be called in a separate goroutine.
 // The SinglePlayerGameEngine passed in will not be modified.
 func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge SinglePlayerGameEngine) (ControlEvent, error) {
-	// Use our own source of randomness. In the long term, this method will deal
-	// with a deserialized game engine (sent via RPC), so the source will be nil.
-	ge = ge.Clone(cpu.src)
 	t := cpu.thinkTime
 	if t > cpu.maxThinkTime {
 		t = cpu.maxThinkTime
@@ -158,8 +152,7 @@ type SuggestMoveResponse struct {
 }
 
 type CPUPlayerServer struct {
-	randSourcePool sync.Pool
-	config         *CPUPlayerServerConfig
+	config *CPUPlayerServerConfig
 }
 
 type CPUPlayerServerConfig struct {
@@ -173,11 +166,6 @@ type CPUPlayerServerConfig struct {
 func NewCPUPlayerServer(config *CPUPlayerServerConfig) *CPUPlayerServer {
 	return &CPUPlayerServer{
 		config: config,
-		randSourcePool: sync.Pool{
-			New: func() any {
-				return rand.NewSource(time.Now().UnixMicro())
-			},
-		},
 	}
 }
 
@@ -195,10 +183,9 @@ func (s *CPUPlayerServer) handleSuggestMove(w http.ResponseWriter, r *http.Reque
 	}
 	// Reconstruct game engine from encoded state.
 	var ge SinglePlayerGameEngine
-	src := s.randSourcePool.Get().(rand.Source)
 	switch req.GameType {
 	case gameTypeFlagz:
-		ge = NewGameEngineFlagz(src)
+		ge = NewGameEngineFlagz()
 		if err := ge.Decode(req.GameEngineState); err != nil {
 			http.Error(w, "invalid game engine state", http.StatusBadRequest)
 			return
@@ -220,8 +207,6 @@ func (s *CPUPlayerServer) handleSuggestMove(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	mv, stats := mcts.SuggestMove(ge, thinkTime)
-	s.randSourcePool.Put(src)
-	src = nil // Don't use anymore
 
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)

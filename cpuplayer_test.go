@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -26,7 +25,7 @@ func TestRemoteCPUPlayer(t *testing.T) {
 	defer testServer.Close()
 
 	var cpu CPUPlayer = NewRemoteCPUPlayer("cpuPlayerId", testServer.URL, cpuThinkTime)
-	ge := NewGameEngineFlagz(rand.NewSource(0))
+	ge := NewGameEngineFlagz()
 	// Allow enough time to let the RPC succeed.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -66,7 +65,7 @@ func TestRemoteCPUPlayerDeadlineExceeded(t *testing.T) {
 	defer testServer.Close()
 
 	var cpu CPUPlayer = NewRemoteCPUPlayer("cpuPlayerId", testServer.URL, cpuThinkTime)
-	ge := NewGameEngineFlagz(rand.NewSource(0))
+	ge := NewGameEngineFlagz()
 	// Very short deadline of 10ms. The RPC should fail with a timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), rpcDeadline)
 	defer cancel()
@@ -98,7 +97,7 @@ func TestRemoteCPUPlayerDeadlineExceededWithPropagation(t *testing.T) {
 	cpu := NewRemoteCPUPlayer("cpuPlayerId", testServer.URL, cpuThinkTime)
 	// Crucially, enable deadline propagation, so server will adjust its think time.
 	cpu.propagateRPCDeadline = true
-	ge := NewGameEngineFlagz(rand.NewSource(0))
+	ge := NewGameEngineFlagz()
 	// Very short deadline of 10ms. The RPC should fail with a timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), rpcDeadline)
 	defer cancel()
@@ -132,7 +131,7 @@ func TestRemoteCPUPlayerWrongURLPath(t *testing.T) {
 	defer testServer.Close()
 
 	var cpu CPUPlayer = NewRemoteCPUPlayer("cpuPlayerId", testServer.URL+"/wrongpath", cpuThinkTime)
-	ge := NewGameEngineFlagz(rand.NewSource(0))
+	ge := NewGameEngineFlagz()
 	_, err := cpu.SuggestMove(context.Background(), ge)
 	if err == nil {
 		t.Error("request for wrong path succeeded")
@@ -160,7 +159,7 @@ func TestRemoteCPUPlayerIncompleteRequestData(t *testing.T) {
 	// Test that the handler defensively checks its inputs and does not crash on incomplete data.
 	s := NewCPUPlayerServer(&CPUPlayerServerConfig{})
 	w := httptest.NewRecorder()
-	ge := NewGameEngineFlagz(rand.NewSource(0))
+	ge := NewGameEngineFlagz()
 	ge.B.FlatFields = []Field{
 		{Type: cellFlag, Owner: 1},
 	} // Make board invalid.

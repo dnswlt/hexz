@@ -279,7 +279,7 @@ func TestFlagzSinglePlayerHistory(t *testing.T) {
 	if hist.GameType != gameTypeFlagz {
 		t.Errorf("wrong game type in history: want %s, got %s", gameTypeFlagz, hist.GameType)
 	}
-	if diff := cmp.Diff([]string{testuser, "Computer"}, hist.PlayerNames); diff != "" {
+	if diff := cmp.Diff([]string{testuser, "CPU"}, hist.PlayerNames); diff != "" {
 		t.Errorf("wrong player names in history: -want +got: %s", diff)
 	}
 }

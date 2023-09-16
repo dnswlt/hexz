@@ -2,14 +2,12 @@ package hexz
 
 import (
 	"math"
-	"math/rand"
 	"testing"
 	"time"
 )
 
 func BenchmarkMCTSPlayRandomGame(b *testing.B) {
-	src := rand.NewSource(123)
-	ge := NewGameEngineFlagz(src)
+	ge := NewGameEngineFlagz()
 	mcts := NewMCTS()
 	for i := 0; i < b.N; i++ {
 		r := 0
@@ -22,7 +20,7 @@ func BenchmarkMCTSPlayRandomGame(b *testing.B) {
 				}
 			}
 		}
-		mcts.playRandomGame(ge.Clone(mcts.rnd), &mcNode{
+		mcts.playRandomGame(ge.Clone(), &mcNode{
 			r:        r,
 			c:        c,
 			cellType: cellFlag,
@@ -38,8 +36,7 @@ func TestMCTSFull(t *testing.T) {
 	// Play one full game without crashing
 	thinkTime := time.Duration(10) * time.Millisecond
 
-	src := rand.NewSource(123)
-	ge := NewGameEngineFlagz(src)
+	ge := NewGameEngineFlagz()
 
 	mcts := []*MCTS{
 		NewMCTS(),
@@ -56,8 +53,7 @@ func TestMCTSFull(t *testing.T) {
 
 func TestMCTSNoThinkTime(t *testing.T) {
 	// Even with zero and negative think time, MCTS should yield a valid move suggestion.
-	src := rand.NewSource(123)
-	ge := NewGameEngineFlagz(src)
+	ge := NewGameEngineFlagz()
 
 	mcts := NewMCTS()
 	thinkTime := time.Duration(0)

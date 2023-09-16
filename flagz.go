@@ -7,7 +7,6 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 )
 
 type GameEngineFlagz struct {
@@ -15,9 +14,6 @@ type GameEngineFlagz struct {
 	// Used to efficiently process moves and determine game state for flagz.
 	FreeCells   int    // Number of unoccupied cells
 	NormalMoves [2]int // Number of normal cell moves the players can make
-	// Source of random numbers. Useful to make games repeatable.
-	// Not cloned nor serialized!
-	rnd *rand.Rand
 	// History of moves made so far
 	Moves []GameEngineMove
 }
@@ -30,10 +26,8 @@ const (
 	flagzMaxValue      = 5 // Maximum value a cell can take.
 )
 
-func NewGameEngineFlagz(src rand.Source) *GameEngineFlagz {
-	g := &GameEngineFlagz{
-		rnd: rand.New(src),
-	}
+func NewGameEngineFlagz() *GameEngineFlagz {
+	g := &GameEngineFlagz{}
 	g.Reset()
 	return g
 }
@@ -51,7 +45,7 @@ func (g *GameEngineFlagz) PopulateInitialCells() {
 	n := len(g.B.FlatFields)
 	// j is only a safeguard for invalid calls to this method on a non-empty board.
 	for j := 0; j < n && i < flagzNumRockCells; j++ {
-		k := g.rnd.Intn(n)
+		k := randIntn(n)
 		if !g.B.FlatFields[k].occupied() {
 			i++
 			f := &g.B.FlatFields[k]
@@ -62,7 +56,7 @@ func (g *GameEngineFlagz) PopulateInitialCells() {
 	// Place some grass cells.
 	v := 0
 	for j := 0; j < n && v < flagzNumGrassCells; j++ {
-		k := g.rnd.Intn(n)
+		k := randIntn(n)
 		if !g.B.FlatFields[k].occupied() {
 			v++
 			f := &g.B.FlatFields[k]
@@ -234,10 +228,9 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 }
 
 func (g *GameEngineFlagz) Board() *Board { return g.B }
-func (g *GameEngineFlagz) Clone(s rand.Source) SinglePlayerGameEngine {
+func (g *GameEngineFlagz) Clone() SinglePlayerGameEngine {
 	return &GameEngineFlagz{
 		B:           g.B.copy(),
-		rnd:         rand.New(s),
 		FreeCells:   g.FreeCells,
 		NormalMoves: g.NormalMoves,
 	}
@@ -282,9 +275,7 @@ func (g *GameEngineFlagz) Decode(encoded []byte) error {
 		start = end
 	}
 	// Keep old random source, which is not serialized.
-	rnd := g.rnd
 	*g = ge
-	g.rnd = rnd
 	return nil
 }
 
@@ -310,12 +301,12 @@ func (g *GameEngineFlagz) RandomMove() (*GameEngineMove, error) {
 	nMoves := g.NormalMoves[pIdx]
 	flagsLeft := b.Resources[pIdx].NumPieces[cellFlag] > 0
 	pickFlag := false
-	if g.FreeCells > 0 && flagsLeft && (nMoves == 0 || g.rnd.Float64() <= float64(1)/float64(nMoves+1)) {
+	if g.FreeCells > 0 && flagsLeft && (nMoves == 0 || randFloat64() <= float64(1)/float64(nMoves+1)) {
 		pickFlag = true
 	}
 	if pickFlag {
 		// Find a random free cell and place a flag there.
-		nthFlag := g.rnd.Intn(g.FreeCells)
+		nthFlag := randIntn(g.FreeCells)
 		n := 0
 		for r := range b.Fields {
 			for c := range b.Fields[r] {
@@ -329,7 +320,7 @@ func (g *GameEngineFlagz) RandomMove() (*GameEngineMove, error) {
 		}
 	} else {
 		// Pick a normal move
-		nthMove := g.rnd.Intn(nMoves)
+		nthMove := randIntn(nMoves)
 		n := 0
 		for r := range b.Fields {
 			for c := range b.Fields[r] {
