@@ -31,6 +31,7 @@ type ServerConfig struct {
 	DocumentRoot      string        // Path to static resource files.
 	GameHistoryRoot   string        // Path to game history files.
 	LoginDatabasePath string        // Path to the file where the player DB is stored. If empty, no persistent storage is used.
+	RedisAddr         string        // Address of the Redis server. If empty, local storage is used.
 	InactivityTimeout time.Duration // Time after which a game is ended due to inactivity.
 	PlayerRemoveDelay time.Duration // Time to wait before removing an unregistered player from the game.
 	LoginTTL          time.Duration
@@ -73,12 +74,18 @@ type Server struct {
 	started time.Time
 }
 
-func NewServer(cfg *ServerConfig) (*Server, error) {
-	playerStore, err := NewInMemoryPlayerStore(cfg.LoginTTL, cfg.LoginDatabasePath)
-	if err != nil {
-		return nil, err
+func NewServer(cfg *ServerConfig) (s *Server, err error) {
+	var playerStore PlayerStore
+	if cfg.RedisAddr != "" {
+		if playerStore, err = NewRemotePlayerStore(cfg.RedisAddr, cfg.LoginTTL); err != nil {
+			return nil, err
+		}
+	} else {
+		if playerStore, err = NewInMemoryPlayerStore(cfg.LoginTTL, cfg.LoginDatabasePath); err != nil {
+			return nil, err
+		}
 	}
-	s := &Server{
+	s = &Server{
 		ongoingGames: make(map[string]*GameHandle),
 		playerStore:  playerStore,
 		config:       cfg,
@@ -87,7 +94,7 @@ func NewServer(cfg *ServerConfig) (*Server, error) {
 		started:      time.Now(),
 	}
 	s.InitCounters()
-	return s, nil
+	return
 }
 
 func (s *Server) InitCounters() {
@@ -454,9 +461,10 @@ func (s *Server) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	playerId := generatePlayerId()
-	if err := s.playerStore.Login(playerId, name); err != nil {
+	if err := s.playerStore.Login(r.Context(), playerId, name); err != nil {
 		infoLog.Printf("Rejected login for player %s: %s", name, err)
 		http.Error(w, "Cannot log in right now", http.StatusPreconditionFailed)
+		return
 	}
 	s.IncCounter("/requests/login/success")
 	http.SetCookie(w, makePlayerCookie(playerId, s.config.LoginTTL))
@@ -466,7 +474,6 @@ func (s *Server) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleHexz(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
-		infoLog.Printf("Foosen cookie: %s", err)
 		s.serveHtmlFile(w, loginHtmlFilename)
 		return
 	}
@@ -521,7 +528,7 @@ func (s *Server) lookupPlayerFromCookie(r *http.Request) (Player, error) {
 	if err != nil {
 		return Player{}, fmt.Errorf("missing cookie")
 	}
-	return s.playerStore.Lookup(PlayerId(cookie.Value))
+	return s.playerStore.Lookup(r.Context(), PlayerId(cookie.Value))
 }
 
 func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
@@ -822,7 +829,8 @@ func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
 	s.ongoingGamesMut.Unlock()
 
 	if ps, ok := s.playerStore.(*InMemoryPlayerStore); ok {
-		resp.NumLoggedInPlayers = ps.NumPlayers()
+		n := ps.NumPlayers()
+		resp.NumLoggedInPlayers = &n
 	}
 
 	s.countersMut.Lock()

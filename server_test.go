@@ -73,7 +73,7 @@ const (
 func TestHandleNewGame(t *testing.T) {
 	cfg := serverConfigForTest(t)
 	s, _ := NewServer(cfg)
-	if err := s.playerStore.Login(testPlayerId, testPlayerName); err != nil {
+	if err := s.playerStore.Login(context.Background(), testPlayerId, testPlayerName); err != nil {
 		t.Error("Cannot log in test player: ", err)
 	}
 	w := httptest.NewRecorder()

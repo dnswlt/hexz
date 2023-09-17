@@ -24,6 +24,8 @@ func main() {
 		"Root directory in whicih to read/write history files. If empty, history is disabled.")
 	flag.StringVar(&cfg.LoginDatabasePath, "userdb", "_logins.json",
 		"File in which to store login information if the local in-memory login store is used.")
+	flag.StringVar(&cfg.RedisAddr, "redis-addr", "",
+		"Address of the Redis server. Optional. If empty, the local in-memory login store is used.")
 	flag.DurationVar(&cfg.InactivityTimeout, "inactivity-timeout", 60*time.Minute,
 		"Time to wait before ending a game due to inactivity")
 	flag.DurationVar(&cfg.PlayerRemoveDelay, "remove-delay", 60*time.Second,
@@ -70,6 +72,7 @@ func main() {
 	s, err := hexz.NewServer(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error creating server: %v\n", err)
+		os.Exit(1)
 	}
 	s.Serve()
 }

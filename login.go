@@ -1,6 +1,7 @@
 package hexz
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/go-redis/redis/v8"
 )
 
 // When run as a standalone app, we can store all logged in users
@@ -20,10 +23,10 @@ type PlayerId string
 
 type PlayerStore interface {
 	// Lookup looks up the given player by ID.
-	Lookup(playerId PlayerId) (Player, error)
+	Lookup(ctx context.Context, playerId PlayerId) (Player, error)
 	// Login logs in the given player. If the player is already logged in,
 	// the existing data will be overwritten with the new data.
-	Login(playerId PlayerId, name string) error
+	Login(ctx context.Context, playerId PlayerId, name string) error
 }
 
 const (
@@ -60,7 +63,7 @@ func NewInMemoryPlayerStore(loginTTL time.Duration, dbPath string) (*InMemoryPla
 	return s, nil
 }
 
-func (s *InMemoryPlayerStore) Lookup(playerId PlayerId) (Player, error) {
+func (s *InMemoryPlayerStore) Lookup(ctx context.Context, playerId PlayerId) (Player, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 	// Clean up periodically.
@@ -88,7 +91,7 @@ func (s *InMemoryPlayerStore) Lookup(playerId PlayerId) (Player, error) {
 	return *p, nil
 }
 
-func (s *InMemoryPlayerStore) Login(playerId PlayerId, name string) error {
+func (s *InMemoryPlayerStore) Login(ctx context.Context, playerId PlayerId, name string) error {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 	if len(s.players) >= maxLoggedInPlayers {
@@ -153,4 +156,47 @@ func (s *InMemoryPlayerStore) saveToFile() error {
 		return err
 	}
 	return nil
+}
+
+// RemotePlayerStore is a player store that stores players in a remote (Redis) database.
+type RemotePlayerStore struct {
+	rdb      *redis.Client
+	loginTTL time.Duration // How long a login is valid.
+}
+
+func NewRemotePlayerStore(addr string, loginTTL time.Duration) (*RemotePlayerStore, error) {
+	if loginTTL <= 0 {
+		return nil, fmt.Errorf("loginTTL must be positive")
+	}
+	rdb := redis.NewClient(&redis.Options{
+		Addr: addr,
+	})
+	err := rdb.Ping(context.Background()).Err()
+	if err != nil {
+		return nil, err
+	}
+	infoLog.Printf("Connected to Redis at %s", addr)
+	return &RemotePlayerStore{
+		rdb:      rdb,
+		loginTTL: loginTTL,
+	}, nil
+}
+
+func (s *RemotePlayerStore) Lookup(ctx context.Context, playerId PlayerId) (Player, error) {
+	val, err := s.rdb.GetEx(ctx, "login:"+string(playerId), s.loginTTL).Result()
+	if err != nil {
+		if err != redis.Nil {
+			errorLog.Printf("Failed to look up player %q: %v", playerId, err)
+		}
+		return Player{}, err
+	}
+	return Player{
+		Id:   playerId,
+		Name: val,
+		// Least LastActive empty, it's unused by the remote player store.
+	}, nil
+}
+
+func (s *RemotePlayerStore) Login(ctx context.Context, playerId PlayerId, name string) error {
+	return s.rdb.SetEX(ctx, "login:"+string(playerId), name, s.loginTTL).Err()
 }

@@ -148,7 +148,7 @@ type StatuszResponse struct {
 	UptimeSeconds      int               `json:"uptimeSeconds"`
 	Uptime             string            `json:"uptime"` // 1h30m3.5s
 	NumOngoingGames    int               `json:"numOngoingGames"`
-	NumLoggedInPlayers int               `json:"numLoggedInPlayers"`
+	NumLoggedInPlayers *int              `json:"numLoggedInPlayers,omitempty"` // pointer to make this one optional (remote store does not support count).
 	Counters           []StatuszCounter  `json:"counters"`
 	Distributions      []*StatuszDistrib `json:"distributions"`
 }
