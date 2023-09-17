@@ -3,7 +3,6 @@ package hexz
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"time"
 )
 
@@ -15,7 +14,6 @@ type pInfo struct {
 type GameMaster struct {
 	s          *Server
 	game       *GameHandle
-	randSrc    rand.Source
 	gameEngine GameEngine
 	// Player and spectator channels.
 	eventListeners map[PlayerId]chan ServerEvent
@@ -357,7 +355,6 @@ func (m *GameMaster) Run(cancel context.CancelFunc) {
 
 // Controller function for a running game. To be executed by a dedicated goroutine.
 func NewGameMaster(s *Server, game *GameHandle) *GameMaster {
-	randSrc := rand.NewSource(time.Now().UnixNano())
 	var historyWriter *HistoryWriter
 	if s.config.GameHistoryRoot != "" {
 		var err error
@@ -366,11 +363,10 @@ func NewGameMaster(s *Server, game *GameHandle) *GameMaster {
 			errorLog.Printf("Cannot create history writer for game %s: %s", game.id, err)
 		}
 	}
-	ge := NewGameEngine(game.gameType, randSrc)
+	ge := NewGameEngine(game.gameType)
 	m := &GameMaster{
 		s:              s,
 		game:           game,
-		randSrc:        randSrc,
 		gameEngine:     ge,
 		eventListeners: make(map[PlayerId]chan ServerEvent),
 		players:        make(map[PlayerId]pInfo),

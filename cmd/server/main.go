@@ -42,6 +42,7 @@ func main() {
 	flag.StringVar(&cfg.TlsCertChain, "tls-cert", "", "Path to chain.pem for TLS")
 	flag.StringVar(&cfg.TlsPrivKey, "tls-key", "", "Path to privkey.pem for TLS")
 	flag.BoolVar(&cfg.EnableUndo, "enable-undo", true, "If true, games support undo/redo")
+	flag.BoolVar(&cfg.Stateless, "stateless", false, "If true, run in stateless mode (e.g. Cloud Run)")
 	flag.Parse()
 	isPortSet := false
 	flag.Visit(func(f *flag.Flag) {
@@ -69,6 +70,17 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	if cfg.Stateless {
+		s, err := hexz.NewStatelessServer(cfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error creating server: %v\n", err)
+			os.Exit(1)
+		}
+		s.Serve()
+		return // never reached.
+	}
+
+	// Stateful server.
 	s, err := hexz.NewServer(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error creating server: %v\n", err)

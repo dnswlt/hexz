@@ -9,10 +9,22 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "cmd/server/hexz.go",
+            "program": "cmd/server/main.go",
             "cwd": "${workspaceFolder}",
             "args": [
-                "-debug"
+                "-debug",
+            ]
+        },
+        {
+            "name": "stateless",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "cmd/server/main.go",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "-stateless",
+                "-redis-addr=nuc:6379",
             ]
         },
         {

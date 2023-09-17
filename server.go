@@ -42,6 +42,8 @@ type ServerConfig struct {
 	TlsCertChain      string
 	TlsPrivKey        string
 	DebugMode         bool
+	// If true, run stateless server (e.g. for Cloud Run). RedisAddr must also be set in this case.
+	Stateless bool
 }
 
 var (
@@ -77,7 +79,11 @@ type Server struct {
 func NewServer(cfg *ServerConfig) (s *Server, err error) {
 	var playerStore PlayerStore
 	if cfg.RedisAddr != "" {
-		if playerStore, err = NewRemotePlayerStore(cfg.RedisAddr, cfg.LoginTTL); err != nil {
+		rc, err := NewRedisClient(cfg.RedisAddr)
+		if err != nil {
+			return nil, err
+		}
+		if playerStore, err = NewRemotePlayerStore(rc, cfg.LoginTTL); err != nil {
 			return nil, err
 		}
 	} else {
@@ -925,10 +931,9 @@ func (s *Server) loggingHandler(h http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) postHandlerFunc(h http.HandlerFunc) http.HandlerFunc {
+func postHandlerFunc(h http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			s.IncCounter("/requests/bad/methodnotallowed")
 			w.Header().Set("Allow", "POST")
 			http.Error(w, "", http.StatusMethodNotAllowed)
 			return
@@ -995,12 +1000,12 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.Handle("/hexz/static/", http.StripPrefix("/hexz/static/",
 		http.FileServer(http.Dir(s.config.DocumentRoot))))
 	// POST method API
-	mux.HandleFunc("/hexz/login", s.postHandlerFunc(s.handleLoginRequest))
-	mux.HandleFunc("/hexz/new", s.postHandlerFunc(s.handleNewGame))
-	mux.HandleFunc("/hexz/move/", s.postHandlerFunc(s.handleMove))
-	mux.HandleFunc("/hexz/reset/", s.postHandlerFunc(s.handleReset))
-	mux.HandleFunc("/hexz/undo/", s.postHandlerFunc(s.handleUndo))
-	mux.HandleFunc("/hexz/redo/", s.postHandlerFunc(s.handleRedo))
+	mux.HandleFunc("/hexz/login", postHandlerFunc(s.handleLoginRequest))
+	mux.HandleFunc("/hexz/new", postHandlerFunc(s.handleNewGame))
+	mux.HandleFunc("/hexz/move/", postHandlerFunc(s.handleMove))
+	mux.HandleFunc("/hexz/reset/", postHandlerFunc(s.handleReset))
+	mux.HandleFunc("/hexz/undo/", postHandlerFunc(s.handleUndo))
+	mux.HandleFunc("/hexz/redo/", postHandlerFunc(s.handleRedo))
 	// Server-sent Event handling
 	mux.HandleFunc("/hexz/sse/", s.handleSSE)
 
@@ -1035,7 +1040,7 @@ func (s *Server) Serve() {
 		errorLog.Fatal("Cannot load game HTML: ", err)
 	}
 
-	infoLog.Printf("Listening on %s", addr)
+	infoLog.Printf("Stateful server listening on %s", addr)
 
 	if s.config.TlsCertChain != "" && s.config.TlsPrivKey != "" {
 		errorLog.Fatal(srv.ListenAndServeTLS(s.config.TlsCertChain, s.config.TlsPrivKey))

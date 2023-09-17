@@ -2,7 +2,6 @@ package hexz
 
 import (
 	"fmt"
-	"math/rand"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
 )
@@ -173,7 +172,7 @@ func (m *GameEngineMove) DecodeProto(pm *pb.GameEngineMove) {
 
 // Dispatches on the gameType to create a corresponding GameEngine.
 // The returned GameEngine is initialized and ready to play.
-func NewGameEngine(gameType GameType, src rand.Source) GameEngine {
+func NewGameEngine(gameType GameType) GameEngine {
 	var ge GameEngine
 	switch gameType {
 	case gameTypeClassic:
@@ -190,6 +189,19 @@ func NewGameEngine(gameType GameType, src rand.Source) GameEngine {
 		panic("Unconsidered game type: " + gameType)
 	}
 	return ge
+}
+
+func DecodeGameEngine(s *pb.GameState) (GameEngine, error) {
+	switch s.State.(type) {
+	case *pb.GameState_Flagz:
+		g := NewGameEngineFlagz()
+		if err := g.Decode(s); err != nil {
+			return nil, err
+		}
+		return g, nil
+	default:
+		panic("unhandled game type")
+	}
 }
 
 // Creates a new, empty 2d field array.
