@@ -1,6 +1,10 @@
 package hexz
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/dnswlt/hexz/hexzpb"
+)
 
 //
 // The "classic" hexz game
@@ -349,10 +353,10 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 	return true
 }
 
-func (g *GameEngineClassic) Encode() ([]byte, error) {
+func (g *GameEngineClassic) Encode() (*hexzpb.GameState, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (g *GameEngineClassic) Decode([]byte) error {
+func (g *GameEngineClassic) Decode(*hexzpb.GameState) error {
 	return fmt.Errorf("not implemented")
 }

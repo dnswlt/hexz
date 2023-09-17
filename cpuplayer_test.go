@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 )
 
 func TestRemoteCPUPlayer(t *testing.T) {
@@ -163,10 +165,10 @@ func TestRemoteCPUPlayerIncompleteRequestData(t *testing.T) {
 	ge.B.FlatFields = []Field{
 		{Type: cellFlag, Owner: 1},
 	} // Make board invalid.
-	data, _ := ge.Encode()
+	state, _ := ge.Encode()
+	data, _ := proto.Marshal(state)
 	requestData, _ := json.Marshal(&SuggestMoveRequest{
 		MaxThinkTime:    10 * time.Millisecond,
-		GameType:        gameTypeFlagz,
 		GameEngineState: data,
 	})
 	r := httptest.NewRequest(http.MethodPost, CpuSuggestMoveURLPath, bytes.NewReader(requestData))

@@ -1,6 +1,10 @@
 package hexz
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/dnswlt/hexz/hexzpb"
+)
 
 //
 // The freeform single-player hexz game.
@@ -83,10 +87,10 @@ func (g *GameEngineFreeform) MakeMove(m GameEngineMove) bool {
 	return true
 }
 
-func (g *GameEngineFreeform) Encode() ([]byte, error) {
+func (g *GameEngineFreeform) Encode() (*hexzpb.GameState, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (g *GameEngineFreeform) Decode([]byte) error {
+func (g *GameEngineFreeform) Decode(*hexzpb.GameState) error {
 	return fmt.Errorf("not implemented")
 }

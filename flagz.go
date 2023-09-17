@@ -3,10 +3,11 @@ package hexz
 // The Flagz game. The best one we have.
 
 import (
-	"bytes"
-	"encoding/gob"
 	"encoding/json"
 	"fmt"
+
+	pb "github.com/dnswlt/hexz/hexzpb"
+	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type GameEngineFlagz struct {
@@ -237,45 +238,46 @@ func (g *GameEngineFlagz) Clone() SinglePlayerGameEngine {
 }
 
 // Serializes the state of this game engine.
-// Currently the encoding is as a Gob, but that can change at any time.
-func (g *GameEngineFlagz) Encode() ([]byte, error) {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	flds := g.B.Fields
-	g.B.Fields = nil // Don't serialize the fields, since they are redundant.
-	defer func() { g.B.Fields = flds }()
-	if err := enc.Encode(g); err != nil {
-		return nil, err
+func (g *GameEngineFlagz) Encode() (*pb.GameState, error) {
+	flagz := &pb.GameEngineFlagzState{
+		Board:       g.B.Proto(),
+		FreeCells:   int32(g.FreeCells),
+		NormalMoves: []int32{int32(g.NormalMoves[0]), int32(g.NormalMoves[1])},
+		Moves:       make([]*pb.GameEngineMove, len(g.Moves)),
 	}
-	return buf.Bytes(), nil
+	for i, m := range g.Moves {
+		flagz.Moves[i] = m.Proto()
+	}
+	s := &pb.GameState{
+		Created: tpb.Now(),
+		State: &pb.GameState_Flagz{
+			Flagz: flagz,
+		},
+	}
+	return s, nil
 }
 
 // Decodes the given encoded state of a game engine and sets this game engine to the given state.
 // The random source of the existing game engine is kept, since the serialized state does not contain one.
-func (g *GameEngineFlagz) Decode(encoded []byte) error {
-	dec := gob.NewDecoder(bytes.NewReader(encoded))
-	var ge GameEngineFlagz
-	if err := dec.Decode(&ge); err != nil {
+func (g *GameEngineFlagz) Decode(s *pb.GameState) error {
+	if s.GetFlagz() == nil {
+		return fmt.Errorf("invalid game state: missing flagz")
+	}
+	flagz := s.GetFlagz()
+	if err := g.B.DecodeProto(flagz.Board); err != nil {
 		return err
 	}
-	if ge.B == nil {
-		return fmt.Errorf("board is nil")
+	g.FreeCells = int(flagz.FreeCells)
+	if len(flagz.NormalMoves) != 2 {
+		return fmt.Errorf("invalid game state: invalid number (%d) of normal moves", len(flagz.NormalMoves))
 	}
-	// Check that the board has the expected size.
-	const numFields = numFieldsFirstRow*((numBoardRows+1)/2) + (numFieldsFirstRow-1)*(numBoardRows/2)
-	if len(ge.B.FlatFields) != numFields {
-		return fmt.Errorf("board has %d fields, want %d", len(ge.B.Fields), numFields)
+	g.NormalMoves = [2]int{int(flagz.NormalMoves[0]), int(flagz.NormalMoves[1])}
+	if flagz.Moves != nil {
+		g.Moves = make([]GameEngineMove, len(flagz.Moves))
+		for i, m := range flagz.Moves {
+			g.Moves[i].DecodeProto(m)
+		}
 	}
-	// Regenerate fields slices.
-	ge.B.Fields = make([][]Field, numBoardRows)
-	start := 0
-	for i := 0; i < len(ge.B.Fields); i++ {
-		end := start + numFieldsFirstRow - i%2
-		ge.B.Fields[i] = ge.B.FlatFields[start:end]
-		start = end
-	}
-	// Keep old random source, which is not serialized.
-	*g = ge
 	return nil
 }
 

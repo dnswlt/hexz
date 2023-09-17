@@ -22,15 +22,14 @@ message Board {
 
 message Field {
     enum CellType {
-        UNSPECIFIED = 0;
-        NORMAL = 1;
-        DEAD = 2;
-        GRASS = 3;
-        ROCK = 4;
-        FIRE = 5;
-        FLAG = 6;
-        PEST = 7;
-        DEATH = 8;
+        NORMAL = 0;
+        DEAD = 1;
+        GRASS = 2;
+        ROCK = 3;
+        FIRE = 4;
+        FLAG = 5;
+        PEST = 6;
+        DEATH = 7;
     }
     CellType type = 1;
     int32 owner = 2;
@@ -51,7 +50,7 @@ message ResourceInfo {
 message GameState {
     google.protobuf.Timestamp created = 1;
     // Use oneof with one element per game engine since proto3 does not support extensions.
-    oneof engine_state {
+    oneof state {
         GameEngineFlagzState flagz = 2;
     }
 }

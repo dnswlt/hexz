@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	pb "github.com/dnswlt/hexz/hexzpb"
+	"google.golang.org/protobuf/proto"
 )
 
 type CPUPlayer interface {
@@ -97,13 +100,16 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, spge SinglePlayerGa
 	if !ok {
 		return nil, fmt.Errorf("remote CPU player only supports flagz engines")
 	}
-	geState, err := ge.Encode()
+	st, err := ge.Encode()
+	if err != nil {
+		return nil, err
+	}
+	geState, err := proto.Marshal(st)
 	if err != nil {
 		return nil, err
 	}
 	data, err := json.Marshal(&SuggestMoveRequest{
 		MaxThinkTime:    cpu.maxThinkTime,
-		GameType:        ge.GameType(),
 		GameEngineState: geState,
 	})
 	if err != nil {
@@ -141,7 +147,6 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, spge SinglePlayerGa
 
 type SuggestMoveRequest struct {
 	MaxThinkTime time.Duration `json:"maxThinkTime"`
-	GameType     GameType      `json:"gameType"`
 	// Encoded game engine state (obtained via SinglePlayerGameEngine.Encode).
 	GameEngineState []byte `json:"gameEngineState"`
 }
@@ -182,11 +187,16 @@ func (s *CPUPlayerServer) handleSuggestMove(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	// Reconstruct game engine from encoded state.
+	state := &pb.GameState{}
+	if err := proto.Unmarshal(req.GameEngineState, state); err != nil {
+		http.Error(w, "invalid game engine state", http.StatusBadRequest)
+		return
+	}
 	var ge SinglePlayerGameEngine
-	switch req.GameType {
-	case gameTypeFlagz:
+	switch state.State.(type) {
+	case *pb.GameState_Flagz:
 		ge = NewGameEngineFlagz()
-		if err := ge.Decode(req.GameEngineState); err != nil {
+		if err := ge.Decode(state); err != nil {
 			http.Error(w, "invalid game engine state", http.StatusBadRequest)
 			return
 		}
