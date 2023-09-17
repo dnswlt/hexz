@@ -1,5 +1,7 @@
 package hexz
 
+import "fmt"
+
 //
 // The freeform single-player hexz game.
 //
@@ -79,4 +81,12 @@ func (g *GameEngineFreeform) MakeMove(m GameEngineMove) bool {
 	}
 	f.Value = 1
 	return true
+}
+
+func (g *GameEngineFreeform) Encode() ([]byte, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (g *GameEngineFreeform) Decode([]byte) error {
+	return fmt.Errorf("not implemented")
 }

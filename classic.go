@@ -1,5 +1,7 @@
 package hexz
 
+import "fmt"
+
 //
 // The "classic" hexz game
 //
@@ -345,4 +347,12 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 	}
 	g.recomputeScoreAndState()
 	return true
+}
+
+func (g *GameEngineClassic) Encode() ([]byte, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (g *GameEngineClassic) Decode([]byte) error {
+	return fmt.Errorf("not implemented")
 }
