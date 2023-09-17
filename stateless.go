@@ -10,6 +10,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // This file contains the implementation of the stateless hexz game server.
@@ -214,6 +215,60 @@ func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 	s.serveHtmlFile(w, gameHtmlFilename)
 }
 
+func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
+	p, err := s.lookupPlayerFromCookie(r)
+	if err != nil {
+		http.Error(w, "Player not logged in", http.StatusPreconditionFailed)
+		return
+	}
+	gameId, err := gameIdFromPath(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
+		return
+	}
+	ge, err := s.lookupGame(r.Context(), gameId)
+	if err != nil {
+		http.Error(w, "No such game", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	// Send initial ServerEvent.
+	err = sendSSEEvent(w, ServerEvent{
+		Timestamp:     time.Now(),
+		Board:         ge.Board().ViewFor(0),
+		Role:          0,
+		PlayerNames:   []string{"Hans", "Franz"},
+		Announcements: []string{"This is going to be awesome!"},
+		GameInfo: &ServerEventGameInfo{
+			ValidCellTypes: ge.ValidCellTypes(),
+			GameType:       ge.GameType(),
+		},
+	})
+	if err != nil {
+		errorLog.Printf("Cannot send initial ServerEvent: %s", err)
+		return
+	}
+	// Tell others we've joined.
+	s.rc.PublishSSE(r.Context(), gameId)
+	// Process events from Redis.
+	eventCh := make(chan string)
+	go s.rc.SubscribeSSE(r.Context(), gameId, eventCh)
+	for {
+		select {
+		case e, ok := <-eventCh:
+			if !ok {
+				errorLog.Printf("Redis pubsub closed for player %s", p.Name)
+				return
+			}
+			infoLog.Printf("Received event: %s %s", p.Name, e)
+		case <-r.Context().Done():
+			infoLog.Printf("SSE connection closed for player %s", p.Name)
+			return
+		}
+	}
+}
+
 func (s *StatelessServer) defaultHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/" {
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
@@ -248,7 +303,7 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	// mux.HandleFunc("/hexz/undo/", postHandlerFunc(s.handleUndo))
 	// mux.HandleFunc("/hexz/redo/", postHandlerFunc(s.handleRedo))
 	// Server-sent Event handling
-	// mux.HandleFunc("/hexz/sse/", s.handleSSE)
+	mux.HandleFunc("/hexz/sse/", s.handleSSE)
 
 	// GET method API
 	mux.HandleFunc("/hexz", s.handleHexz)

@@ -69,3 +69,16 @@ func (c *RedisClient) LookupGame(ctx context.Context, gameId string) (*pb.GameSt
 	}
 	return gameState, nil
 }
+
+func (c *RedisClient) SubscribeSSE(ctx context.Context, gameId string, ch chan<- string) {
+	sub := c.Subscribe(ctx, "sse:"+gameId)
+	defer sub.Close()
+	defer close(ch)
+	for msg := range sub.Channel() {
+		ch <- msg.Payload
+	}
+}
+
+func (c *RedisClient) PublishSSE(ctx context.Context, gameId string) {
+	c.Publish(ctx, "sse:"+gameId, "update")
+}
