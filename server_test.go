@@ -61,6 +61,7 @@ func serverConfigForTest(t *testing.T) *ServerConfig {
 		DocumentRoot:    "./resources",
 		GameHistoryRoot: historyRoot,
 		DebugMode:       true,
+		LoginTTL:        24 * time.Hour, // By default, don't auto-log out players in tests.
 	}
 }
 
@@ -71,9 +72,9 @@ const (
 
 func TestHandleNewGame(t *testing.T) {
 	cfg := serverConfigForTest(t)
-	s := NewServer(cfg)
-	if !s.loginPlayer(testPlayerId, testPlayerName) {
-		t.Errorf("Cannot log in test player")
+	s, _ := NewServer(cfg)
+	if err := s.playerStore.Login(testPlayerId, testPlayerName); err != nil {
+		t.Error("Cannot log in test player: ", err)
 	}
 	w := httptest.NewRecorder()
 	// Create request with login form parameters.
@@ -132,7 +133,7 @@ func TestFlagzSinglePlayer(t *testing.T) {
 	}
 	cfg := serverConfigForTest(t)
 	cfg.CpuThinkTime = 1 * time.Millisecond // We want a fast test, not smart moves.
-	srv := NewServer(cfg)
+	srv, _ := NewServer(cfg)
 	testServer := httptest.NewServer(srv.createMux())
 	defer testServer.Close()
 
@@ -203,7 +204,7 @@ func TestFlagzSinglePlayerHistory(t *testing.T) {
 	cfg := serverConfigForTest(t)
 	cfg.CpuThinkTime = 1 * time.Millisecond // We want a fast test, not smart moves.
 	cfg.GameHistoryRoot = histDir
-	srv := NewServer(cfg)
+	srv, _ := NewServer(cfg)
 	testServer := httptest.NewServer(srv.createMux())
 	defer testServer.Close()
 

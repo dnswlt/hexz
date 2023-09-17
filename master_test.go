@@ -25,7 +25,7 @@ func TestGameMasterRegisterUnregister(t *testing.T) {
 	cfg := &ServerConfig{
 		PlayerRemoveDelay: time.Duration(1) * time.Microsecond,
 	}
-	s := NewServer(cfg)
+	s, _ := NewServer(cfg)
 	m := NewGameMaster(s, g)
 	go m.Run(cancel)
 	allEvents := make(chan ServerEvent)
@@ -105,7 +105,7 @@ func TestGameMasterPlayFullGame(t *testing.T) {
 	cfg := &ServerConfig{
 		PlayerRemoveDelay: time.Duration(1) * time.Microsecond,
 	}
-	s := NewServer(cfg)
+	s, _ := NewServer(cfg)
 	m := NewGameMaster(s, g)
 	go m.Run(cancel)
 	allEvents := make(chan ServerEvent)
@@ -201,7 +201,7 @@ func TestRejoinGame(t *testing.T) {
 	cfg := &ServerConfig{
 		PlayerRemoveDelay: 500 * time.Millisecond, // Should be plenty to allow for a rejoin.
 	}
-	s := NewServer(cfg)
+	s, _ := NewServer(cfg)
 	m := NewGameMaster(s, g)
 	// Start the game.
 	done := make(chan struct{}, 1)
@@ -254,7 +254,7 @@ func TestRejoinGameTimeout(t *testing.T) {
 	cfg := &ServerConfig{
 		PlayerRemoveDelay: 10 * time.Microsecond, // Log out player quickly for a fast test.
 	}
-	s := NewServer(cfg)
+	s, _ := NewServer(cfg)
 	m := NewGameMaster(s, g)
 	// Start the game.
 	done := make(chan struct{}, 1)

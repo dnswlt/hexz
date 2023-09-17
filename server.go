@@ -30,9 +30,10 @@ type ServerConfig struct {
 	ServerPort        int
 	DocumentRoot      string        // Path to static resource files.
 	GameHistoryRoot   string        // Path to game history files.
+	LoginDatabasePath string        // Path to the file where the player DB is stored. If empty, no persistent storage is used.
 	InactivityTimeout time.Duration // Time after which a game is ended due to inactivity.
 	PlayerRemoveDelay time.Duration // Time to wait before removing an unregistered player from the game.
-	LoginTtl          time.Duration
+	LoginTTL          time.Duration
 	CpuThinkTime      time.Duration
 	CpuMaxFlags       int
 	AuthTokenSha256   string // Used in http Basic authentication for /statusz. Must be a SHA256 checksum.
@@ -56,9 +57,7 @@ type Server struct {
 	ongoingGames    map[string]*GameHandle
 	ongoingGamesMut sync.Mutex
 
-	// Contains all logged in players, mapped by their (cookie) playerId.
-	loggedInPlayers    map[PlayerId]*Player
-	loggedInPlayersMut sync.Mutex
+	playerStore PlayerStore
 
 	// Server configuration (set from command-line flags).
 	config *ServerConfig
@@ -74,17 +73,21 @@ type Server struct {
 	started time.Time
 }
 
-func NewServer(cfg *ServerConfig) *Server {
+func NewServer(cfg *ServerConfig) (*Server, error) {
+	playerStore, err := NewInMemoryPlayerStore(cfg.LoginTTL, cfg.LoginDatabasePath)
+	if err != nil {
+		return nil, err
+	}
 	s := &Server{
-		ongoingGames:    make(map[string]*GameHandle),
-		loggedInPlayers: make(map[PlayerId]*Player),
-		config:          cfg,
-		counters:        make(map[string]*Counter),
-		distrib:         make(map[string]*Distribution),
-		started:         time.Now(),
+		ongoingGames: make(map[string]*GameHandle),
+		playerStore:  playerStore,
+		config:       cfg,
+		counters:     make(map[string]*Counter),
+		distrib:      make(map[string]*Distribution),
+		started:      time.Now(),
 	}
 	s.InitCounters()
-	return s
+	return s, nil
 }
 
 func (s *Server) InitCounters() {
@@ -143,8 +146,6 @@ func (s *Server) AddDistribValue(name string, value float64) bool {
 }
 
 const (
-	maxLoggedInPlayers = 10000
-
 	playerIdCookieName   = "playerId"
 	gameHtmlFilename     = "game.html"
 	viewHtmlFilename     = "view.html"
@@ -190,36 +191,6 @@ type Player struct {
 	Id         PlayerId  `json:"id"`
 	Name       string    `json:"name"`
 	LastActive time.Time `json:"lastActive"`
-}
-
-func (s *Server) lookupPlayer(playerId PlayerId) (Player, bool) {
-	s.loggedInPlayersMut.Lock()
-	defer s.loggedInPlayersMut.Unlock()
-
-	p, ok := s.loggedInPlayers[playerId]
-	if !ok {
-		return Player{}, false
-	}
-	p.LastActive = time.Now()
-	return *p, true
-}
-
-func (s *Server) loginPlayer(playerId PlayerId, name string) bool {
-	s.loggedInPlayersMut.Lock()
-	defer s.loggedInPlayersMut.Unlock()
-
-	if len(s.loggedInPlayers) > maxLoggedInPlayers {
-		// TODO: GC the logged in players to avoid running out of space.
-		// The login logic is very hacky for the time being.
-		return false
-	}
-	p := &Player{
-		Id:         playerId,
-		Name:       name,
-		LastActive: time.Now(),
-	}
-	s.loggedInPlayers[playerId] = p
-	return true
 }
 
 // Control events are sent to the game master goroutine.
@@ -483,12 +454,12 @@ func (s *Server) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	playerId := generatePlayerId()
-	if !s.loginPlayer(playerId, name) {
-		infoLog.Printf("Rejected login for player %s", name)
+	if err := s.playerStore.Login(playerId, name); err != nil {
+		infoLog.Printf("Rejected login for player %s: %s", name, err)
 		http.Error(w, "Cannot log in right now", http.StatusPreconditionFailed)
 	}
 	s.IncCounter("/requests/login/success")
-	http.SetCookie(w, makePlayerCookie(playerId, s.config.LoginTtl))
+	http.SetCookie(w, makePlayerCookie(playerId, s.config.LoginTTL))
 	http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 }
 
@@ -500,7 +471,7 @@ func (s *Server) handleHexz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Prolong cookie ttl.
-	http.SetCookie(w, makePlayerCookie(p.Id, s.config.LoginTtl))
+	http.SetCookie(w, makePlayerCookie(p.Id, s.config.LoginTTL))
 	s.serveHtmlFile(w, newGameHtmlFilename)
 }
 
@@ -550,11 +521,7 @@ func (s *Server) lookupPlayerFromCookie(r *http.Request) (Player, error) {
 	if err != nil {
 		return Player{}, fmt.Errorf("missing cookie")
 	}
-	p, ok := s.lookupPlayer(PlayerId(cookie.Value))
-	if !ok {
-		return Player{}, fmt.Errorf("player not found")
-	}
-	return p, nil
+	return s.playerStore.Lookup(PlayerId(cookie.Value))
 }
 
 func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
@@ -756,7 +723,7 @@ func (s *Server) handleGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Prolong cookie ttl.
-	http.SetCookie(w, makePlayerCookie(p.Id, s.config.LoginTtl))
+	http.SetCookie(w, makePlayerCookie(p.Id, s.config.LoginTTL))
 	s.serveHtmlFile(w, gameHtmlFilename)
 }
 
@@ -854,9 +821,9 @@ func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
 	resp.NumOngoingGames = len(s.ongoingGames)
 	s.ongoingGamesMut.Unlock()
 
-	s.loggedInPlayersMut.Lock()
-	resp.NumLoggedInPlayers = len(s.loggedInPlayers)
-	s.loggedInPlayersMut.Unlock()
+	if ps, ok := s.playerStore.(*InMemoryPlayerStore); ok {
+		resp.NumLoggedInPlayers = ps.NumPlayers()
+	}
 
 	s.countersMut.Lock()
 	counters := make([]StatuszCounter, len(s.counters))
@@ -940,93 +907,6 @@ func (s *Server) defaultHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	s.IncCounter("/requests/other")
 	http.Error(w, "", http.StatusNotFound)
-}
-
-func (s *Server) loadUserDatabase() {
-	r, err := os.Open(userDatabaseFilename)
-	if err != nil {
-		if err != os.ErrNotExist {
-			errorLog.Println("Failed to read user database:", err.Error())
-		}
-		return
-	}
-	defer r.Close()
-	dec := json.NewDecoder(r)
-	var players []*Player
-	if err := dec.Decode(&players); err != nil {
-		errorLog.Println("Corrupted user database:", err.Error())
-	}
-	infoLog.Printf("Loaded %d users from user db", len(players))
-	s.loggedInPlayersMut.Lock()
-	defer s.loggedInPlayersMut.Unlock()
-	for _, p := range players {
-		if _, ok := s.loggedInPlayers[p.Id]; !ok {
-			// Only add players, don't overwrite anything existing in memory.
-			s.loggedInPlayers[p.Id] = p
-		}
-	}
-}
-
-func (s *Server) saveUserDatabase(players []Player) {
-	w, err := os.Create(userDatabaseFilename)
-	if err != nil {
-		errorLog.Print("Cannot save user db: ", err.Error())
-		return
-	}
-	defer w.Close()
-	enc := json.NewEncoder(w)
-	if err := enc.Encode(players); err != nil {
-		errorLog.Fatal("Cannot encode user db: ", err.Error())
-	}
-	infoLog.Printf("Saved user db (%d users)", len(players))
-	s.IncCounter("/storage/userdb/saved")
-}
-
-func (s *Server) updateLoggedInPlayers() {
-	lastIteration := time.Now()
-	period := time.Duration(5) * time.Minute
-	if s.config.DebugMode {
-		// Clean up active users more frequently in debug mode.
-		period = time.Duration(5) * time.Second
-	}
-	for {
-		t := time.After(period)
-		<-t
-		activity := false
-		now := time.Now()
-		logoutThresh := now.Add(-s.config.LoginTtl)
-		s.loggedInPlayersMut.Lock()
-		del := []*Player{}
-		for _, p := range s.loggedInPlayers {
-			if p.LastActive.Before(logoutThresh) {
-				del = append(del, p)
-			} else if p.LastActive.After(lastIteration) {
-				activity = true
-			}
-		}
-		for _, p := range del {
-			delete(s.loggedInPlayers, p.Id)
-		}
-		s.loggedInPlayersMut.Unlock()
-		// Do I/O outside the mutex.
-		for _, p := range del {
-			infoLog.Printf("Logged out player %s(%s)", p.Name, p.Id)
-		}
-		if activity || len(del) > 0 {
-			s.loggedInPlayersMut.Lock()
-			// Create copies of the players to avoid data race during serialization.
-			// (LastActive can get updated at any time by other goroutines.)
-			players := make([]Player, len(s.loggedInPlayers))
-			i := 0
-			for _, p := range s.loggedInPlayers {
-				players[i] = *p
-				i++
-			}
-			s.loggedInPlayersMut.Unlock()
-			s.saveUserDatabase(players)
-		}
-		lastIteration = now
-	}
 }
 
 func (s *Server) loggingHandler(h http.Handler) http.Handler {
@@ -1147,11 +1027,7 @@ func (s *Server) Serve() {
 		errorLog.Fatal("Cannot load game HTML: ", err)
 	}
 
-	s.loadUserDatabase()
-
 	infoLog.Printf("Listening on %s", addr)
-	// Start login GC routine
-	go s.updateLoggedInPlayers()
 
 	if s.config.TlsCertChain != "" && s.config.TlsPrivKey != "" {
 		errorLog.Fatal(srv.ListenAndServeTLS(s.config.TlsCertChain, s.config.TlsPrivKey))

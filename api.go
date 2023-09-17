@@ -10,9 +10,6 @@ const (
 	Finished GameState = "finished"
 )
 
-// A random UUID used to identify players. Also used in cookies.
-type PlayerId string
-
 // JSON for server responses.
 
 type ServerEvent struct {

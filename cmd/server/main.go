@@ -22,11 +22,13 @@ func main() {
 		"Root directory from which to serve files")
 	flag.StringVar(&cfg.GameHistoryRoot, "history-dir", "",
 		"Root directory in whicih to read/write history files. If empty, history is disabled.")
+	flag.StringVar(&cfg.LoginDatabasePath, "userdb", "_logins.json",
+		"File in which to store login information if the local in-memory login store is used.")
 	flag.DurationVar(&cfg.InactivityTimeout, "inactivity-timeout", 60*time.Minute,
 		"Time to wait before ending a game due to inactivity")
 	flag.DurationVar(&cfg.PlayerRemoveDelay, "remove-delay", 60*time.Second,
 		"Time to wait before removing a disconnected player from a game")
-	flag.DurationVar(&cfg.LoginTtl, "login-ttl", 24*time.Hour,
+	flag.DurationVar(&cfg.LoginTTL, "login-ttl", 24*time.Hour,
 		"Time to wait logging a player out after inactivity")
 	flag.DurationVar(&cfg.CpuThinkTime, "cpu-think-time", 5*time.Second,
 		"Time the computer has to think about a move")
@@ -65,5 +67,9 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	hexz.NewServer(cfg).Serve()
+	s, err := hexz.NewServer(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error creating server: %v\n", err)
+	}
+	s.Serve()
 }
