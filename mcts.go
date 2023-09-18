@@ -6,6 +6,8 @@ import (
 	"math"
 	"strings"
 	"time"
+
+	"github.com/dnswlt/hexz/xrand"
 )
 
 type mcNode struct {
@@ -144,11 +146,11 @@ func (mcts *MCTS) nextMoves(node *mcNode, b *Board) []*mcNode {
 					r: r, c: c, turn: b.Turn,
 				})
 			}
-			if hasFlag && (randFloat64() < float64(maxFlags)/(float64(nFlags)+1)) {
+			if hasFlag && (xrand.Float64() < float64(maxFlags)/(float64(nFlags)+1)) {
 				// reservoir sampling to pick maxFlags with equal probability among all possibilities.
 				k := nFlags
 				if k >= maxFlags {
-					k = randIntn(maxFlags)
+					k = xrand.Intn(maxFlags)
 				}
 				flagMoves[k] = &mcNode{
 					r: r, c: c, turn: b.Turn, cellType: cellFlag,
@@ -194,7 +196,7 @@ func (mcts *MCTS) run(ge SinglePlayerGameEngine, path []*mcNode) (depth int) {
 		node.children = cs
 		node.liveChildren = len(cs)
 		// Play a random child (rollout)
-		c := cs[randIntn(len(cs))]
+		c := cs[xrand.Intn(len(cs))]
 		winner := mcts.playRandomGame(ge, c)
 		path = append(path, c)
 		mcts.backpropagate(path, winner)

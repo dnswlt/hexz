@@ -1,4 +1,4 @@
-package hexz
+package xrand
 
 import (
 	"hash/maphash"
@@ -21,13 +21,13 @@ func rand64() uint64 {
 }
 
 // randFloat64 returns a uniformly distributed random number in the interval [0.0, 1.0).
-func randFloat64() float64 {
+func Float64() float64 {
 	return float64(rand64()&int53Mask) * f53Mul
 }
 
 // randIntn returns a uniformly distributed random number in the interval [0, n).
 // n must be a positive int32.
-func randIntn(n int) int {
+func Intn(n int) int {
 	if n <= 0 || n > math.MaxInt32 {
 		panic("randIntn: invalid argument")
 	}

@@ -1,4 +1,4 @@
-package hexz
+package xrand
 
 import "testing"
 
@@ -23,7 +23,7 @@ func TestRand64(t *testing.T) {
 func TestRandFloat64(t *testing.T) {
 	// randFloat64 should return a number between 0 and 1.
 	for i := 0; i < 100; i++ {
-		r := randFloat64()
+		r := Float64()
 		if r < 0 || r >= 1 {
 			t.Errorf("randFloat64 returned %f, want [0,1)", r)
 		}
@@ -33,7 +33,7 @@ func TestRandFloat64(t *testing.T) {
 func TestRandIntn(t *testing.T) {
 	// randIntn should return a number between 0 and n.
 	for i := 1; i <= 100; i++ {
-		r := randIntn(i)
+		r := Intn(i)
 		if r < 0 || r >= i {
 			t.Errorf("randIntn returned %d, want [0,%d)", r, i)
 		}

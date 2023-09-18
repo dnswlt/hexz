@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
+	"github.com/dnswlt/hexz/xrand"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -46,7 +47,7 @@ func (g *GameEngineFlagz) PopulateInitialCells() {
 	n := len(g.B.FlatFields)
 	// j is only a safeguard for invalid calls to this method on a non-empty board.
 	for j := 0; j < n && i < flagzNumRockCells; j++ {
-		k := randIntn(n)
+		k := xrand.Intn(n)
 		if !g.B.FlatFields[k].occupied() {
 			i++
 			f := &g.B.FlatFields[k]
@@ -57,7 +58,7 @@ func (g *GameEngineFlagz) PopulateInitialCells() {
 	// Place some grass cells.
 	v := 0
 	for j := 0; j < n && v < flagzNumGrassCells; j++ {
-		k := randIntn(n)
+		k := xrand.Intn(n)
 		if !g.B.FlatFields[k].occupied() {
 			v++
 			f := &g.B.FlatFields[k]
@@ -303,12 +304,12 @@ func (g *GameEngineFlagz) RandomMove() (*GameEngineMove, error) {
 	nMoves := g.NormalMoves[pIdx]
 	flagsLeft := b.Resources[pIdx].NumPieces[cellFlag] > 0
 	pickFlag := false
-	if g.FreeCells > 0 && flagsLeft && (nMoves == 0 || randFloat64() <= float64(1)/float64(nMoves+1)) {
+	if g.FreeCells > 0 && flagsLeft && (nMoves == 0 || xrand.Float64() <= float64(1)/float64(nMoves+1)) {
 		pickFlag = true
 	}
 	if pickFlag {
 		// Find a random free cell and place a flag there.
-		nthFlag := randIntn(g.FreeCells)
+		nthFlag := xrand.Intn(g.FreeCells)
 		n := 0
 		for r := range b.Fields {
 			for c := range b.Fields[r] {
@@ -322,7 +323,7 @@ func (g *GameEngineFlagz) RandomMove() (*GameEngineMove, error) {
 		}
 	} else {
 		// Pick a normal move
-		nthMove := randIntn(nMoves)
+		nthMove := xrand.Intn(nMoves)
 		n := 0
 		for r := range b.Fields {
 			for c := range b.Fields[r] {
