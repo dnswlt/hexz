@@ -353,10 +353,10 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 	return true
 }
 
-func (g *GameEngineClassic) Encode() (*hexzpb.GameState, error) {
+func (g *GameEngineClassic) Encode() (*hexzpb.GameEngineState, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (g *GameEngineClassic) Decode(*hexzpb.GameState) error {
+func (g *GameEngineClassic) Decode(*hexzpb.GameEngineState) error {
 	return fmt.Errorf("not implemented")
 }

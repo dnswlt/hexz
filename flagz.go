@@ -8,7 +8,6 @@ import (
 
 	pb "github.com/dnswlt/hexz/hexzpb"
 	"github.com/dnswlt/hexz/xrand"
-	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type GameEngineFlagz struct {
@@ -239,7 +238,7 @@ func (g *GameEngineFlagz) Clone() SinglePlayerGameEngine {
 }
 
 // Serializes the state of this game engine.
-func (g *GameEngineFlagz) Encode() (*pb.GameState, error) {
+func (g *GameEngineFlagz) Encode() (*pb.GameEngineState, error) {
 	flagz := &pb.GameEngineFlagzState{
 		Board:       g.B.Proto(),
 		FreeCells:   int32(g.FreeCells),
@@ -249,9 +248,8 @@ func (g *GameEngineFlagz) Encode() (*pb.GameState, error) {
 	for i, m := range g.Moves {
 		flagz.Moves[i] = m.Proto()
 	}
-	s := &pb.GameState{
-		Created: tpb.Now(),
-		State: &pb.GameState_Flagz{
+	s := &pb.GameEngineState{
+		State: &pb.GameEngineState_Flagz{
 			Flagz: flagz,
 		},
 	}
@@ -260,7 +258,7 @@ func (g *GameEngineFlagz) Encode() (*pb.GameState, error) {
 
 // Decodes the given encoded state of a game engine and sets this game engine to the given state.
 // The random source of the existing game engine is kept, since the serialized state does not contain one.
-func (g *GameEngineFlagz) Decode(s *pb.GameState) error {
+func (g *GameEngineFlagz) Decode(s *pb.GameEngineState) error {
 	if s.GetFlagz() == nil {
 		return fmt.Errorf("invalid game state: missing flagz")
 	}

@@ -187,14 +187,14 @@ func (s *CPUPlayerServer) handleSuggestMove(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	// Reconstruct game engine from encoded state.
-	state := &pb.GameState{}
+	state := &pb.GameEngineState{}
 	if err := proto.Unmarshal(req.GameEngineState, state); err != nil {
 		http.Error(w, "invalid game engine state", http.StatusBadRequest)
 		return
 	}
 	var ge SinglePlayerGameEngine
 	switch state.State.(type) {
-	case *pb.GameState_Flagz:
+	case *pb.GameEngineState_Flagz:
 		ge = NewGameEngineFlagz()
 		if err := ge.Decode(state); err != nil {
 			http.Error(w, "invalid game engine state", http.StatusBadRequest)

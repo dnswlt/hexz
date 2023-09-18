@@ -34,9 +34,9 @@ type GameEngine interface {
 	Winner() (playerNum int) // Results are only meaningful if IsDone() is true. 0 for draw.
 	GameType() GameType
 	// Encodes the current state of the game engine.
-	Encode() (*pb.GameState, error)
+	Encode() (*pb.GameEngineState, error)
 	// Sets this game engine into the state defined by the given encoded state.
-	Decode(s *pb.GameState) error
+	Decode(s *pb.GameEngineState) error
 }
 
 type SinglePlayerGameEngine interface {
@@ -192,10 +192,10 @@ func NewGameEngine(gameType GameType) GameEngine {
 }
 
 func DecodeGameEngine(s *pb.GameState) (GameEngine, error) {
-	switch s.State.(type) {
-	case *pb.GameState_Flagz:
+	switch s.EngineState.State.(type) {
+	case *pb.GameEngineState_Flagz:
 		g := NewGameEngineFlagz()
-		if err := g.Decode(s); err != nil {
+		if err := g.Decode(s.EngineState); err != nil {
 			return nil, err
 		}
 		return g, nil

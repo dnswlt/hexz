@@ -11,6 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	pb "github.com/dnswlt/hexz/hexzpb"
+	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // This file contains the implementation of the stateless hexz game server.
@@ -67,16 +70,21 @@ func (s *StatelessServer) lookupPlayerFromCookie(r *http.Request) (Player, error
 }
 
 func (s *StatelessServer) startNewGame(ctx context.Context, hostingPlayer string, gameType GameType, singlePlayer bool) (gameId string, err error) {
-	enc, err := NewGameEngine(gameType).Encode()
+	engineState, err := NewGameEngine(gameType).Encode()
 	if err != nil {
 		return "", err
+	}
+	gameState := &pb.GameState{
+		Created:     tpb.Now(),
+		Players:     []*pb.Player{},
+		EngineState: engineState,
 	}
 	// Try to find an unused gameId.
 	for i := 0; i < 100; i++ {
 		gameId = GenerateGameId()
 		// Keep the game in Redis for 24 hours max.
 		var ok bool
-		ok, err = s.rc.StoreNewGame(ctx, gameId, enc)
+		ok, err = s.rc.StoreNewGame(ctx, gameId, gameState)
 		if err != nil {
 			return "", err
 		}

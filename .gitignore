@@ -6,3 +6,4 @@ _logins.json
 /bench
 *.txt
 /hist
+dump.rdb
