@@ -7,7 +7,7 @@ import (
 )
 
 func TestCellTypeEnumsAligned(t *testing.T) {
-	wantLen := int(cellTypeLen) + 1 // +1 for the "UNSPECIFIED" enum
+	wantLen := int(cellTypeLen)
 	if gotLen := len(pb.Field_CellType_name); wantLen != gotLen {
 		t.Errorf("CellType enums are not aligned: want %d, got %d", wantLen, gotLen)
 	}
@@ -28,7 +28,7 @@ func TestCellTypeEnumsAligned(t *testing.T) {
 		t.Errorf("Please update expectedPairs with added enums")
 	}
 	for _, p := range expectedPairs {
-		if int(p.p)-1 != int(p.e) {
+		if int(p.p) != int(p.e) {
 			t.Errorf("CellType enum mismatch for %s", p.p.String())
 		}
 	}

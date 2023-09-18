@@ -327,7 +327,7 @@ func (b *Board) Proto() *pb.Board {
 	}
 	for i, f := range b.FlatFields {
 		bp.FlatFields[i] = &pb.Field{
-			Type:     pb.Field_CellType(f.Type + 1), // +1 due to UNSPECIFIED enum value.
+			Type:     pb.Field_CellType(f.Type),
 			Owner:    int32(f.Owner),
 			Hidden:   f.Hidden,
 			Value:    int32(f.Value),
@@ -359,7 +359,7 @@ func (b *Board) DecodeProto(bp *pb.Board) error {
 	}
 	for i, f := range bp.FlatFields {
 		b.FlatFields[i] = Field{
-			Type:     CellType(f.Type - 1), // -1 due to UNSPECIFIED enum value.
+			Type:     CellType(f.Type),
 			Owner:    int(f.Owner),
 			Hidden:   f.Hidden,
 			Value:    int(f.Value),

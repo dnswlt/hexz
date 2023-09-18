@@ -6,10 +6,9 @@ option go_package = "github.com/dnswlt/hexz/hexzpb";
 
 message Board {
     enum GameState {
-        UNSPECIFIED = 0;
-        INITIAL = 1;
-        RUNNING = 2;
-        FINISHED = 3;
+        INITIAL = 0;
+        RUNNING = 1;
+        FINISHED = 2;
     }
     int32 turn = 1;
     int32 move = 2;
@@ -45,13 +44,20 @@ message ResourceInfo {
     repeated int32 num_pieces = 1;
 }
 
+message Player {
+    string id = 1;
+    string name = 2;
+}
+
 // This message contains all data to restore a game state.
 // It can be used to save and load games in a memory store.
 message GameState {
     google.protobuf.Timestamp created = 1;
+    // Players in this game, in the order they joined.
+    repeated Player players = 2;
     // Use oneof with one element per game engine since proto3 does not support extensions.
     oneof state {
-        GameEngineFlagzState flagz = 2;
+        GameEngineFlagzState flagz = 3;
     }
 }
 

@@ -66,7 +66,7 @@ func (s *StatelessServer) lookupPlayerFromCookie(r *http.Request) (Player, error
 	return s.playerStore.Lookup(r.Context(), PlayerId(cookie.Value))
 }
 
-func (s *StatelessServer) startNewGame(ctx context.Context, host string, gameType GameType, singlePlayer bool) (gameId string, err error) {
+func (s *StatelessServer) startNewGame(ctx context.Context, hostingPlayer string, gameType GameType, singlePlayer bool) (gameId string, err error) {
 	enc, err := NewGameEngine(gameType).Encode()
 	if err != nil {
 		return "", err
@@ -108,14 +108,6 @@ func (s *StatelessServer) serveHtmlFile(w http.ResponseWriter, filename string) 
 	}
 	w.Header().Set("Content-Type", "text/html")
 	w.Write(html)
-}
-
-func (s *StatelessServer) lookupGame(ctx context.Context, gameId string) (GameEngine, error) {
-	gs, err := s.rc.LookupGame(ctx, gameId)
-	if err != nil {
-		return nil, err
-	}
-	return DecodeGameEngine(gs)
 }
 
 func (s *StatelessServer) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
@@ -205,7 +197,7 @@ func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
-	if _, err := s.lookupGame(r.Context(), gameId); err != nil {
+	if _, err := s.rc.LookupGame(r.Context(), gameId); err != nil {
 		// Game does not exist: offer to start a new game.
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 		return
@@ -226,9 +218,15 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
-	ge, err := s.lookupGame(r.Context(), gameId)
+	gameState, err := s.rc.LookupGame(r.Context(), gameId)
 	if err != nil {
 		http.Error(w, "No such game", http.StatusNotFound)
+		return
+	}
+	ge, err := DecodeGameEngine(gameState)
+	if err != nil {
+		errorLog.Print("Cannot decode game state: ", err)
+		http.Error(w, "invalid game state", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -236,10 +234,10 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	// Send initial ServerEvent.
 	err = sendSSEEvent(w, ServerEvent{
 		Timestamp:     time.Now(),
-		Board:         ge.Board().ViewFor(0),
-		Role:          0,
-		PlayerNames:   []string{"Hans", "Franz"},
-		Announcements: []string{"This is going to be awesome!"},
+		Board:         ge.Board().ViewFor(gameState.PlayerNum(string(p.Id))),
+		Role:          gameState.PlayerNum(string(p.Id)),
+		PlayerNames:   gameState.PlayerNames(),
+		Announcements: []string{fmt.Sprintf("Welcome %s!", p.Name)},
 		GameInfo: &ServerEventGameInfo{
 			ValidCellTypes: ge.ValidCellTypes(),
 			GameType:       ge.GameType(),
@@ -250,7 +248,7 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Tell others we've joined.
-	s.rc.PublishSSE(r.Context(), gameId)
+	s.rc.NotifySSE(r.Context(), gameId)
 	// Process events from Redis.
 	eventCh := make(chan string)
 	go s.rc.SubscribeSSE(r.Context(), gameId, eventCh)
