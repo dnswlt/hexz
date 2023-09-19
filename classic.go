@@ -17,13 +17,7 @@ type GameEngineClassic struct {
 func (g *GameEngineClassic) GameType() GameType { return gameTypeClassic }
 func (g *GameEngineClassic) Board() *Board      { return g.board }
 func (g *GameEngineClassic) Init() {
-	flatFields, fields := makeFields()
-	b := &Board{
-		Turn:       1, // Player 1 begins
-		FlatFields: flatFields,
-		Fields:     fields,
-		State:      Initial,
-	}
+	b := NewBoard()
 	numPlayers := g.NumPlayers()
 	b.Score = make([]int, numPlayers)
 	b.Resources = make([]ResourceInfo, numPlayers)

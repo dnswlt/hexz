@@ -13,7 +13,6 @@ import (
 	"time"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
-	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // This file contains the implementation of the stateless hexz game server.
@@ -23,27 +22,29 @@ import (
 // See server.go for the stateful implementation.
 
 type StatelessServer struct {
+	config      *ServerConfig
 	playerStore PlayerStore
-	// Server configuration (set from command-line flags).
-	config *ServerConfig
-	rc     *RedisClient
+	gameStore   GameStore
 }
 
 func NewStatelessServer(config *ServerConfig) (*StatelessServer, error) {
-	rc, err := NewRedisClient(config.RedisAddr)
+	rc, err := NewRedisClient(&RedisClientConfig{
+		Addr:     config.RedisAddr,
+		LoginTTL: config.LoginTTL,
+		GameTTL:  config.InactivityTimeout,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	playerStore, err := NewRemotePlayerStore(rc, config.LoginTTL)
 	if err != nil {
 		return nil, err
 	}
 
 	return &StatelessServer{
-		playerStore: playerStore,
+		playerStore: &RemotePlayerStore{rc},
 		config:      config,
-		rc:          rc,
+		gameStore:   rc,
 	}, nil
 }
 
@@ -69,27 +70,26 @@ func (s *StatelessServer) lookupPlayerFromCookie(r *http.Request) (Player, error
 	return s.playerStore.Lookup(r.Context(), PlayerId(cookie.Value))
 }
 
-func (s *StatelessServer) startNewGame(ctx context.Context, hostingPlayer string, gameType GameType, singlePlayer bool) (gameId string, err error) {
+func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType GameType, singlePlayer bool) (string, error) {
 	engineState, err := NewGameEngine(gameType).Encode()
 	if err != nil {
 		return "", err
 	}
-	gameState := &pb.GameState{
-		Created:     tpb.Now(),
-		Players:     []*pb.Player{},
-		EngineState: engineState,
-	}
 	// Try to find an unused gameId.
 	for i := 0; i < 100; i++ {
-		gameId = GenerateGameId()
+		gameState := &pb.GameState{
+			GameId:      GenerateGameId(),
+			Players:     []*pb.Player{}, // Players are registed in handleSSE.
+			EngineState: engineState,
+		}
 		// Keep the game in Redis for 24 hours max.
 		var ok bool
-		ok, err = s.rc.StoreNewGame(ctx, gameId, gameState)
+		ok, err = s.gameStore.StoreNewGame(ctx, gameState)
 		if err != nil {
 			return "", err
 		}
 		if ok {
-			return gameId, nil
+			return gameState.GameId, nil
 		}
 	}
 	return "", fmt.Errorf("cannot find unused gameId")
@@ -175,7 +175,7 @@ func (s *StatelessServer) handleNewGame(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	gameId, err := s.startNewGame(r.Context(), p.Name, GameType(typeParam), singlePlayer)
+	gameId, err := s.startNewGame(r.Context(), &p, GameType(typeParam), singlePlayer)
 	if err != nil {
 		errorLog.Printf("cannot start new game: %s\n", err)
 		http.Error(w, "", http.StatusPreconditionFailed)
@@ -205,7 +205,7 @@ func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
-	if _, err := s.rc.LookupGame(r.Context(), gameId); err != nil {
+	if _, err := s.gameStore.LookupGame(r.Context(), gameId); err != nil {
 		// Game does not exist: offer to start a new game.
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 		return
@@ -214,6 +214,10 @@ func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, makePlayerCookie(p.Id, s.config.LoginTTL))
 	s.serveHtmlFile(w, gameHtmlFilename)
 }
+
+const (
+	sseEventPlayerJoined = "player joined"
+)
 
 func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
@@ -226,7 +230,7 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
-	gameState, err := s.rc.LookupGame(r.Context(), gameId)
+	gameState, err := s.gameStore.LookupGame(r.Context(), gameId)
 	if err != nil {
 		http.Error(w, "No such game", http.StatusNotFound)
 		return
@@ -239,7 +243,20 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
-	// Send initial ServerEvent.
+	// If there is a slot in the game left, add this player.
+	if len(gameState.Players) < ge.NumPlayers() {
+		gameState.Players = append(gameState.Players, &pb.Player{
+			Id:   string(p.Id),
+			Name: p.Name,
+		})
+		if err := s.gameStore.UpdateGame(r.Context(), gameState); err != nil {
+			errorLog.Printf("Cannot store updated game state: %s", err)
+			return
+		}
+		// Tell others we've joined.
+		s.gameStore.Publish(r.Context(), gameId, sseEventPlayerJoined+":"+p.Name)
+	}
+	// Send initial ServerEvent to the player.
 	err = sendSSEEvent(w, ServerEvent{
 		Timestamp:     time.Now(),
 		Board:         ge.Board().ViewFor(gameState.PlayerNum(string(p.Id))),
@@ -255,11 +272,9 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		errorLog.Printf("Cannot send initial ServerEvent: %s", err)
 		return
 	}
-	// Tell others we've joined.
-	s.rc.NotifySSE(r.Context(), gameId)
 	// Process events from Redis.
 	eventCh := make(chan string)
-	go s.rc.SubscribeSSE(r.Context(), gameId, eventCh)
+	go s.gameStore.Subscribe(r.Context(), gameId, eventCh)
 	for {
 		select {
 		case e, ok := <-eventCh:
@@ -267,7 +282,39 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 				errorLog.Printf("Redis pubsub closed for player %s", p.Name)
 				return
 			}
-			infoLog.Printf("Received event: %s %s", p.Name, e)
+			ev, msg, _ := strings.Cut(e, ":")
+			switch ev {
+			case sseEventPlayerJoined:
+				infoLog.Printf("[%s] A new player joined: %s", p.Name, msg)
+				gameState, err := s.gameStore.LookupGame(r.Context(), gameId)
+				if err != nil {
+					errorLog.Printf("Cannot lookup game state for game %s: %s", gameId, err)
+					return
+				}
+				ge, err = DecodeGameEngine(gameState)
+				if err != nil {
+					errorLog.Printf("Cannot decode game state for game %s: %s", gameId, err)
+					return
+				}
+				pNum := gameState.PlayerNum(string(p.Id))
+				err = sendSSEEvent(w, ServerEvent{
+					Timestamp:     time.Now(),
+					Board:         ge.Board().ViewFor(pNum),
+					Role:          pNum,
+					PlayerNames:   gameState.PlayerNames(),
+					Announcements: []string{"New player joined!"},
+					GameInfo: &ServerEventGameInfo{
+						ValidCellTypes: ge.ValidCellTypes(),
+						GameType:       ge.GameType(),
+					},
+				})
+				if err != nil {
+					errorLog.Printf("Cannot send ServerEvent: %s", err)
+					return
+				}
+			default:
+				infoLog.Printf("[%s] Received event: %s", p.Name, e)
+			}
 		case <-r.Context().Done():
 			infoLog.Printf("SSE connection closed for player %s", p.Name)
 			return

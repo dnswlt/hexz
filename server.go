@@ -77,19 +77,9 @@ type Server struct {
 }
 
 func NewServer(cfg *ServerConfig) (s *Server, err error) {
-	var playerStore PlayerStore
-	if cfg.RedisAddr != "" {
-		rc, err := NewRedisClient(cfg.RedisAddr)
-		if err != nil {
-			return nil, err
-		}
-		if playerStore, err = NewRemotePlayerStore(rc, cfg.LoginTTL); err != nil {
-			return nil, err
-		}
-	} else {
-		if playerStore, err = NewInMemoryPlayerStore(cfg.LoginTTL, cfg.LoginDatabasePath); err != nil {
-			return nil, err
-		}
+	playerStore, err := NewInMemoryPlayerStore(cfg.LoginTTL, cfg.LoginDatabasePath)
+	if err != nil {
+		return nil, err
 	}
 	s = &Server{
 		ongoingGames: make(map[string]*GameHandle),

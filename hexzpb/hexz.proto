@@ -62,10 +62,13 @@ message GameEngineState {
 // This message contains all data to restore a game state.
 // It can be used to save and load games in a memory store.
 message GameState {
-    google.protobuf.Timestamp created = 1;
+    string game_id = 1;
+    int64 seqnum = 2;
+    google.protobuf.Timestamp created = 3;
+    google.protobuf.Timestamp modified = 4;
     // Players in this game, in the order they joined.
-    repeated Player players = 2;
-    GameEngineState engine_state = 3;
+    repeated Player players = 5;
+    GameEngineState engine_state = 6;
 }
 
 // The encoded state of a GameEngineFlagz. Used for saving and loading games.

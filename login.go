@@ -156,26 +156,15 @@ func (s *InMemoryPlayerStore) saveToFile() error {
 	return nil
 }
 
-// RemotePlayerStore is a player store that stores players in a remote (Redis) database.
+// RemotePlayerStore is an interface adapter that lets RedisClient implement PlayerStore.
 type RemotePlayerStore struct {
-	rc       *RedisClient
-	loginTTL time.Duration // How long a login is valid.
-}
-
-func NewRemotePlayerStore(rc *RedisClient, loginTTL time.Duration) (*RemotePlayerStore, error) {
-	if loginTTL <= 0 {
-		return nil, fmt.Errorf("loginTTL must be positive")
-	}
-	return &RemotePlayerStore{
-		rc:       rc,
-		loginTTL: loginTTL,
-	}, nil
+	*RedisClient
 }
 
 func (s *RemotePlayerStore) Lookup(ctx context.Context, playerId PlayerId) (Player, error) {
-	return s.rc.LookupPlayer(ctx, playerId, s.loginTTL)
+	return s.LookupPlayer(ctx, playerId)
 }
 
 func (s *RemotePlayerStore) Login(ctx context.Context, playerId PlayerId, name string) error {
-	return s.rc.LoginPlayer(ctx, playerId, name, s.loginTTL)
+	return s.LoginPlayer(ctx, playerId, name)
 }
