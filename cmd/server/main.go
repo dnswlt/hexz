@@ -44,21 +44,25 @@ func main() {
 	flag.BoolVar(&cfg.EnableUndo, "enable-undo", true, "If true, games support undo/redo")
 	flag.BoolVar(&cfg.Stateless, "stateless", false, "If true, run in stateless mode (e.g. Cloud Run)")
 	flag.Parse()
-	isPortSet := false
+	setFlags := make(map[string]bool)
 	flag.Visit(func(f *flag.Flag) {
-		if f.Name == "port" {
-			isPortSet = true
-		}
+		setFlags[f.Name] = true
 	})
 	// If -port was not specified explicitly, try the $PORT environment variable.
 	envPort := os.Getenv("PORT")
-	if !isPortSet && envPort != "" {
+	if !setFlags["port"] && envPort != "" {
 		port, err := strconv.Atoi(envPort)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "invalid port: %v\n", envPort)
 			os.Exit(1)
 		}
 		cfg.ServerPort = port
+	}
+	// If -redis-addr was not specified explicitly, try the $REDISHOST and $REDISPORT environment variables.
+	envRedisHost := os.Getenv("REDISHOST")
+	envRedisPort := os.Getenv("REDISPORT")
+	if !setFlags["redis-addr"] && envRedisHost != "" && envRedisPort != "" {
+		cfg.RedisAddr = envRedisHost + ":" + envRedisPort
 	}
 	if len(flag.Args()) > 0 {
 		fmt.Fprintf(os.Stderr, "unexpected extra arguments: %v\n", flag.Args())
