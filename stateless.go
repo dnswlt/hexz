@@ -222,6 +222,19 @@ const (
 	sseEventGameUpdated  = "game.updated"
 )
 
+func (s *StatelessServer) loadGame(ctx context.Context, gameId string) (*pb.GameState, GameEngine, error) {
+	gameState, err := s.gameStore.LookupGame(ctx, gameId)
+	if err != nil {
+		return nil, nil, err
+	}
+	ge, err := DecodeGameEngine(gameState)
+	if err != nil {
+		errorLog.Printf("Cannot decode game engine for game %s: %s", gameId, err)
+		return nil, nil, err
+	}
+	return gameState, ge, nil
+}
+
 func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
@@ -233,16 +246,9 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
-	gameState, err := s.gameStore.LookupGame(r.Context(), gameId)
+	gameState, ge, err := s.loadGame(r.Context(), gameId)
 	if err != nil {
 		http.Error(w, "No such game", http.StatusNotFound)
-		return
-	}
-	ge, err := DecodeGameEngine(gameState)
-	if err != nil {
-		errorLog.Print("Cannot decode game state: ", err)
-		http.Error(w, "invalid game state", http.StatusInternalServerError)
-		return
 	}
 	// Get move request.
 	dec := json.NewDecoder(r.Body)
@@ -293,15 +299,9 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
-	gameState, err := s.gameStore.LookupGame(r.Context(), gameId)
+	gameState, ge, err := s.loadGame(r.Context(), gameId)
 	if err != nil {
 		http.Error(w, "No such game", http.StatusNotFound)
-		return
-	}
-	ge, err := DecodeGameEngine(gameState)
-	if err != nil {
-		errorLog.Print("Cannot decode game state: ", err)
-		http.Error(w, "invalid game state", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -319,6 +319,7 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		// Tell others we've joined.
 		s.gameStore.Publish(r.Context(), gameId, sseEventPlayerJoined+":"+p.Name)
 	}
+	pNum := gameState.PlayerNum(string(p.Id))
 	// Send initial ServerEvent to the player.
 	err = sendSSEEvent(w, ServerEvent{
 		Timestamp:     time.Now(),
@@ -342,24 +343,18 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		select {
 		case e, ok := <-eventCh:
 			if !ok {
-				errorLog.Printf("Redis pubsub closed for player %s", p.Name)
+				errorLog.Printf("Pubsub closed for player %s", p.Name)
 				return
 			}
-			ev, msg, _ := strings.Cut(e, ":")
+			ev, msg, _ := strings.Cut(e, ":") // Event format: <eventType>:<msg>
 			switch ev {
 			case sseEventPlayerJoined:
-				infoLog.Printf("[%s] A new player joined: %s", p.Name, msg)
-				gameState, err := s.gameStore.LookupGame(r.Context(), gameId)
+				infoLog.Printf("[%s/%s] A new player joined: %s", gameId, p.Name, msg)
+				gameState, ge, err := s.loadGame(r.Context(), gameId)
 				if err != nil {
-					errorLog.Printf("Cannot lookup game state for game %s: %s", gameId, err)
+					errorLog.Printf("Cannot load ongoing game %s: %s", gameId, err)
 					return
 				}
-				ge, err = DecodeGameEngine(gameState)
-				if err != nil {
-					errorLog.Printf("Cannot decode game state for game %s: %s", gameId, err)
-					return
-				}
-				pNum := gameState.PlayerNum(string(p.Id))
 				err = sendSSEEvent(w, ServerEvent{
 					Timestamp:     time.Now(),
 					Board:         ge.Board().ViewFor(pNum),
@@ -372,31 +367,38 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			case sseEventGameUpdated:
-				infoLog.Printf("[%s] Received game update", p.Name)
-				gameState, err := s.gameStore.LookupGame(r.Context(), gameId)
+				infoLog.Printf("[%s/%s] Received game update: %s", gameId, p.Name, e)
+				gameState, ge, err := s.loadGame(r.Context(), gameId)
 				if err != nil {
-					errorLog.Printf("Cannot lookup game state for game %s: %s", gameId, err)
+					errorLog.Printf("Cannot load ongoing game %s: %s", gameId, err)
 					return
 				}
-				ge, err = DecodeGameEngine(gameState)
-				if err != nil {
-					errorLog.Printf("Cannot decode game state for game %s: %s", gameId, err)
-					return
+				var winner int
+				var announcements []string
+				if ge.IsDone() {
+					winner = ge.Winner()
+					if winner > 0 {
+						announcements = append(announcements,
+							fmt.Sprintf("&#127942; &#127942; &#127942; %s won &#127942; &#127942; &#127942;",
+								gameState.PlayerNames()[winner-1]))
+					} else {
+						announcements = append(announcements, "The game is a draw!")
+					}
 				}
-				pNum := gameState.PlayerNum(string(p.Id))
 				err = sendSSEEvent(w, ServerEvent{
 					Timestamp:     time.Now(),
 					Board:         ge.Board().ViewFor(pNum),
 					Role:          pNum,
 					PlayerNames:   gameState.PlayerNames(),
-					Announcements: []string{},
+					Winner:        winner,
+					Announcements: announcements,
 				})
 				if err != nil {
 					errorLog.Printf("Cannot send ServerEvent: %s", err)
 					return
 				}
 			default:
-				infoLog.Printf("[%s] Received event: %s", p.Name, e)
+				infoLog.Printf("[%s/%s] Received unknown event: %s", gameId, p.Name, e)
 			}
 		case <-r.Context().Done():
 			infoLog.Printf("SSE connection closed for player %s", p.Name)

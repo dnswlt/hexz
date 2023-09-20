@@ -354,6 +354,16 @@ func (b *Board) DecodeProto(bp *pb.Board) error {
 	b.Turn = int(bp.Turn)
 	b.Move = int(bp.Move)
 	b.LastRevealed = int(bp.LastRevealed)
+	switch bp.State {
+	case pb.Board_INITIAL:
+		b.State = Initial
+	case pb.Board_RUNNING:
+		b.State = Running
+	case pb.Board_FINISHED:
+		b.State = Finished
+	default:
+		return fmt.Errorf("cannot decode board: unknown game state: %v", bp.State)
+	}
 	if len(b.FlatFields) != len(bp.FlatFields) {
 		return fmt.Errorf("cannot decode board: field length mismatch: want %d, got %d", len(b.FlatFields), len(bp.FlatFields))
 	}

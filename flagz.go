@@ -167,6 +167,9 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 	b := g.B
 	turn := b.Turn
 	pIdx := turn - 1
+	if b.State != Running {
+		return false
+	}
 	if m.PlayerNum != turn || m.Move != b.Move {
 		// Only allow moves by players whose turn it is.
 		return false

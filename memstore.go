@@ -17,7 +17,7 @@ type GameStore interface {
 	LookupGame(ctx context.Context, gameId string) (*pb.GameState, error)
 	UpdateGame(ctx context.Context, s *pb.GameState) error
 
-	Publish(ctx context.Context, gameId string, event string) (int64, error)
+	Publish(ctx context.Context, gameId string, event string) error
 	Subscribe(ctx context.Context, gameId string, ch chan<- string)
 }
 
@@ -118,6 +118,6 @@ func (c *RedisClient) Subscribe(ctx context.Context, gameId string, ch chan<- st
 
 // Sends a message to the channel for the given game.
 // Returns the number of subscribers that received the message.
-func (c *RedisClient) Publish(ctx context.Context, gameId string, message string) (int64, error) {
-	return c.client.Publish(ctx, "pubsub:"+gameId, message).Result()
+func (c *RedisClient) Publish(ctx context.Context, gameId string, message string) error {
+	return c.client.Publish(ctx, "pubsub:"+gameId, message).Err()
 }

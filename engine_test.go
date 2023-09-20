@@ -47,14 +47,22 @@ func TestScoreBasedSingleWinner(t *testing.T) {
 }
 
 func TestBoardProto(t *testing.T) {
+	// Create random board, make some changes to it.
 	board := NewBoard()
-	orig := board.copy() // Decode into a copy so we can compare.
+	board.State = Finished
+	board.Turn = 2
+	board.Move = 10
+	board.Fields[0][0].Type = cellFlag
+	board.Fields[0][0].Owner = 1
+	// Encode and decode
 	bp := board.Proto()
-	err := board.DecodeProto(bp)
+	decoded := NewBoard()
+	err := decoded.DecodeProto(bp)
 	if err != nil {
 		t.Fatal("cannot decode: ", err)
 	}
-	if diff := cmp.Diff(orig, board); diff != "" {
+	// Compare
+	if diff := cmp.Diff(board, decoded); diff != "" {
 		t.Errorf("board mismatch (-want +got):\n%s", diff)
 	}
 }
