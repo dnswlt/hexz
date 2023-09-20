@@ -34,4 +34,4 @@ COPY --from=builder /app/resources /app/resources
 # Run the server in its "home" directory.
 WORKDIR /app
 
-CMD ["/app/server", "-cpu-think-time=5s", "-cpu-max-flags=-1", "-remove-delay=1m", "-inactivity-timeout=1h"]
+CMD ["/app/server", "-cpu-think-time=5s", "-cpu-max-flags=-1", "-remove-delay=1m", "-inactivity-timeout=1h", "-stateless"]
