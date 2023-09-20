@@ -34,6 +34,7 @@ type RedisClientConfig struct {
 
 func NewRedisClient(config *RedisClientConfig) (*RedisClient, error) {
 	rc := &RedisClient{
+		config: config,
 		client: redis.NewClient(&redis.Options{
 			Addr: config.Addr,
 		}),
@@ -78,7 +79,7 @@ func (c *RedisClient) StoreNewGame(ctx context.Context, s *pb.GameState) (bool, 
 	if err != nil {
 		return false, err
 	}
-	// Store the game in Redis for 24 hours max.
+	infoLog.Printf("Storing new game %q: %d bytes", s.GameId, len(data))
 	return c.client.SetNX(ctx, "game:"+s.GameId, data, c.config.GameTTL).Result()
 }
 
@@ -115,8 +116,8 @@ func (c *RedisClient) Subscribe(ctx context.Context, gameId string, ch chan<- st
 	}
 }
 
-// Sends a "notify" message to the channel for the given game.
+// Sends a message to the channel for the given game.
 // Returns the number of subscribers that received the message.
-func (c *RedisClient) Publish(ctx context.Context, gameId string, event string) (int64, error) {
-	return c.client.Publish(ctx, "pubsub:"+gameId, event).Result()
+func (c *RedisClient) Publish(ctx context.Context, gameId string, message string) (int64, error) {
+	return c.client.Publish(ctx, "pubsub:"+gameId, message).Result()
 }

@@ -2,6 +2,7 @@ package hexz
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -179,6 +180,7 @@ func (s *StatelessServer) handleNewGame(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		errorLog.Printf("cannot start new game: %s\n", err)
 		http.Error(w, "", http.StatusPreconditionFailed)
+		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/hexz/%s", gameId), http.StatusSeeOther)
 }
@@ -216,8 +218,69 @@ func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 }
 
 const (
-	sseEventPlayerJoined = "player joined"
+	sseEventPlayerJoined = "player.joined"
+	sseEventGameUpdated  = "game.updated"
 )
+
+func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
+	p, err := s.lookupPlayerFromCookie(r)
+	if err != nil {
+		http.Error(w, "Player not logged in", http.StatusPreconditionFailed)
+		return
+	}
+	gameId, err := gameIdFromPath(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
+		return
+	}
+	gameState, err := s.gameStore.LookupGame(r.Context(), gameId)
+	if err != nil {
+		http.Error(w, "No such game", http.StatusNotFound)
+		return
+	}
+	ge, err := DecodeGameEngine(gameState)
+	if err != nil {
+		errorLog.Print("Cannot decode game state: ", err)
+		http.Error(w, "invalid game state", http.StatusInternalServerError)
+		return
+	}
+	// Get move request.
+	dec := json.NewDecoder(r.Body)
+	var req *MoveRequest
+	if err := dec.Decode(&req); err != nil {
+		http.Error(w, "unmarshal error", http.StatusBadRequest)
+		return
+	}
+	if !req.Type.valid() {
+		http.Error(w, "Invalid cell type", http.StatusBadRequest)
+		return
+	}
+	// Is it the player's turn?
+	pNum := gameState.PlayerNum(string(p.Id))
+	if ge.Board().Turn != pNum {
+		http.Error(w, "player cannot make a move", http.StatusPreconditionFailed)
+		return
+	}
+	if !ge.MakeMove(GameEngineMove{
+		PlayerNum: pNum,
+		Move:      req.Move,
+		Row:       req.Row,
+		Col:       req.Col,
+		CellType:  req.Type,
+	}) {
+		http.Error(w, "invalid move", http.StatusBadRequest)
+		return
+	}
+	// Store new game state and notify other players.
+	enc, _ := ge.Encode()
+	gameState.EngineState = enc
+	if err := s.gameStore.UpdateGame(r.Context(), gameState); err != nil {
+		errorLog.Printf("Could not store game %s: %s", gameId, err)
+		http.Error(w, "failed to save game state", http.StatusInternalServerError)
+		return
+	}
+	s.gameStore.Publish(r.Context(), gameId, sseEventGameUpdated)
+}
 
 func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
@@ -302,11 +365,31 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 					Board:         ge.Board().ViewFor(pNum),
 					Role:          pNum,
 					PlayerNames:   gameState.PlayerNames(),
-					Announcements: []string{"New player joined!"},
-					GameInfo: &ServerEventGameInfo{
-						ValidCellTypes: ge.ValidCellTypes(),
-						GameType:       ge.GameType(),
-					},
+					Announcements: []string{"New player " + msg + " joined!"},
+				})
+				if err != nil {
+					errorLog.Printf("Cannot send ServerEvent: %s", err)
+					return
+				}
+			case sseEventGameUpdated:
+				infoLog.Printf("[%s] Received game update", p.Name)
+				gameState, err := s.gameStore.LookupGame(r.Context(), gameId)
+				if err != nil {
+					errorLog.Printf("Cannot lookup game state for game %s: %s", gameId, err)
+					return
+				}
+				ge, err = DecodeGameEngine(gameState)
+				if err != nil {
+					errorLog.Printf("Cannot decode game state for game %s: %s", gameId, err)
+					return
+				}
+				pNum := gameState.PlayerNum(string(p.Id))
+				err = sendSSEEvent(w, ServerEvent{
+					Timestamp:     time.Now(),
+					Board:         ge.Board().ViewFor(pNum),
+					Role:          pNum,
+					PlayerNames:   gameState.PlayerNames(),
+					Announcements: []string{},
 				})
 				if err != nil {
 					errorLog.Printf("Cannot send ServerEvent: %s", err)
@@ -351,7 +434,7 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	// POST method API
 	mux.HandleFunc("/hexz/login", postHandlerFunc(s.handleLoginRequest))
 	mux.HandleFunc("/hexz/new", postHandlerFunc(s.handleNewGame))
-	// mux.HandleFunc("/hexz/move/", postHandlerFunc(s.handleMove))
+	mux.HandleFunc("/hexz/move/", postHandlerFunc(s.handleMove))
 	// mux.HandleFunc("/hexz/reset/", postHandlerFunc(s.handleReset))
 	// mux.HandleFunc("/hexz/undo/", postHandlerFunc(s.handleUndo))
 	// mux.HandleFunc("/hexz/redo/", postHandlerFunc(s.handleRedo))
