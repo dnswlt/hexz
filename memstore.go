@@ -16,6 +16,7 @@ type GameStore interface {
 	StoreNewGame(ctx context.Context, s *pb.GameState) (bool, error)
 	LookupGame(ctx context.Context, gameId string) (*pb.GameState, error)
 	UpdateGame(ctx context.Context, s *pb.GameState) error
+	ListRecentGames(ctx context.Context, limit int) ([]*pb.GameInfo, error)
 
 	Publish(ctx context.Context, gameId string, event string) error
 	Subscribe(ctx context.Context, gameId string, ch chan<- string)
@@ -70,17 +71,26 @@ func (c *RedisClient) LoginPlayer(ctx context.Context, playerId PlayerId, name s
 }
 
 // Stores the given game state in Redis, unless a game with the same ID already exists.
-// This method updates the Created and Modified fields of the game state.
+// This method updates the Modified fields of the game state.
 func (c *RedisClient) StoreNewGame(ctx context.Context, s *pb.GameState) (bool, error) {
 	now := tpb.Now()
-	s.Created = now
 	s.Modified = now
 	data, err := proto.Marshal(s)
 	if err != nil {
 		return false, err
 	}
-	infoLog.Printf("Storing new game %q: %d bytes", s.GameId, len(data))
-	return c.client.SetNX(ctx, "game:"+s.GameId, data, c.config.GameTTL).Result()
+	gameId := s.GameInfo.Id
+	infoLog.Printf("Storing new game %q: %d bytes", gameId, len(data))
+	ok, err := c.client.SetNX(ctx, "game:"+gameId, data, c.config.GameTTL).Result()
+	if !ok || err != nil {
+		return ok, err
+	}
+	mInfo, _ := proto.Marshal(s.GameInfo) // We can always marshal a GameInfo.
+	// TODO: Clean up "recentgames" periodically.
+	if err := c.client.ZAdd(ctx, "recentgames", redis.Z{Score: float64(now.Seconds), Member: mInfo}).Err(); err != nil {
+		errorLog.Printf("Failed to add game %q to recent games: %v", gameId, err)
+	}
+	return true, nil
 }
 
 // Stores the given game state in Redis, overwriting any existing game with the same ID.
@@ -92,7 +102,7 @@ func (c *RedisClient) UpdateGame(ctx context.Context, s *pb.GameState) error {
 	if err != nil {
 		return err
 	}
-	return c.client.Set(ctx, "game:"+s.GameId, data, c.config.GameTTL).Err()
+	return c.client.Set(ctx, "game:"+s.GameInfo.Id, data, c.config.GameTTL).Err()
 }
 
 func (c *RedisClient) LookupGame(ctx context.Context, gameId string) (*pb.GameState, error) {
@@ -107,12 +117,36 @@ func (c *RedisClient) LookupGame(ctx context.Context, gameId string) (*pb.GameSt
 	return gameState, nil
 }
 
+func (c *RedisClient) ListRecentGames(ctx context.Context, limit int) ([]*pb.GameInfo, error) {
+	r, err := c.client.ZRevRange(ctx, "recentgames", 0, int64(limit-1)).Result()
+	if err != nil {
+		return nil, err
+	}
+	games := make([]*pb.GameInfo, len(r))
+	for i, m := range r {
+		games[i] = &pb.GameInfo{}
+		if err := proto.Unmarshal([]byte(m), games[i]); err != nil {
+			return nil, err
+		}
+	}
+	return games, nil
+}
+
 func (c *RedisClient) Subscribe(ctx context.Context, gameId string, ch chan<- string) {
 	sub := c.client.Subscribe(ctx, "pubsub:"+gameId)
 	defer sub.Close()
 	defer close(ch)
-	for msg := range sub.Channel() {
-		ch <- msg.Payload
+	for {
+		select {
+		case msg, ok := <-sub.Channel():
+			if !ok {
+				return
+			}
+			ch <- msg.Payload
+		case <-ctx.Done():
+			// sub.Channel() does not seem to respond to context cancellation, so we do it externally.
+			return
+		}
 	}
 }
 

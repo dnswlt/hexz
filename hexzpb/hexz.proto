@@ -49,6 +49,26 @@ message Player {
     string name = 2;
 }
 
+// GameInfo is summary information about an ongoing game, used to 
+// display a list of games to the user.
+message GameInfo {
+    string id = 1;
+    string host = 2;
+    google.protobuf.Timestamp started = 3;
+    string type = 4; // Expected to match a hexz.GameType value.
+}
+
+// This message contains all data to restore a game state.
+// It can be used to save and load games in a memory store.
+message GameState {
+    GameInfo game_info = 1;
+    int64 seqnum = 2;
+    google.protobuf.Timestamp modified = 4;
+    // Players in this game, in the order they joined.
+    repeated Player players = 5;
+    GameEngineState engine_state = 6;
+}
+
 // This message contains all data to restore a game engine state.
 // Every GameEngine implementation implements the .Encode() method
 // to encode its state into this message.
@@ -57,18 +77,6 @@ message GameEngineState {
         // All game engine types should have one field in this oneof.
         GameEngineFlagzState flagz = 1;
     }
-}
-
-// This message contains all data to restore a game state.
-// It can be used to save and load games in a memory store.
-message GameState {
-    string game_id = 1;
-    int64 seqnum = 2;
-    google.protobuf.Timestamp created = 3;
-    google.protobuf.Timestamp modified = 4;
-    // Players in this game, in the order they joined.
-    repeated Player players = 5;
-    GameEngineState engine_state = 6;
 }
 
 // The encoded state of a GameEngineFlagz. Used for saving and loading games.

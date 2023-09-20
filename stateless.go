@@ -14,6 +14,7 @@ import (
 	"time"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
+	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // This file contains the implementation of the stateless hexz game server.
@@ -76,11 +77,16 @@ func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType 
 	if err != nil {
 		return "", err
 	}
-	// Try to find an unused gameId.
+	// Try to find an unused gameId. This loop should usually exit after the first iteration.
 	for i := 0; i < 100; i++ {
 		gameState := &pb.GameState{
-			GameId:      GenerateGameId(),
-			Players:     []*pb.Player{}, // Players are registed in handleSSE.
+			GameInfo: &pb.GameInfo{
+				Id:      GenerateGameId(),
+				Host:    p.Name,
+				Started: tpb.Now(),
+				Type:    string(gameType),
+			},
+			Players:     []*pb.Player{{Id: string(p.Id), Name: p.Name}}, // More players are registed in handleSSE.
 			EngineState: engineState,
 		}
 		// Keep the game in Redis for 24 hours max.
@@ -90,7 +96,7 @@ func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType 
 			return "", err
 		}
 		if ok {
-			return gameState.GameId, nil
+			return gameState.GameInfo.Id, nil
 		}
 	}
 	return "", fmt.Errorf("cannot find unused gameId")
@@ -194,6 +200,31 @@ func (s *StatelessServer) handleHexz(w http.ResponseWriter, r *http.Request) {
 	// Prolong cookie ttl.
 	http.SetCookie(w, makePlayerCookie(p.Id, s.config.LoginTTL))
 	s.serveHtmlFile(w, newGameHtmlFilename)
+}
+
+func (s *StatelessServer) handleGamez(w http.ResponseWriter, r *http.Request) {
+	gameInfos, err := s.gameStore.ListRecentGames(r.Context(), 10)
+	if err != nil {
+		http.Error(w, "list recent games", http.StatusInternalServerError)
+		errorLog.Print("cannot list recent games: ", err)
+		return
+	}
+	resp := make([]*GameInfo, len(gameInfos))
+	for i, g := range gameInfos {
+		resp[i] = &GameInfo{
+			Id:       g.Id,
+			Host:     g.Host,
+			Started:  g.Started.AsTime(),
+			GameType: GameType(g.Type),
+		}
+	}
+	json, err := json.Marshal(resp)
+	if err != nil {
+		http.Error(w, "marshal error", http.StatusInternalServerError)
+		errorLog.Fatal("Cannot marshal []GameInfo: " + err.Error())
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(json)
 }
 
 func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
@@ -306,8 +337,9 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
+	pNum := gameState.PlayerNum(string(p.Id))
 	// If there is a slot in the game left, add this player.
-	if len(gameState.Players) < ge.NumPlayers() {
+	if pNum == 0 && len(gameState.Players) < ge.NumPlayers() {
 		gameState.Players = append(gameState.Players, &pb.Player{
 			Id:   string(p.Id),
 			Name: p.Name,
@@ -316,10 +348,10 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 			errorLog.Printf("Cannot store updated game state: %s", err)
 			return
 		}
+		pNum = gameState.PlayerNum(string(p.Id))
 		// Tell others we've joined.
 		s.gameStore.Publish(r.Context(), gameId, sseEventPlayerJoined+":"+p.Name)
 	}
-	pNum := gameState.PlayerNum(string(p.Id))
 	// Send initial ServerEvent to the player.
 	err = sendSSEEvent(w, ServerEvent{
 		Timestamp:     time.Now(),
@@ -445,7 +477,7 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 
 	// GET method API
 	mux.HandleFunc("/hexz", s.handleHexz)
-	// mux.HandleFunc("/hexz/gamez", s.handleGamez)
+	mux.HandleFunc("/hexz/gamez", s.handleGamez)
 	// mux.HandleFunc("/hexz/view/", s.handleView)
 	// mux.HandleFunc("/hexz/history/", s.handleHistory)
 	// mux.HandleFunc("/hexz/moves/", s.handleValidMoves)
