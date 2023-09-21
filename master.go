@@ -88,6 +88,7 @@ func (m *GameMaster) makeInitialServerEvent(announcements []string) *ServerEvent
 			ValidCellTypes: m.gameEngine.ValidCellTypes(),
 			GameType:       m.game.gameType,
 		},
+		DisableUndo: m.s.config.DisableUndo,
 	}
 }
 
@@ -166,7 +167,7 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 	}
 	mr := e.moveRequest
 	if m.gameEngine.MakeMove(GameEngineMove{PlayerNum: p.playerNum, Move: mr.Move, Row: mr.Row, Col: mr.Col, CellType: mr.Type}) {
-		if m.s.config.EnableUndo {
+		if !m.s.config.DisableUndo {
 			if he, ok := m.gameEngine.(SinglePlayerGameEngine); ok {
 				m.undo = append(m.undo, he.Clone())
 				m.redo = nil
@@ -321,9 +322,13 @@ func (m *GameMaster) Run(cancel context.CancelFunc) {
 			case ControlEventReset:
 				m.processControlEventReset(e)
 			case ControlEventUndo:
-				m.processControlEventUndo(e)
+				if !m.s.config.DisableUndo {
+					m.processControlEventUndo(e)
+				}
 			case ControlEventRedo:
-				m.processControlEventRedo(e)
+				if !m.s.config.DisableUndo {
+					m.processControlEventRedo(e)
+				}
 			case ControlEventValidMoves:
 				m.processControlEventValidMoves(e)
 			}
