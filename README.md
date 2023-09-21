@@ -38,3 +38,14 @@ repository:
 ```
 protoc hexzpb/hexz.proto --go_out=. --go_opt=paths=source_relative
 ```
+
+
+## WASM
+
+The vision is to run CPU players in the user's browser, not on the server.
+
+Totally WIP: to build the WASM module, run:
+
+```
+GOOS=js GOARCH=wasm go build -o ./resources/wasm/hexz.wasm cmd/wasm/main.go
+```

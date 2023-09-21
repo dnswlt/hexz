@@ -1,0 +1,17 @@
+<html>  
+    <head>
+        <meta charset="utf-8"/>
+        <script src="/hexz/static/js/wasm_exec.js"></script>
+        <script>
+            const go = new Go();
+            WebAssembly.instantiateStreaming(fetch("/hexz/static/wasm/hexz.wasm"), go.importObject).then((result) => {
+                wasm = result.instance;
+                go.run(wasm);
+                console.log(goWasmFoo(JSON.stringify({a: "foo", b: -1})));
+            });
+        </script>
+    </head>
+    <body>
+        This is a WASM test. It should print something on the JS console (I guess?).
+    </body>
+</html>

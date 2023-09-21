@@ -7,3 +7,4 @@ _logins.json
 *.txt
 /hist
 dump.rdb
+*.wasm
