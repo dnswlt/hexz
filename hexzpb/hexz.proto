@@ -76,6 +76,8 @@ message GameEngineState {
     oneof state {
         // All game engine types should have one field in this oneof.
         GameEngineFlagzState flagz = 1;
+        GameEngineClassicState classic = 2;
+        GameEngineFreeformState freeform = 3;
     }
 }
 
@@ -87,6 +89,16 @@ message GameEngineFlagzState {
     repeated int32 normal_moves = 3;
     // History of moves made so far.
     repeated GameEngineMove moves = 4;
+}
+
+// The encoded state of a GameEngineClassic. Used for saving and loading games.
+message GameEngineClassicState {
+    Board board = 1;
+}
+
+// The encoded state of a GameEngineFreeform. Used for saving and loading games.
+message GameEngineFreeformState {
+    Board board = 1;
 }
 
 message GameEngineMove {

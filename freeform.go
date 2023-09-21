@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/dnswlt/hexz/hexzpb"
+	pb "github.com/dnswlt/hexz/hexzpb"
 )
 
 //
@@ -12,6 +13,12 @@ import (
 
 type GameEngineFreeform struct {
 	board *Board
+}
+
+func NewGameEngineFreeform() *GameEngineFreeform {
+	g := &GameEngineFreeform{}
+	g.Init()
+	return g
 }
 
 func (g *GameEngineFreeform) GameType() GameType { return gameTypeFreeform }
@@ -79,18 +86,31 @@ func (g *GameEngineFreeform) MakeMove(m GameEngineMove) bool {
 	f := &board.Fields[m.Row][m.Col]
 	f.Owner = board.Turn
 	f.Type = m.CellType
-	board.Turn++
-	if board.Turn > 2 {
-		board.Turn = 1
+	if m.CellType == cellNormal {
+		f.Value = 1
 	}
-	f.Value = 1
 	return true
 }
 
 func (g *GameEngineFreeform) Encode() (*hexzpb.GameEngineState, error) {
-	return nil, fmt.Errorf("not implemented")
+	freeform := &pb.GameEngineFreeformState{
+		Board: g.Board().Proto(),
+	}
+	s := &pb.GameEngineState{
+		State: &pb.GameEngineState_Freeform{
+			Freeform: freeform,
+		},
+	}
+	return s, nil
 }
 
-func (g *GameEngineFreeform) Decode(*hexzpb.GameEngineState) error {
-	return fmt.Errorf("not implemented")
+func (g *GameEngineFreeform) Decode(s *hexzpb.GameEngineState) error {
+	if s.GetFreeform() == nil {
+		return fmt.Errorf("invalid game state: missing freeform")
+	}
+	freeform := s.GetFreeform()
+	if err := g.board.DecodeProto(freeform.Board); err != nil {
+		return err
+	}
+	return nil
 }

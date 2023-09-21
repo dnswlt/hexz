@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/dnswlt/hexz/hexzpb"
+	pb "github.com/dnswlt/hexz/hexzpb"
 )
 
 //
@@ -12,6 +13,12 @@ import (
 
 type GameEngineClassic struct {
 	board *Board
+}
+
+func NewGameEngineClassic() *GameEngineClassic {
+	g := &GameEngineClassic{}
+	g.Init()
+	return g
 }
 
 func (g *GameEngineClassic) GameType() GameType { return gameTypeClassic }
@@ -348,9 +355,24 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 }
 
 func (g *GameEngineClassic) Encode() (*hexzpb.GameEngineState, error) {
-	return nil, fmt.Errorf("not implemented")
+	classic := &pb.GameEngineClassicState{
+		Board: g.Board().Proto(),
+	}
+	s := &pb.GameEngineState{
+		State: &pb.GameEngineState_Classic{
+			Classic: classic,
+		},
+	}
+	return s, nil
 }
 
-func (g *GameEngineClassic) Decode(*hexzpb.GameEngineState) error {
-	return fmt.Errorf("not implemented")
+func (g *GameEngineClassic) Decode(s *hexzpb.GameEngineState) error {
+	if s.GetClassic() == nil {
+		return fmt.Errorf("invalid game state: missing classic")
+	}
+	classic := s.GetClassic()
+	if err := g.board.DecodeProto(classic.Board); err != nil {
+		return err
+	}
+	return nil
 }

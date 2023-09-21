@@ -176,15 +176,11 @@ func NewGameEngine(gameType GameType) GameEngine {
 	var ge GameEngine
 	switch gameType {
 	case gameTypeClassic:
-		gec := &GameEngineClassic{}
-		gec.Init()
-		ge = gec
+		ge = NewGameEngineClassic()
 	case gameTypeFlagz:
 		ge = NewGameEngineFlagz()
 	case gameTypeFreeform:
-		gef := &GameEngineFreeform{}
-		gef.Init()
-		ge = gef
+		ge = NewGameEngineFreeform()
 	default:
 		panic("Unconsidered game type: " + gameType)
 	}
@@ -192,16 +188,21 @@ func NewGameEngine(gameType GameType) GameEngine {
 }
 
 func DecodeGameEngine(s *pb.GameState) (GameEngine, error) {
+	var g GameEngine
 	switch s.EngineState.State.(type) {
 	case *pb.GameEngineState_Flagz:
-		g := NewGameEngineFlagz()
-		if err := g.Decode(s.EngineState); err != nil {
-			return nil, err
-		}
-		return g, nil
+		g = NewGameEngineFlagz()
+	case *pb.GameEngineState_Classic:
+		g = NewGameEngineClassic()
+	case *pb.GameEngineState_Freeform:
+		g = NewGameEngineFreeform()
 	default:
 		panic("unhandled game type")
 	}
+	if err := g.Decode(s.EngineState); err != nil {
+		return nil, err
+	}
+	return g, nil
 }
 
 // Creates a new, empty 2d field array.
