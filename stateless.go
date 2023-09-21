@@ -36,11 +36,7 @@ func NewStatelessServer(config *ServerConfig) (*StatelessServer, error) {
 		GameTTL:  config.InactivityTimeout,
 	})
 	if err != nil {
-		return nil, err
-	}
-
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create redis client: %s", err)
 	}
 
 	return &StatelessServer{
@@ -363,6 +359,7 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 			ValidCellTypes: ge.ValidCellTypes(),
 			GameType:       ge.GameType(),
 		},
+		DisableUndo: true, // Not supported in stateless mode yet.
 	})
 	if err != nil {
 		errorLog.Printf("Cannot send initial ServerEvent: %s", err)

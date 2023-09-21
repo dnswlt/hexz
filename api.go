@@ -23,8 +23,9 @@ type ServerEvent struct {
 	// Number of the player that wins. 0 if no winner yet or draw.
 	Winner int `json:"winner,omitempty"`
 	// Signals to clients that this is the last event they will receive.
-	LastEvent bool                 `json:"lastEvent"`
-	GameInfo  *ServerEventGameInfo `json:"gameInfo,omitempty"`
+	LastEvent   bool                 `json:"lastEvent"`
+	GameInfo    *ServerEventGameInfo `json:"gameInfo,omitempty"`
+	DisableUndo bool                 `json:"disableUndo,omitempty"`
 }
 
 // Sent in an initial message to clients.
