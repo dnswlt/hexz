@@ -180,11 +180,49 @@ func (s *StatelessServer) handleNewGame(w http.ResponseWriter, r *http.Request) 
 	}
 	gameId, err := s.startNewGame(r.Context(), &p, GameType(typeParam), singlePlayer)
 	if err != nil {
-		errorLog.Printf("cannot start new game: %s\n", err)
+		errorLog.Printf("Cannot start new game: %s\n", err)
 		http.Error(w, "", http.StatusPreconditionFailed)
 		return
 	}
 	http.Redirect(w, r, fmt.Sprintf("/hexz/%s", gameId), http.StatusSeeOther)
+}
+
+func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
+	p, err := s.lookupPlayerFromCookie(r)
+	if err != nil {
+		http.Error(w, "unknown player", http.StatusForbidden)
+		return
+	}
+	gameId, err := gameIdFromPath(r.URL.Path)
+	if err != nil {
+		http.Error(w, "invalid game ID", http.StatusBadRequest)
+		return
+	}
+	gameState, ge, err := s.loadGame(r.Context(), gameId)
+	if err != nil {
+		http.Error(w, "game does not exist", http.StatusNotFound)
+		return
+	}
+	dec := json.NewDecoder(r.Body)
+	var req ResetRequest
+	if err := dec.Decode(&req); err != nil {
+		http.Error(w, "unmarshal error", http.StatusBadRequest)
+		return
+	}
+	if gameState.PlayerNum(string(p.Id)) <= 0 {
+		http.Error(w, "only players can reset a game", http.StatusForbidden)
+		return
+	}
+	ge.Reset()
+	state, _ := ge.Encode()
+	gameState.EngineState = state
+	if err := s.gameStore.UpdateGame(r.Context(), gameState); err != nil {
+		http.Error(w, "cannot update game", http.StatusInternalServerError)
+		errorLog.Printf("Cannot update game %s: %s", gameId, err)
+		return
+	}
+	// Inform other players.
+	s.gameStore.Publish(r.Context(), gameId, sseEventGameUpdated)
 }
 
 func (s *StatelessServer) handleHexz(w http.ResponseWriter, r *http.Request) {
@@ -202,7 +240,7 @@ func (s *StatelessServer) handleGamez(w http.ResponseWriter, r *http.Request) {
 	gameInfos, err := s.gameStore.ListRecentGames(r.Context(), 10)
 	if err != nil {
 		http.Error(w, "list recent games", http.StatusInternalServerError)
-		errorLog.Print("cannot list recent games: ", err)
+		errorLog.Print("Cannot list recent games: ", err)
 		return
 	}
 	resp := make([]*GameInfo, len(gameInfos))
@@ -276,6 +314,7 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 	gameState, ge, err := s.loadGame(r.Context(), gameId)
 	if err != nil {
 		http.Error(w, "No such game", http.StatusNotFound)
+		return
 	}
 	// Get move request.
 	dec := json.NewDecoder(r.Body)
@@ -308,8 +347,8 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 	enc, _ := ge.Encode()
 	gameState.EngineState = enc
 	if err := s.gameStore.UpdateGame(r.Context(), gameState); err != nil {
-		errorLog.Printf("Could not store game %s: %s", gameId, err)
 		http.Error(w, "failed to save game state", http.StatusInternalServerError)
+		errorLog.Printf("Could not store game %s: %s", gameId, err)
 		return
 	}
 	s.gameStore.Publish(r.Context(), gameId, sseEventGameUpdated)
@@ -466,7 +505,7 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	mux.HandleFunc("/hexz/login", postHandlerFunc(s.handleLoginRequest))
 	mux.HandleFunc("/hexz/new", postHandlerFunc(s.handleNewGame))
 	mux.HandleFunc("/hexz/move/", postHandlerFunc(s.handleMove))
-	// mux.HandleFunc("/hexz/reset/", postHandlerFunc(s.handleReset))
+	mux.HandleFunc("/hexz/reset/", postHandlerFunc(s.handleReset))
 	// mux.HandleFunc("/hexz/undo/", postHandlerFunc(s.handleUndo))
 	// mux.HandleFunc("/hexz/redo/", postHandlerFunc(s.handleRedo))
 	// Server-sent Event handling

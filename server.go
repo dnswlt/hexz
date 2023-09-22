@@ -559,6 +559,7 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
 		http.Error(w, "unknown player", http.StatusPreconditionFailed)
+		return
 	}
 	gameId, err := gameIdFromPath(r.URL.Path)
 	if err != nil {
@@ -574,6 +575,7 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 	var req ResetRequest
 	if err := dec.Decode(&req); err != nil {
 		http.Error(w, "unmarshal error", http.StatusBadRequest)
+		return
 	}
 	game.sendEvent(ControlEventReset{playerId: p.Id, message: req.Message})
 }

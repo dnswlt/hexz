@@ -3,7 +3,6 @@ package hexz
 import (
 	"fmt"
 
-	"github.com/dnswlt/hexz/hexzpb"
 	pb "github.com/dnswlt/hexz/hexzpb"
 )
 
@@ -92,7 +91,7 @@ func (g *GameEngineFreeform) MakeMove(m GameEngineMove) bool {
 	return true
 }
 
-func (g *GameEngineFreeform) Encode() (*hexzpb.GameEngineState, error) {
+func (g *GameEngineFreeform) Encode() (*pb.GameEngineState, error) {
 	freeform := &pb.GameEngineFreeformState{
 		Board: g.Board().Proto(),
 	}
@@ -104,7 +103,7 @@ func (g *GameEngineFreeform) Encode() (*hexzpb.GameEngineState, error) {
 	return s, nil
 }
 
-func (g *GameEngineFreeform) Decode(s *hexzpb.GameEngineState) error {
+func (g *GameEngineFreeform) Decode(s *pb.GameEngineState) error {
 	if s.GetFreeform() == nil {
 		return fmt.Errorf("invalid game state: missing freeform")
 	}

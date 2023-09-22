@@ -53,7 +53,7 @@ message Player {
 // display a list of games to the user.
 message GameInfo {
     string id = 1;
-    string host = 2;
+    string host = 2; // The player hosting the game.
     google.protobuf.Timestamp started = 3;
     string type = 4; // Expected to match a hexz.GameType value.
 }

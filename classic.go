@@ -3,7 +3,6 @@ package hexz
 import (
 	"fmt"
 
-	"github.com/dnswlt/hexz/hexzpb"
 	pb "github.com/dnswlt/hexz/hexzpb"
 )
 
@@ -354,7 +353,7 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 	return true
 }
 
-func (g *GameEngineClassic) Encode() (*hexzpb.GameEngineState, error) {
+func (g *GameEngineClassic) Encode() (*pb.GameEngineState, error) {
 	classic := &pb.GameEngineClassicState{
 		Board: g.Board().Proto(),
 	}
@@ -366,7 +365,7 @@ func (g *GameEngineClassic) Encode() (*hexzpb.GameEngineState, error) {
 	return s, nil
 }
 
-func (g *GameEngineClassic) Decode(s *hexzpb.GameEngineState) error {
+func (g *GameEngineClassic) Decode(s *pb.GameEngineState) error {
 	if s.GetClassic() == nil {
 		return fmt.Errorf("invalid game state: missing classic")
 	}
