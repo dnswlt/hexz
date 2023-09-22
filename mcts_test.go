@@ -83,11 +83,25 @@ func TestMCTSSingleMove(t *testing.T) {
 
 	ge := NewGameEngineFlagz()
 	mcts := NewMCTS()
-	m, stats := mcts.SuggestMove(ge, thinkTime)
+	m, _ := mcts.SuggestMove(ge, thinkTime)
 	if !ge.MakeMove(m) {
-		t.Fatal("Cannot make move")
+		t.Errorf("Cannot make move: %v", m)
 	}
-	t.Errorf("Iterations: %d, tree size: %d", stats.Iterations, stats.TreeSize)
+}
+
+func BenchmarkMCTSRun(b *testing.B) {
+	gameEngine := NewGameEngineFlagz()
+	mcts := NewMCTS()
+	for i := 0; i < b.N; i++ {
+		ge := gameEngine.Clone()
+		path := make([]*mcNode, 1, 100)
+		path[0] = &mcNode{}
+		mcts.run(ge, path)
+		if path[0].done() {
+			// This is not expected, in fact not possible in practice.
+			b.Fatal("Board completely explored.")
+		}
+	}
 }
 
 func TestMCTSNoThinkTime(t *testing.T) {

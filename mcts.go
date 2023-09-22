@@ -179,7 +179,7 @@ func (mcts *MCTS) getNextByUtc(node *mcNode) *mcNode {
 }
 
 func (mcts *MCTS) nextMoves(node *mcNode, b *Board) []mcNode {
-	cs := make([]mcNode, 0, 64)
+	cs := make([]mcNode, 0, len(b.FlatFields))
 	hasFlag := b.Resources[b.Turn-1].NumPieces[cellFlag] > 0
 	for r := 0; r < len(b.Fields); r++ {
 		for c := 0; c < len(b.Fields[r]); c++ {
