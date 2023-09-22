@@ -133,8 +133,7 @@ func (root *mcNode) nodesPerDepth() (size int, leafNodes []int, branchNodes []in
 }
 
 type MCTS struct {
-	MaxFlagPositions int // maximum number of (random) positions to consider for placing a flag in a single move.
-	UctFactor        float32
+	UctFactor float32
 }
 
 func (mcts *MCTS) playRandomGame(ge SinglePlayerGameEngine, firstMove *mcNode) (winner int) {
@@ -178,7 +177,7 @@ func (mcts *MCTS) getNextByUtc(node *mcNode) *mcNode {
 	return next
 }
 
-func (mcts *MCTS) nextMoves(node *mcNode, b *Board) []mcNode {
+func (mcts *MCTS) nextMoves(b *Board) []mcNode {
 	cs := make([]mcNode, 0, len(b.FlatFields))
 	hasFlag := b.Resources[b.Turn-1].NumPieces[cellFlag] > 0
 	for r := 0; r < len(b.Fields); r++ {
@@ -201,24 +200,12 @@ func (mcts *MCTS) nextMoves(node *mcNode, b *Board) []mcNode {
 	return cs
 }
 
-func (mcts *MCTS) backpropagate(path []*mcNode, winner int) {
-	for i := len(path) - 1; i >= 0; i-- {
-		if path[i].turn() == winner {
-			path[i].wins += 1
-		} else if winner == 0 {
-			path[i].wins += 0.5
-		}
-		path[i].count += 1
-	}
-}
-
-func (mcts *MCTS) run(ge SinglePlayerGameEngine, path []*mcNode) (depth int) {
-	node := path[len(path)-1]
+func (mcts *MCTS) run(ge SinglePlayerGameEngine, node *mcNode, curDepth int) (winner int, depth int) {
 	b := ge.Board()
 	if node.children == nil {
 		// Terminal node in our exploration graph, but not in the whole game:
 		// While traversing a path we play moves and detect when the game IsDone (below).
-		cs := mcts.nextMoves(node, b)
+		cs := mcts.nextMoves(b)
 		if len(cs) == 0 {
 			panic(fmt.Sprintf("No next moves on allegedly non-final node: %s", node.String()))
 		}
@@ -226,10 +213,22 @@ func (mcts *MCTS) run(ge SinglePlayerGameEngine, path []*mcNode) (depth int) {
 		node.setLiveChildren(len(cs))
 		// Play a random child (rollout)
 		c := &cs[xrand.Intn(len(cs))]
-		winner := mcts.playRandomGame(ge, c)
-		path = append(path, c)
-		mcts.backpropagate(path, winner)
-		return len(path)
+		winner = mcts.playRandomGame(ge, c)
+		// Record counts and wins for both nodes.
+		node.count++
+		c.count++
+		if winner == c.turn() {
+			c.wins++
+		}
+		if winner == node.turn() {
+			node.wins++
+		}
+		if winner == 0 {
+			// Draw
+			c.wins += 0.5
+			node.wins += 0.5
+		}
+		return winner, curDepth
 	}
 	// Node has children already, descend to the one with the highest UTC.
 	c := mcts.getNextByUtc(node)
@@ -243,16 +242,13 @@ func (mcts *MCTS) run(ge SinglePlayerGameEngine, path []*mcNode) (depth int) {
 	if !ge.MakeMove(move) {
 		panic(fmt.Sprintf("Failed to make move %s", move.String()))
 	}
-	path = append(path, c)
 	if ge.IsDone() {
 		// This was the last move. Propagate the result up.
 		c.setDone()
-		winner := ge.Winner()
-		mcts.backpropagate(path, winner)
-		depth = len(path)
+		winner, depth = ge.Winner(), curDepth
 	} else {
 		// Not done: descend to next level
-		depth = mcts.run(ge, path)
+		winner, depth = mcts.run(ge, c, curDepth+1)
 	}
 	if c.done() {
 		// Propagate up the fact that child is done to avoid revisiting it.
@@ -260,6 +256,13 @@ func (mcts *MCTS) run(ge SinglePlayerGameEngine, path []*mcNode) (depth int) {
 		if node.liveChildren() == 0 {
 			node.setDone()
 		}
+	}
+	node.count++
+	if winner == node.turn() {
+		node.wins++
+	} else if winner == 0 {
+		// Draw
+		node.wins += 0.5
 	}
 	return
 }
@@ -342,8 +345,7 @@ func (s *MCTSStats) String() string {
 
 func NewMCTS() *MCTS {
 	return &MCTS{
-		MaxFlagPositions: -1, // Unlimited
-		UctFactor:        1.0,
+		UctFactor: 1.0,
 	}
 }
 
@@ -386,8 +388,6 @@ func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, max
 func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration time.Duration) (GameEngineMove, *MCTSStats) {
 	root := &mcNode{}
 	root.setTurn(gameEngine.Board().Turn)
-	// If we are reusing subtrees, we might already have fully explored
-	// the subtree. In that case, pick the best child immediately
 	if root.done() {
 		if len(root.children) == 0 {
 			panic("No children, but root is done")
@@ -402,9 +402,7 @@ func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration tim
 			break
 		}
 		ge := gameEngine.Clone()
-		path := make([]*mcNode, 1, 100)
-		path[0] = root
-		depth := mcts.run(ge, path)
+		_, depth := mcts.run(ge, root, 0)
 		if depth > maxDepth {
 			maxDepth = depth
 		}

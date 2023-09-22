@@ -94,13 +94,7 @@ func BenchmarkMCTSRun(b *testing.B) {
 	mcts := NewMCTS()
 	for i := 0; i < b.N; i++ {
 		ge := gameEngine.Clone()
-		path := make([]*mcNode, 1, 100)
-		path[0] = &mcNode{}
-		mcts.run(ge, path)
-		if path[0].done() {
-			// This is not expected, in fact not possible in practice.
-			b.Fatal("Board completely explored.")
-		}
+		mcts.run(ge, &mcNode{}, 0)
 	}
 }
 

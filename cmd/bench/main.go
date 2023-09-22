@@ -17,7 +17,6 @@ import (
 var cpuProfile = flag.String("cpuprofile", "", "write cpu profile to file")
 var maxRuntime = flag.Duration("maxruntime", time.Duration(30)*time.Second, "maximum time to run the benchmark")
 var numGames = flag.Int("numgames", 1, "Number of games to play")
-var maxFlagPositions = flag.Int("maxflagpos", -1, "maximum number of positions to randomly try placing a flag on")
 var uctFactor = flag.Float64("uctfactor", 1.0, "weight of the exploration component in the UCT")
 var thinkTime = flag.Duration("thinktime", time.Duration(2)*time.Second, "Think time per player and move")
 var oppThinkTime = flag.Duration("oppthinktime", time.Duration(2)*time.Second, "Think time per player and move")
@@ -88,7 +87,6 @@ func main() {
 		}
 		// Evaluate parameters both on P1 and P2
 		benchPlayer := nRuns%2 + 1
-		mcts[benchPlayer-1].MaxFlagPositions = *maxFlagPositions
 		mcts[benchPlayer-1].UctFactor = float32(*uctFactor)
 		collectBoardHistory := *gameHistoryDir != ""
 		gameId := hexz.GenerateGameId()
