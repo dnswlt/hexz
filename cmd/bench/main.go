@@ -21,7 +21,6 @@ var maxFlagPositions = flag.Int("maxflagpos", -1, "maximum number of positions t
 var uctFactor = flag.Float64("uctfactor", 1.0, "weight of the exploration component in the UCT")
 var thinkTime = flag.Duration("thinktime", time.Duration(2)*time.Second, "Think time per player and move")
 var oppThinkTime = flag.Duration("oppthinktime", time.Duration(2)*time.Second, "Think time per player and move")
-var flagsFirst = flag.Bool("flagsfirst", false, "If true, flags will be played first")
 var gameHistoryDir = flag.String("gamehistorydir", "", "Directory to which game history of each played game is written")
 
 // Compute the think time we'll give to the player.
@@ -90,9 +89,7 @@ func main() {
 		// Evaluate parameters both on P1 and P2
 		benchPlayer := nRuns%2 + 1
 		mcts[benchPlayer-1].MaxFlagPositions = *maxFlagPositions
-		mcts[benchPlayer-1].UctFactor = *uctFactor
-		mcts[benchPlayer-1].FlagsFirst = *flagsFirst
-		mcts[benchPlayer-1].ReuseTree = true
+		mcts[benchPlayer-1].UctFactor = float32(*uctFactor)
 		collectBoardHistory := *gameHistoryDir != ""
 		gameId := hexz.GenerateGameId()
 		var historyWriter *hexz.HistoryWriter

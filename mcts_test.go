@@ -20,9 +20,9 @@ func BenchmarkMCTSPlayRandomGame(b *testing.B) {
 				}
 			}
 		}
-		root := &mcNode{r: r, c: c}
+		root := newMcNode(r, c)
 		root.setFlag()
-		mcts.playRandomGame(ge.Clone(), root)
+		mcts.playRandomGame(ge.Clone(), &root)
 	}
 }
 
@@ -49,7 +49,13 @@ func TestMCTSFull(t *testing.T) {
 }
 
 func TestMCTSBitOps(t *testing.T) {
-	m := mcNode{r: 0, c: 0}
+	m := newMcNode(3, 4)
+	if m.r() != 3 {
+		t.Errorf("Wrong row: %d", m.r())
+	}
+	if m.c() != 4 {
+		t.Errorf("Wrong col: %d", m.c())
+	}
 	m.setTurn(2)
 	if m.turn() != 2 {
 		t.Errorf("Wrong turn: %d", m.turn())
@@ -77,10 +83,11 @@ func TestMCTSSingleMove(t *testing.T) {
 
 	ge := NewGameEngineFlagz()
 	mcts := NewMCTS()
-	m, _ := mcts.SuggestMove(ge, thinkTime)
+	m, stats := mcts.SuggestMove(ge, thinkTime)
 	if !ge.MakeMove(m) {
 		t.Fatal("Cannot make move")
 	}
+	t.Errorf("Iterations: %d, tree size: %d", stats.Iterations, stats.TreeSize)
 }
 
 func TestMCTSNoThinkTime(t *testing.T) {

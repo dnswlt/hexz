@@ -11,12 +11,23 @@ import (
 )
 
 type mcNode struct {
-	r, c     int
+	bits     uint32
 	children []mcNode
-	wins     float64
-	count    float64
+	wins     float32
+	count    float32
 	// bit-encoding of several values: in LSB order: [liveChildren(7), done(1), turn(1), cellType(1)]
-	bits uint16
+}
+
+func newMcNode(r, c int) mcNode {
+	return mcNode{bits: uint32(r<<16) | (uint32(c) << 24)}
+}
+
+func (n *mcNode) r() int {
+	return int((n.bits >> 16) & 0xff)
+}
+
+func (n *mcNode) c() int {
+	return int((n.bits >> 24) & 0xff)
 }
 
 func (n *mcNode) done() bool {
@@ -39,7 +50,7 @@ func (n *mcNode) setTurn(turn int) {
 		n.bits |= 1 << 9
 		return
 	}
-	n.bits &= ^uint16(1 << 9)
+	n.bits &= ^uint32(1 << 9)
 }
 
 func (n *mcNode) cellType() CellType {
@@ -61,7 +72,7 @@ func (n *mcNode) setLiveChildren(k int) {
 	if k > 127 {
 		panic(fmt.Sprintf("setLiveChildren called with large k: %d", k))
 	}
-	n.bits = (n.bits & ^uint16(0x7f)) | uint16(k)
+	n.bits = (n.bits & ^uint32(0x7f)) | uint32(k)
 }
 
 func (n *mcNode) decrLiveChildren() {
@@ -70,22 +81,22 @@ func (n *mcNode) decrLiveChildren() {
 
 func (n *mcNode) String() string {
 	return fmt.Sprintf("(%d,%d/%d) #cs:%d, wins:%f count:%f, done:%t, turn:%d, #lc:%d",
-		n.r, n.c, n.cellType(), len(n.children), n.wins, n.count, n.done(), n.turn(), n.liveChildren())
+		n.r(), n.c(), n.cellType(), len(n.children), n.wins, n.count, n.done(), n.turn(), n.liveChildren())
 }
 
-func (n *mcNode) Q() float64 {
+func (n *mcNode) Q() float32 {
 	if n.count == 0 {
 		return 0
 	}
 	return n.wins / n.count
 }
 
-func (n *mcNode) U(parentCount float64, uctFactor float64) float64 {
+func (n *mcNode) U(parentCount float32, uctFactor float32) float32 {
 	if n.count == 0.0 {
 		// Never played => infinitely interesting.
-		return math.MaxFloat64
+		return math.MaxFloat32
 	}
-	return n.wins/n.count + uctFactor*math.Sqrt(math.Log(parentCount)/n.count)
+	return n.wins/n.count + uctFactor*float32(math.Sqrt(math.Log(float64(parentCount))/float64(n.count)))
 }
 
 // Returns the number of leaf and branch nodes on each depth level, starting from 0 for the root.
@@ -123,7 +134,7 @@ func (root *mcNode) nodesPerDepth() (size int, leafNodes []int, branchNodes []in
 
 type MCTS struct {
 	MaxFlagPositions int // maximum number of (random) positions to consider for placing a flag in a single move.
-	UctFactor        float64
+	UctFactor        float32
 }
 
 func (mcts *MCTS) playRandomGame(ge SinglePlayerGameEngine, firstMove *mcNode) (winner int) {
@@ -131,8 +142,8 @@ func (mcts *MCTS) playRandomGame(ge SinglePlayerGameEngine, firstMove *mcNode) (
 	if !ge.MakeMove(GameEngineMove{
 		PlayerNum: firstMove.turn(),
 		Move:      b.Move,
-		Row:       firstMove.r,
-		Col:       firstMove.c,
+		Row:       firstMove.r(),
+		Col:       firstMove.c(),
 		CellType:  firstMove.cellType(),
 	}) {
 		panic("Invalid move: " + firstMove.String())
@@ -152,7 +163,7 @@ func (mcts *MCTS) playRandomGame(ge SinglePlayerGameEngine, firstMove *mcNode) (
 
 func (mcts *MCTS) getNextByUtc(node *mcNode) *mcNode {
 	var next *mcNode
-	maxUct := -1.0
+	maxUct := float32(-1.0)
 	for i := range node.children {
 		l := &node.children[i]
 		if l.done() {
@@ -177,11 +188,11 @@ func (mcts *MCTS) nextMoves(node *mcNode, b *Board) []mcNode {
 				continue
 			}
 			if f.isAvail(b.Turn) {
-				cs = append(cs, mcNode{r: r, c: c})
+				cs = append(cs, newMcNode(r, c))
 				cs[len(cs)-1].setTurn(b.Turn)
 			}
 			if hasFlag {
-				cs = append(cs, mcNode{r: r, c: c})
+				cs = append(cs, newMcNode(r, c))
 				cs[len(cs)-1].setTurn(b.Turn)
 				cs[len(cs)-1].setFlag()
 			}
@@ -227,7 +238,7 @@ func (mcts *MCTS) run(ge SinglePlayerGameEngine, path []*mcNode) (depth int) {
 		panic(fmt.Sprintf("No children left for node: %s", node.String()))
 	}
 	move := GameEngineMove{
-		PlayerNum: c.turn(), Move: b.Move, Row: c.r, Col: c.c, CellType: c.cellType(),
+		PlayerNum: c.turn(), Move: b.Move, Row: c.r(), Col: c.c(), CellType: c.cellType(),
 	}
 	if !ge.MakeMove(move) {
 		panic(fmt.Sprintf("Failed to make move %s", move.String()))
@@ -354,19 +365,19 @@ func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, max
 			best = c
 		}
 		stats.Moves[i] = MCTSMoveStats{
-			Row:        c.r,
-			Col:        c.c,
+			Row:        c.r(),
+			Col:        c.c(),
 			CellType:   c.cellType(),
 			Iterations: int(c.count),
-			U:          c.U(root.count, mcts.UctFactor),
-			Q:          c.Q(),
+			U:          float64(c.U(root.count, mcts.UctFactor)),
+			Q:          float64(c.Q()),
 		}
 	}
 	m := GameEngineMove{
 		PlayerNum: best.turn(),
 		Move:      move,
-		Row:       best.r,
-		Col:       best.c,
+		Row:       best.r(),
+		Col:       best.c(),
 		CellType:  best.cellType(),
 	}
 	return m, stats
