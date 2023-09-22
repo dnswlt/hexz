@@ -35,21 +35,19 @@ func main() {
 		}
 		gameState := &pb.GameState{}
 		var ge hexz.GameEngine
-		if len(a.EncodedGameState) == 0 {
-			// No game state sent: just create a new one for testing.
-			fmt.Printf("goWasmSuggestMove: no encoded game state received, building my own\n")
-			ge = hexz.NewGameEngineFlagz()
-		} else {
-			err = proto.Unmarshal(a.EncodedGameState, gameState)
-			if err != nil {
-				fmt.Printf("goWasmSuggestMove: called with invalid encoded proto: %s\n", err)
-				return nil
-			}
-			ge, err = hexz.DecodeGameEngine(gameState.EngineState)
-			if err != nil {
-				fmt.Printf("goWasmSuggestMove: cannot decode game engine: %s\n", err)
-				return nil
-			}
+		err = proto.Unmarshal(a.EncodedGameState, gameState)
+		if err != nil {
+			fmt.Printf("goWasmSuggestMove: called with invalid encoded proto: %s\n", err)
+			return nil
+		}
+		ge, err = hexz.DecodeGameEngine(gameState.EngineState)
+		if err != nil {
+			fmt.Printf("goWasmSuggestMove: cannot decode game engine: %s\n", err)
+			return nil
+		}
+		if ge.IsDone() {
+			fmt.Printf("goWasmSuggestMove: game is already done\n")
+			return nil
 		}
 		spge, ok := ge.(hexz.SinglePlayerGameEngine)
 		if !ok {

@@ -47,5 +47,5 @@ The vision is to run CPU players in the user's browser, not on the server.
 Totally WIP: to build the WASM module, run:
 
 ```
-GOOS=js GOARCH=wasm go build -o ./resources/wasm/hexz.wasm cmd/wasm/main.go
+GOOS=js GOARCH=wasm go build -o ./resources/wasm/hexz.wasm cmd/wasm/main.go && gzip -f ./resources/wasm/hexz.wasm
 ```

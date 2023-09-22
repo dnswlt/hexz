@@ -77,6 +77,10 @@ func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType 
 	if err != nil {
 		return "", err
 	}
+	players := []*pb.Player{{Id: string(p.Id), Name: p.Name}}
+	if singlePlayer {
+		players = append(players, &pb.Player{Id: "CPU", Name: "CPU"})
+	}
 	// Try to find an unused gameId. This loop should usually exit after the first iteration.
 	for i := 0; i < 100; i++ {
 		gameState := &pb.GameState{
@@ -87,7 +91,7 @@ func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType 
 				Type:      string(gameType),
 				CpuPlayer: singlePlayer,
 			},
-			Players:     []*pb.Player{{Id: string(p.Id), Name: p.Name}}, // More players are registed in handleSSE.
+			Players:     players, // More players are registed in handleSSE.
 			EngineState: engineState,
 		}
 		if ok, err := s.gameStore.StoreNewGame(ctx, gameState); err != nil {
