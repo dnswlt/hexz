@@ -10,3 +10,6 @@ dump.rdb
 *.wasm
 *.gz
 *.br
+*.log
+*.pem
+

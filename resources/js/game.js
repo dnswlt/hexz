@@ -670,7 +670,7 @@ async function makeCPUMove() {
     const gameStateResponse = await response.json()
     let suggestMoveResult = goWasmSuggestMove(JSON.stringify({
         encodedGameState: gameStateResponse.encodedGameState,
-        maxThinkTimeMillis: 1000,
+        maxThinkTimeMillis: 3000,
     }));
     if (suggestMoveResult) {
         const move = JSON.parse(suggestMoveResult);
