@@ -20,12 +20,9 @@ func BenchmarkMCTSPlayRandomGame(b *testing.B) {
 				}
 			}
 		}
-		mcts.playRandomGame(ge.Clone(), &mcNode{
-			r:        r,
-			c:        c,
-			cellType: cellFlag,
-			turn:     1,
-		})
+		root := &mcNode{r: r, c: c}
+		root.setFlag()
+		mcts.playRandomGame(ge.Clone(), root)
 	}
 }
 
@@ -48,6 +45,26 @@ func TestMCTSFull(t *testing.T) {
 		if !ge.MakeMove(m) {
 			t.Fatal("Cannot make move")
 		}
+	}
+}
+
+func TestMCTSBitOps(t *testing.T) {
+	m := mcNode{r: 0, c: 0}
+	m.setTurn(2)
+	if m.turn() != 2 {
+		t.Errorf("Wrong turn: %d", m.turn())
+	}
+	m.setFlag()
+	if m.cellType() != cellFlag {
+		t.Errorf("Flag not set")
+	}
+	m.setLiveChildren(17)
+	if m.liveChildren() != 17 {
+		t.Errorf("Wrong live children: %d", m.liveChildren())
+	}
+	m.decrLiveChildren()
+	if m.liveChildren() != 16 {
+		t.Errorf("Wrong live children: %d", m.liveChildren())
 	}
 }
 

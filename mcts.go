@@ -11,19 +11,66 @@ import (
 )
 
 type mcNode struct {
-	r, c         int
-	cellType     CellType
-	children     []*mcNode
-	wins         float64
-	count        float64
-	done         bool
-	turn         int
-	liveChildren int // Number of child nodes that are not done yet.
+	r, c     int
+	children []mcNode
+	wins     float64
+	count    float64
+	// bit-encoding of several values: in LSB order: [liveChildren(7), done(1), turn(1), cellType(1)]
+	bits uint16
+}
+
+func (n *mcNode) done() bool {
+	return n.bits&(1<<8) != 0
+}
+
+func (n *mcNode) setDone() {
+	n.bits |= (1 << 8)
+}
+
+func (n *mcNode) turn() int {
+	if n.bits&(1<<9) != 0 {
+		return 2
+	}
+	return 1
+}
+
+func (n *mcNode) setTurn(turn int) {
+	if turn == 2 {
+		n.bits |= 1 << 9
+		return
+	}
+	n.bits &= ^uint16(1 << 9)
+}
+
+func (n *mcNode) cellType() CellType {
+	if n.bits&(1<<10) != 0 {
+		return cellFlag
+	}
+	return cellNormal
+}
+
+func (n *mcNode) setFlag() {
+	n.bits |= 1 << 10
+}
+
+func (n *mcNode) liveChildren() int {
+	return int(n.bits & 0x7f)
+}
+
+func (n *mcNode) setLiveChildren(k int) {
+	if k > 127 {
+		panic(fmt.Sprintf("setLiveChildren called with large k: %d", k))
+	}
+	n.bits = (n.bits & ^uint16(0x7f)) | uint16(k)
+}
+
+func (n *mcNode) decrLiveChildren() {
+	n.bits--
 }
 
 func (n *mcNode) String() string {
 	return fmt.Sprintf("(%d,%d/%d) #cs:%d, wins:%f count:%f, done:%t, turn:%d, #lc:%d",
-		n.r, n.c, n.cellType, len(n.children), n.wins, n.count, n.done, n.turn, n.liveChildren)
+		n.r, n.c, n.cellType(), len(n.children), n.wins, n.count, n.done(), n.turn(), n.liveChildren())
 }
 
 func (n *mcNode) Q() float64 {
@@ -67,8 +114,8 @@ func (root *mcNode) nodesPerDepth() (size int, leafNodes []int, branchNodes []in
 		} else {
 			bs[n.d]++
 		}
-		for _, c := range n.n.children {
-			q = append(q, ni{c, n.d + 1})
+		for i := range n.n.children {
+			q = append(q, ni{&n.n.children[i], n.d + 1})
 		}
 	}
 	return s, ls, bs
@@ -77,22 +124,18 @@ func (root *mcNode) nodesPerDepth() (size int, leafNodes []int, branchNodes []in
 type MCTS struct {
 	MaxFlagPositions int // maximum number of (random) positions to consider for placing a flag in a single move.
 	UctFactor        float64
-	FlagsFirst       bool // If true, flags will be played whenever possible.
-	ReuseTree        bool
-	root             *mcNode
-	rootMove         int // Move number corresponding to the state at root.
 }
 
 func (mcts *MCTS) playRandomGame(ge SinglePlayerGameEngine, firstMove *mcNode) (winner int) {
 	b := ge.Board()
 	if !ge.MakeMove(GameEngineMove{
-		PlayerNum: firstMove.turn,
+		PlayerNum: firstMove.turn(),
 		Move:      b.Move,
 		Row:       firstMove.r,
 		Col:       firstMove.c,
-		CellType:  firstMove.cellType,
+		CellType:  firstMove.cellType(),
 	}) {
-		panic("Invalid move")
+		panic("Invalid move: " + firstMove.String())
 	}
 	for !ge.IsDone() {
 		m, err := ge.RandomMove()
@@ -110,8 +153,9 @@ func (mcts *MCTS) playRandomGame(ge SinglePlayerGameEngine, firstMove *mcNode) (
 func (mcts *MCTS) getNextByUtc(node *mcNode) *mcNode {
 	var next *mcNode
 	maxUct := -1.0
-	for _, l := range node.children {
-		if l.done {
+	for i := range node.children {
+		l := &node.children[i]
+		if l.done() {
 			continue
 		}
 		uct := l.U(node.count, mcts.UctFactor)
@@ -123,18 +167,9 @@ func (mcts *MCTS) getNextByUtc(node *mcNode) *mcNode {
 	return next
 }
 
-func (mcts *MCTS) nextMoves(node *mcNode, b *Board) []*mcNode {
-	cs := make([]*mcNode, 0, 16)
+func (mcts *MCTS) nextMoves(node *mcNode, b *Board) []mcNode {
+	cs := make([]mcNode, 0, 64)
 	hasFlag := b.Resources[b.Turn-1].NumPieces[cellFlag] > 0
-	maxFlags := mcts.MaxFlagPositions
-	if maxFlags <= 0 {
-		maxFlags = len(b.FlatFields)
-	}
-	var flagMoves []*mcNode
-	if hasFlag {
-		flagMoves = make([]*mcNode, maxFlags)
-	}
-	nFlags := 0
 	for r := 0; r < len(b.Fields); r++ {
 		for c := 0; c < len(b.Fields[r]); c++ {
 			f := &b.Fields[r][c]
@@ -142,39 +177,22 @@ func (mcts *MCTS) nextMoves(node *mcNode, b *Board) []*mcNode {
 				continue
 			}
 			if f.isAvail(b.Turn) {
-				cs = append(cs, &mcNode{
-					r: r, c: c, turn: b.Turn,
-				})
+				cs = append(cs, mcNode{r: r, c: c})
+				cs[len(cs)-1].setTurn(b.Turn)
 			}
-			if hasFlag && (xrand.Float64() < float64(maxFlags)/(float64(nFlags)+1)) {
-				// reservoir sampling to pick maxFlags with equal probability among all possibilities.
-				k := nFlags
-				if k >= maxFlags {
-					k = xrand.Intn(maxFlags)
-				}
-				flagMoves[k] = &mcNode{
-					r: r, c: c, turn: b.Turn, cellType: cellFlag,
-				}
-				nFlags++
+			if hasFlag {
+				cs = append(cs, mcNode{r: r, c: c})
+				cs[len(cs)-1].setTurn(b.Turn)
+				cs[len(cs)-1].setFlag()
 			}
 		}
 	}
-	if nFlags > maxFlags {
-		nFlags = maxFlags
-	}
-	if nFlags > 0 && mcts.FlagsFirst {
-		// Forced play of flags
-		return flagMoves[:nFlags]
-	}
-	if nFlags == 0 {
-		return cs
-	}
-	return append(cs, flagMoves[:nFlags]...)
+	return cs
 }
 
 func (mcts *MCTS) backpropagate(path []*mcNode, winner int) {
 	for i := len(path) - 1; i >= 0; i-- {
-		if path[i].turn == winner {
+		if path[i].turn() == winner {
 			path[i].wins += 1
 		} else if winner == 0 {
 			path[i].wins += 0.5
@@ -194,9 +212,9 @@ func (mcts *MCTS) run(ge SinglePlayerGameEngine, path []*mcNode) (depth int) {
 			panic(fmt.Sprintf("No next moves on allegedly non-final node: %s", node.String()))
 		}
 		node.children = cs
-		node.liveChildren = len(cs)
+		node.setLiveChildren(len(cs))
 		// Play a random child (rollout)
-		c := cs[xrand.Intn(len(cs))]
+		c := &cs[xrand.Intn(len(cs))]
 		winner := mcts.playRandomGame(ge, c)
 		path = append(path, c)
 		mcts.backpropagate(path, winner)
@@ -209,7 +227,7 @@ func (mcts *MCTS) run(ge SinglePlayerGameEngine, path []*mcNode) (depth int) {
 		panic(fmt.Sprintf("No children left for node: %s", node.String()))
 	}
 	move := GameEngineMove{
-		PlayerNum: c.turn, Move: b.Move, Row: c.r, Col: c.c, CellType: c.cellType,
+		PlayerNum: c.turn(), Move: b.Move, Row: c.r, Col: c.c, CellType: c.cellType(),
 	}
 	if !ge.MakeMove(move) {
 		panic(fmt.Sprintf("Failed to make move %s", move.String()))
@@ -217,7 +235,7 @@ func (mcts *MCTS) run(ge SinglePlayerGameEngine, path []*mcNode) (depth int) {
 	path = append(path, c)
 	if ge.IsDone() {
 		// This was the last move. Propagate the result up.
-		c.done = true
+		c.setDone()
 		winner := ge.Winner()
 		mcts.backpropagate(path, winner)
 		depth = len(path)
@@ -225,11 +243,11 @@ func (mcts *MCTS) run(ge SinglePlayerGameEngine, path []*mcNode) (depth int) {
 		// Not done: descend to next level
 		depth = mcts.run(ge, path)
 	}
-	if c.done {
+	if c.done() {
 		// Propagate up the fact that child is done to avoid revisiting it.
-		node.liveChildren--
-		if node.liveChildren == 0 {
-			node.done = true
+		node.decrLiveChildren()
+		if node.liveChildren() == 0 {
+			node.setDone()
 		}
 	}
 	return
@@ -315,87 +333,51 @@ func NewMCTS() *MCTS {
 	return &MCTS{
 		MaxFlagPositions: -1, // Unlimited
 		UctFactor:        1.0,
-		FlagsFirst:       false,
-		ReuseTree:        true,
 	}
 }
 
-func (mcts *MCTS) bestNextMoveWithStats(n *mcNode, elapsed time.Duration, maxDepth int, move int) (GameEngineMove, *MCTSStats) {
-	size, leafNodes, branchNodes := mcts.root.nodesPerDepth()
+func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, maxDepth int, move int) (GameEngineMove, *MCTSStats) {
+	size, leafNodes, branchNodes := root.nodesPerDepth()
 	stats := &MCTSStats{
-		Iterations:    int(n.count),
+		Iterations:    int(root.count),
 		MaxDepth:      maxDepth,
 		Elapsed:       elapsed,
-		FullyExplored: n.done,
+		FullyExplored: root.done(),
 		TreeSize:      size,
 		LeafNodes:     leafNodes,
 		BranchNodes:   branchNodes,
-		Moves:         make([]MCTSMoveStats, len(n.children)),
+		Moves:         make([]MCTSMoveStats, len(root.children)),
 	}
-	var best *mcNode
-	for i, c := range n.children {
-		if best == nil || c.Q() > best.Q() {
+	best := root.children[0]
+	for i, c := range root.children[1:] {
+		if c.Q() > best.Q() {
 			best = c
 		}
 		stats.Moves[i] = MCTSMoveStats{
 			Row:        c.r,
 			Col:        c.c,
-			CellType:   c.cellType,
+			CellType:   c.cellType(),
 			Iterations: int(c.count),
-			U:          c.U(n.count, mcts.UctFactor),
+			U:          c.U(root.count, mcts.UctFactor),
 			Q:          c.Q(),
 		}
 	}
 	m := GameEngineMove{
-		PlayerNum: best.turn,
+		PlayerNum: best.turn(),
 		Move:      move,
 		Row:       best.r,
 		Col:       best.c,
-		CellType:  best.cellType,
+		CellType:  best.cellType(),
 	}
 	return m, stats
 }
 
 func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration time.Duration) (GameEngineMove, *MCTSStats) {
-	var root *mcNode
-	moveHist := gameEngine.MoveHistory()
-	if !mcts.ReuseTree || mcts.root == nil || len(moveHist) <= mcts.rootMove {
-		// Start a new root.
-		root = &mcNode{turn: gameEngine.Board().Turn}
-	} else {
-		// Try to find and resume a subtree for the current state of the board.
-		r := mcts.root
-		ok := true
-		for i := 0; i < len(moveHist)-mcts.rootMove; i++ {
-			found := false
-			for _, c := range r.children {
-				if c.r == moveHist[mcts.rootMove+i].Row &&
-					c.c == moveHist[mcts.rootMove+i].Col &&
-					c.turn == moveHist[mcts.rootMove+i].PlayerNum &&
-					c.cellType == moveHist[mcts.rootMove+i].CellType {
-					r = c
-					found = true
-					break
-				}
-			}
-			if !found {
-				ok = false
-				break
-			}
-		}
-		if ok {
-			root = r
-		} else {
-			root = &mcNode{turn: gameEngine.Board().Turn}
-		}
-	}
-	if mcts.ReuseTree {
-		mcts.root = root
-		mcts.rootMove = gameEngine.Board().Move
-	}
+	root := &mcNode{}
+	root.setTurn(gameEngine.Board().Turn)
 	// If we are reusing subtrees, we might already have fully explored
 	// the subtree. In that case, pick the best child immediately
-	if root.done {
+	if root.done() {
 		if len(root.children) == 0 {
 			panic("No children, but root is done")
 		}
@@ -415,7 +397,7 @@ func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration tim
 		if depth > maxDepth {
 			maxDepth = depth
 		}
-		if root.done {
+		if root.done() {
 			// Board completely explored
 			break
 		}
