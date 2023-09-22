@@ -45,6 +45,7 @@ const gstate = {
     // Optional information about the scores a CPU assigns to each move.
     moveScores: null,
     renderMoveScores: false,
+    clientSideCPUPlayer: false,
 };
 
 // Gets dynamically updated depending on the canvas size.
@@ -108,6 +109,10 @@ function handleServerEvent(sse, serverEvent) {
         let menurow = document.getElementById("menurow-undo-redo");
         menurow.style.display = "none";
     }
+    if (serverEvent?.gameInfo?.clientSideCPUPlayer) {
+        gstate.clientSideCPUPlayer = true;
+        initWASM();
+    }
     if (serverEvent.board != null) {
         // new board received.
         gstate.board = serverEvent.board;
@@ -117,6 +122,10 @@ function handleServerEvent(sse, serverEvent) {
         redraw();
         updateTurnInfo();
         updateScore();
+        if (gstate.clientSideCPUPlayer && gstate.role == 1 && gstate.board.turn == 2) {
+            // We are P1, it's CPU's turn.
+            makeCPUMove();
+        }
         if (gstate.role > 0 && serverEvent.winner > 0) {
             // Show an animation if a winner was just announced.
             setTimeout(function () {
@@ -638,4 +647,47 @@ function showAnimation(animationFunc) {
 
 function reset() {
     redraw();
+}
+
+
+// CPU Player in WASM.
+
+let wasmInitialized = false;
+async function initWASM() {
+    if (wasmInitialized) {
+        return;
+    }
+    wasmInitialized = true;
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch(`/hexz/static/wasm/hexz.wasm?t=${Date.now()}`), go.importObject).then((result) => {
+        const wasm = result.instance;
+        go.run(wasm);
+    });
+}
+
+async function makeCPUMove() {
+    const response = await fetch(`/hexz/state/${gameId()}`);
+    const gameStateResponse = await response.json()
+    let suggestMoveResult = goWasmSuggestMove(JSON.stringify({
+        encodedGameState: gameStateResponse.encodedGameState,
+        maxThinkTimeMillis: 1000,
+    }));
+    if (suggestMoveResult) {
+        const move = JSON.parse(suggestMoveResult);
+        console.log("CPU suggested move:", move);
+        const moveResponse = await fetch(`/hexz/move/${gameId()}`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(move.moveRequest),
+        });
+        if (moveResponse.ok) {
+            console.log("Successfully made a move!");
+        } else {
+            console.log("Failed to make a move: ", moveResponse.statusText);
+        }
+    } else {
+        console.log("CPU did not find a move.");
+    }
 }

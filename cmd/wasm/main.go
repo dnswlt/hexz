@@ -59,7 +59,6 @@ func main() {
 		mcts := hexz.NewMCTS()
 		maxThinkTime := time.Duration(a.MaxThinkTimeMillis) * time.Millisecond
 		mv, _ := mcts.SuggestMove(spge, maxThinkTime)
-		fmt.Printf("goWasmSuggestMove call was valid. Happy birthday!\n")
 		res, err := json.Marshal(suggestMoveResult{
 			MoveRequest: hexz.MoveRequest{
 				Move: mv.Move,

@@ -1,6 +1,7 @@
 package hexz
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,7 +14,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lpar/gzipped/v2"
+
 	pb "github.com/dnswlt/hexz/hexzpb"
+	"google.golang.org/protobuf/proto"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -77,21 +81,18 @@ func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType 
 	for i := 0; i < 100; i++ {
 		gameState := &pb.GameState{
 			GameInfo: &pb.GameInfo{
-				Id:      GenerateGameId(),
-				Host:    p.Name,
-				Started: tpb.Now(),
-				Type:    string(gameType),
+				Id:        GenerateGameId(),
+				Host:      p.Name,
+				Started:   tpb.Now(),
+				Type:      string(gameType),
+				CpuPlayer: singlePlayer,
 			},
 			Players:     []*pb.Player{{Id: string(p.Id), Name: p.Name}}, // More players are registed in handleSSE.
 			EngineState: engineState,
 		}
-		// Keep the game in Redis for 24 hours max.
-		var ok bool
-		ok, err = s.gameStore.StoreNewGame(ctx, gameState)
-		if err != nil {
+		if ok, err := s.gameStore.StoreNewGame(ctx, gameState); err != nil {
 			return "", err
-		}
-		if ok {
+		} else if ok {
 			return gameState.GameInfo.Id, nil
 		}
 	}
@@ -282,6 +283,52 @@ func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 	s.serveHtmlFile(w, gameHtmlFilename)
 }
 
+// Download the full game state as an encoded protobuf. This is used to run a CPU player in
+// WASM in the user's browser.
+func (s *StatelessServer) handleState(w http.ResponseWriter, r *http.Request) {
+	p, err := s.lookupPlayerFromCookie(r)
+	if err != nil {
+		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
+		return
+	}
+	gameId, err := gameIdFromPath(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
+		return
+	}
+	gameState, err := s.gameStore.LookupGame(r.Context(), gameId)
+	if err != nil {
+		// Game does not exist: offer to start a new game.
+		http.Error(w, "No such game", http.StatusNotFound)
+		return
+	}
+	if gameState.PlayerNum(string(p.Id)) == 0 {
+		http.Error(w, "Only players can request the game state", http.StatusForbidden)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	// Game state can change at any time, so don't cache it.
+	w.Header().Set("Cache-Control", "no-cache")
+	var enc *json.Encoder
+	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		gw := gzip.NewWriter(w)
+		defer gw.Close()
+		enc = json.NewEncoder(gw)
+	} else {
+		enc = json.NewEncoder(w)
+	}
+	encodedGameState, err := proto.Marshal(gameState)
+	if err != nil {
+		http.Error(w, "marshal error", http.StatusInternalServerError)
+		errorLog.Print("Cannot marshal GameState: " + err.Error())
+	}
+	enc.Encode(GameStateResponse{
+		GameId:           gameId,
+		EncodedGameState: encodedGameState,
+	})
+}
+
 const (
 	sseEventPlayerJoined = "player.joined"
 	sseEventGameUpdated  = "game.updated"
@@ -329,10 +376,13 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 	}
 	// Is it the player's turn?
 	pNum := gameState.PlayerNum(string(p.Id))
-	if ge.Board().Turn != pNum {
+	if ge.Board().Turn != pNum && !gameState.GetGameInfo().GetCpuPlayer() {
 		http.Error(w, "player cannot make a move", http.StatusPreconditionFailed)
 		return
+	} else if pNum == 1 && gameState.GetGameInfo().GetCpuPlayer() && ge.Board().Turn == 2 {
+		pNum = 2 // Pretend to be the CPU player.
 	}
+
 	if !ge.MakeMove(GameEngineMove{
 		PlayerNum: pNum,
 		Move:      req.Move,
@@ -395,8 +445,9 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		PlayerNames:   gameState.PlayerNames(),
 		Announcements: []string{fmt.Sprintf("Welcome %s!", p.Name)},
 		GameInfo: &ServerEventGameInfo{
-			ValidCellTypes: ge.ValidCellTypes(),
-			GameType:       ge.GameType(),
+			ValidCellTypes:      ge.ValidCellTypes(),
+			GameType:            ge.GameType(),
+			ClientSideCPUPlayer: gameState.GameInfo.CpuPlayer,
 		},
 		DisableUndo: s.config.DisableUndo,
 	})
@@ -500,12 +551,13 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	mux := &http.ServeMux{}
 	// Static resources (images, JavaScript, ...) live under DocumentRoot.
 	mux.Handle("/hexz/static/", http.StripPrefix("/hexz/static/",
-		http.FileServer(http.Dir(s.config.DocumentRoot))))
+		gzipped.FileServer(gzipped.Dir(s.config.DocumentRoot))))
 	// POST method API
 	mux.HandleFunc("/hexz/login", postHandlerFunc(s.handleLoginRequest))
 	mux.HandleFunc("/hexz/new", postHandlerFunc(s.handleNewGame))
 	mux.HandleFunc("/hexz/move/", postHandlerFunc(s.handleMove))
 	mux.HandleFunc("/hexz/reset/", postHandlerFunc(s.handleReset))
+	mux.HandleFunc("/hexz/state/", s.handleState)
 	// mux.HandleFunc("/hexz/undo/", postHandlerFunc(s.handleUndo))
 	// mux.HandleFunc("/hexz/redo/", postHandlerFunc(s.handleRedo))
 	// Server-sent Event handling

@@ -22,10 +22,12 @@ type ServerEvent struct {
 	DebugMessage  string   `json:"debugMessage"`
 	// Number of the player that wins. 0 if no winner yet or draw.
 	Winner int `json:"winner,omitempty"`
+	// Only sent in the first event to clients.
+	GameInfo *ServerEventGameInfo `json:"gameInfo,omitempty"`
+	// If true, the client should not display undo/redo buttons.
+	DisableUndo bool `json:"disableUndo,omitempty"`
 	// Signals to clients that this is the last event they will receive.
-	LastEvent   bool                 `json:"lastEvent"`
-	GameInfo    *ServerEventGameInfo `json:"gameInfo,omitempty"`
-	DisableUndo bool                 `json:"disableUndo,omitempty"`
+	LastEvent bool `json:"lastEvent"`
 }
 
 // Sent in an initial message to clients.
@@ -34,6 +36,9 @@ type ServerEventGameInfo struct {
 	ValidCellTypes []CellType `json:"validCellTypes"`
 	// The type of game we're playing.
 	GameType GameType `json:"gameType"`
+	// True if this is a game of one player against a CPU player, which
+	// should be run on the client side.
+	ClientSideCPUPlayer bool `json:"clientSideCPUPlayer"`
 }
 
 // A player's or spectator's view of the board.
@@ -128,6 +133,20 @@ type RedoRequest struct {
 	Move int `json:"move"`
 }
 
+// Used in /hexz/status responses.
+type GameStateResponse struct {
+	GameId           string `json:"gameId"`
+	EncodedGameState []byte `json:"encodedGameState"`
+}
+
+// Used in responses to list active games (/hexz/gamez).
+type GameInfo struct {
+	Id       string    `json:"id"`
+	Host     string    `json:"host"`
+	Started  time.Time `json:"started"`
+	GameType GameType  `json:"gameType"`
+}
+
 type StatuszCounter struct {
 	Name  string `json:"name"`
 	Value int64  `json:"value"`
@@ -152,12 +171,4 @@ type StatuszResponse struct {
 	NumLoggedInPlayers *int              `json:"numLoggedInPlayers,omitempty"` // pointer to make this one optional (remote store does not support count).
 	Counters           []StatuszCounter  `json:"counters"`
 	Distributions      []*StatuszDistrib `json:"distributions"`
-}
-
-// Used in responses to list active games (/hexz/gamez).
-type GameInfo struct {
-	Id       string    `json:"id"`
-	Host     string    `json:"host"`
-	Started  time.Time `json:"started"`
-	GameType GameType  `json:"gameType"`
 }

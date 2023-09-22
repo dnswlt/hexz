@@ -811,8 +811,8 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		defer gz.Close()
 		z = gz
 	}
-	dec := json.NewEncoder(z)
-	err = dec.Encode(NewGameHistoryResponse(hist))
+	enc := json.NewEncoder(z)
+	err = enc.Encode(NewGameHistoryResponse(hist))
 	if err != nil {
 		http.Error(w, "", http.StatusInternalServerError)
 		errorLog.Fatalf("Failed to marshal history response: %s", err)

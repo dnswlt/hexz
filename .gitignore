@@ -8,3 +8,5 @@ _logins.json
 /hist
 dump.rdb
 *.wasm
+*.gz
+*.br
