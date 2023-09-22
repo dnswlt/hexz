@@ -187,9 +187,9 @@ func NewGameEngine(gameType GameType) GameEngine {
 	return ge
 }
 
-func DecodeGameEngine(s *pb.GameState) (GameEngine, error) {
+func DecodeGameEngine(s *pb.GameEngineState) (GameEngine, error) {
 	var g GameEngine
-	switch s.EngineState.State.(type) {
+	switch s.State.(type) {
 	case *pb.GameEngineState_Flagz:
 		g = NewGameEngineFlagz()
 	case *pb.GameEngineState_Classic:
@@ -199,7 +199,7 @@ func DecodeGameEngine(s *pb.GameState) (GameEngine, error) {
 	default:
 		panic("unhandled game type")
 	}
-	if err := g.Decode(s.EngineState); err != nil {
+	if err := g.Decode(s); err != nil {
 		return nil, err
 	}
 	return g, nil

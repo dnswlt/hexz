@@ -7,7 +7,14 @@
             WebAssembly.instantiateStreaming(fetch("/hexz/static/wasm/hexz.wasm"), go.importObject).then((result) => {
                 wasm = result.instance;
                 go.run(wasm);
-                console.log(goWasmFoo(JSON.stringify({a: "foo", b: -1})));
+                let move = goWasmSuggestMove(JSON.stringify({
+                    encodedGameState: "",
+                    maxThinkTimeMillis: 1000,
+                }));
+                if (move) {
+                    console.log(JSON.parse(move));
+                }
+                // console.log(goWasmSuggestMove(JSON.stringify({encodedGameState: "a2FwdXR0Cg=="})));
             });
         </script>
     </head>

@@ -4,29 +4,76 @@ import (
 	"encoding/json"
 	"fmt"
 	"syscall/js"
+	"time"
+
+	"github.com/dnswlt/hexz"
+	pb "github.com/dnswlt/hexz/hexzpb"
+	"google.golang.org/protobuf/proto"
 )
 
-type jsArg struct {
-	A string `json:"a"`
-	B int    `json:"b"`
+type suggestMoveArgs struct {
+	EncodedGameState   []byte `json:"encodedGameState"`
+	MaxThinkTimeMillis int    `json:"maxThinkTimeMillis"`
+}
+
+type suggestMoveResult struct {
+	MoveRequest hexz.MoveRequest `json:"moveRequest"`
 }
 
 func main() {
 	fmt.Printf("This line was written by the goWASM Heavy Metal Superengine!!!\n")
-	goWasmFoo := js.FuncOf(func(this js.Value, args []js.Value) any {
+	goWasmSuggestMove := js.FuncOf(func(this js.Value, args []js.Value) any {
 		if len(args) != 1 || args[0].Type() != js.TypeString {
-			fmt.Printf("goWasmFoo was called with invalid arguments [%v]%v\n", this, args)
-			return false
+			fmt.Printf("goWasmSuggestMove: called with invalid arguments [%v]%v\n", this, args)
+			return nil
 		}
-		var m jsArg
-		if err := json.Unmarshal([]byte(args[0].String()), &m); err != nil {
-			fmt.Printf("goWasmFoo was called with invalid JSON: %v\n", args)
-			return false
+		var a suggestMoveArgs
+		err := json.Unmarshal([]byte(args[0].String()), &a)
+		if err != nil {
+			fmt.Printf("goWasmSuggestMove: called with invalid JSON: %s\n", err)
+			return nil
 		}
-		fmt.Printf("goWasmFoo was called with valid JSON. Happy birthday! %v\n", m)
-		return true
+		gameState := &pb.GameState{}
+		var ge hexz.GameEngine
+		if len(a.EncodedGameState) == 0 {
+			// No game state sent: just create a new one for testing.
+			fmt.Printf("goWasmSuggestMove: no encoded game state received, building my own\n")
+			ge = hexz.NewGameEngineFlagz()
+		} else {
+			err = proto.Unmarshal(a.EncodedGameState, gameState)
+			if err != nil {
+				fmt.Printf("goWasmSuggestMove: called with invalid encoded proto: %s\n", err)
+				return nil
+			}
+			ge, err = hexz.DecodeGameEngine(gameState.EngineState)
+			if err != nil {
+				fmt.Printf("goWasmSuggestMove: cannot decode game engine: %s\n", err)
+				return nil
+			}
+		}
+		spge, ok := ge.(hexz.SinglePlayerGameEngine)
+		if !ok {
+			fmt.Printf("goWasmSuggestMove: game engine %T is not a single player game engine\n", ge)
+			return nil
+		}
+		mcts := hexz.NewMCTS()
+		maxThinkTime := time.Duration(a.MaxThinkTimeMillis) * time.Millisecond
+		mv, _ := mcts.SuggestMove(spge, maxThinkTime)
+		fmt.Printf("goWasmSuggestMove call was valid. Happy birthday!\n")
+		res, err := json.Marshal(suggestMoveResult{
+			MoveRequest: hexz.MoveRequest{
+				Move: mv.Move,
+				Row:  mv.Row,
+				Col:  mv.Col,
+				Type: mv.CellType,
+			}})
+		if err != nil {
+			panic("Cannot marshal result: " + err.Error())
+		}
+		return string(res)
 	})
-	js.Global().Set("goWasmFoo", goWasmFoo)
+	js.Global().Set("goWasmSuggestMove", goWasmSuggestMove)
+
 	<-make(chan bool)
-	goWasmFoo.Release()
+	goWasmSuggestMove.Release()
 }

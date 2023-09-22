@@ -292,7 +292,7 @@ func (s *StatelessServer) loadGame(ctx context.Context, gameId string) (*pb.Game
 	if err != nil {
 		return nil, nil, err
 	}
-	ge, err := DecodeGameEngine(gameState)
+	ge, err := DecodeGameEngine(gameState.EngineState)
 	if err != nil {
 		errorLog.Printf("Cannot decode game engine for game %s: %s", gameId, err)
 		return nil, nil, err
