@@ -99,7 +99,7 @@ func (mcts *MCTS) playRandomGame(ge SinglePlayerGameEngine, firstMove *mcNode) (
 		if err != nil {
 			log.Fatalf("Could not suggest a move: %s", err.Error())
 		}
-		if !ge.MakeMove(*m) {
+		if !ge.MakeMove(m) {
 			log.Fatalf("Could not make a move")
 			return
 		}

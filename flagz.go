@@ -3,7 +3,6 @@ package hexz
 // The Flagz game. The best one we have.
 
 import (
-	"encoding/json"
 	"fmt"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
@@ -227,7 +226,7 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 	b.Turn = 3 - b.Turn // Usually it's the other player's turn. If not, recomputeState will fix that.
 	b.Move++
 	g.recomputeState()
-	g.Moves = append(g.Moves, m)
+	// g.Moves = append(g.Moves, m)
 	return true
 }
 
@@ -296,9 +295,9 @@ func (g *GameEngineFlagz) Winner() (playerNum int) {
 
 // Suggests a move for the player whose turn it is.
 // Uses a random strategy. Probably not very smart.
-func (g *GameEngineFlagz) RandomMove() (*GameEngineMove, error) {
+func (g *GameEngineFlagz) RandomMove() (GameEngineMove, error) {
 	if g.B.State != Running {
-		return nil, fmt.Errorf("game is not running")
+		return GameEngineMove{}, fmt.Errorf("game is not running")
 	}
 	b := g.B
 	pIdx := b.Turn - 1
@@ -316,7 +315,7 @@ func (g *GameEngineFlagz) RandomMove() (*GameEngineMove, error) {
 			for c := range b.Fields[r] {
 				if !b.Fields[r][c].occupied() {
 					if n == nthFlag {
-						return &GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellFlag}, nil
+						return GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellFlag}, nil
 					}
 					n++
 				}
@@ -331,15 +330,14 @@ func (g *GameEngineFlagz) RandomMove() (*GameEngineMove, error) {
 				f := &b.Fields[r][c]
 				if !f.occupied() && f.isAvail(b.Turn) {
 					if n == nthMove {
-						return &GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellNormal}, nil
+						return GameEngineMove{PlayerNum: b.Turn, Move: b.Move, Row: r, Col: c, CellType: cellNormal}, nil
 					}
 					n++
 				}
 			}
 		}
 	}
-	data, _ := json.MarshalIndent(g, "", "  ")
-	panic(fmt.Sprintf("no legal move found: %v", string(data)))
+	return GameEngineMove{}, fmt.Errorf("no legal move found")
 }
 
 func (g *GameEngineFlagz) ValidMoves() []*GameEngineMove {

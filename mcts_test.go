@@ -51,6 +51,21 @@ func TestMCTSFull(t *testing.T) {
 	}
 }
 
+func TestMCTSSingleMove(t *testing.T) {
+	// This test makes a single move with a lot of think time. Mostly useful for memory profiling.
+	if testing.Short() {
+		t.Skip("Don't run MCTS simulation in -short mode.")
+	}
+	thinkTime := time.Duration(5000) * time.Millisecond
+
+	ge := NewGameEngineFlagz()
+	mcts := NewMCTS()
+	m, _ := mcts.SuggestMove(ge, thinkTime)
+	if !ge.MakeMove(m) {
+		t.Fatal("Cannot make move")
+	}
+}
+
 func TestMCTSNoThinkTime(t *testing.T) {
 	// Even with zero and negative think time, MCTS should yield a valid move suggestion.
 	ge := NewGameEngineFlagz()

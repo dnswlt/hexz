@@ -70,7 +70,7 @@ func BenchmarkPlayFlagzGame(b *testing.B) {
 			if err != nil {
 				b.Fatal("Could not suggest a move:", err.Error())
 			}
-			if !ge.MakeMove(*m) {
+			if !ge.MakeMove(m) {
 				b.Fatal("Could not make a move")
 				return
 			}
@@ -110,7 +110,7 @@ func TestCompareCellValueByRandomGamePlay(t *testing.T) {
 					if err != nil {
 						t.Fatal("Could not suggest a move:", err.Error())
 					}
-					if !ge.MakeMove(*m) {
+					if !ge.MakeMove(m) {
 						t.Fatal("Could not make a move")
 						return
 					}
@@ -209,7 +209,7 @@ func TestCompareCellValueByCharacteristic(t *testing.T) {
 			if err != nil {
 				t.Fatal("Could not suggest a move:", err.Error())
 			}
-			if !ge.MakeMove(*m) {
+			if !ge.MakeMove(m) {
 				t.Fatal("Could not make a move")
 				return
 			}

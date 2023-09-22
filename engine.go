@@ -42,7 +42,7 @@ type GameEngine interface {
 type SinglePlayerGameEngine interface {
 	GameEngine
 	// Returns a random move that can be played in the engine's current state.
-	RandomMove() (*GameEngineMove, error)
+	RandomMove() (GameEngineMove, error)
 	// Returns all valid moves that can be played in the engine's current state.
 	ValidMoves() []*GameEngineMove
 	// Returns a clone of the engine, e.g. to use in MCTS.
