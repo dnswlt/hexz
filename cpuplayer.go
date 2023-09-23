@@ -13,7 +13,7 @@ import (
 )
 
 type CPUPlayer interface {
-	SuggestMove(ctx context.Context, ge SinglePlayerGameEngine) (ControlEvent, error)
+	SuggestMove(ctx context.Context, ge *GameEngineFlagz) (ControlEvent, error)
 	MaxThinkTime() time.Duration
 }
 
@@ -40,8 +40,8 @@ func (cpu *LocalCPUPlayer) MaxThinkTime() time.Duration {
 
 // Calculates a suggested move (using MCTS) and sends a ControlEventMove to respCh.
 // This method should be called in a separate goroutine.
-// The SinglePlayerGameEngine passed in will not be modified.
-func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge SinglePlayerGameEngine) (ControlEvent, error) {
+// The GameEngineFlagz ge will not be modified.
+func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz) (ControlEvent, error) {
 	t := cpu.thinkTime
 	if t > cpu.maxThinkTime {
 		t = cpu.maxThinkTime
@@ -94,12 +94,7 @@ const (
 	HttpHeaderXRequestDeadline = "X-Request-Deadline"
 )
 
-func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, spge SinglePlayerGameEngine) (ControlEvent, error) {
-	// For now, only flagz engines are supported.
-	ge, ok := spge.(*GameEngineFlagz)
-	if !ok {
-		return nil, fmt.Errorf("remote CPU player only supports flagz engines")
-	}
+func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz) (ControlEvent, error) {
 	st, err := ge.Encode()
 	if err != nil {
 		return nil, err
@@ -147,7 +142,7 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, spge SinglePlayerGa
 
 type SuggestMoveRequest struct {
 	MaxThinkTime time.Duration `json:"maxThinkTime"`
-	// Encoded game engine state (obtained via SinglePlayerGameEngine.Encode).
+	// Game engine state, as a marshalled pb.GameEngineState.
 	GameEngineState []byte `json:"gameEngineState"`
 }
 
@@ -192,7 +187,7 @@ func (s *CPUPlayerServer) handleSuggestMove(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "invalid game engine state", http.StatusBadRequest)
 		return
 	}
-	var ge SinglePlayerGameEngine
+	var ge *GameEngineFlagz
 	switch state.State.(type) {
 	case *pb.GameEngineState_Flagz:
 		ge = NewGameEngineFlagz()

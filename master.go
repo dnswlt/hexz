@@ -168,7 +168,7 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 	mr := e.moveRequest
 	if m.gameEngine.MakeMove(GameEngineMove{PlayerNum: p.playerNum, Move: mr.Move, Row: mr.Row, Col: mr.Col, CellType: mr.Type}) {
 		if !m.s.config.DisableUndo {
-			if he, ok := m.gameEngine.(SinglePlayerGameEngine); ok {
+			if he, ok := m.gameEngine.(*GameEngineFlagz); ok {
 				m.undo = append(m.undo, he.Clone())
 				m.redo = nil
 			}
@@ -190,7 +190,7 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 		if m.cpuPlayer != nil && m.gameEngine.Board().Turn != 1 && !m.gameEngine.IsDone() {
 			// Ask CPU player to make a move.
 			go func(ctx context.Context) {
-				mv, err := m.cpuPlayer.SuggestMove(ctx, m.gameEngine.(SinglePlayerGameEngine))
+				mv, err := m.cpuPlayer.SuggestMove(ctx, m.gameEngine.(*GameEngineFlagz))
 				if err != nil {
 					// TODO: the game will be stuck now. We should probably cancel it.
 					errorLog.Print("Couldn't get CPU move: ", err)
@@ -277,7 +277,7 @@ func (m *GameMaster) processControlEventRedo(e ControlEventRedo) {
 
 func (m *GameMaster) processControlEventValidMoves(e ControlEventValidMoves) {
 	defer close(e.reply)
-	if engine, ok := m.gameEngine.(SinglePlayerGameEngine); ok {
+	if engine, ok := m.gameEngine.(*GameEngineFlagz); ok {
 		validMoves := engine.ValidMoves()
 		moves := make([]*MoveRequest, len(validMoves))
 		for i, m := range validMoves {

@@ -2,8 +2,12 @@ package hexz
 
 import (
 	"math"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
+
+	unsafe "unsafe"
 )
 
 func BenchmarkMCTSPlayRandomGame(b *testing.B) {
@@ -74,6 +78,17 @@ func TestMCTSBitOps(t *testing.T) {
 	}
 }
 
+func TestSizeofMcNode(t *testing.T) {
+	// Changing the mcNode
+	if !strings.Contains(runtime.GOARCH, "64") {
+		t.Skip("Only run this test on 64bit architectures")
+	}
+	want := uintptr(40)
+	if got := unsafe.Sizeof(mcNode{}); got != want {
+		t.Error("Wrong size: ", got, ", want: ", want)
+	}
+}
+
 func TestMCTSSingleMove(t *testing.T) {
 	// This test makes a single move with a lot of think time. Mostly useful for memory profiling.
 	if testing.Short() {
@@ -83,7 +98,8 @@ func TestMCTSSingleMove(t *testing.T) {
 
 	ge := NewGameEngineFlagz()
 	mcts := NewMCTS()
-	m, _ := mcts.SuggestMove(ge, thinkTime)
+	m, stats := mcts.SuggestMove(ge, thinkTime)
+	t.Log(stats)
 	if !ge.MakeMove(m) {
 		t.Errorf("Cannot make move: %v", m)
 	}
@@ -110,7 +126,8 @@ func TestMCTSSingleMoveMidGame(t *testing.T) {
 	}
 	// Now suggest a move.
 	mcts := NewMCTS()
-	m, _ := mcts.SuggestMove(ge, thinkTime)
+	m, stats := mcts.SuggestMove(ge, thinkTime)
+	t.Log(stats)
 	if !ge.MakeMove(m) {
 		t.Errorf("Cannot make move: %v", m)
 	}
@@ -118,7 +135,7 @@ func TestMCTSSingleMoveMidGame(t *testing.T) {
 
 func BenchmarkMCTSRun(b *testing.B) {
 	gameEngine := NewGameEngineFlagz()
-	ge := gameEngine.Clone().(*GameEngineFlagz)
+	ge := gameEngine.Clone()
 	mcts := NewMCTS()
 	for i := 0; i < b.N; i++ {
 		ge.copyFrom(gameEngine)

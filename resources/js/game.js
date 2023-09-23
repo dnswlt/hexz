@@ -684,9 +684,7 @@ async function makeCPUMove() {
             },
             body: JSON.stringify(move.moveRequest),
         });
-        if (moveResponse.ok) {
-            console.log("Successfully made a move!");
-        } else {
+        if (!moveResponse.ok) {
             console.log("Failed to make a move: ", moveResponse.statusText);
         }
     } else {

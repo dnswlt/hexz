@@ -50,9 +50,9 @@ func main() {
 			fmt.Printf("goWasmSuggestMove: game is already done\n")
 			return nil
 		}
-		spge, ok := ge.(hexz.SinglePlayerGameEngine)
+		spge, ok := ge.(*hexz.GameEngineFlagz)
 		if !ok {
-			fmt.Printf("goWasmSuggestMove: game engine %T is not a single player game engine\n", ge)
+			fmt.Printf("goWasmSuggestMove: %T is not supported, only GameEngineFlagz is\n", ge)
 			return nil
 		}
 		mcts := hexz.NewMCTS()
@@ -60,8 +60,8 @@ func main() {
 		mv, stats := mcts.SuggestMove(spge, maxThinkTime)
 		var memstats runtime.MemStats
 		runtime.ReadMemStats(&memstats)
-		fmt.Printf("MemStats: HeapAlloc=%dMiB, TotalAlloc=%dMiB\n", memstats.HeapAlloc/(1024*1024), memstats.TotalAlloc/(1024*1024))
-		fmt.Printf("goWasmSuggestMove: stats: size=%d, max_depth=%d, iter=%d\n", stats.TreeSize, stats.MaxDepth, stats.Iterations)
+		fmt.Printf("goWasmSuggestMove: MCTSStats: size=%d, max_depth=%d, iter=%d. MemStats: HeapAlloc=%dMiB, TotalAlloc=%dMiB\n",
+			stats.TreeSize, stats.MaxDepth, stats.Iterations, memstats.HeapAlloc/(1024*1024), memstats.TotalAlloc/(1024*1024))
 		res, err := json.Marshal(suggestMoveResult{
 			MoveRequest: hexz.MoveRequest{
 				Move: mv.Move,

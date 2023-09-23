@@ -11,11 +11,12 @@ import (
 )
 
 type mcNode struct {
-	bits     uint32
-	children []mcNode
+	// bit-encoding of several values [i:j], j exclusive):
+	// [ liveChildren[0:8], done[8], turn[9], cellType[10], r[16:24], c[24:32] ]
 	wins     float32
 	count    float32
-	// bit-encoding of several values: in LSB order: [liveChildren(7), done(1), turn(1), cellType(1)]
+	bits     uint32
+	children []mcNode
 }
 
 func newMcNode(r, c int) mcNode {
@@ -137,7 +138,7 @@ type MCTS struct {
 	UctFactor float32
 }
 
-func (mcts *MCTS) playRandomGame(ge SinglePlayerGameEngine, firstMove *mcNode) (winner int) {
+func (mcts *MCTS) playRandomGame(ge *GameEngineFlagz, firstMove *mcNode) (winner int) {
 	b := ge.Board()
 	if !ge.MakeMove(GameEngineMove{
 		PlayerNum: firstMove.turn(),
@@ -178,9 +179,14 @@ func (mcts *MCTS) getNextByUtc(node *mcNode) *mcNode {
 	return next
 }
 
-func (mcts *MCTS) nextMoves(b *Board) []mcNode {
-	cs := make([]mcNode, 0, len(b.FlatFields))
+func (mcts *MCTS) nextMoves(ge *GameEngineFlagz) []mcNode {
+	b := ge.B
 	hasFlag := b.Resources[b.Turn-1].NumPieces[cellFlag] > 0
+	nChildren := ge.NormalMoves[b.Turn-1]
+	if hasFlag {
+		nChildren += ge.FreeCells
+	}
+	cs := make([]mcNode, 0, nChildren)
 	for r := 0; r < len(b.Fields); r++ {
 		for c := 0; c < len(b.Fields[r]); c++ {
 			f := &b.Fields[r][c]
@@ -198,15 +204,19 @@ func (mcts *MCTS) nextMoves(b *Board) []mcNode {
 			}
 		}
 	}
+	if len(cs) != nChildren {
+		// If this happens, our memory allocation above is wrong.
+		panic(fmt.Sprintf("Wrong number of next moves: %d != %d+%d", len(cs), ge.FreeCells, ge.NormalMoves[b.Turn-1]))
+	}
 	return cs
 }
 
-func (mcts *MCTS) run(ge SinglePlayerGameEngine, node *mcNode, curDepth int) (winner int, depth int) {
+func (mcts *MCTS) run(ge *GameEngineFlagz, node *mcNode, curDepth int) (winner int, depth int) {
 	b := ge.Board()
 	if node.children == nil {
 		// Terminal node in our exploration graph, but not in the whole game:
 		// While traversing a path we play moves and detect when the game IsDone (below).
-		cs := mcts.nextMoves(b)
+		cs := mcts.nextMoves(ge)
 		if len(cs) == 0 {
 			panic(fmt.Sprintf("No next moves on allegedly non-final node: %s", node.String()))
 		}
@@ -386,21 +396,17 @@ func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, mov
 	return m, stats
 }
 
-func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration time.Duration) (GameEngineMove, *MCTSStats) {
-	flagz, ok := gameEngine.(*GameEngineFlagz)
-	if !ok {
-		panic(fmt.Sprintf("Cannot use MCTS with game engine %T", gameEngine))
-	}
+func (mcts *MCTS) SuggestMove(gameEngine *GameEngineFlagz, maxDuration time.Duration) (GameEngineMove, *MCTSStats) {
 	root := &mcNode{}
 	root.setTurn(gameEngine.Board().Turn)
 	started := time.Now()
-	ge := flagz.Clone().(*GameEngineFlagz)
+	ge := gameEngine.Clone()
 	for n := 0; ; n++ {
 		// Check every N rounds if we're done. Run at least once.
 		if (n-1)&63 == 0 && time.Since(started) >= maxDuration {
 			break
 		}
-		ge.copyFrom(flagz)
+		ge.copyFrom(gameEngine)
 		mcts.run(ge, root, 0)
 		if root.done() {
 			// Board completely explored
