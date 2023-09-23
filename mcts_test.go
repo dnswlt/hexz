@@ -137,9 +137,10 @@ func BenchmarkMCTSRun(b *testing.B) {
 	gameEngine := NewGameEngineFlagz()
 	ge := gameEngine.Clone()
 	mcts := NewMCTS()
+	root := &mcNode{}
 	for i := 0; i < b.N; i++ {
 		ge.copyFrom(gameEngine)
-		mcts.run(ge, &mcNode{}, 0)
+		mcts.run(ge, root, 0)
 	}
 }
 
