@@ -659,10 +659,12 @@ async function initWASM() {
     }
     wasmInitialized = true;
     const go = new Go();
-    WebAssembly.instantiateStreaming(fetch(`/hexz/static/wasm/hexz.wasm?t=${Date.now()}`), go.importObject).then((result) => {
-        const wasm = result.instance;
-        go.run(wasm);
-    });
+    // Load WASM module. Avoid caching by adding a timestamp.
+    const result = await WebAssembly.instantiateStreaming(fetch(`/hexz/static/wasm/hexz.wasm?t=${Date.now()}`), go.importObject)
+    const wasm = result.instance;
+    // This will make the goWasmSuggestMove function globally available.
+    await go.run(wasm);
+    console.log("WASM died.");
 }
 
 async function makeCPUMove() {

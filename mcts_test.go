@@ -89,11 +89,39 @@ func TestMCTSSingleMove(t *testing.T) {
 	}
 }
 
+func TestMCTSSingleMoveMidGame(t *testing.T) {
+	// This test makes a single move in the middle of a random game with a lot of think time.
+	// Mostly useful for memory profiling.
+	if testing.Short() {
+		t.Skip("Don't run MCTS simulation in -short mode.")
+	}
+	thinkTime := time.Duration(5000) * time.Millisecond
+
+	ge := NewGameEngineFlagz()
+	// Advance the game a bit.
+	for i := 0; i < 30; i++ {
+		mv, err := ge.RandomMove()
+		if err != nil {
+			t.Fatal("No next move: ", err)
+		}
+		if !ge.MakeMove(mv) {
+			t.Fatalf("Cannot make move: %v", mv)
+		}
+	}
+	// Now suggest a move.
+	mcts := NewMCTS()
+	m, _ := mcts.SuggestMove(ge, thinkTime)
+	if !ge.MakeMove(m) {
+		t.Errorf("Cannot make move: %v", m)
+	}
+}
+
 func BenchmarkMCTSRun(b *testing.B) {
 	gameEngine := NewGameEngineFlagz()
+	ge := gameEngine.Clone().(*GameEngineFlagz)
 	mcts := NewMCTS()
 	for i := 0; i < b.N; i++ {
-		ge := gameEngine.Clone()
+		ge.copyFrom(gameEngine)
 		mcts.run(ge, &mcNode{}, 0)
 	}
 }

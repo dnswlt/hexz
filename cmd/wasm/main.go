@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"syscall/js"
 	"time"
 
@@ -56,7 +57,11 @@ func main() {
 		}
 		mcts := hexz.NewMCTS()
 		maxThinkTime := time.Duration(a.MaxThinkTimeMillis) * time.Millisecond
-		mv, _ := mcts.SuggestMove(spge, maxThinkTime)
+		mv, stats := mcts.SuggestMove(spge, maxThinkTime)
+		var memstats runtime.MemStats
+		runtime.ReadMemStats(&memstats)
+		fmt.Printf("MemStats: HeapAlloc=%dMiB, TotalAlloc=%dMiB\n", memstats.HeapAlloc/(1024*1024), memstats.TotalAlloc/(1024*1024))
+		fmt.Printf("goWasmSuggestMove: stats: size=%d, max_depth=%d, iter=%d\n", stats.TreeSize, stats.MaxDepth, stats.Iterations)
 		res, err := json.Marshal(suggestMoveResult{
 			MoveRequest: hexz.MoveRequest{
 				Move: mv.Move,

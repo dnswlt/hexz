@@ -15,7 +15,6 @@ type GameEngineFlagz struct {
 	FreeCells   int    // Number of unoccupied cells
 	NormalMoves [2]int // Number of normal cell moves the players can make
 	// History of moves made so far
-	Moves []GameEngineMove
 }
 
 func (g *GameEngineFlagz) GameType() GameType { return gameTypeFlagz }
@@ -34,10 +33,6 @@ func NewGameEngineFlagz() *GameEngineFlagz {
 
 func (g *GameEngineFlagz) ValidCellTypes() []CellType {
 	return []CellType{cellNormal, cellFlag}
-}
-
-func (g *GameEngineFlagz) MoveHistory() []GameEngineMove {
-	return g.Moves
 }
 
 func (g *GameEngineFlagz) PopulateInitialCells() {
@@ -239,16 +234,18 @@ func (g *GameEngineFlagz) Clone() SinglePlayerGameEngine {
 	}
 }
 
+func (g *GameEngineFlagz) copyFrom(other *GameEngineFlagz) {
+	g.B.copyFrom(other.B)
+	g.FreeCells = other.FreeCells
+	g.NormalMoves = other.NormalMoves
+}
+
 // Serializes the state of this game engine.
 func (g *GameEngineFlagz) Encode() (*pb.GameEngineState, error) {
 	flagz := &pb.GameEngineFlagzState{
 		Board:       g.B.Proto(),
 		FreeCells:   int32(g.FreeCells),
 		NormalMoves: []int32{int32(g.NormalMoves[0]), int32(g.NormalMoves[1])},
-		Moves:       make([]*pb.GameEngineMove, len(g.Moves)),
-	}
-	for i, m := range g.Moves {
-		flagz.Moves[i] = m.Proto()
 	}
 	s := &pb.GameEngineState{
 		State: &pb.GameEngineState_Flagz{
@@ -273,12 +270,6 @@ func (g *GameEngineFlagz) Decode(s *pb.GameEngineState) error {
 		return fmt.Errorf("invalid game state: invalid number (%d) of normal moves", len(flagz.NormalMoves))
 	}
 	g.NormalMoves = [2]int{int(flagz.NormalMoves[0]), int(flagz.NormalMoves[1])}
-	if flagz.Moves != nil {
-		g.Moves = make([]GameEngineMove, len(flagz.Moves))
-		for i, m := range flagz.Moves {
-			g.Moves[i].DecodeProto(m)
-		}
-	}
 	return nil
 }
 

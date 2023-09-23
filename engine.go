@@ -27,8 +27,6 @@ type GameEngine interface {
 	NumPlayers() int
 	ValidCellTypes() []CellType
 	MakeMove(move GameEngineMove) bool
-	// All moves made so far. Game engines that don't support history may return nil.
-	MoveHistory() []GameEngineMove
 	Board() *Board
 	IsDone() bool
 	Winner() (playerNum int) // Results are only meaningful if IsDone() is true. 0 for draw.
@@ -129,6 +127,25 @@ func (b *Board) copy() *Board {
 		FlatFields:   flat,
 		LastRevealed: b.LastRevealed,
 	}
+}
+
+func (b *Board) copyFrom(src *Board) {
+	if len(b.Score) != len(src.Score) {
+		b.Score = make([]int, len(src.Score))
+	}
+	copy(b.Score, src.Score)
+	if len(b.Resources) != len(src.Resources) {
+		b.Resources = make([]ResourceInfo, len(src.Resources))
+	}
+	copy(b.Resources, src.Resources)
+	b.Turn = src.Turn
+	b.Move = src.Move
+	b.State = src.State
+	b.LastRevealed = src.LastRevealed
+	if len(b.FlatFields) != len(src.FlatFields) {
+		panic("cannot copy board: field length mismatch")
+	}
+	copy(b.FlatFields, src.FlatFields)
 }
 
 func (f *Field) occupied() bool {

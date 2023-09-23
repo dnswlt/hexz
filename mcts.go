@@ -100,6 +100,7 @@ func (n *mcNode) U(parentCount float32, uctFactor float32) float32 {
 }
 
 // Returns the number of leaf and branch nodes on each depth level, starting from 0 for the root.
+// The depth of the tree can be computed as len(leafNodes).
 func (root *mcNode) nodesPerDepth() (size int, leafNodes []int, branchNodes []int) {
 	ls := []int{}
 	bs := []int{}
@@ -349,11 +350,11 @@ func NewMCTS() *MCTS {
 	}
 }
 
-func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, maxDepth int, move int) (GameEngineMove, *MCTSStats) {
+func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, move int) (GameEngineMove, *MCTSStats) {
 	size, leafNodes, branchNodes := root.nodesPerDepth()
 	stats := &MCTSStats{
 		Iterations:    int(root.count),
-		MaxDepth:      maxDepth,
+		MaxDepth:      len(leafNodes),
 		Elapsed:       elapsed,
 		FullyExplored: root.done(),
 		TreeSize:      size,
@@ -386,31 +387,26 @@ func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, max
 }
 
 func (mcts *MCTS) SuggestMove(gameEngine SinglePlayerGameEngine, maxDuration time.Duration) (GameEngineMove, *MCTSStats) {
+	flagz, ok := gameEngine.(*GameEngineFlagz)
+	if !ok {
+		panic(fmt.Sprintf("Cannot use MCTS with game engine %T", gameEngine))
+	}
 	root := &mcNode{}
 	root.setTurn(gameEngine.Board().Turn)
-	if root.done() {
-		if len(root.children) == 0 {
-			panic("No children, but root is done")
-		}
-		return mcts.bestNextMoveWithStats(root, time.Duration(0), 0, gameEngine.Board().Move)
-	}
 	started := time.Now()
-	maxDepth := 0
+	ge := flagz.Clone().(*GameEngineFlagz)
 	for n := 0; ; n++ {
 		// Check every N rounds if we're done. Run at least once.
 		if (n-1)&63 == 0 && time.Since(started) >= maxDuration {
 			break
 		}
-		ge := gameEngine.Clone()
-		_, depth := mcts.run(ge, root, 0)
-		if depth > maxDepth {
-			maxDepth = depth
-		}
+		ge.copyFrom(flagz)
+		mcts.run(ge, root, 0)
 		if root.done() {
 			// Board completely explored
 			break
 		}
 	}
 	elapsed := time.Since(started)
-	return mcts.bestNextMoveWithStats(root, elapsed, maxDepth, gameEngine.Board().Move)
+	return mcts.bestNextMoveWithStats(root, elapsed, gameEngine.Board().Move)
 }
