@@ -31,6 +31,7 @@ type RedisClientConfig struct {
 	Addr     string
 	LoginTTL time.Duration
 	GameTTL  time.Duration
+	DB       int // Production should always use 0, 1 is for testing.
 }
 
 func NewRedisClient(config *RedisClientConfig) (*RedisClient, error) {
@@ -38,6 +39,7 @@ func NewRedisClient(config *RedisClientConfig) (*RedisClient, error) {
 		config: config,
 		client: redis.NewClient(&redis.Options{
 			Addr: config.Addr,
+			DB:   config.DB,
 		}),
 	}
 	if err := rc.Ping(); err != nil {
@@ -80,14 +82,12 @@ func (c *RedisClient) StoreNewGame(ctx context.Context, s *pb.GameState) (bool, 
 		return false, err
 	}
 	gameId := s.GameInfo.Id
-	infoLog.Printf("Storing new game %q: %d bytes", gameId, len(data))
 	ok, err := c.client.SetNX(ctx, "game:"+gameId, data, c.config.GameTTL).Result()
 	if !ok || err != nil {
 		return ok, err
 	}
 	mInfo, _ := proto.Marshal(s.GameInfo) // We can always marshal a GameInfo.
-	// TODO: Clean up "recentgames" periodically.
-	if err := c.client.ZAdd(ctx, "recentgames", redis.Z{Score: float64(now.Seconds), Member: mInfo}).Err(); err != nil {
+	if err := c.client.ZAdd(ctx, "recentgames", redis.Z{Score: float64(s.GameInfo.Started.Seconds), Member: mInfo}).Err(); err != nil {
 		errorLog.Printf("Failed to add game %q to recent games: %v", gameId, err)
 	}
 	return true, nil
@@ -117,16 +117,50 @@ func (c *RedisClient) LookupGame(ctx context.Context, gameId string) (*pb.GameSt
 	return gameState, nil
 }
 
+func (c *RedisClient) DeleteGame(ctx context.Context, gameId string) error {
+	if err := c.client.Del(ctx, "game:"+gameId).Err(); err != nil {
+		return err
+	}
+	if err := c.client.ZRem(ctx, "recentgames", gameId).Err(); err != nil {
+		errorLog.Printf("Failed to remove game %q from recentgames: %v", gameId, err)
+	}
+	return nil
+}
+
 func (c *RedisClient) ListRecentGames(ctx context.Context, limit int) ([]*pb.GameInfo, error) {
 	r, err := c.client.ZRevRange(ctx, "recentgames", 0, int64(limit-1)).Result()
 	if err != nil {
 		return nil, err
 	}
-	games := make([]*pb.GameInfo, len(r))
-	for i, m := range r {
-		games[i] = &pb.GameInfo{}
-		if err := proto.Unmarshal([]byte(m), games[i]); err != nil {
+	games := make([]*pb.GameInfo, 0, len(r))
+	for _, m := range r {
+		gi := &pb.GameInfo{}
+		if err := proto.Unmarshal([]byte(m), gi); err != nil {
 			return nil, err
+		}
+		s := time.Since(gi.GetStarted().AsTime())
+		if s > c.config.GameTTL {
+			continue
+		}
+		games = append(games, gi)
+	}
+	// Clean up recentgames if it gets too big. Use hard-coded numbers for now.
+	// TODO: make this configurable.
+	card, err := c.client.ZCard(ctx, "recentgames").Result()
+	if err != nil {
+		errorLog.Printf("Failed to query ZCARD for recentgames: %v", err)
+		return games, err
+	}
+	minItems := 20
+	if minItems < limit*2 {
+		minItems = limit * 2 // Keep enough to list recent games, and have some buffer.
+	}
+	maxItems := 2 * minItems // Avoid removing single items at each call.
+	if card > int64(maxItems) {
+		if n, err := c.client.ZRemRangeByRank(ctx, "recentgames", 0, card-int64(minItems)-1).Result(); err != nil {
+			errorLog.Printf("Failed to remove old games from recentgames: %v", err)
+		} else {
+			infoLog.Printf("Removed %d old games from recentgames", n)
 		}
 	}
 	return games, nil
