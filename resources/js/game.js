@@ -56,7 +56,7 @@ function gameId() {
     return pathSegs[pathSegs.length - 1];
 }
 
-async function sendMove(row, col) {
+async function sendMove(row, col, cellType) {
     return fetch("/hexz/move/" + gameId(), {
         method: "POST",
         headers: {
@@ -66,7 +66,7 @@ async function sendMove(row, col) {
             move: gstate.board.move,
             row: row,
             col: col,
-            type: gstate.selectedCellType,
+            type: cellType,
         }),
     })
 }
@@ -556,7 +556,10 @@ function onCanvasClicked(event) {
 }
 
 function onFieldClicked(row, col) {
-    sendMove(row, col);
+    if (gstate.board.turn != gstate.role) {
+        return; // Do nothing if it's not our turn.
+    }
+    sendMove(row, col, gstate.selectedCellType);
     // Revert selection to normal to avoid accidentally placing special cells.
     gstate.selectedCellType = cellNormal;
 }
