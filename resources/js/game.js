@@ -123,7 +123,7 @@ function handleServerEvent(sse, serverEvent) {
         updateTurnInfo();
         updateScore();
         if (gstate.clientSideCPUPlayer && gstate.role == 1 && gstate.board.turn == 2) {
-            // We are P1, it's CPU's turn. Wait a bit to let the current redraw finish.
+            // We are P1, it's CPU's turn. Wait 100ms to let the current redraw finish.
             setTimeout(makeCPUMove, 100);
         }
         if (gstate.role > 0 && serverEvent.winner > 0) {
@@ -655,22 +655,27 @@ function reset() {
 
 // CPU Player in WASM.
 
-let wasmInitialized = false;
+let wasmInitializationPromise = null;
 async function initWASM() {
-    if (wasmInitialized) {
-        return;
+    if (!wasmInitializationPromise) {
+        wasmInitializationPromise = new Promise((resolve) => {
+            const go = new Go();
+            // Load WASM module. Avoid caching by adding a timestamp.
+            WebAssembly.instantiateStreaming(fetch(`/hexz/static/wasm/hexz.wasm?t=${Date.now()}`), go.importObject).then((result) => {
+                const wasm = result.instance;
+                // This will make the goWasmSuggestMove function globally available.
+                go.run(wasm);
+                setTimeout(resolve, 100);  // Give WASM some time to initialize before resolving. 
+                // TODO: This is not clean, but AFAIU the Golang WASM runtime does not provide a way to
+                // detect when it's ready. (Could I pass in the resolve function as a callback?)
+            });
+        })
     }
-    wasmInitialized = true;
-    const go = new Go();
-    // Load WASM module. Avoid caching by adding a timestamp.
-    const result = await WebAssembly.instantiateStreaming(fetch(`/hexz/static/wasm/hexz.wasm?t=${Date.now()}`), go.importObject)
-    const wasm = result.instance;
-    // This will make the goWasmSuggestMove function globally available.
-    await go.run(wasm);
-    console.log("WASM died.");
+    return wasmInitializationPromise;
 }
 
 async function makeCPUMove() {
+    await initWASM();
     const response = await fetch(`/hexz/state/${gameId()}`);
     const gameStateResponse = await response.json()
     let suggestMoveResult = goWasmSuggestMove(JSON.stringify({
