@@ -19,6 +19,7 @@ type suggestMoveArgs struct {
 
 type suggestMoveResult struct {
 	MoveRequest hexz.MoveRequest `json:"moveRequest"`
+	Stats       hexz.WASMStats   `json:"stats"`
 }
 
 func main() {
@@ -60,15 +61,25 @@ func main() {
 		mv, stats := mcts.SuggestMove(spge, maxThinkTime)
 		var memstats runtime.MemStats
 		runtime.ReadMemStats(&memstats)
-		fmt.Printf("goWasmSuggestMove: MCTSStats: size=%d, max_depth=%d, iter=%d. MemStats: HeapAlloc=%dMiB, TotalAlloc=%dMiB\n",
-			stats.TreeSize, stats.MaxDepth, stats.Iterations, memstats.HeapAlloc/(1024*1024), memstats.TotalAlloc/(1024*1024))
+		heapAllocMiB := float64(memstats.HeapAlloc) / (1024 * 1024)
+		totalAllocMiB := float64(memstats.TotalAlloc) / (1024 * 1024)
+		fmt.Printf("goWasmSuggestMove: MCTSStats: size=%d, max_depth=%d, iter=%d. MemStats: HeapAlloc=%.2fMiB, TotalAlloc=%.2fMiB\n",
+			stats.TreeSize, stats.MaxDepth, stats.Iterations, heapAllocMiB, totalAllocMiB)
 		res, err := json.Marshal(suggestMoveResult{
 			MoveRequest: hexz.MoveRequest{
 				Move: mv.Move,
 				Row:  mv.Row,
 				Col:  mv.Col,
 				Type: mv.CellType,
-			}})
+			},
+			Stats: hexz.WASMStats{
+				TreeSize:      stats.TreeSize,
+				MaxDepth:      stats.MaxDepth,
+				Iterations:    stats.Iterations,
+				HeapAllocMiB:  heapAllocMiB,
+				TotalAllocMiB: totalAllocMiB,
+			},
+		})
 		if err != nil {
 			panic("Cannot marshal result: " + err.Error())
 		}

@@ -684,16 +684,37 @@ async function makeCPUMove() {
     }));
     if (suggestMoveResult) {
         const move = JSON.parse(suggestMoveResult);
-        console.log("CPU suggested move:", move);
+        console.log("CPU suggested move:", move.moveRequest);
         const moveResponse = await fetch(`/hexz/move/${gameId()}`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json", },
             body: JSON.stringify(move.moveRequest),
         });
         if (!moveResponse.ok) {
             console.log("Failed to make a move: ", moveResponse.statusText);
+            return;
+        }
+        // Send WASMStatsRequest so we can learn how our clients perform.
+        const statsResponse = await fetch(`/hexz/wasmstats/${gameId()}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", },
+            body: JSON.stringify({
+                gameId: gameId(),
+                gameType: "Flagz",
+                move: gstate.board.move,
+                userInfo: {
+                    userAgent: navigator.userAgent,
+                    language: navigator.language,
+                    resolution: [window.screen.width, window.screen.height],
+                    viewport: [window.innerWidth, window.innerHeight],
+                    browserWindow: [window.outerWidth, window.outerHeight],
+                    hardwareConcurrency: navigator.hardwareConcurrency,
+                },
+                stats: move.stats
+            }),
+        });
+        if (!statsResponse.ok) {
+            console.log("Failed to send WASM stats: ", statsResponse.statusText);
         }
     } else {
         console.log("CPU did not find a move.");

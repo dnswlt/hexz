@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
@@ -287,6 +288,30 @@ func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 	s.serveHtmlFile(w, gameHtmlFilename)
 }
 
+func (s *StatelessServer) handleWASMStats(w http.ResponseWriter, r *http.Request) {
+	_, err := s.lookupPlayerFromCookie(r)
+	if err != nil {
+		http.Error(w, "missing player cookie", http.StatusBadRequest)
+		return
+	}
+	_, err = gameIdFromPath(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
+		return
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		errorLog.Printf("Cannot read request body: %s", err)
+		http.Error(w, "", http.StatusInternalServerError)
+	}
+	var req WASMStatsRequest
+	if err = json.Unmarshal(body, &req); err != nil {
+		http.Error(w, "unmarshal error", http.StatusBadRequest)
+		return
+	}
+	infoLog.Printf("CPU stats: %s", string(body))
+}
+
 // Download the full game state as an encoded protobuf. This is used to run a CPU player in
 // WASM in the user's browser.
 func (s *StatelessServer) handleState(w http.ResponseWriter, r *http.Request) {
@@ -561,7 +586,9 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	mux.HandleFunc("/hexz/new", postHandlerFunc(s.handleNewGame))
 	mux.HandleFunc("/hexz/move/", postHandlerFunc(s.handleMove))
 	mux.HandleFunc("/hexz/reset/", postHandlerFunc(s.handleReset))
+	// Methods for CPU player.
 	mux.HandleFunc("/hexz/state/", s.handleState)
+	mux.HandleFunc("/hexz/wasmstats/", postHandlerFunc(s.handleWASMStats))
 	// mux.HandleFunc("/hexz/undo/", postHandlerFunc(s.handleUndo))
 	// mux.HandleFunc("/hexz/redo/", postHandlerFunc(s.handleRedo))
 	// Server-sent Event handling
