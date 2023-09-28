@@ -27,6 +27,18 @@ Run the Artifact Registry image locally:
 PORT=8080 && docker run -p 8080:${PORT} -e PORT=${PORT} europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/hexz:latest
 ```
 
+## Cloud Logging
+
+List logs in ascending order, starting from a given timestamp:
+```
+t=$(TZ=UTC date -d'2 hours ago' +%Y-%m-%dT%H:%M:%SZ) && \
+  gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=hexz AND textPayload:\"CPU stats\" AND timestamp>=\"$t\"" --project hexz-cloud-run --order=asc --limit=10
+```
+
+List recent logs, in descending order:
+```
+gcloud logging read 'resource.type=cloud_run_revision AND resource.labels.service_name=hexz AND textPayload:"CPU stats"' --freshness=2h --project hexz-cloud-run --limit=10
+```
 
 ## Protocol Buffers
 The generated sources of all `.proto` files are checked in to this repository,

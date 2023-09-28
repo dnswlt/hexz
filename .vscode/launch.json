@@ -32,7 +32,7 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "cmd/bench/bench.go",
+            "program": "cmd/bench/main.go",
             "cwd": "${workspaceFolder}",
             "args": [
                 "-maxruntime=2m"

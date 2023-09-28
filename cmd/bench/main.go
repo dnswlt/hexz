@@ -42,6 +42,33 @@ func getThinkTime(stats []*hexz.MCTSStats, isBenchPlayer bool) time.Duration {
 	return moveThinkTime
 }
 
+func printVisitCountHistograms(visitCounts []map[int]int) {
+	for i, m := range visitCounts {
+		h := make([]int, 12)
+		max := 0
+		for vc := range m {
+			if vc > max {
+				max = vc
+			}
+		}
+		for vcount, nnodes := range m {
+			if vcount == 0 {
+				h[0] += nnodes
+				continue
+			}
+			h[vcount*10/max+1] += nnodes
+		}
+		fmt.Printf("Depth %d:\n", i)
+		for j := range h {
+			if j == 0 {
+				fmt.Printf("  0: %d\n", h[j])
+				continue
+			}
+			fmt.Printf("  %d - %d: %d\n", max*(j-1)/len(h), max*j/len(h), h[j])
+		}
+	}
+}
+
 func main() {
 	flag.Parse()
 	// Optional profiling
@@ -118,6 +145,7 @@ func main() {
 					MoveScores: stats.MoveScores(),
 				})
 			}
+			printVisitCountHistograms(stats.VisitCounts)
 			moveStats[t] = append(moveStats[t], stats)
 			// fmt.Print(stats)
 			if !ge.MakeMove(m) {

@@ -102,10 +102,7 @@ func (n *mcNode) U(parentCount float32, uctFactor float32) float32 {
 
 // Returns the number of leaf and branch nodes on each depth level, starting from 0 for the root.
 // The depth of the tree can be computed as len(leafNodes).
-func (root *mcNode) nodesPerDepth() (size int, leafNodes []int, branchNodes []int) {
-	ls := []int{}
-	bs := []int{}
-	s := 0
+func (root *mcNode) nodesPerDepth() (size int, leafNodes []int, branchNodes []int, visitCounts []map[int]int) {
 	type ni struct {
 		n *mcNode
 		d int
@@ -115,23 +112,23 @@ func (root *mcNode) nodesPerDepth() (size int, leafNodes []int, branchNodes []in
 	for len(q) > 0 {
 		n := q[len(q)-1]
 		q = q[:len(q)-1]
-		s++
-		if len(ls) <= n.d {
-			ls1, bs1 := make([]int, n.d+1), make([]int, n.d+1)
-			copy(ls1, ls)
-			copy(bs1, bs)
-			ls, bs = ls1, bs1
+		size++
+		if len(leafNodes) == n.d {
+			leafNodes = append(leafNodes, 0)
+			branchNodes = append(branchNodes, 0)
+			visitCounts = append(visitCounts, make(map[int]int))
 		}
 		if len(n.n.children) == 0 {
-			ls[n.d]++
+			leafNodes[n.d]++
 		} else {
-			bs[n.d]++
+			branchNodes[n.d]++
 		}
+		visitCounts[n.d][int(n.n.count)]++
 		for i := range n.n.children {
 			q = append(q, ni{&n.n.children[i], n.d + 1})
 		}
 	}
-	return s, ls, bs
+	return
 }
 
 type MCTS struct {
@@ -291,8 +288,9 @@ type MCTSStats struct {
 	Iterations    int
 	MaxDepth      int
 	TreeSize      int
-	LeafNodes     []int // Per depth level, 0=root
-	BranchNodes   []int // Per depth level, 0=root
+	LeafNodes     []int         // Per depth level, 0=root
+	BranchNodes   []int         // Per depth level, 0=root
+	VisitCounts   []map[int]int // Per depth level, maps visit count to number of nodes with that count.
 	Elapsed       time.Duration
 	FullyExplored bool
 	Moves         []MCTSMoveStats
@@ -361,7 +359,7 @@ func NewMCTS() *MCTS {
 }
 
 func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, move int) (GameEngineMove, *MCTSStats) {
-	size, leafNodes, branchNodes := root.nodesPerDepth()
+	size, leafNodes, branchNodes, visitCounts := root.nodesPerDepth()
 	stats := &MCTSStats{
 		Iterations:    int(root.count),
 		MaxDepth:      len(leafNodes),
@@ -370,6 +368,7 @@ func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, mov
 		TreeSize:      size,
 		LeafNodes:     leafNodes,
 		BranchNodes:   branchNodes,
+		VisitCounts:   visitCounts,
 		Moves:         make([]MCTSMoveStats, len(root.children)),
 	}
 	best := root.children[0]

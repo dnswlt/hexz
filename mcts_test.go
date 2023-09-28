@@ -79,7 +79,7 @@ func TestMCTSBitOps(t *testing.T) {
 }
 
 func TestSizeofMcNode(t *testing.T) {
-	// Changing the mcNode
+	// Detect if we change the mcNode size, which might lead to increased GC pressure.
 	if !strings.Contains(runtime.GOARCH, "64") {
 		t.Skip("Only run this test on 64bit architectures")
 	}
