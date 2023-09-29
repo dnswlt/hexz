@@ -111,6 +111,8 @@ func main() {
 		mcts := []*hexz.MCTS{
 			hexz.NewMCTS(),
 			hexz.NewMCTS(),
+			// hexz.NewMCTSWithMem(8_000_000),
+			// hexz.NewMCTSWithMem(8_000_000),
 		}
 		// Evaluate parameters both on P1 and P2
 		benchPlayer := nRuns%2 + 1

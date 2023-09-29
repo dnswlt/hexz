@@ -257,3 +257,34 @@ func BenchmarkLog64(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkTabulatedLog(b *testing.B) {
+	const cacheSize = 100_000
+	c := make([]float64, cacheSize)
+	for i := range c {
+		c[i] = math.Log(float64(i))
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var s float64
+		for j := 1; j < len(c); j++ {
+			s += c[j]
+		}
+		if s < 0 {
+			b.Errorf("Wrong sum: %f", s)
+		}
+	}
+}
+
+func BenchmarkRegularLog64(b *testing.B) {
+	const cacheSize = 100_000
+	for i := 0; i < b.N; i++ {
+		var s float64
+		for j := 1; j < cacheSize; j++ {
+			s += math.Log(float64(j))
+		}
+		if s < 0 {
+			b.Errorf("Wrong sum: %f", s)
+		}
+	}
+}

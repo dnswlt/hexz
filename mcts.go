@@ -92,12 +92,42 @@ func (n *mcNode) Q() float32 {
 	return n.wins / n.count
 }
 
+// Tabulating logs showed a significant performance gain on amd64.
+//
+// go test -bench BenchmarkMCTSRun -run ^$ -count=10
+//
+// dnswlt/hexz$ benchstat old.txt new.txt
+// goos: darwin
+// goarch: arm64
+// pkg: github.com/dnswlt/hexz
+//
+//	│   old.txt   │              new.txt               │
+//	│   sec/op    │   sec/op     vs base               │
+//
+// MCTSRun-10   25.17µ ± 2%   23.52µ ± 1%  -6.55% (p=0.000 n=10)
+const useTabulatedLogs = true
+const logValuesSize = 100_000
+
+var logValues [logValuesSize]float64
+
+func init() {
+	for i := 1; i < logValuesSize; i++ {
+		logValues[i] = math.Log(float64(i))
+	}
+}
+
 func (n *mcNode) U(parentCount float32, uctFactor float32) float32 {
 	if n.count == 0.0 {
 		// Never played => infinitely interesting.
 		return math.MaxFloat32
 	}
-	return n.wins/n.count + uctFactor*float32(math.Sqrt(math.Log(float64(parentCount))/float64(n.count)))
+	var l float64
+	if useTabulatedLogs && parentCount < logValuesSize {
+		l = logValues[int(parentCount)]
+	} else {
+		l = math.Log(float64(parentCount))
+	}
+	return n.wins/n.count + uctFactor*float32(math.Sqrt(l/float64(n.count)))
 }
 
 // Returns the number of leaf and branch nodes on each depth level, starting from 0 for the root.
@@ -133,6 +163,8 @@ func (root *mcNode) nodesPerDepth() (size int, leafNodes []int, branchNodes []in
 
 type MCTS struct {
 	UctFactor float32
+	Mem       []mcNode
+	Next      int
 }
 
 func (mcts *MCTS) playRandomGame(ge *GameEngineFlagz, firstMove *mcNode) (winner int) {
@@ -183,7 +215,14 @@ func (mcts *MCTS) nextMoves(ge *GameEngineFlagz) []mcNode {
 	if hasFlag {
 		nChildren += ge.FreeCells
 	}
-	cs := make([]mcNode, 0, nChildren)
+	var cs []mcNode
+	if mcts.Mem != nil {
+		cs = mcts.Mem[mcts.Next : mcts.Next+nChildren]
+		mcts.Next += nChildren
+	} else {
+		cs = make([]mcNode, nChildren)
+	}
+	i := 0
 	for r := 0; r < len(b.Fields); r++ {
 		for c := 0; c < len(b.Fields[r]); c++ {
 			f := &b.Fields[r][c]
@@ -191,13 +230,15 @@ func (mcts *MCTS) nextMoves(ge *GameEngineFlagz) []mcNode {
 				continue
 			}
 			if f.isAvail(b.Turn) {
-				cs = append(cs, newMcNode(r, c))
-				cs[len(cs)-1].setTurn(b.Turn)
+				cs[i].bits = uint32(r<<16) | (uint32(c) << 24)
+				cs[i].setTurn(b.Turn)
+				i++
 			}
 			if hasFlag {
-				cs = append(cs, newMcNode(r, c))
-				cs[len(cs)-1].setTurn(b.Turn)
-				cs[len(cs)-1].setFlag()
+				cs[i].bits = uint32(r<<16) | (uint32(c) << 24)
+				cs[i].setTurn(b.Turn)
+				cs[i].setFlag()
+				i++
 			}
 		}
 	}
@@ -358,6 +399,14 @@ func NewMCTS() *MCTS {
 	}
 }
 
+func NewMCTSWithMem(cap int) *MCTS {
+	return &MCTS{
+		UctFactor: 1.0,
+		Mem:       make([]mcNode, cap),
+		Next:      0,
+	}
+}
+
 func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, move int) (GameEngineMove, *MCTSStats) {
 	size, leafNodes, branchNodes, visitCounts := root.nodesPerDepth()
 	stats := &MCTSStats{
@@ -395,7 +444,14 @@ func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, mov
 	return m, stats
 }
 
+func (mcts *MCTS) Reset() {
+	if mcts.Mem != nil {
+		mcts.Next = 0
+	}
+}
+
 func (mcts *MCTS) SuggestMove(gameEngine *GameEngineFlagz, maxDuration time.Duration) (GameEngineMove, *MCTSStats) {
+	defer mcts.Reset()
 	root := &mcNode{}
 	root.setTurn(gameEngine.Board().Turn)
 	started := time.Now()
