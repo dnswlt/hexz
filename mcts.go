@@ -13,8 +13,8 @@ import (
 type mcNode struct {
 	// bit-encoding of several values [i:j], j exclusive):
 	// [ liveChildren[0:8], done[8], turn[9], cellType[10], r[16:24], c[24:32] ]
-	wins     float32
-	count    float32
+	wins     int
+	count    int
 	bits     uint32
 	children []mcNode
 }
@@ -81,15 +81,15 @@ func (n *mcNode) decrLiveChildren() {
 }
 
 func (n *mcNode) String() string {
-	return fmt.Sprintf("(%d,%d/%d) #cs:%d, wins:%f count:%f, done:%t, turn:%d, #lc:%d",
+	return fmt.Sprintf("(%d,%d/%d) #cs:%d, wins:%d count:%d, done:%t, turn:%d, #lc:%d",
 		n.r(), n.c(), n.cellType(), len(n.children), n.wins, n.count, n.done(), n.turn(), n.liveChildren())
 }
 
-func (n *mcNode) Q() float32 {
+func (n *mcNode) Q() float64 {
 	if n.count == 0 {
 		return 0
 	}
-	return n.wins / n.count
+	return float64(n.wins) / float64(n.count)
 }
 
 // Tabulating logs showed a significant performance gain on amd64.
@@ -116,18 +116,27 @@ func init() {
 	}
 }
 
-func (n *mcNode) U(parentCount float32, uctFactor float32) float32 {
-	if n.count == 0.0 {
-		// Never played => infinitely interesting.
-		return math.MaxFloat32
+var EnableInitialDrawAssumption = true
+
+func (n *mcNode) U(parentCount int, uctFactor float64) float64 {
+	if !EnableInitialDrawAssumption && n.count == 0 {
+		return math.MaxFloat64
+	}
+	if parentCount == 0 {
+		// First rollout for the parent. Assume this game was a draw.
+		return 0.5
 	}
 	var l float64
 	if useTabulatedLogs && parentCount < logValuesSize {
-		l = logValues[int(parentCount)]
+		l = logValues[parentCount]
 	} else {
 		l = math.Log(float64(parentCount))
 	}
-	return n.wins/n.count + uctFactor*float32(math.Sqrt(l/float64(n.count)))
+	if n.count == 0 {
+		// Never played => assume one game was played and it was a draw.
+		return 0.5 + uctFactor*math.Sqrt(l)
+	}
+	return float64(n.wins)/float64(n.count) + uctFactor*math.Sqrt(l/float64(n.count))
 }
 
 // Returns the number of leaf and branch nodes on each depth level, starting from 0 for the root.
@@ -162,7 +171,7 @@ func (root *mcNode) nodesPerDepth() (size int, leafNodes []int, branchNodes []in
 }
 
 type MCTS struct {
-	UctFactor float32
+	UctFactor float64
 	Mem       []mcNode
 	Next      int
 }
@@ -193,7 +202,7 @@ func (mcts *MCTS) playRandomGame(ge *GameEngineFlagz, firstMove *mcNode) (winner
 
 func (mcts *MCTS) getNextByUtc(node *mcNode) *mcNode {
 	var next *mcNode
-	maxUct := float32(-1.0)
+	maxUct := -1.0
 	for i := range node.children {
 		l := &node.children[i]
 		if l.done() {
@@ -230,19 +239,19 @@ func (mcts *MCTS) nextMoves(ge *GameEngineFlagz) []mcNode {
 				continue
 			}
 			if f.isAvail(b.Turn) {
-				cs[i].bits = uint32(r<<16) | (uint32(c) << 24)
+				cs[i].bits = uint32(r)<<16 | uint32(c)<<24
 				cs[i].setTurn(b.Turn)
 				i++
 			}
 			if hasFlag {
-				cs[i].bits = uint32(r<<16) | (uint32(c) << 24)
+				cs[i].bits = uint32(r)<<16 | uint32(c)<<24
 				cs[i].setTurn(b.Turn)
 				cs[i].setFlag()
 				i++
 			}
 		}
 	}
-	if len(cs) != nChildren {
+	if len(cs) != i {
 		// If this happens, our memory allocation above is wrong.
 		panic(fmt.Sprintf("Wrong number of next moves: %d != %d+%d", len(cs), ge.FreeCells, ge.NormalMoves[b.Turn-1]))
 	}
@@ -271,11 +280,6 @@ func (mcts *MCTS) run(ge *GameEngineFlagz, node *mcNode, curDepth int) (winner i
 		}
 		if winner == node.turn() {
 			node.wins++
-		}
-		if winner == 0 {
-			// Draw
-			c.wins += 0.5
-			node.wins += 0.5
 		}
 		return winner, curDepth
 	}
@@ -309,9 +313,6 @@ func (mcts *MCTS) run(ge *GameEngineFlagz, node *mcNode, curDepth int) (winner i
 	node.count++
 	if winner == node.turn() {
 		node.wins++
-	} else if winner == 0 {
-		// Draw
-		node.wins += 0.5
 	}
 	return
 }
@@ -420,8 +421,9 @@ func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, mov
 		VisitCounts:   visitCounts,
 		Moves:         make([]MCTSMoveStats, len(root.children)),
 	}
-	best := root.children[0]
-	for i, c := range root.children[1:] {
+	best := &root.children[0]
+	for i := range root.children {
+		c := &root.children[i]
 		if c.Q() > best.Q() {
 			best = c
 		}

@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math"
 	"os"
 	"os/signal"
 	"runtime/pprof"
@@ -36,7 +35,7 @@ func getThinkTime(stats []*hexz.MCTSStats, isBenchPlayer bool) time.Duration {
 	}
 	minQ := stats[l-1].MinQ()
 	maxQ := stats[l-1].MaxQ()
-	if math.Min(1-minQ, maxQ) < 0.02 {
+	if maxQ < 0.05 || minQ > 0.95 {
 		moveThinkTime = time.Duration(100) * time.Millisecond
 	}
 	return moveThinkTime
@@ -116,18 +115,7 @@ func main() {
 		}
 		// Evaluate parameters both on P1 and P2
 		benchPlayer := nRuns%2 + 1
-		mcts[benchPlayer-1].UctFactor = float32(*uctFactor)
-		collectBoardHistory := *gameHistoryDir != ""
-		gameId := hexz.GenerateGameId()
-		var historyWriter *hexz.HistoryWriter
-		if collectBoardHistory {
-			var err error
-			historyWriter, err = hexz.NewHistoryWriter(*gameHistoryDir, gameId)
-			if err != nil {
-				log.Fatal("cannot create history writer: ", err)
-			}
-			defer historyWriter.Close()
-		}
+		mcts[benchPlayer-1].UctFactor = *uctFactor
 	Gameloop:
 		for !ge.IsDone() && time.Since(started) < *maxRuntime {
 			select {
@@ -138,15 +126,8 @@ func main() {
 			}
 			t := ge.Board().Turn - 1
 			moveThinkTime := getThinkTime(moveStats[t], benchPlayer == ge.Board().Turn)
+			hexz.EnableInitialDrawAssumption = (benchPlayer == ge.Board().Turn) // Enable Loss assumption for benchmarked player.
 			m, stats := mcts[t].SuggestMove(ge, moveThinkTime)
-			if collectBoardHistory {
-				boardView := ge.Board().ViewFor(0)
-				historyWriter.Write(&hexz.GameHistoryEntry{
-					EntryType:  "move",
-					Board:      boardView,
-					MoveScores: stats.MoveScores(),
-				})
-			}
 			printVisitCountHistograms(stats.VisitCounts)
 			moveStats[t] = append(moveStats[t], stats)
 			// fmt.Print(stats)
@@ -164,14 +145,6 @@ func main() {
 			nMoves++
 		}
 		if ge.IsDone() {
-			if collectBoardHistory {
-				historyWriter.Write(&hexz.GameHistoryEntry{
-					EntryType: "move",
-					Board:     ge.Board().ViewFor(0),
-					// No MoveScores for terminal board.
-				})
-				fmt.Printf("Wrote game history with gameId %s\n", gameId)
-			}
 			winner := ge.Winner()
 			if winner == benchPlayer {
 				wstats[benchPlayer-1].wins++
