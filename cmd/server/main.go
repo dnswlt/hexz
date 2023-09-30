@@ -25,7 +25,9 @@ func main() {
 	flag.StringVar(&cfg.LoginDatabasePath, "userdb", "_logins.json",
 		"File in which to store login information if the local in-memory login store is used.")
 	flag.StringVar(&cfg.RedisAddr, "redis-addr", "",
-		"Address of the Redis server. Optional. If empty, the local in-memory login store is used.")
+		"Address of the Redis server. If empty, the local in-memory login store is used.")
+	flag.StringVar(&cfg.PostgresURL, "postgres-url", "",
+		"URL of the PostgreSQL server (e.g. \"postgres://hexz:hexz@localhost:5432/hexz\"). If empty, no persistent storage is used.")
 	flag.DurationVar(&cfg.InactivityTimeout, "inactivity-timeout", 60*time.Minute,
 		"Time to wait before ending a game due to inactivity")
 	flag.DurationVar(&cfg.PlayerRemoveDelay, "remove-delay", 60*time.Second,

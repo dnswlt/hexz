@@ -158,9 +158,10 @@ type WASMStatsRequest struct {
 
 type WASMStats struct {
 	// MCTS stats.
-	TreeSize   int `json:"treeSize"`
-	MaxDepth   int `json:"maxDepth"`
-	Iterations int `json:"iterations"`
+	TreeSize   int           `json:"treeSize"`
+	MaxDepth   int           `json:"maxDepth"`
+	Iterations int           `json:"iterations"`
+	Elapsed    time.Duration `json:"elapsed"`
 	// Memory allocations, in MiB (1024*1024 bytes).
 	TotalAllocMiB float64 `json:"totalAllocMiB"`
 	HeapAllocMiB  float64 `json:"heapAllocMiB"`

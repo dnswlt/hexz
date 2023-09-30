@@ -32,6 +32,7 @@ type ServerConfig struct {
 	GameHistoryRoot   string        // Path to game history files.
 	LoginDatabasePath string        // Path to the file where the player DB is stored. If empty, no persistent storage is used.
 	RedisAddr         string        // Address of the Redis server. If empty, local storage is used.
+	PostgresURL       string        // URL of the PostgreSQL server. If empty, no persistent storage is used.
 	InactivityTimeout time.Duration // Time after which a game is ended due to inactivity.
 	PlayerRemoveDelay time.Duration // Time to wait before removing an unregistered player from the game.
 	LoginTTL          time.Duration

@@ -31,6 +31,7 @@ import (
 type StatelessServer struct {
 	config      *ServerConfig
 	playerStore PlayerStore
+	dbStore     DatabaseStore
 	gameStore   GameStore
 }
 
@@ -43,11 +44,18 @@ func NewStatelessServer(config *ServerConfig) (*StatelessServer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create redis client: %s", err)
 	}
-
+	var dbStore DatabaseStore
+	if config.PostgresURL != "" {
+		dbStore, err = NewPostgresStore(context.Background(), config.PostgresURL)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &StatelessServer{
 		playerStore: &RemotePlayerStore{rc},
 		config:      config,
 		gameStore:   rc,
+		dbStore:     dbStore,
 	}, nil
 }
 
@@ -308,6 +316,9 @@ func (s *StatelessServer) handleWASMStats(w http.ResponseWriter, r *http.Request
 	if err = json.Unmarshal(body, &req); err != nil {
 		http.Error(w, "unmarshal error", http.StatusBadRequest)
 		return
+	}
+	if s.dbStore != nil {
+		s.dbStore.InsertStats(r.Context(), &req)
 	}
 	infoLog.Printf("CPU stats: %s", string(body))
 }

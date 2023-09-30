@@ -76,6 +76,7 @@ func main() {
 				TreeSize:      stats.TreeSize,
 				MaxDepth:      stats.MaxDepth,
 				Iterations:    stats.Iterations,
+				Elapsed:       stats.Elapsed,
 				HeapAllocMiB:  heapAllocMiB,
 				TotalAllocMiB: totalAllocMiB,
 			},
