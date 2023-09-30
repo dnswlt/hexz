@@ -8,6 +8,9 @@ import (
 	"time"
 
 	unsafe "unsafe"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func BenchmarkMCTSPlayRandomGame(b *testing.B) {
@@ -162,6 +165,56 @@ func TestMCTSNoThinkTime(t *testing.T) {
 	m, _ = mcts.SuggestMove(ge, thinkTime)
 	if !ge.MakeMove(m) {
 		t.Errorf("Cannot make move %v", m)
+	}
+}
+
+func TestMcNodeIncr(t *testing.T) {
+	opt := cmpopts.EquateApprox(1e6, 0)
+	var m mcNode
+	m.set(0, 0, 1, cellNormal)
+	// P1 wins.
+	m.incr(1)
+	if m.wins != 1 {
+		t.Errorf("Wrong wins: %d", m.wins)
+	}
+	if m.count != 1 {
+		t.Errorf("Wrong count: %d", m.count)
+	}
+	if !cmp.Equal(m.Q(), 1.0, opt) {
+		t.Errorf("Wrong Q: %f", m.Q())
+	}
+	// P2 wins.
+	m.incr(2)
+	if m.wins != 0 {
+		t.Errorf("Wrong wins: %d", m.wins)
+	}
+	if m.count != 2 {
+		t.Errorf("Wrong count: %d", m.count)
+	}
+	if !cmp.Equal(m.Q(), 0.5, opt) {
+		t.Errorf("Wrong Q: %f", m.Q())
+	}
+	// Draw
+	m.incr(0)
+	if m.wins != 0 {
+		t.Errorf("Wrong wins: %d", m.wins)
+	}
+	if m.count != 3 {
+		t.Errorf("Wrong count: %d", m.count)
+	}
+	if !cmp.Equal(m.Q(), 0.5, opt) {
+		t.Errorf("Wrong Q: %f", m.Q())
+	}
+	// P1 wins again.
+	m.incr(1)
+	if m.wins != 1 {
+		t.Errorf("Wrong wins: %d", m.wins)
+	}
+	if m.count != 4 {
+		t.Errorf("Wrong count: %d", m.count)
+	}
+	if !cmp.Equal(m.Q(), 0.75, opt) {
+		t.Errorf("Wrong Q: %f", m.Q())
 	}
 }
 

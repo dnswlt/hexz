@@ -24,6 +24,17 @@ func (n *mcNode) set(r, c int, turn int, cellType CellType) {
 	n.bits = uint32(r) | (uint32(c) << 8) | (uint32(turn>>1) << 16) | (uint32(cellType) << 17)
 }
 
+func (n *mcNode) incr(winner int) {
+	n.count++
+	if winner == n.turn() {
+		n.wins++
+	} else if winner != 0 {
+		// Other player won.
+		n.wins--
+	}
+	// Do nothing on a draw (count it as 0).
+}
+
 func (n *mcNode) r() int {
 	return int(n.bits & 0xff)
 }
@@ -52,7 +63,7 @@ func (n *mcNode) Q() float64 {
 	if n.count == 0 {
 		return 0
 	}
-	return float64(n.wins) / float64(n.count)
+	return 0.5 + float64(n.wins)/float64(n.count)/2
 }
 
 // Tabulating logs showed a significant performance gain on amd64.
@@ -99,7 +110,7 @@ func (n *mcNode) U(parentCount int32, uctFactor float64) float64 {
 		// Never played => assume one game was played and it was a draw.
 		return 0.5 + uctFactor*math.Sqrt(l)
 	}
-	return float64(n.wins)/float64(n.count) + uctFactor*math.Sqrt(l/float64(n.count))
+	return n.Q() + uctFactor*math.Sqrt(l/float64(n.count))
 }
 
 // Returns the number of leaf and branch nodes on each depth level, starting from 0 for the root.
@@ -222,10 +233,7 @@ func (mcts *MCTS) run(ge *GameEngineFlagz, node *mcNode, curDepth int) (winner i
 	b := ge.Board()
 	if ge.IsDone() {
 		winner = ge.Winner()
-		if winner == node.turn() {
-			node.wins++
-		}
-		node.count++
+		node.incr(winner)
 		return winner, curDepth
 	}
 	if node.children == nil {
@@ -240,10 +248,7 @@ func (mcts *MCTS) run(ge *GameEngineFlagz, node *mcNode, curDepth int) (winner i
 		winner = mcts.playRandomGame(ge, c)
 		depth = curDepth + 1
 		// Record counts and wins for child.
-		c.count++
-		if winner == c.turn() {
-			c.wins++
-		}
+		c.incr(winner)
 	} else {
 		// Node has children already, descend to the one with the highest UTC.
 		c := mcts.getNextByUtc(node)
@@ -256,19 +261,13 @@ func (mcts *MCTS) run(ge *GameEngineFlagz, node *mcNode, curDepth int) (winner i
 		if ge.IsDone() {
 			// This was the last move. Update child stats.
 			winner, depth = ge.Winner(), curDepth
-			c.count++
-			if winner == c.turn() {
-				c.wins++
-			}
+			c.incr(winner)
 		} else {
 			// Not done: descend to next level
 			winner, depth = mcts.run(ge, c, curDepth+1)
 		}
 	}
-	node.count++
-	if winner == node.turn() {
-		node.wins++
-	}
+	node.incr(winner)
 	return
 }
 
@@ -411,7 +410,7 @@ func (mcts *MCTS) Reset() {
 }
 
 func (mcts *MCTS) SuggestMove(gameEngine *GameEngineFlagz, maxDuration time.Duration) (GameEngineMove, *MCTSStats) {
-	defer mcts.Reset()
+	mcts.Reset()
 	root := &mcNode{}
 	root.set(0, 0, gameEngine.Board().Turn, cellNormal) // Dummy values, only the turn matters.
 	started := time.Now()
