@@ -13,8 +13,8 @@ import (
 type mcNode struct {
 	// bit-encoding of several values [i:j], j exclusive):
 	// [ liveChildren[0:8], done[8], turn[9], cellType[10], r[16:24], c[24:32] ]
-	wins     int
-	count    int
+	wins     int32
+	count    int32
 	bits     uint32
 	children []mcNode
 }
@@ -118,7 +118,7 @@ func init() {
 
 var EnableInitialDrawAssumption = true
 
-func (n *mcNode) U(parentCount int, uctFactor float64) float64 {
+func (n *mcNode) U(parentCount int32, uctFactor float64) float64 {
 	if !EnableInitialDrawAssumption && n.count == 0 {
 		return math.MaxFloat64
 	}
@@ -172,8 +172,11 @@ func (root *mcNode) nodesPerDepth() (size int, leafNodes []int, branchNodes []in
 
 type MCTS struct {
 	UctFactor float64
-	Mem       []mcNode
-	Next      int
+	// If true, SuggestMove returns the most frequently vistited child node,
+	// not the one with the highest win rate.
+	ReturnMostFrequentlyVisited bool
+	Mem                         []mcNode
+	Next                        int
 }
 
 func (mcts *MCTS) playRandomGame(ge *GameEngineFlagz, firstMove *mcNode) (winner int) {
@@ -397,6 +400,9 @@ func (s *MCTSStats) String() string {
 func NewMCTS() *MCTS {
 	return &MCTS{
 		UctFactor: 1.0,
+		// Returning the node with the highest number of visits is the "standard approach",
+		// https://ai.stackexchange.com/questions/16905/mcts-how-to-choose-the-final-action-from-the-root
+		ReturnMostFrequentlyVisited: true,
 	}
 }
 
@@ -424,7 +430,9 @@ func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, mov
 	best := &root.children[0]
 	for i := range root.children {
 		c := &root.children[i]
-		if c.Q() > best.Q() {
+		if !mcts.ReturnMostFrequentlyVisited && c.Q() > best.Q() {
+			best = c
+		} else if mcts.ReturnMostFrequentlyVisited && c.count > best.count {
 			best = c
 		}
 		stats.Moves[i] = MCTSMoveStats{

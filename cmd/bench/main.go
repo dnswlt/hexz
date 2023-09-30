@@ -19,7 +19,6 @@ var numGames = flag.Int("numgames", 1, "Number of games to play")
 var uctFactor = flag.Float64("uctfactor", 1.0, "weight of the exploration component in the UCT")
 var thinkTime = flag.Duration("thinktime", time.Duration(2)*time.Second, "Think time per player and move")
 var oppThinkTime = flag.Duration("oppthinktime", time.Duration(2)*time.Second, "Think time per player and move")
-var gameHistoryDir = flag.String("gamehistorydir", "", "Directory to which game history of each played game is written")
 
 // Compute the think time we'll give to the player.
 // The more confident a player is that they'll win/lose, the less time we give them
@@ -113,9 +112,10 @@ func main() {
 			// hexz.NewMCTSWithMem(8_000_000),
 			// hexz.NewMCTSWithMem(8_000_000),
 		}
-		// Evaluate parameters both on P1 and P2
+		// Evaluate parameters both when playing as P1 and P2.
 		benchPlayer := nRuns%2 + 1
 		mcts[benchPlayer-1].UctFactor = *uctFactor
+		mcts[benchPlayer-1].ReturnMostFrequentlyVisited = true
 	Gameloop:
 		for !ge.IsDone() && time.Since(started) < *maxRuntime {
 			select {
@@ -126,7 +126,7 @@ func main() {
 			}
 			t := ge.Board().Turn - 1
 			moveThinkTime := getThinkTime(moveStats[t], benchPlayer == ge.Board().Turn)
-			hexz.EnableInitialDrawAssumption = (benchPlayer == ge.Board().Turn) // Enable Loss assumption for benchmarked player.
+			hexz.EnableInitialDrawAssumption = (benchPlayer == ge.Board().Turn)
 			m, stats := mcts[t].SuggestMove(ge, moveThinkTime)
 			printVisitCountHistograms(stats.VisitCounts)
 			moveStats[t] = append(moveStats[t], stats)

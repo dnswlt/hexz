@@ -4,7 +4,6 @@
 const styles = {
     colors: {
         grid: '#cbcbcb',
-        background: '#1e1e1e',
         players: ['#255ab4', '#f8d748'],
         hiddenMoves: ['#92acd9', '#fbeba3'], // 50% alpha of players on white bg.
         // blocked: ['rgba(248, 215, 72, 0.2)', 'rgba(37, 90, 180, 0.5)', '#3e3e3e'],  // same as hiddenMoves / unavailablePiece.
