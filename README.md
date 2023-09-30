@@ -14,7 +14,7 @@ docker run -p 8080:8080 hexz
 
 ## Cloud Run
 
-Build and deploy:
+Build and deploy Docker image:
 
 ```
 docker build . --tag europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/hexz:latest
@@ -25,6 +25,13 @@ Run the Artifact Registry image locally:
 
 ```
 PORT=8080 && docker run -p 8080:${PORT} -e PORT=${PORT} europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/hexz:latest
+```
+
+Deploy to Cloud Run:
+
+```
+gcloud run deploy hexz --image=europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/hexz:latest --region=europe-west6 --project=hexz-cloud-run  && \
+  gcloud run services update-traffic hexz --to-latest
 ```
 
 ## Cloud Logging
