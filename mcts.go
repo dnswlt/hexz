@@ -10,79 +10,42 @@ import (
 	"github.com/dnswlt/hexz/xrand"
 )
 
+// Nodes of the MCTS search tree.
 type mcNode struct {
+	wins  int32
+	count int32
 	// bit-encoding of several values [i:j], j exclusive):
-	// [ liveChildren[0:8], done[8], turn[9], cellType[10], r[16:24], c[24:32] ]
-	wins     int32
-	count    int32
+	// [ r[0:8], c[8:16], turn[16], cellType[17:21]  ]
 	bits     uint32
 	children []mcNode
 }
 
-func newMcNode(r, c int) mcNode {
-	return mcNode{bits: uint32(r<<16) | (uint32(c) << 24)}
+func (n *mcNode) set(r, c int, turn int, cellType CellType) {
+	n.bits = uint32(r) | (uint32(c) << 8) | (uint32(turn>>1) << 16) | (uint32(cellType) << 17)
 }
 
 func (n *mcNode) r() int {
-	return int((n.bits >> 16) & 0xff)
+	return int(n.bits & 0xff)
 }
 
 func (n *mcNode) c() int {
-	return int((n.bits >> 24) & 0xff)
-}
-
-func (n *mcNode) done() bool {
-	return n.bits&(1<<8) != 0
-}
-
-func (n *mcNode) setDone() {
-	n.bits |= (1 << 8)
+	return int((n.bits >> 8) & 0xff)
 }
 
 func (n *mcNode) turn() int {
-	if n.bits&(1<<9) != 0 {
+	if n.bits&(1<<16) != 0 {
 		return 2
 	}
 	return 1
 }
 
-func (n *mcNode) setTurn(turn int) {
-	if turn == 2 {
-		n.bits |= 1 << 9
-		return
-	}
-	n.bits &= ^uint32(1 << 9)
-}
-
 func (n *mcNode) cellType() CellType {
-	if n.bits&(1<<10) != 0 {
-		return cellFlag
-	}
-	return cellNormal
-}
-
-func (n *mcNode) setFlag() {
-	n.bits |= 1 << 10
-}
-
-func (n *mcNode) liveChildren() int {
-	return int(n.bits & 0x7f)
-}
-
-func (n *mcNode) setLiveChildren(k int) {
-	if k > 127 {
-		panic(fmt.Sprintf("setLiveChildren called with large k: %d", k))
-	}
-	n.bits = (n.bits & ^uint32(0x7f)) | uint32(k)
-}
-
-func (n *mcNode) decrLiveChildren() {
-	n.bits--
+	return CellType((n.bits >> 17) & 0xf)
 }
 
 func (n *mcNode) String() string {
-	return fmt.Sprintf("(%d,%d/%d) #cs:%d, wins:%d count:%d, done:%t, turn:%d, #lc:%d",
-		n.r(), n.c(), n.cellType(), len(n.children), n.wins, n.count, n.done(), n.turn(), n.liveChildren())
+	return fmt.Sprintf("(%d,%d/%d) #cs:%d, wins:%d count:%d, turn:%d",
+		n.r(), n.c(), n.cellType(), len(n.children), n.wins, n.count, n.turn())
 }
 
 func (n *mcNode) Q() float64 {
@@ -208,9 +171,6 @@ func (mcts *MCTS) getNextByUtc(node *mcNode) *mcNode {
 	maxUct := -1.0
 	for i := range node.children {
 		l := &node.children[i]
-		if l.done() {
-			continue
-		}
 		uct := l.U(node.count, mcts.UctFactor)
 		if uct > maxUct {
 			next = l
@@ -242,14 +202,11 @@ func (mcts *MCTS) nextMoves(ge *GameEngineFlagz) []mcNode {
 				continue
 			}
 			if f.isAvail(b.Turn) {
-				cs[i].bits = uint32(r)<<16 | uint32(c)<<24
-				cs[i].setTurn(b.Turn)
+				cs[i].set(r, c, b.Turn, cellNormal)
 				i++
 			}
 			if hasFlag {
-				cs[i].bits = uint32(r)<<16 | uint32(c)<<24
-				cs[i].setTurn(b.Turn)
-				cs[i].setFlag()
+				cs[i].set(r, c, b.Turn, cellFlag)
 				i++
 			}
 		}
@@ -263,54 +220,49 @@ func (mcts *MCTS) nextMoves(ge *GameEngineFlagz) []mcNode {
 
 func (mcts *MCTS) run(ge *GameEngineFlagz, node *mcNode, curDepth int) (winner int, depth int) {
 	b := ge.Board()
+	if ge.IsDone() {
+		winner = ge.Winner()
+		if winner == node.turn() {
+			node.wins++
+		}
+		node.count++
+		return winner, curDepth
+	}
 	if node.children == nil {
-		// Terminal node in our exploration graph, but not in the whole game:
-		// While traversing a path we play moves and detect when the game IsDone (below).
+		// Terminal node in our exploration graph, but not in the whole game: rollout time!
 		cs := mcts.nextMoves(ge)
 		if len(cs) == 0 {
-			panic(fmt.Sprintf("No next moves on allegedly non-final node: %s", node.String()))
+			panic("No next moves, but game is not over yet")
 		}
 		node.children = cs
-		node.setLiveChildren(len(cs))
 		// Play a random child (rollout)
 		c := &cs[xrand.Intn(len(cs))]
 		winner = mcts.playRandomGame(ge, c)
-		// Record counts and wins for both nodes.
-		node.count++
+		depth = curDepth + 1
+		// Record counts and wins for child.
 		c.count++
 		if winner == c.turn() {
 			c.wins++
 		}
-		if winner == node.turn() {
-			node.wins++
-		}
-		return winner, curDepth
-	}
-	// Node has children already, descend to the one with the highest UTC.
-	c := mcts.getNextByUtc(node)
-	if c == nil {
-		// All children are done, but that was not properly propagated up to the parent node.
-		panic(fmt.Sprintf("No children left for node: %s", node.String()))
-	}
-	move := GameEngineMove{
-		PlayerNum: c.turn(), Move: b.Move, Row: c.r(), Col: c.c(), CellType: c.cellType(),
-	}
-	if !ge.MakeMove(move) {
-		panic(fmt.Sprintf("Failed to make move %s", move.String()))
-	}
-	if ge.IsDone() {
-		// This was the last move. Propagate the result up.
-		c.setDone()
-		winner, depth = ge.Winner(), curDepth
 	} else {
-		// Not done: descend to next level
-		winner, depth = mcts.run(ge, c, curDepth+1)
-	}
-	if c.done() {
-		// Propagate up the fact that child is done to avoid revisiting it.
-		node.decrLiveChildren()
-		if node.liveChildren() == 0 {
-			node.setDone()
+		// Node has children already, descend to the one with the highest UTC.
+		c := mcts.getNextByUtc(node)
+		move := GameEngineMove{
+			PlayerNum: c.turn(), Move: b.Move, Row: c.r(), Col: c.c(), CellType: c.cellType(),
+		}
+		if !ge.MakeMove(move) {
+			panic(fmt.Sprintf("Failed to make move %s", move.String()))
+		}
+		if ge.IsDone() {
+			// This was the last move. Update child stats.
+			winner, depth = ge.Winner(), curDepth
+			c.count++
+			if winner == c.turn() {
+				c.wins++
+			}
+		} else {
+			// Not done: descend to next level
+			winner, depth = mcts.run(ge, c, curDepth+1)
 		}
 	}
 	node.count++
@@ -330,15 +282,14 @@ type MCTSMoveStats struct {
 }
 
 type MCTSStats struct {
-	Iterations    int
-	MaxDepth      int
-	TreeSize      int
-	LeafNodes     []int         // Per depth level, 0=root
-	BranchNodes   []int         // Per depth level, 0=root
-	VisitCounts   []map[int]int // Per depth level, maps visit count to number of nodes with that count.
-	Elapsed       time.Duration
-	FullyExplored bool
-	Moves         []MCTSMoveStats
+	Iterations  int
+	MaxDepth    int
+	TreeSize    int
+	LeafNodes   []int         // Per depth level, 0=root
+	BranchNodes []int         // Per depth level, 0=root
+	VisitCounts []map[int]int // Per depth level, maps visit count to number of nodes with that count.
+	Elapsed     time.Duration
+	Moves       []MCTSMoveStats
 }
 
 func (s *MCTSStats) MinQ() float64 {
@@ -417,15 +368,14 @@ func NewMCTSWithMem(cap int) *MCTS {
 func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, move int) (GameEngineMove, *MCTSStats) {
 	size, leafNodes, branchNodes, visitCounts := root.nodesPerDepth()
 	stats := &MCTSStats{
-		Iterations:    int(root.count),
-		MaxDepth:      len(leafNodes),
-		Elapsed:       elapsed,
-		FullyExplored: root.done(),
-		TreeSize:      size,
-		LeafNodes:     leafNodes,
-		BranchNodes:   branchNodes,
-		VisitCounts:   visitCounts,
-		Moves:         make([]MCTSMoveStats, len(root.children)),
+		Iterations:  int(root.count),
+		MaxDepth:    len(leafNodes),
+		Elapsed:     elapsed,
+		TreeSize:    size,
+		LeafNodes:   leafNodes,
+		BranchNodes: branchNodes,
+		VisitCounts: visitCounts,
+		Moves:       make([]MCTSMoveStats, len(root.children)),
 	}
 	best := &root.children[0]
 	for i := range root.children {
@@ -463,7 +413,7 @@ func (mcts *MCTS) Reset() {
 func (mcts *MCTS) SuggestMove(gameEngine *GameEngineFlagz, maxDuration time.Duration) (GameEngineMove, *MCTSStats) {
 	defer mcts.Reset()
 	root := &mcNode{}
-	root.setTurn(gameEngine.Board().Turn)
+	root.set(0, 0, gameEngine.Board().Turn, cellNormal) // Dummy values, only the turn matters.
 	started := time.Now()
 	ge := gameEngine.Clone()
 	for n := 0; ; n++ {
@@ -473,10 +423,6 @@ func (mcts *MCTS) SuggestMove(gameEngine *GameEngineFlagz, maxDuration time.Dura
 		}
 		ge.copyFrom(gameEngine)
 		mcts.run(ge, root, 0)
-		if root.done() {
-			// Board completely explored
-			break
-		}
 	}
 	elapsed := time.Since(started)
 	return mcts.bestNextMoveWithStats(root, elapsed, gameEngine.Board().Move)

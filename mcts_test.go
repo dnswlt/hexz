@@ -24,8 +24,8 @@ func BenchmarkMCTSPlayRandomGame(b *testing.B) {
 				}
 			}
 		}
-		root := newMcNode(r, c)
-		root.setFlag()
+		var root mcNode
+		root.set(r, c, ge.B.Turn, cellFlag)
 		mcts.playRandomGame(ge.Clone(), &root)
 	}
 }
@@ -53,28 +53,32 @@ func TestMCTSFull(t *testing.T) {
 }
 
 func TestMCTSBitOps(t *testing.T) {
-	m := newMcNode(3, 4)
+	var m mcNode
+	m.set(3, 4 /*turn*/, 2, cellFlag)
 	if m.r() != 3 {
 		t.Errorf("Wrong row: %d", m.r())
 	}
 	if m.c() != 4 {
 		t.Errorf("Wrong col: %d", m.c())
 	}
-	m.setTurn(2)
 	if m.turn() != 2 {
 		t.Errorf("Wrong turn: %d", m.turn())
 	}
-	m.setFlag()
 	if m.cellType() != cellFlag {
 		t.Errorf("Flag not set")
 	}
-	m.setLiveChildren(17)
-	if m.liveChildren() != 17 {
-		t.Errorf("Wrong live children: %d", m.liveChildren())
+	m.set(9, 10, 1, cellNormal)
+	if m.r() != 9 {
+		t.Errorf("Wrong row: %d", m.r())
 	}
-	m.decrLiveChildren()
-	if m.liveChildren() != 16 {
-		t.Errorf("Wrong live children: %d", m.liveChildren())
+	if m.c() != 10 {
+		t.Errorf("Wrong col: %d", m.c())
+	}
+	if m.turn() != 1 {
+		t.Errorf("Wrong turn: %d", m.turn())
+	}
+	if m.cellType() != cellNormal {
+		t.Errorf("Wrong cell type: %d", m.cellType())
 	}
 }
 
