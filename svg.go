@@ -23,6 +23,7 @@ func hexPolySVG(sideLength float64, f *Field, r, c int) string {
 		1: "#1e1e1e",
 		2: "#7a6505",
 	}
+	// Coordinates for a hexagon with side length a, centered at (0, 0).
 	a := sideLength
 	b := math.Sqrt(3) * a
 	ps := []float64{
@@ -42,6 +43,12 @@ func hexPolySVG(sideLength float64, f *Field, r, c int) string {
 		fill = "#008048"
 	case f.Type == cellRock:
 		fill = "#5f5f5f"
+	case f.Blocked > 0:
+		fill = map[int]string{
+			1: "#fbeba3",
+			2: "#92acd9",
+			3: "#5f5f5f",
+		}[int(f.Blocked)]
 	default:
 		fill = "none"
 	}
@@ -82,11 +89,6 @@ func ExportSVG(file string, boards []*Board, captions []string) error {
 	width := 10 * math.Sqrt(3) * sideLength
 	height := 17 * sideLength
 	viewbox := fmt.Sprintf("0 0 %.6f %.6f", width, height)
-	f, err := os.Create(file)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
 	var sb strings.Builder
 	sb.WriteString(`<!DOCTYPE html>
 		<html>
@@ -133,6 +135,13 @@ func ExportSVG(file string, boards []*Board, captions []string) error {
 	}
 	sb.WriteString("</body>\n")
 	sb.WriteString("</html>\n")
-	f.Write([]byte(sb.String()))
+
+	// Write output file.
+	f, err := os.Create(file)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	f.WriteString(sb.String())
 	return nil
 }

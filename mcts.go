@@ -149,21 +149,15 @@ type MCTS struct {
 	// If true, SuggestMove returns the most frequently vistited child node,
 	// not the one with the highest win rate.
 	ReturnMostFrequentlyVisited bool
-	Mem                         []mcNode
-	Next                        int
+	// Sample boards that led to a win/loss.
+	WinningBoard *Board
+	LosingBoard  *Board
+	// For explicit memory handling.
+	Mem  []mcNode
+	Next int
 }
 
-func (mcts *MCTS) playRandomGame(ge *GameEngineFlagz, firstMove *mcNode) (winner int) {
-	b := ge.Board()
-	if !ge.MakeMove(GameEngineMove{
-		PlayerNum: firstMove.turn(),
-		Move:      b.Move,
-		Row:       firstMove.r(),
-		Col:       firstMove.c(),
-		CellType:  firstMove.cellType(),
-	}) {
-		panic("Invalid move: " + firstMove.String())
-	}
+func (mcts *MCTS) playRandomGame(ge *GameEngineFlagz) (winner int) {
 	for !ge.IsDone() {
 		m, err := ge.RandomMove()
 		if err != nil {
@@ -229,13 +223,15 @@ func (mcts *MCTS) nextMoves(ge *GameEngineFlagz) []mcNode {
 	return cs
 }
 
-func (mcts *MCTS) run(ge *GameEngineFlagz, node *mcNode, curDepth int) (winner int, depth int) {
-	b := ge.Board()
+func (mcts *MCTS) run(ge *GameEngineFlagz, node *mcNode) (winner int) {
 	if ge.IsDone() {
-		winner = ge.Winner()
-		node.incr(winner)
-		return winner, curDepth
+		panic("Called Run() on a finished game")
 	}
+	return mcts.runInternal(ge, node, 0)
+}
+
+func (mcts *MCTS) runInternal(ge *GameEngineFlagz, node *mcNode, curDepth int) (winner int) {
+	b := ge.Board()
 	if node.children == nil {
 		// Terminal node in our exploration graph, but not in the whole game: rollout time!
 		cs := mcts.nextMoves(ge)
@@ -245,8 +241,18 @@ func (mcts *MCTS) run(ge *GameEngineFlagz, node *mcNode, curDepth int) (winner i
 		node.children = cs
 		// Play a random child (rollout)
 		c := &cs[xrand.Intn(len(cs))]
-		winner = mcts.playRandomGame(ge, c)
-		depth = curDepth + 1
+		move := GameEngineMove{
+			PlayerNum: c.turn(), Move: b.Move, Row: c.r(), Col: c.c(), CellType: c.cellType(),
+		}
+		if !ge.MakeMove(move) {
+			panic(fmt.Sprintf("Failed to make move for rollout: %s", move.String()))
+		}
+		winner = mcts.playRandomGame(ge)
+		if winner == 1 && mcts.WinningBoard == nil {
+			mcts.WinningBoard = b.copy()
+		} else if winner == 2 && mcts.LosingBoard == nil {
+			mcts.LosingBoard = b.copy()
+		}
 		// Record counts and wins for child.
 		c.incr(winner)
 	} else {
@@ -256,15 +262,15 @@ func (mcts *MCTS) run(ge *GameEngineFlagz, node *mcNode, curDepth int) (winner i
 			PlayerNum: c.turn(), Move: b.Move, Row: c.r(), Col: c.c(), CellType: c.cellType(),
 		}
 		if !ge.MakeMove(move) {
-			panic(fmt.Sprintf("Failed to make move %s", move.String()))
+			panic(fmt.Sprintf("Failed to make move during tree descent: %s", move.String()))
 		}
 		if ge.IsDone() {
 			// This was the last move. Update child stats.
-			winner, depth = ge.Winner(), curDepth
+			winner = ge.Winner()
 			c.incr(winner)
 		} else {
 			// Not done: descend to next level
-			winner, depth = mcts.run(ge, c, curDepth+1)
+			winner = mcts.runInternal(ge, c, curDepth+1)
 		}
 	}
 	node.incr(winner)
@@ -389,8 +395,8 @@ func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, mov
 			Col:        c.c(),
 			CellType:   c.cellType(),
 			Iterations: int(c.count),
-			U:          float64(c.U(root.count, mcts.UctFactor)),
-			Q:          float64(c.Q()),
+			U:          c.U(root.count, mcts.UctFactor),
+			Q:          c.Q(),
 		}
 	}
 	m := GameEngineMove{
@@ -407,6 +413,8 @@ func (mcts *MCTS) Reset() {
 	if mcts.Mem != nil {
 		mcts.Next = 0
 	}
+	mcts.WinningBoard = nil
+	mcts.LosingBoard = nil
 }
 
 func (mcts *MCTS) SuggestMove(gameEngine *GameEngineFlagz, maxDuration time.Duration) (GameEngineMove, *MCTSStats) {
@@ -421,7 +429,7 @@ func (mcts *MCTS) SuggestMove(gameEngine *GameEngineFlagz, maxDuration time.Dura
 			break
 		}
 		ge.copyFrom(gameEngine)
-		mcts.run(ge, root, 0)
+		mcts.run(ge, root)
 	}
 	elapsed := time.Since(started)
 	return mcts.bestNextMoveWithStats(root, elapsed, gameEngine.Board().Move)

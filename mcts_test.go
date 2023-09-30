@@ -15,21 +15,11 @@ import (
 
 func BenchmarkMCTSPlayRandomGame(b *testing.B) {
 	ge := NewGameEngineFlagz()
+	orig := ge.Clone()
 	mcts := NewMCTS()
 	for i := 0; i < b.N; i++ {
-		r := 0
-		c := 0
-	Outer:
-		for ; r < len(ge.B.Fields); r++ {
-			for ; c < len(ge.B.Fields[r]); c++ {
-				if !ge.B.Fields[r][c].occupied() {
-					break Outer
-				}
-			}
-		}
-		var root mcNode
-		root.set(r, c, ge.B.Turn, cellFlag)
-		mcts.playRandomGame(ge.Clone(), &root)
+		ge.copyFrom(orig)
+		mcts.playRandomGame(ge)
 	}
 }
 
@@ -52,6 +42,50 @@ func TestMCTSFull(t *testing.T) {
 		if !ge.MakeMove(m) {
 			t.Fatal("Cannot make move")
 		}
+	}
+}
+
+func TestMCTSLosingBoardWithHighQ(t *testing.T) {
+	// This test writes examples of winning and losing boards to a file.
+	// The idea is to see if hexz can really still result in a loss
+	// even if the MCTS is very sure it will win.
+	//
+	// Comment out the next line to actually run this (long) test.
+	t.Skip("To be activated manually for experiments.")
+
+	if testing.Short() {
+		t.Skip("Don't run full MCTS simulation in -short mode.")
+	}
+	thinkTime := time.Duration(1000) * time.Millisecond
+
+	ge := NewGameEngineFlagz()
+
+	mcts := NewMCTS()
+	wroteBoard := false
+	for !ge.IsDone() {
+		m, stats := mcts.SuggestMove(ge, thinkTime)
+		if stats.MinQ() > 0.98 && mcts.LosingBoard != nil && mcts.WinningBoard != nil {
+			// We are very sure we'll win. Let's see what the boards looks like.
+			ExportSVG("losing_board.html",
+				[]*Board{
+					ge.Board(),
+					mcts.WinningBoard,
+					mcts.LosingBoard,
+				},
+				[]string{
+					"Current board",
+					"Winning board",
+					"Losing board",
+				})
+			wroteBoard = true
+			break
+		}
+		if !ge.MakeMove(m) {
+			t.Fatal("Cannot make move")
+		}
+	}
+	if !wroteBoard {
+		t.Error("Did not write losing board")
 	}
 }
 
@@ -147,7 +181,7 @@ func BenchmarkMCTSRun(b *testing.B) {
 	root := &mcNode{}
 	for i := 0; i < b.N; i++ {
 		ge.copyFrom(gameEngine)
-		mcts.run(ge, root, 0)
+		mcts.run(ge, root)
 	}
 }
 
