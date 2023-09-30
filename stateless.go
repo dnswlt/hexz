@@ -515,7 +515,6 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			case sseEventGameUpdated:
-				infoLog.Printf("[%s/%s] Received game update: %s", gameId, p.Name, e)
 				gameState, ge, err := s.loadGame(r.Context(), gameId)
 				if err != nil {
 					errorLog.Printf("Cannot load ongoing game %s: %s", gameId, err)
