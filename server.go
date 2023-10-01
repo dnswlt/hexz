@@ -51,7 +51,7 @@ var (
 	// Regexp used to validate player names.
 	playernameRegexp = regexp.MustCompile(`^[\p{Latin}0-9_.-]+$`)
 
-	// Loggers
+	// Loggers. Note: cmd/server/main.go uses its own loggers.
 	infoLog  = log.New(os.Stderr, "I ", log.Ldate|log.Ltime|log.Lshortfile)
 	errorLog = log.New(os.Stderr, "E ", log.Ldate|log.Ltime|log.Lshortfile)
 )

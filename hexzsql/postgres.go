@@ -1,8 +1,4 @@
-package hexz
-
-// Database support.
-// While a stateless server will store the current game state in a memstore,
-// history and stats can be stored in a database.
+package hexzsql
 
 import (
 	"context"
@@ -11,15 +7,9 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib" // Needed to register pgx as a database/sql driver.
 
+	"github.com/dnswlt/hexz"
 	pb "github.com/dnswlt/hexz/hexzpb"
 )
-
-type DatabaseStore interface {
-	// Store a game state in the database.
-	StoreGame(ctx context.Context, gameId string, state *pb.GameState) error
-	InsertStats(ctx context.Context, stats *WASMStatsRequest) error
-	LoadGame(ctx context.Context, gameId string) (*pb.GameState, error)
-}
 
 type PostgresStore struct {
 	pool *sql.DB
@@ -35,7 +25,6 @@ func NewPostgresStore(ctx context.Context, database_url string) (*PostgresStore,
 	if err != nil {
 		return nil, fmt.Errorf("failed to ping PostgresSQL at %s: %w", database_url, err)
 	}
-	infoLog.Printf("Connected to PostgresSQL at %s", database_url)
 	return s, nil
 }
 
@@ -48,7 +37,7 @@ func (s *PostgresStore) StoreGame(ctx context.Context, gameId string, gs *pb.Gam
 	return err
 }
 
-func (s *PostgresStore) InsertStats(ctx context.Context, stats *WASMStatsRequest) error {
+func (s *PostgresStore) InsertStats(ctx context.Context, stats *hexz.WASMStatsRequest) error {
 	t := &stats.Stats
 	u := &stats.UserInfo
 	_, err := s.pool.ExecContext(ctx, `

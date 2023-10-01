@@ -1,10 +1,11 @@
-package hexz
+package hexzsql
 
 import (
 	"context"
 	"flag"
 	"testing"
 
+	"github.com/dnswlt/hexz"
 	pb "github.com/dnswlt/hexz/hexzpb"
 )
 
@@ -25,7 +26,7 @@ func TestPostgresDatabase(t *testing.T) {
 	gameId := "test_game_id"
 	gs := &pb.GameState{
 		GameInfo: &pb.GameInfo{
-			Type: string(gameTypeFlagz),
+			Type: "Test",
 		},
 	}
 	if err := db.StoreGame(ctx, gameId, gs); err != nil {
@@ -43,15 +44,15 @@ func TestPostgresInsertStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	stats := &WASMStatsRequest{
+	stats := &hexz.WASMStatsRequest{
 		GameId:   "test_game_id",
 		Move:     1,
-		GameType: gameTypeFlagz,
-		Stats: WASMStats{
+		GameType: "Test",
+		Stats: hexz.WASMStats{
 			TreeSize:   42,
 			Iterations: 1000,
 		},
-		UserInfo: UserInfo{
+		UserInfo: hexz.UserInfo{
 			UserAgent:  "Mozilla/5.0 (X11; Linux x86_64; rv:78.0) Gecko/20100101 Firefox/78.0",
 			Language:   "en-US",
 			Resolution: [2]int{800, 600},

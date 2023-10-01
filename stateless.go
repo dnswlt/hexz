@@ -35,7 +35,7 @@ type StatelessServer struct {
 	gameStore   GameStore
 }
 
-func NewStatelessServer(config *ServerConfig) (*StatelessServer, error) {
+func NewStatelessServer(config *ServerConfig, dbStore DatabaseStore) (*StatelessServer, error) {
 	rc, err := NewRedisClient(&RedisClientConfig{
 		Addr:     config.RedisAddr,
 		LoginTTL: config.LoginTTL,
@@ -43,13 +43,6 @@ func NewStatelessServer(config *ServerConfig) (*StatelessServer, error) {
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create redis client: %s", err)
-	}
-	var dbStore DatabaseStore
-	if config.PostgresURL != "" {
-		dbStore, err = NewPostgresStore(context.Background(), config.PostgresURL)
-		if err != nil {
-			return nil, err
-		}
 	}
 	return &StatelessServer{
 		playerStore: &RemotePlayerStore{rc},
