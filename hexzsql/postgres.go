@@ -30,10 +30,10 @@ func NewPostgresStore(ctx context.Context, database_url string) (*PostgresStore,
 
 func (s *PostgresStore) StoreGame(ctx context.Context, gameId string, gs *pb.GameState) error {
 	_, err := s.pool.ExecContext(ctx, `
-		INSERT INTO games (game_id, game_type, player1_name, player2_name) 
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (game_id) DO UPDATE SET game_type = $2, player1_name = $3, player2_name = $4`,
-		gameId, string(gs.GameInfo.Type), "hans", "franz")
+		INSERT INTO games (game_id, game_type, host_name) 
+		VALUES ($1, $2, $3)
+		ON CONFLICT (game_id) DO UPDATE SET game_type = $2, host_name = $3`,
+		gameId, string(gs.GameInfo.Type), gs.GameInfo.Host)
 	return err
 }
 

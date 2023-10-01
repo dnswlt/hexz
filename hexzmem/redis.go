@@ -1,26 +1,19 @@
-package hexz
+package hexzmem
 
 // Contains interfaces and implementations for storing game data remotely.
 
 import (
 	"context"
+	"log"
+	"os"
 	"time"
 
+	"github.com/dnswlt/hexz"
 	pb "github.com/dnswlt/hexz/hexzpb"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
-
-type GameStore interface {
-	StoreNewGame(ctx context.Context, s *pb.GameState) (bool, error)
-	LookupGame(ctx context.Context, gameId string) (*pb.GameState, error)
-	UpdateGame(ctx context.Context, s *pb.GameState) error
-	ListRecentGames(ctx context.Context, limit int) ([]*pb.GameInfo, error)
-
-	Publish(ctx context.Context, gameId string, event string) error
-	Subscribe(ctx context.Context, gameId string, ch chan<- string)
-}
 
 type RedisClient struct {
 	client *redis.Client
@@ -34,6 +27,24 @@ type RedisClientConfig struct {
 	DB       int // Production should always use 0, 1 is for testing.
 }
 
+// RemotePlayerStore is an interface adapter that lets RedisClient implement PlayerStore.
+type RemotePlayerStore struct {
+	*RedisClient
+}
+
+var (
+	infoLog  = log.New(os.Stderr, "I ", log.Ldate|log.Ltime|log.Lshortfile)
+	errorLog = log.New(os.Stderr, "E ", log.Ldate|log.Ltime|log.Lshortfile)
+)
+
+func (s *RemotePlayerStore) Lookup(ctx context.Context, playerId hexz.PlayerId) (hexz.Player, error) {
+	return s.LookupPlayer(ctx, playerId)
+}
+
+func (s *RemotePlayerStore) Login(ctx context.Context, playerId hexz.PlayerId, name string) error {
+	return s.LoginPlayer(ctx, playerId, name)
+}
+
 func NewRedisClient(config *RedisClientConfig) (*RedisClient, error) {
 	rc := &RedisClient{
 		config: config,
@@ -45,7 +56,6 @@ func NewRedisClient(config *RedisClientConfig) (*RedisClient, error) {
 	if err := rc.Ping(); err != nil {
 		return nil, err
 	}
-	infoLog.Printf("Connected to Redis at %s", rc.client.Options().Addr)
 	return rc, nil
 }
 
@@ -53,22 +63,19 @@ func (c *RedisClient) Ping() error {
 	return c.client.Ping(context.Background()).Err()
 }
 
-func (c *RedisClient) LookupPlayer(ctx context.Context, playerId PlayerId) (Player, error) {
+func (c *RedisClient) LookupPlayer(ctx context.Context, playerId hexz.PlayerId) (hexz.Player, error) {
 	val, err := c.client.GetEx(ctx, "login:"+string(playerId), c.config.LoginTTL).Result()
 	if err != nil {
-		if err != redis.Nil {
-			errorLog.Printf("Failed to look up player %q: %v", playerId, err)
-		}
-		return Player{}, err
+		return hexz.Player{}, err
 	}
-	return Player{
+	return hexz.Player{
 		Id:         playerId,
 		Name:       val,
 		LastActive: time.Now(),
 	}, nil
 }
 
-func (c *RedisClient) LoginPlayer(ctx context.Context, playerId PlayerId, name string) error {
+func (c *RedisClient) LoginPlayer(ctx context.Context, playerId hexz.PlayerId, name string) error {
 	return c.client.SetEx(ctx, "login:"+string(playerId), name, c.config.LoginTTL).Err()
 }
 

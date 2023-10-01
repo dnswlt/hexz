@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/dnswlt/hexz"
+	"github.com/dnswlt/hexz/hexzmem"
 	"github.com/dnswlt/hexz/hexzsql"
 )
 
@@ -33,7 +34,7 @@ func main() {
 	flag.StringVar(&cfg.LoginDatabasePath, "userdb", "_logins.json",
 		"File in which to store login information if the local in-memory login store is used.")
 	flag.StringVar(&cfg.RedisAddr, "redis-addr", "",
-		"Address of the Redis server. If empty, the local in-memory login store is used.")
+		"Address of the Redis server. Only used by the -stateless server (default: localhost:6379).")
 	flag.StringVar(&cfg.PostgresURL, "postgres-url", "",
 		"URL of the PostgreSQL server (e.g. \"postgres://hexz:hexz@localhost:5432/hexz\"). If empty, no persistent storage is used.")
 	flag.DurationVar(&cfg.InactivityTimeout, "inactivity-timeout", 60*time.Minute,
@@ -82,8 +83,21 @@ func main() {
 		}
 	}
 	if cfg.Stateless {
+		// Redis
+		if cfg.RedisAddr == "" {
+			cfg.RedisAddr = "localhost:6379"
+		}
+		rc, err := hexzmem.NewRedisClient(&hexzmem.RedisClientConfig{
+			Addr:     cfg.RedisAddr,
+			LoginTTL: cfg.LoginTTL,
+			GameTTL:  cfg.InactivityTimeout,
+		})
+		if err != nil {
+			errorLog.Fatal("error connecting to redis: ", err)
+		}
+		infoLog.Print("connected to Redis at ", cfg.RedisAddr)
+		// Postgres (optional)
 		var dbStore hexz.DatabaseStore
-		var err error
 		if cfg.PostgresURL != "" {
 			dbStore, err = hexzsql.NewPostgresStore(context.Background(), cfg.PostgresURL)
 			if err != nil {
@@ -91,7 +105,8 @@ func main() {
 			}
 			infoLog.Print("connected to PostgreSQL at ", cfg.PostgresURL)
 		}
-		s, err := hexz.NewStatelessServer(cfg, dbStore)
+		// Let's go!
+		s, err := hexz.NewStatelessServer(cfg, &hexzmem.RemotePlayerStore{RedisClient: rc}, rc, dbStore)
 		if err != nil {
 			errorLog.Fatal("error creating server: ", err)
 		}

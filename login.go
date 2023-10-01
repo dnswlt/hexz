@@ -19,14 +19,6 @@ import (
 // A random UUID used to identify players. Also used in cookies.
 type PlayerId string
 
-type PlayerStore interface {
-	// Lookup looks up the given player by ID.
-	Lookup(ctx context.Context, playerId PlayerId) (Player, error)
-	// Login logs in the given player. If the player is already logged in,
-	// the existing data will be overwritten with the new data.
-	Login(ctx context.Context, playerId PlayerId, name string) error
-}
-
 const (
 	maxLoggedInPlayers = 10000
 )
@@ -154,17 +146,4 @@ func (s *InMemoryPlayerStore) saveToFile() error {
 		return err
 	}
 	return nil
-}
-
-// RemotePlayerStore is an interface adapter that lets RedisClient implement PlayerStore.
-type RemotePlayerStore struct {
-	*RedisClient
-}
-
-func (s *RemotePlayerStore) Lookup(ctx context.Context, playerId PlayerId) (Player, error) {
-	return s.LookupPlayer(ctx, playerId)
-}
-
-func (s *RemotePlayerStore) Login(ctx context.Context, playerId PlayerId, name string) error {
-	return s.LoginPlayer(ctx, playerId, name)
 }

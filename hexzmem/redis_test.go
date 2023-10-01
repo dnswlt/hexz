@@ -1,4 +1,4 @@
-package hexz
+package hexzmem
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	testRedisAddr = flag.String("test-redis-addr", "localhost:6379", "Address of Redis server used for integration tests")
+	testRedisAddr = flag.String("test-redis-addr", "", "Address of Redis server used for integration tests")
 )
 
 func TestRedisPubsub(t *testing.T) {

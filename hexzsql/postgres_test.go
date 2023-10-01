@@ -53,7 +53,7 @@ func TestPostgresInsertStats(t *testing.T) {
 			Iterations: 1000,
 		},
 		UserInfo: hexz.UserInfo{
-			UserAgent:  "Mozilla/5.0 (X11; Linux x86_64; rv:78.0) Gecko/20100101 Firefox/78.0",
+			UserAgent:  "Golang_Test",
 			Language:   "en-US",
 			Resolution: [2]int{800, 600},
 		},
