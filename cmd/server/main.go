@@ -74,13 +74,18 @@ func main() {
 	if !setFlags["redis-addr"] && envRedisHost != "" && envRedisPort != "" {
 		cfg.RedisAddr = envRedisHost + ":" + envRedisPort
 	}
-	if len(flag.Args()) > 0 {
-		errorLog.Fatal("unexpected extra arguments: ", flag.Args())
+	// If -postgres-url was not specified explicitly, try the $POSTGRES_URL environment variable.
+	envPostgresURL := os.Getenv("POSTGRES_URL")
+	if !setFlags["postgres-url"] && envPostgresURL != "" {
+		cfg.PostgresURL = envPostgresURL
 	}
 	if cfg.AuthTokenSha256 != "" {
 		if len(cfg.AuthTokenSha256) != 64 || !regexp.MustCompile("[a-fA-F0-9]+").MatchString(cfg.AuthTokenSha256) {
 			errorLog.Fatal("-auth-token must be a SHA256 hex digest")
 		}
+	}
+	if len(flag.Args()) > 0 {
+		errorLog.Fatal("unexpected extra arguments: ", flag.Args())
 	}
 	if cfg.Stateless {
 		// Redis
