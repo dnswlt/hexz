@@ -22,6 +22,13 @@ var (
 	errorLog = log.New(os.Stderr, "E ", log.Ldate|log.Ltime|log.Lshortfile)
 )
 
+func redactPGPassword(url string) string {
+	reURL := regexp.MustCompile(`(?i)(postgres://[^:]+:)[^@]+(@)`)
+	reDSN := regexp.MustCompile(`(?i)(password=)[^ ]+`)
+	url = reDSN.ReplaceAllString(url, "$1<redacted>")
+	return reURL.ReplaceAllString(url, "$1<redacted>$2")
+}
+
 func main() {
 	cfg := &hexz.ServerConfig{}
 
@@ -102,13 +109,13 @@ func main() {
 		}
 		infoLog.Print("connected to Redis at ", cfg.RedisAddr)
 		// Postgres (optional)
-		var dbStore hexz.DatabaseStore
+		var dbStore *hexzsql.PostgresStore
 		if cfg.PostgresURL != "" {
 			dbStore, err = hexzsql.NewPostgresStore(context.Background(), cfg.PostgresURL)
 			if err != nil {
 				errorLog.Fatal("error connecting to postgres: ", err)
 			}
-			infoLog.Print("connected to PostgreSQL at ", cfg.PostgresURL)
+			infoLog.Print("connected to PostgreSQL at ", redactPGPassword(cfg.PostgresURL))
 		}
 		// Let's go!
 		s, err := hexz.NewStatelessServer(cfg, &hexzmem.RemotePlayerStore{RedisClient: rc}, rc, dbStore)
