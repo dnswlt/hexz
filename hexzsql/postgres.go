@@ -41,35 +41,31 @@ func (s *PostgresStore) StoreGame(ctx context.Context, hostId string, gs *pb.Gam
 	if err != nil {
 		return fmt.Errorf("failed to store game: %w", err)
 	}
-	gsBytes, err := proto.Marshal(gs)
-	if err != nil {
-		return fmt.Errorf("failed to marshal game state: %w", err)
-	}
-	_, err = s.pool.ExecContext(ctx, `
-		INSERT INTO game_history (game_id, game_state, entry_type)
-		VALUES ($1, $2, $3)`,
-		gs.GameInfo.Id, gsBytes, "reset")
-	if err != nil {
+	if err := s.InsertHistory(ctx, "reset", gs.GameInfo.Id, gs); err != nil {
 		return fmt.Errorf("failed to store game history: %w", err)
 	}
 	return nil
 }
 
-func (s *PostgresStore) InsertHistory(ctx context.Context, entryType string, gs *pb.GameState) error {
-	gsBytes, err := proto.Marshal(gs)
-	if err != nil {
-		return fmt.Errorf("failed to marshal game state: %w", err)
+func (s *PostgresStore) InsertHistory(ctx context.Context, entryType string, gameId string, gs *pb.GameState) error {
+	var gameStateBytes []byte
+	if gs != nil {
+		enc, err := proto.Marshal(gs)
+		if err != nil {
+			return fmt.Errorf("failed to marshal game state: %w", err)
+		}
+		var buf bytes.Buffer
+		gz := gzip.NewWriter(&buf)
+		if _, err = gz.Write(enc); err != nil {
+			return fmt.Errorf("failed to compress game state: %w", err)
+		}
+		gz.Close()
+		gameStateBytes = buf.Bytes()
 	}
-	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
-	if _, err = gz.Write(gsBytes); err != nil {
-		return fmt.Errorf("failed to compress game state: %w", err)
-	}
-	gz.Close()
-	_, err = s.pool.ExecContext(ctx, `
+	_, err := s.pool.ExecContext(ctx, `
 		INSERT INTO game_history (game_id, game_state, entry_type)
 		VALUES ($1, $2, $3)`,
-		gs.GameInfo.Id, buf.Bytes(), entryType)
+		gameId, gameStateBytes, entryType)
 	if err != nil {
 		return fmt.Errorf("failed to store game history: %w", err)
 	}
@@ -89,8 +85,12 @@ func (s *PostgresStore) PreviousGameState(ctx context.Context, gameId string) (*
 	if err != nil {
 		return nil, fmt.Errorf("failed to query game history: %w", err)
 	}
-	undoStack := []int{}
-	redoStack := []int{}
+	type event struct {
+		seqnum    int
+		entryType string
+	}
+	undoStack := []event{}
+	redoStack := []event{}
 	count := 0
 	for rows.Next() {
 		count++
@@ -104,7 +104,8 @@ func (s *PostgresStore) PreviousGameState(ctx context.Context, gameId string) (*
 		}
 		switch entryType {
 		case "move":
-			undoStack = append(undoStack, seqnum)
+			undoStack = append(undoStack, event{seqnum, entryType})
+			redoStack = []event{}
 		case "undo":
 			if len(undoStack) == 0 {
 				return nil, fmt.Errorf("cannot undo: inconsistent game history")
@@ -118,8 +119,11 @@ func (s *PostgresStore) PreviousGameState(ctx context.Context, gameId string) (*
 			undoStack = append(undoStack, redoStack[len(redoStack)-1])
 			redoStack = redoStack[:len(redoStack)-1]
 		case "reset":
-			undoStack = []int{seqnum}
-			redoStack = []int{}
+			undoStack = []event{{seqnum, entryType}}
+			redoStack = []event{}
+		case "join":
+			undoStack = append(undoStack, event{seqnum, entryType})
+			redoStack = []event{}
 		default:
 			return nil, fmt.Errorf("unknown entry type %q", entryType)
 		}
@@ -127,9 +131,11 @@ func (s *PostgresStore) PreviousGameState(ctx context.Context, gameId string) (*
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to scan game history: %w", err)
 	}
-	if len(undoStack) <= 1 {
-		// The first entry is the reset, so we need at least two entries to undo.
+	if len(undoStack) == 0 {
 		return nil, fmt.Errorf("cannot undo: no moves to undo")
+	}
+	if undoStack[len(undoStack)-1].entryType != "move" {
+		return nil, fmt.Errorf("only moves can be undone")
 	}
 	// Load the game state.
 	var compressedBytes []byte
@@ -137,7 +143,7 @@ func (s *PostgresStore) PreviousGameState(ctx context.Context, gameId string) (*
 		SELECT game_state
 		FROM game_history
 		WHERE game_id = $1 AND seqnum = $2`,
-		gameId, undoStack[len(undoStack)-2]).Scan(&compressedBytes); err != nil {
+		gameId, undoStack[len(undoStack)-2].seqnum).Scan(&compressedBytes); err != nil {
 		return nil, fmt.Errorf("failed to query game history: %w", err)
 	}
 	gameState := &pb.GameState{}

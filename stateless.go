@@ -438,7 +438,7 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.dbStore != nil {
-		if err := s.dbStore.InsertHistory(r.Context(), "move", gameState); err != nil {
+		if err := s.dbStore.InsertHistory(r.Context(), "move", gameId, gameState); err != nil {
 			errorLog.Printf("Cannot add history entry for game %s in database: %s", gameState.GameInfo.Id, err)
 		}
 	}
@@ -478,7 +478,7 @@ func (s *StatelessServer) handleUndo(w http.ResponseWriter, r *http.Request) {
 		errorLog.Printf("Could not store game %s: %s", gameId, err)
 		return
 	}
-	if err := s.dbStore.InsertHistory(r.Context(), "undo", prevGameState); err != nil {
+	if err := s.dbStore.InsertHistory(r.Context(), "undo", gameId, nil); err != nil {
 		errorLog.Printf("Cannot add history entry for game %s in database: %s", currentGameState.GameInfo.Id, err)
 	}
 	s.gameStore.Publish(r.Context(), gameId, sseEventGameUpdated)
@@ -512,6 +512,11 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		if err := s.gameStore.UpdateGame(r.Context(), gameState); err != nil {
 			errorLog.Printf("Cannot store updated game state: %s", err)
 			return
+		}
+		if s.dbStore != nil {
+			if err := s.dbStore.InsertHistory(r.Context(), "join", gameId, gameState); err != nil {
+				errorLog.Printf("Cannot add history entry for game %s in database: %s", gameState.GameInfo.Id, err)
+			}
 		}
 		pNum = gameState.PlayerNum(string(p.Id))
 		// Tell others we've joined.

@@ -15,15 +15,15 @@ CREATE TABLE games (
     PRIMARY KEY (game_id)
 );
 
+DROP TABLE IF EXISTS game_history;
 DROP SEQUENCE IF EXISTS game_history_seq;
 CREATE SEQUENCE game_history_seq;
-DROP TABLE IF EXISTS game_history;
 CREATE TABLE game_history (
     created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     seqnum INTEGER NOT NULL DEFAULT nextval('game_history_seq'),
     game_id TEXT NOT NULL,
-    game_state bytea NOT NULL, -- A serialized GameState proto.
-    entry_type TEXT NOT NULL,  -- One of 'move', 'undo', 'redo', 'reset'.
+    game_state bytea, -- A serialized GameState proto. NULL for 'undo' and 'redo' entries.
+    entry_type TEXT NOT NULL,  -- One of 'reset', 'join', 'move', 'undo', 'redo'.
 
     PRIMARY KEY (game_id, seqnum)
 );

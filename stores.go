@@ -14,8 +14,8 @@ import (
 type DatabaseStore interface {
 	// Stores a game state in the database.
 	StoreGame(ctx context.Context, hostId string, state *pb.GameState) error
-	// Adds an entry to the game history.
-	InsertHistory(ctx context.Context, entryType string, state *pb.GameState) error
+	// Adds an entry to the game history. state can be nil for "undo" and "redo" entries.
+	InsertHistory(ctx context.Context, entryType string, gameId string, state *pb.GameState) error
 	// Returns the previous game state from the database. Does not write any new history entries.
 	// Clients should register the undo themselves by calling InsertHistory.
 	PreviousGameState(ctx context.Context, gameId string) (*pb.GameState, error)
