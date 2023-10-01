@@ -8,25 +8,22 @@ CREATE TABLE games (
     created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     game_id TEXT NOT NULL,
     game_type TEXT NOT NULL,
+    -- Identifies the player hosting the game.
     host_id TEXT,
     host_name TEXT,
 
     PRIMARY KEY (game_id)
 );
 
+DROP SEQUENCE IF EXISTS game_history_seq;
+CREATE SEQUENCE game_history_seq;
 DROP TABLE IF EXISTS game_history;
 CREATE TABLE game_history (
     created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    seqnum INTEGER NOT NULL DEFAULT nextval('game_history_seq'),
     game_id TEXT NOT NULL,
-    seqnum INTEGER NOT NULL,
     game_state bytea NOT NULL, -- A serialized GameState proto.
     entry_type TEXT NOT NULL,  -- One of 'move', 'undo', 'redo', 'reset'.
-    -- If the entry_type is 'move', the following fields are set.
-    move_num INTEGER,
-    move_turn INTEGER,
-    move_row INTEGER,
-    move_col INTEGER,
-    move_type INTEGER,  -- A CellType enum value.
 
     PRIMARY KEY (game_id, seqnum)
 );

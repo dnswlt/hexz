@@ -1,11 +1,15 @@
 package hexzsql
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // Needed to register pgx as a database/sql driver.
+	"google.golang.org/protobuf/proto"
 
 	"github.com/dnswlt/hexz"
 	pb "github.com/dnswlt/hexz/hexzpb"
@@ -28,13 +32,128 @@ func NewPostgresStore(ctx context.Context, database_url string) (*PostgresStore,
 	return s, nil
 }
 
-func (s *PostgresStore) StoreGame(ctx context.Context, gameId string, gs *pb.GameState) error {
+func (s *PostgresStore) StoreGame(ctx context.Context, hostId string, gs *pb.GameState) error {
 	_, err := s.pool.ExecContext(ctx, `
-		INSERT INTO games (game_id, game_type, host_name) 
-		VALUES ($1, $2, $3)
-		ON CONFLICT (game_id) DO UPDATE SET game_type = $2, host_name = $3`,
-		gameId, string(gs.GameInfo.Type), gs.GameInfo.Host)
-	return err
+		INSERT INTO games (game_id, game_type, host_id, host_name) 
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (game_id) DO UPDATE SET game_type = $2, host_id = $3, host_name = $4`,
+		gs.GameInfo.Id, string(gs.GameInfo.Type), hostId, gs.GameInfo.Host)
+	if err != nil {
+		return fmt.Errorf("failed to store game: %w", err)
+	}
+	gsBytes, err := proto.Marshal(gs)
+	if err != nil {
+		return fmt.Errorf("failed to marshal game state: %w", err)
+	}
+	_, err = s.pool.ExecContext(ctx, `
+		INSERT INTO game_history (game_id, game_state, entry_type)
+		VALUES ($1, $2, $3)`,
+		gs.GameInfo.Id, gsBytes, "reset")
+	if err != nil {
+		return fmt.Errorf("failed to store game history: %w", err)
+	}
+	return nil
+}
+
+func (s *PostgresStore) InsertHistory(ctx context.Context, entryType string, gs *pb.GameState) error {
+	gsBytes, err := proto.Marshal(gs)
+	if err != nil {
+		return fmt.Errorf("failed to marshal game state: %w", err)
+	}
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	if _, err = gz.Write(gsBytes); err != nil {
+		return fmt.Errorf("failed to compress game state: %w", err)
+	}
+	gz.Close()
+	_, err = s.pool.ExecContext(ctx, `
+		INSERT INTO game_history (game_id, game_state, entry_type)
+		VALUES ($1, $2, $3)`,
+		gs.GameInfo.Id, buf.Bytes(), entryType)
+	if err != nil {
+		return fmt.Errorf("failed to store game history: %w", err)
+	}
+	return nil
+}
+
+func (s *PostgresStore) PreviousGameState(ctx context.Context, gameId string) (*pb.GameState, error) {
+	const entryLimit = 1000 // Don't allow more than this many history entries in total.
+	rows, err := s.pool.QueryContext(ctx, `
+		SELECT 
+			seqnum,
+			entry_type
+		FROM game_history
+		WHERE game_id = $1
+		ORDER BY seqnum`,
+		gameId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query game history: %w", err)
+	}
+	undoStack := []int{}
+	redoStack := []int{}
+	count := 0
+	for rows.Next() {
+		count++
+		if count == entryLimit {
+			return nil, fmt.Errorf("too many history entries (limit is %d)", entryLimit)
+		}
+		var seqnum int
+		var entryType string
+		if err := rows.Scan(&seqnum, &entryType); err != nil {
+			return nil, fmt.Errorf("failed to scan game history: %w", err)
+		}
+		switch entryType {
+		case "move":
+			undoStack = append(undoStack, seqnum)
+		case "undo":
+			if len(undoStack) == 0 {
+				return nil, fmt.Errorf("cannot undo: inconsistent game history")
+			}
+			redoStack = append(redoStack, undoStack[len(undoStack)-1])
+			undoStack = undoStack[:len(undoStack)-1]
+		case "redo":
+			if len(redoStack) == 0 {
+				return nil, fmt.Errorf("cannot redo: inconsistent game history")
+			}
+			undoStack = append(undoStack, redoStack[len(redoStack)-1])
+			redoStack = redoStack[:len(redoStack)-1]
+		case "reset":
+			undoStack = []int{seqnum}
+			redoStack = []int{}
+		default:
+			return nil, fmt.Errorf("unknown entry type %q", entryType)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to scan game history: %w", err)
+	}
+	if len(undoStack) <= 1 {
+		// The first entry is the reset, so we need at least two entries to undo.
+		return nil, fmt.Errorf("cannot undo: no moves to undo")
+	}
+	// Load the game state.
+	var compressedBytes []byte
+	if err := s.pool.QueryRowContext(ctx, `
+		SELECT game_state
+		FROM game_history
+		WHERE game_id = $1 AND seqnum = $2`,
+		gameId, undoStack[len(undoStack)-2]).Scan(&compressedBytes); err != nil {
+		return nil, fmt.Errorf("failed to query game history: %w", err)
+	}
+	gameState := &pb.GameState{}
+	gz, err := gzip.NewReader(bytes.NewReader(compressedBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gzip reader: %w", err)
+	}
+	defer gz.Close()
+	gsBytes, err := io.ReadAll(gz)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read compressed game state: %w", err)
+	}
+	if err := proto.Unmarshal(gsBytes, gameState); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal game state: %w", err)
+	}
+	return gameState, nil
 }
 
 func (s *PostgresStore) InsertStats(ctx context.Context, stats *hexz.WASMStatsRequest) error {

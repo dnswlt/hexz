@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	testPostgresURL = flag.String("test-postgres-url", "", "PostgresSQL URL for testing")
+	testPostgresURL = flag.String("test-postgres-url", "postgres://hexz:hexz@nuc:5432/hexz", "PostgresSQL URL for testing")
 )
 
 func TestPostgresDatabase(t *testing.T) {
@@ -23,13 +23,15 @@ func TestPostgresDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	gameId := "test_game_id"
+
 	gs := &pb.GameState{
 		GameInfo: &pb.GameInfo{
-			Type: "Test",
+			Id:   "test_game_id",
+			Type: "TestType",
+			Host: "test_host",
 		},
 	}
-	if err := db.StoreGame(ctx, gameId, gs); err != nil {
+	if err := db.StoreGame(ctx, "test_host_id", gs); err != nil {
 		t.Fatal(err)
 	}
 }

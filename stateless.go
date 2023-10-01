@@ -66,7 +66,8 @@ func (s *StatelessServer) lookupPlayerFromCookie(r *http.Request) (Player, error
 	return s.playerStore.Lookup(r.Context(), PlayerId(cookie.Value))
 }
 
-func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType GameType, singlePlayer bool) (string, error) {
+// Stores a new game in the game store and returns the new game ID.
+func (s *StatelessServer) startNewGame(ctx context.Context, remoteAddr string, p *Player, gameType GameType, singlePlayer bool) (string, error) {
 	engineState, err := NewGameEngine(gameType).Encode()
 	if err != nil {
 		return "", err
@@ -76,8 +77,9 @@ func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType 
 		players = append(players, &pb.Player{Id: "CPU", Name: "CPU"})
 	}
 	// Try to find an unused gameId. This loop should usually exit after the first iteration.
+	var gameState *pb.GameState
 	for i := 0; i < 100; i++ {
-		gameState := &pb.GameState{
+		gs := &pb.GameState{
 			GameInfo: &pb.GameInfo{
 				Id:        GenerateGameId(),
 				Host:      p.Name,
@@ -88,13 +90,22 @@ func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType 
 			Players:     players, // More players are registed in handleSSE.
 			EngineState: engineState,
 		}
-		if ok, err := s.gameStore.StoreNewGame(ctx, gameState); err != nil {
+		if ok, err := s.gameStore.StoreNewGame(ctx, gs); err != nil {
 			return "", err
 		} else if ok {
-			return gameState.GameInfo.Id, nil
+			gameState = gs
+			break
 		}
 	}
-	return "", fmt.Errorf("cannot find unused gameId")
+	if gameState == nil {
+		return "", fmt.Errorf("cannot find unused gameId")
+	}
+	if s.dbStore != nil {
+		if err := s.dbStore.StoreGame(ctx, string(p.Id), gameState); err != nil {
+			errorLog.Printf("Cannot store game %s in database: %s", gameState.GameInfo.Id, err)
+		}
+	}
+	return gameState.GameInfo.Id, nil
 }
 
 // Sends the contents of filename to the ResponseWriter.
@@ -177,7 +188,7 @@ func (s *StatelessServer) handleNewGame(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	gameId, err := s.startNewGame(r.Context(), &p, GameType(typeParam), singlePlayer)
+	gameId, err := s.startNewGame(r.Context(), r.RemoteAddr, &p, GameType(typeParam), singlePlayer)
 	if err != nil {
 		errorLog.Printf("Cannot start new game: %s\n", err)
 		http.Error(w, "", http.StatusPreconditionFailed)
@@ -426,6 +437,50 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 		errorLog.Printf("Could not store game %s: %s", gameId, err)
 		return
 	}
+	if s.dbStore != nil {
+		if err := s.dbStore.InsertHistory(r.Context(), "move", gameState); err != nil {
+			errorLog.Printf("Cannot add history entry for game %s in database: %s", gameState.GameInfo.Id, err)
+		}
+	}
+	s.gameStore.Publish(r.Context(), gameId, sseEventGameUpdated)
+}
+
+func (s *StatelessServer) handleUndo(w http.ResponseWriter, r *http.Request) {
+	p, err := s.lookupPlayerFromCookie(r)
+	if err != nil {
+		http.Error(w, "", http.StatusBadRequest)
+	}
+	gameId, err := gameIdFromPath(r.URL.Path)
+	if err != nil {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
+		return
+	}
+	if s.dbStore == nil {
+		http.Error(w, "Undo not supported", http.StatusBadRequest)
+		return
+	}
+	currentGameState, _, err := s.loadGame(r.Context(), gameId)
+	if err != nil {
+		http.Error(w, "No such game", http.StatusNotFound)
+		return
+	}
+	if currentGameState.PlayerNum(string(p.Id)) == 0 {
+		http.Error(w, "Only players can undo a move", http.StatusForbidden)
+		return
+	}
+	prevGameState, err := s.dbStore.PreviousGameState(r.Context(), gameId)
+	if err != nil {
+		http.Error(w, "No previous game state", http.StatusNotFound)
+		return
+	}
+	if err := s.gameStore.UpdateGame(r.Context(), prevGameState); err != nil {
+		http.Error(w, "failed to save game state", http.StatusInternalServerError)
+		errorLog.Printf("Could not store game %s: %s", gameId, err)
+		return
+	}
+	if err := s.dbStore.InsertHistory(r.Context(), "undo", prevGameState); err != nil {
+		errorLog.Printf("Cannot add history entry for game %s in database: %s", currentGameState.GameInfo.Id, err)
+	}
 	s.gameStore.Publish(r.Context(), gameId, sseEventGameUpdated)
 }
 
@@ -584,7 +639,7 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	// Methods for CPU player.
 	mux.HandleFunc("/hexz/state/", s.handleState)
 	mux.HandleFunc("/hexz/wasmstats/", postHandlerFunc(s.handleWASMStats))
-	// mux.HandleFunc("/hexz/undo/", postHandlerFunc(s.handleUndo))
+	mux.HandleFunc("/hexz/undo/", postHandlerFunc(s.handleUndo))
 	// mux.HandleFunc("/hexz/redo/", postHandlerFunc(s.handleRedo))
 	// Server-sent Event handling
 	mux.HandleFunc("/hexz/sse/", s.handleSSE)

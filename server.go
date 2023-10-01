@@ -12,7 +12,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
-	"math/rand"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -324,7 +324,12 @@ func GenerateGameId() string {
 	var alphabet = []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	var b strings.Builder
 	for i := 0; i < 6; i++ {
-		b.WriteRune(alphabet[rand.Intn(len(alphabet))])
+		max := big.NewInt(int64(len(alphabet)))
+		n, err := crand.Int(crand.Reader, max)
+		if err != nil {
+			panic(fmt.Sprintf("cannot generate random number: %s", err.Error()))
+		}
+		b.WriteRune(alphabet[n.Int64()])
 	}
 	return b.String()
 }

@@ -25,6 +25,8 @@
             "args": [
                 "-stateless",
                 "-redis-addr=nuc:6379",
+                "-postgres-url=postgres://hexz:hexz@nuc:5432/hexz",
+                "-disable-undo=false",
             ]
         },
         {

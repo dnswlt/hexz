@@ -53,6 +53,13 @@ func TestSha256HexDigest(t *testing.T) {
 	}
 }
 
+func TestGenerateGameId(t *testing.T) {
+	got := GenerateGameId()
+	if !regexp.MustCompile(`^[A-Z]{6}$`).MatchString(got) {
+		t.Errorf("Wrong gameId: %q", got)
+	}
+}
+
 func serverConfigForTest(t *testing.T) *ServerConfig {
 	historyRoot := t.TempDir()
 	return &ServerConfig{
