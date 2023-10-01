@@ -17,8 +17,12 @@ type DatabaseStore interface {
 	// Adds an entry to the game history. state can be nil for "undo" and "redo" entries.
 	InsertHistory(ctx context.Context, entryType string, gameId string, state *pb.GameState) error
 	// Returns the previous game state from the database. Does not write any new history entries.
-	// Clients should register the undo themselves by calling InsertHistory.
+	// Clients should register the undo once it became effective by calling InsertHistory(ctx, "undo", ...).
 	PreviousGameState(ctx context.Context, gameId string) (*pb.GameState, error)
+	// Returns the next game state from the database. Does not write any new history entries.
+	// This will only yield a non-error result if the previous event was an undo.
+	// Clients should register the undo once it became effective by calling InsertHistory(ctx, "undo", ...).
+	NextGameState(ctx context.Context, gameId string) (*pb.GameState, error)
 	// Adds stats for a CPU move.
 	InsertStats(ctx context.Context, stats *WASMStatsRequest) error
 	// Loads a game state from the database.

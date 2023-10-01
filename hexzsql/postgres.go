@@ -72,94 +72,124 @@ func (s *PostgresStore) InsertHistory(ctx context.Context, entryType string, gam
 	return nil
 }
 
-func (s *PostgresStore) PreviousGameState(ctx context.Context, gameId string) (*pb.GameState, error) {
-	const entryLimit = 1000 // Don't allow more than this many history entries in total.
+const (
+	// Don't allow more than this many history entries in total.
+	// It is an arbitrary choice, the main goal is to avoid using too much
+	// DB storage per game, e.g. caused by rogue clients.
+	historyEntryLimit = 1000
+)
+
+// Used for undo/redo.
+type historyEvent struct {
+	seqnum    int
+	entryType string
+}
+
+func (s *PostgresStore) readEventStacks(ctx context.Context, gameId string) (undoStack []historyEvent, redoStack []historyEvent, err error) {
 	rows, err := s.pool.QueryContext(ctx, `
-		SELECT 
-			seqnum,
-			entry_type
-		FROM game_history
-		WHERE game_id = $1
-		ORDER BY seqnum`,
+	SELECT 
+		seqnum,
+		entry_type
+	FROM game_history
+	WHERE game_id = $1
+	ORDER BY seqnum`,
 		gameId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query game history: %w", err)
+		return nil, nil, fmt.Errorf("failed to query game history: %w", err)
 	}
-	type event struct {
-		seqnum    int
-		entryType string
-	}
-	undoStack := []event{}
-	redoStack := []event{}
 	count := 0
 	for rows.Next() {
 		count++
-		if count == entryLimit {
-			return nil, fmt.Errorf("too many history entries (limit is %d)", entryLimit)
+		if count == historyEntryLimit {
+			return nil, nil, fmt.Errorf("too many history entries (limit is %d)", historyEntryLimit)
 		}
 		var seqnum int
 		var entryType string
 		if err := rows.Scan(&seqnum, &entryType); err != nil {
-			return nil, fmt.Errorf("failed to scan game history: %w", err)
+			return nil, nil, fmt.Errorf("failed to scan game history: %w", err)
 		}
 		switch entryType {
 		case "move":
-			undoStack = append(undoStack, event{seqnum, entryType})
-			redoStack = []event{}
+			undoStack = append(undoStack, historyEvent{seqnum, entryType})
+			redoStack = []historyEvent{}
 		case "undo":
 			if len(undoStack) == 0 {
-				return nil, fmt.Errorf("cannot undo: inconsistent game history")
+				return nil, nil, fmt.Errorf("cannot undo: inconsistent game history")
 			}
 			redoStack = append(redoStack, undoStack[len(undoStack)-1])
 			undoStack = undoStack[:len(undoStack)-1]
 		case "redo":
 			if len(redoStack) == 0 {
-				return nil, fmt.Errorf("cannot redo: inconsistent game history")
+				return nil, nil, fmt.Errorf("cannot redo: inconsistent game history")
 			}
 			undoStack = append(undoStack, redoStack[len(redoStack)-1])
 			redoStack = redoStack[:len(redoStack)-1]
 		case "reset":
-			undoStack = []event{{seqnum, entryType}}
-			redoStack = []event{}
+			undoStack = []historyEvent{{seqnum, entryType}}
+			redoStack = []historyEvent{}
 		case "join":
-			undoStack = append(undoStack, event{seqnum, entryType})
-			redoStack = []event{}
+			undoStack = append(undoStack, historyEvent{seqnum, entryType})
+			redoStack = []historyEvent{}
 		default:
-			return nil, fmt.Errorf("unknown entry type %q", entryType)
+			return nil, nil, fmt.Errorf("unknown entry type %q", entryType)
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to scan game history: %w", err)
+		return nil, nil, fmt.Errorf("failed to scan game history: %w", err)
 	}
-	if len(undoStack) == 0 {
+	return undoStack, redoStack, nil
+}
+
+func (s *PostgresStore) readGameFromHistory(ctx context.Context, gameId string, seqnum int) (*pb.GameState, error) {
+	// Load the game state.
+	var gameStateBytes []byte
+	if err := s.pool.QueryRowContext(ctx, `
+		SELECT game_state
+		FROM game_history
+		WHERE game_id = $1 AND seqnum = $2`,
+		gameId, seqnum).Scan(&gameStateBytes); err != nil {
+		return nil, fmt.Errorf("failed to query game history: %w", err)
+	}
+	gameState := &pb.GameState{}
+	gz, err := gzip.NewReader(bytes.NewReader(gameStateBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gzip reader: %w", err)
+	}
+	defer gz.Close()
+	protoBytes, err := io.ReadAll(gz)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read compressed game state: %w", err)
+	}
+	if err := proto.Unmarshal(protoBytes, gameState); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal game state: %w", err)
+	}
+	return gameState, nil
+}
+
+func (s *PostgresStore) PreviousGameState(ctx context.Context, gameId string) (*pb.GameState, error) {
+	undoStack, _, err := s.readEventStacks(ctx, gameId)
+	if err != nil {
+		return nil, err
+	}
+	if len(undoStack) <= 1 {
+		// We cannot undo the first event, which is always a reset.
 		return nil, fmt.Errorf("cannot undo: no moves to undo")
 	}
 	if undoStack[len(undoStack)-1].entryType != "move" {
 		return nil, fmt.Errorf("only moves can be undone")
 	}
-	// Load the game state.
-	var compressedBytes []byte
-	if err := s.pool.QueryRowContext(ctx, `
-		SELECT game_state
-		FROM game_history
-		WHERE game_id = $1 AND seqnum = $2`,
-		gameId, undoStack[len(undoStack)-2].seqnum).Scan(&compressedBytes); err != nil {
-		return nil, fmt.Errorf("failed to query game history: %w", err)
-	}
-	gameState := &pb.GameState{}
-	gz, err := gzip.NewReader(bytes.NewReader(compressedBytes))
+	return s.readGameFromHistory(ctx, gameId, undoStack[len(undoStack)-2].seqnum)
+}
+
+func (s *PostgresStore) NextGameState(ctx context.Context, gameId string) (*pb.GameState, error) {
+	_, redoStack, err := s.readEventStacks(ctx, gameId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create gzip reader: %w", err)
+		return nil, err
 	}
-	defer gz.Close()
-	gsBytes, err := io.ReadAll(gz)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read compressed game state: %w", err)
+	if len(redoStack) == 0 {
+		return nil, fmt.Errorf("cannot redo: no moves to redo")
 	}
-	if err := proto.Unmarshal(gsBytes, gameState); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal game state: %w", err)
-	}
-	return gameState, nil
+	return s.readGameFromHistory(ctx, gameId, redoStack[len(redoStack)-1].seqnum)
 }
 
 func (s *PostgresStore) InsertStats(ctx context.Context, stats *hexz.WASMStatsRequest) error {
