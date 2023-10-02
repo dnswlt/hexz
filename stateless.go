@@ -47,7 +47,9 @@ func NewStatelessServer(config *ServerConfig, playerStore PlayerStore, gameStore
 
 func (s *StatelessServer) loggingHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hlog.Infof("Incoming request: %s %s %s", r.RemoteAddr, r.Method, r.URL.String())
+		if s.config.DebugMode {
+			hlog.Infof("Incoming request: %s %s %s", r.RemoteAddr, r.Method, r.URL.String())
+		}
 		h.ServeHTTP(w, r)
 	})
 }
