@@ -110,7 +110,7 @@ function handleServerEvent(sse, serverEvent) {
     }
     if (serverEvent?.gameInfo?.clientSideCPUPlayer) {
         gstate.clientSideCPUPlayer = true;
-        initWASM();
+        startWASMWebWorker();
     }
     if (serverEvent.board != null) {
         // new board received.
@@ -123,7 +123,7 @@ function handleServerEvent(sse, serverEvent) {
         updateScore();
         if (gstate.clientSideCPUPlayer && gstate.role == 1 && gstate.board.turn == 2) {
             // We are P1, it's CPU's turn. Wait 100ms to let the current redraw finish.
-            setTimeout(makeCPUMove, 100);
+            sendWASMWorkerMoveRequest();
         }
         if (gstate.role > 0 && serverEvent.winner > 0) {
             // Show an animation if a winner was just announced.
@@ -651,39 +651,14 @@ function reset() {
     redraw();
 }
 
-
-// CPU Player in WASM.
-
-let wasmInitializationPromise = null;
-async function initWASM() {
-    if (!wasmInitializationPromise) {
-        wasmInitializationPromise = new Promise((resolve) => {
-            const go = new Go();
-            // Load WASM module. Avoid caching by adding a timestamp.
-            WebAssembly.instantiateStreaming(fetch(`/hexz/static/wasm/hexz.wasm?t=${Date.now()}`), go.importObject).then((result) => {
-                const wasm = result.instance;
-                // This will make the goWasmSuggestMove function globally available.
-                go.run(wasm);
-                setTimeout(resolve, 100);  // Give WASM some time to initialize before resolving. 
-                // TODO: This is not clean, but AFAIU the Golang WASM runtime does not provide a way to
-                // detect when it's ready. (Could I pass in the resolve function as a callback?)
-            });
-        })
-    }
-    return wasmInitializationPromise;
-}
-
-async function makeCPUMove() {
-    await initWASM();
-    const response = await fetch(`/hexz/state/${gameId()}`);
-    const gameStateResponse = await response.json()
-    let suggestMoveResult = goWasmSuggestMove(JSON.stringify({
-        encodedGameState: gameStateResponse.encodedGameState,
-        maxThinkTimeMillis: 3000,
-    }));
-    if (suggestMoveResult) {
-        const move = JSON.parse(suggestMoveResult);
-        console.log("CPU suggested move:", move.moveRequest);
+let wasmWorker = null;
+function startWASMWebWorker() {
+    wasmWorker = new Worker('/hexz/static/js/wasmworker.js');
+    wasmWorker.onmessage = async (e) => {
+        move = e.data;
+        if (!move) {
+            console.log("CPU did not find a move.");
+        }
         const moveResponse = await fetch(`/hexz/move/${gameId()}`, {
             method: "POST",
             headers: { "Content-Type": "application/json", },
@@ -691,7 +666,7 @@ async function makeCPUMove() {
         });
         if (!moveResponse.ok) {
             console.log("Failed to make a move: ", moveResponse.statusText);
-            return;
+            return false;
         }
         // Send WASMStatsRequest so we can learn how our clients perform.
         const statsResponse = await fetch(`/hexz/wasmstats/${gameId()}`, {
@@ -715,7 +690,13 @@ async function makeCPUMove() {
         if (!statsResponse.ok) {
             console.log("Failed to send WASM stats: ", statsResponse.statusText);
         }
-    } else {
-        console.log("CPU did not find a move.");
     }
 }
+
+function sendWASMWorkerMoveRequest() {
+    wasmWorker.postMessage({
+        gameId: gameId(),
+    })
+}
+
+initialize();

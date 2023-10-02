@@ -65,8 +65,6 @@ func main() {
 		runtime.ReadMemStats(&memstats)
 		heapAllocMiB := float64(memstats.HeapAlloc) / (1024 * 1024)
 		totalAllocMiB := float64(memstats.TotalAlloc) / (1024 * 1024)
-		fmt.Printf("goWasmSuggestMove: MCTSStats: size=%d, max_depth=%d, iter=%d. MemStats: HeapAlloc=%.2fMiB, TotalAlloc=%.2fMiB\n",
-			stats.TreeSize, stats.MaxDepth, stats.Iterations, heapAllocMiB, totalAllocMiB)
 		res, err := json.Marshal(suggestMoveResult{
 			MoveRequest: hexz.MoveRequest{
 				Move: mv.Move,
@@ -90,6 +88,6 @@ func main() {
 	})
 	js.Global().Set("goWasmSuggestMove", goWasmSuggestMove)
 
-	<-make(chan bool)
+	<-make(chan bool) // Run forever, else we'll lose access to all exported functions, too.
 	goWasmSuggestMove.Release()
 }
