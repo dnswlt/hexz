@@ -87,6 +87,7 @@ func main() {
 		hlog.Fatalf("unexpected extra arguments: %v", flag.Args())
 	}
 	if cfg.Stateless {
+		hlog.UseJSONLogger()
 		// Redis
 		if cfg.RedisAddr == "" {
 			cfg.RedisAddr = "localhost:6379"

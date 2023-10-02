@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	L = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+	textLogger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		AddSource: true,
 		ReplaceAttr: func(groups []string, attr slog.Attr) slog.Attr {
 			if attr.Key == slog.SourceKey {
@@ -23,7 +23,36 @@ var (
 			return attr
 		},
 	}))
+	jsonLogger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		AddSource: true,
+		ReplaceAttr: func(groups []string, attr slog.Attr) slog.Attr {
+			// Use special fields recognized by Cloud Logging.
+			// https://cloud.google.com/logging/docs/agent/logging/configuration#special-fields
+			if attr.Key == slog.MessageKey {
+				attr.Key = "message"
+			}
+			if attr.Key == slog.LevelKey {
+				attr.Key = "severity"
+			}
+			if attr.Key == slog.SourceKey {
+				if src, ok := attr.Value.Any().(*slog.Source); ok {
+					attr.Key = "logging.googleapis.com/sourceLocation"
+					src.File = path.Base(src.File)
+				}
+			}
+			return attr
+		},
+	}))
+	L = textLogger
 )
+
+func UseJSONLogger() {
+	L = jsonLogger
+}
+
+func UseTextLogger() {
+	L = textLogger
+}
 
 func Infof(format string, args ...any) {
 	if !L.Enabled(context.Background(), slog.LevelInfo) {
