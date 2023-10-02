@@ -4,12 +4,11 @@ package hexzmem
 
 import (
 	"context"
-	"log"
-	"os"
 	"time"
 
 	"github.com/dnswlt/hexz"
 	pb "github.com/dnswlt/hexz/hexzpb"
+	"github.com/dnswlt/hexz/hlog"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
@@ -31,11 +30,6 @@ type RedisClientConfig struct {
 type RemotePlayerStore struct {
 	*RedisClient
 }
-
-var (
-	infoLog  = log.New(os.Stderr, "I ", log.Ldate|log.Ltime|log.Lshortfile)
-	errorLog = log.New(os.Stderr, "E ", log.Ldate|log.Ltime|log.Lshortfile)
-)
 
 func (s *RemotePlayerStore) Lookup(ctx context.Context, playerId hexz.PlayerId) (hexz.Player, error) {
 	return s.LookupPlayer(ctx, playerId)
@@ -95,7 +89,7 @@ func (c *RedisClient) StoreNewGame(ctx context.Context, s *pb.GameState) (bool, 
 	}
 	mInfo, _ := proto.Marshal(s.GameInfo) // We can always marshal a GameInfo.
 	if err := c.client.ZAdd(ctx, "recentgames", redis.Z{Score: float64(s.GameInfo.Started.Seconds), Member: mInfo}).Err(); err != nil {
-		errorLog.Printf("Failed to add game %q to recent games: %v", gameId, err)
+		hlog.Errorf("Failed to add game %q to recent games: %v", gameId, err)
 	}
 	return true, nil
 }
@@ -129,7 +123,7 @@ func (c *RedisClient) DeleteGame(ctx context.Context, gameId string) error {
 		return err
 	}
 	if err := c.client.ZRem(ctx, "recentgames", gameId).Err(); err != nil {
-		errorLog.Printf("Failed to remove game %q from recentgames: %v", gameId, err)
+		hlog.Errorf("Failed to remove game %q from recentgames: %v", gameId, err)
 	}
 	return nil
 }
@@ -155,7 +149,7 @@ func (c *RedisClient) ListRecentGames(ctx context.Context, limit int) ([]*pb.Gam
 	// TODO: make this configurable.
 	card, err := c.client.ZCard(ctx, "recentgames").Result()
 	if err != nil {
-		errorLog.Printf("Failed to query ZCARD for recentgames: %v", err)
+		hlog.Errorf("Failed to query ZCARD for recentgames: %v", err)
 		return games, err
 	}
 	minItems := 20
@@ -165,9 +159,9 @@ func (c *RedisClient) ListRecentGames(ctx context.Context, limit int) ([]*pb.Gam
 	maxItems := 2 * minItems // Avoid removing single items at each call.
 	if card > int64(maxItems) {
 		if n, err := c.client.ZRemRangeByRank(ctx, "recentgames", 0, card-int64(minItems)-1).Result(); err != nil {
-			errorLog.Printf("Failed to remove old games from recentgames: %v", err)
+			hlog.Errorf("Failed to remove old games from recentgames: %v", err)
 		} else {
-			infoLog.Printf("Removed %d old games from recentgames", n)
+			hlog.Infof("Removed %d old games from recentgames", n)
 		}
 	}
 	return games, nil

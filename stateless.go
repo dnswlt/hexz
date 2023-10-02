@@ -18,6 +18,7 @@ import (
 	"github.com/lpar/gzipped/v2"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
+	"github.com/dnswlt/hexz/hlog"
 	"google.golang.org/protobuf/proto"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -46,7 +47,7 @@ func NewStatelessServer(config *ServerConfig, playerStore PlayerStore, gameStore
 
 func (s *StatelessServer) loggingHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		infoLog.Printf("Incoming request: %s %s %s", r.RemoteAddr, r.Method, r.URL.String())
+		hlog.Infof("Incoming request: %s %s %s", r.RemoteAddr, r.Method, r.URL.String())
 		h.ServeHTTP(w, r)
 	})
 }
@@ -102,7 +103,7 @@ func (s *StatelessServer) startNewGame(ctx context.Context, remoteAddr string, p
 	}
 	if s.dbStore != nil {
 		if err := s.dbStore.StoreGame(ctx, string(p.Id), gameState); err != nil {
-			errorLog.Printf("Cannot store game %s in database: %s", gameState.GameInfo.Id, err)
+			hlog.Errorf("Cannot store game %s in database: %s", gameState.GameInfo.Id, err)
 		}
 	}
 	return gameState.GameInfo.Id, nil
@@ -112,17 +113,17 @@ func (s *StatelessServer) startNewGame(ctx context.Context, remoteAddr string, p
 func (s *StatelessServer) serveHtmlFile(w http.ResponseWriter, filename string) {
 	if path.Ext(filename) != ".html" || strings.Contains(filename, "..") || strings.Contains(filename, "/") {
 		// It's a programming error to call this method with non-html files.
-		errorLog.Fatalf("Not a valid HTML file: %q\n", filename)
+		hlog.Fatalf("Not a valid HTML file: %q\n", filename)
 	}
 	p := path.Join(s.config.DocumentRoot, filename)
 	html, err := os.ReadFile(p)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			// We should only call this method for existing html files.
-			errorLog.Fatalf("Cannot read %s: %s", p, err.Error())
+			hlog.Fatalf("Cannot read %s: %s", p, err.Error())
 		} else {
 			// Whatever might cause us to fail reading our own files...
-			errorLog.Printf("Could not read existing file %s: %s", p, err.Error())
+			hlog.Errorf("Could not read existing file %s: %s", p, err.Error())
 			http.Error(w, "", http.StatusInternalServerError)
 			return
 		}
@@ -148,7 +149,7 @@ func (s *StatelessServer) handleLoginRequest(w http.ResponseWriter, r *http.Requ
 	}
 	playerId := generatePlayerId()
 	if err := s.playerStore.Login(r.Context(), playerId, name); err != nil {
-		infoLog.Printf("Rejected login for player %s: %s", name, err)
+		hlog.Infof("Rejected login for player %s: %s", name, err)
 		http.Error(w, "Cannot log in right now", http.StatusPreconditionFailed)
 		return
 	}
@@ -190,7 +191,7 @@ func (s *StatelessServer) handleNewGame(w http.ResponseWriter, r *http.Request) 
 	}
 	gameId, err := s.startNewGame(r.Context(), r.RemoteAddr, &p, GameType(typeParam), singlePlayer)
 	if err != nil {
-		errorLog.Printf("Cannot start new game: %s\n", err)
+		hlog.Errorf("Cannot start new game: %s\n", err)
 		http.Error(w, "", http.StatusPreconditionFailed)
 		return
 	}
@@ -228,7 +229,7 @@ func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
 	gameState.EngineState = state
 	if err := s.gameStore.UpdateGame(r.Context(), gameState); err != nil {
 		http.Error(w, "cannot update game", http.StatusInternalServerError)
-		errorLog.Printf("Cannot update game %s: %s", gameId, err)
+		hlog.Errorf("Cannot update game %s: %s", gameId, err)
 		return
 	}
 	// Inform other players.
@@ -250,7 +251,7 @@ func (s *StatelessServer) handleGamez(w http.ResponseWriter, r *http.Request) {
 	gameInfos, err := s.gameStore.ListRecentGames(r.Context(), 10)
 	if err != nil {
 		http.Error(w, "list recent games", http.StatusInternalServerError)
-		errorLog.Print("Cannot list recent games: ", err)
+		hlog.Errorf("Cannot list recent games: %s", err)
 		return
 	}
 	resp := make([]*GameInfo, len(gameInfos))
@@ -265,7 +266,7 @@ func (s *StatelessServer) handleGamez(w http.ResponseWriter, r *http.Request) {
 	json, err := json.Marshal(resp)
 	if err != nil {
 		http.Error(w, "marshal error", http.StatusInternalServerError)
-		errorLog.Fatal("Cannot marshal []GameInfo: " + err.Error())
+		hlog.Errorf("JSON marshal error: %s", err)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(json)
@@ -305,7 +306,7 @@ func (s *StatelessServer) handleWASMStats(w http.ResponseWriter, r *http.Request
 	}
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		errorLog.Printf("Cannot read request body: %s", err)
+		hlog.Errorf("Cannot read request body: %s", err)
 		http.Error(w, "", http.StatusInternalServerError)
 	}
 	var req WASMStatsRequest
@@ -316,7 +317,7 @@ func (s *StatelessServer) handleWASMStats(w http.ResponseWriter, r *http.Request
 	if s.dbStore != nil {
 		s.dbStore.InsertStats(r.Context(), &req)
 	}
-	infoLog.Printf("CPU stats: %s", string(body))
+	hlog.Infof("CPU stats: %s", string(body))
 }
 
 // Download the full game state as an encoded protobuf. This is used to run a CPU player in
@@ -357,7 +358,7 @@ func (s *StatelessServer) handleState(w http.ResponseWriter, r *http.Request) {
 	encodedGameState, err := proto.Marshal(gameState)
 	if err != nil {
 		http.Error(w, "marshal error", http.StatusInternalServerError)
-		errorLog.Print("Cannot marshal GameState: " + err.Error())
+		hlog.Errorf("Cannot marshal GameState: %s", err.Error())
 	}
 	enc.Encode(GameStateResponse{
 		GameId:           gameId,
@@ -377,7 +378,7 @@ func (s *StatelessServer) loadGame(ctx context.Context, gameId string) (*pb.Game
 	}
 	ge, err := DecodeGameEngine(gameState.EngineState)
 	if err != nil {
-		errorLog.Printf("Cannot decode game engine for game %s: %s", gameId, err)
+		hlog.Errorf("Cannot decode game engine for game %s: %s", gameId, err)
 		return nil, nil, err
 	}
 	return gameState, ge, nil
@@ -434,12 +435,12 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 	gameState.EngineState = enc
 	if err := s.gameStore.UpdateGame(r.Context(), gameState); err != nil {
 		http.Error(w, "failed to save game state", http.StatusInternalServerError)
-		errorLog.Printf("Could not store game %s: %s", gameId, err)
+		hlog.Errorf("Could not store game %s: %s", gameId, err)
 		return
 	}
 	if s.dbStore != nil {
 		if err := s.dbStore.InsertHistory(r.Context(), "move", gameId, gameState); err != nil {
-			errorLog.Printf("Cannot add history entry for game %s in database: %s", gameState.GameInfo.Id, err)
+			hlog.Errorf("Cannot add history entry for game %s in database: %s", gameState.GameInfo.Id, err)
 		}
 	}
 	s.gameStore.Publish(r.Context(), gameId, sseEventGameUpdated)
@@ -475,11 +476,11 @@ func (s *StatelessServer) handleUndo(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.gameStore.UpdateGame(r.Context(), prevGameState); err != nil {
 		http.Error(w, "failed to save game state", http.StatusInternalServerError)
-		errorLog.Printf("Could not store game %s: %s", gameId, err)
+		hlog.Errorf("Could not store game %s: %s", gameId, err)
 		return
 	}
 	if err := s.dbStore.InsertHistory(r.Context(), "undo", gameId, nil); err != nil {
-		errorLog.Printf("Cannot add history entry for game %s in database: %s", gameId, err)
+		hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
 	}
 	s.gameStore.Publish(r.Context(), gameId, sseEventGameUpdated)
 }
@@ -514,11 +515,11 @@ func (s *StatelessServer) handleRedo(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.gameStore.UpdateGame(r.Context(), nextGameState); err != nil {
 		http.Error(w, "failed to save game state", http.StatusInternalServerError)
-		errorLog.Printf("Could not store game %s: %s", gameId, err)
+		hlog.Errorf("Could not store game %s: %s", gameId, err)
 		return
 	}
 	if err := s.dbStore.InsertHistory(r.Context(), "redo", gameId, nil); err != nil {
-		errorLog.Printf("Cannot add history entry for game %s in database: %s", gameId, err)
+		hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
 	}
 	s.gameStore.Publish(r.Context(), gameId, sseEventGameUpdated)
 }
@@ -549,12 +550,12 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 			Name: p.Name,
 		})
 		if err := s.gameStore.UpdateGame(r.Context(), gameState); err != nil {
-			errorLog.Printf("Cannot store updated game state: %s", err)
+			hlog.Errorf("Cannot store updated game state: %s", err)
 			return
 		}
 		if s.dbStore != nil {
 			if err := s.dbStore.InsertHistory(r.Context(), "join", gameId, gameState); err != nil {
-				errorLog.Printf("Cannot add history entry for game %s in database: %s", gameState.GameInfo.Id, err)
+				hlog.Errorf("Cannot add history entry for game %s in database: %s", gameState.GameInfo.Id, err)
 			}
 		}
 		pNum = gameState.PlayerNum(string(p.Id))
@@ -576,7 +577,7 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		DisableUndo: s.config.DisableUndo,
 	})
 	if err != nil {
-		errorLog.Printf("Cannot send initial ServerEvent: %s", err)
+		hlog.Errorf("Cannot send initial ServerEvent: %s", err)
 		return
 	}
 	// Process events from Redis.
@@ -586,16 +587,16 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		select {
 		case e, ok := <-eventCh:
 			if !ok {
-				errorLog.Printf("Pubsub closed for player %s", p.Name)
+				hlog.Errorf("Pubsub closed for player %s", p.Name)
 				return
 			}
 			ev, msg, _ := strings.Cut(e, ":") // Event format: <eventType>:<msg>
 			switch ev {
 			case sseEventPlayerJoined:
-				infoLog.Printf("[%s/%s] A new player joined: %s", gameId, p.Name, msg)
+				hlog.Infof("[%s/%s] A new player joined: %s", gameId, p.Name, msg)
 				gameState, ge, err := s.loadGame(r.Context(), gameId)
 				if err != nil {
-					errorLog.Printf("Cannot load ongoing game %s: %s", gameId, err)
+					hlog.Errorf("Cannot load ongoing game %s: %s", gameId, err)
 					return
 				}
 				err = sendSSEEvent(w, ServerEvent{
@@ -606,13 +607,13 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 					Announcements: []string{"New player " + msg + " joined!"},
 				})
 				if err != nil {
-					errorLog.Printf("Cannot send ServerEvent: %s", err)
+					hlog.Errorf("Cannot send ServerEvent: %s", err)
 					return
 				}
 			case sseEventGameUpdated:
 				gameState, ge, err := s.loadGame(r.Context(), gameId)
 				if err != nil {
-					errorLog.Printf("Cannot load ongoing game %s: %s", gameId, err)
+					hlog.Errorf("Cannot load ongoing game %s: %s", gameId, err)
 					return
 				}
 				var winner int
@@ -636,14 +637,14 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 					Announcements: announcements,
 				})
 				if err != nil {
-					errorLog.Printf("Cannot send ServerEvent: %s", err)
+					hlog.Errorf("Cannot send ServerEvent: %s", err)
 					return
 				}
 			default:
-				infoLog.Printf("[%s/%s] Received unknown event: %s", gameId, p.Name, e)
+				hlog.Infof("[%s/%s] Received unknown event: %s", gameId, p.Name, e)
 			}
 		case <-r.Context().Done():
-			infoLog.Printf("SSE connection closed for player %s", p.Name)
+			hlog.Infof("SSE connection closed for player %s", p.Name)
 			return
 		}
 	}
@@ -713,10 +714,10 @@ func (s *StatelessServer) Serve() {
 
 	// Quick sanity check that we have access to the game HTML file.
 	if _, err := s.readStaticResource(gameHtmlFilename); err != nil {
-		errorLog.Fatal("Cannot load game HTML: ", err)
+		hlog.Fatalf("Cannot load game HTML: %s", err)
 	}
 
-	infoLog.Printf("Stateless server listening on %s", addr)
+	hlog.Infof("Stateless server listening on %s", addr)
 
-	errorLog.Fatal(srv.ListenAndServe())
+	hlog.Fatalf("%s", srv.ListenAndServe())
 }
