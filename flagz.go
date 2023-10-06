@@ -119,8 +119,8 @@ func (g *GameEngineFlagz) lifetime(ct CellType) int {
 	return 0
 }
 
-// Updates the Blocked and nextVal status of all cells neighboring (r, c).
-// Also updates the counts of availalbe moves per player in g.
+// Updates the .Blocked and .NextVal status of all cells neighboring (r, c).
+// Also updates the counts of available moves per player in g.
 // (r, c) must already have been updated.
 func (g *GameEngineFlagz) updateNeighborCells(r, c int) {
 	b := g.B
