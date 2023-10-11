@@ -465,11 +465,11 @@ class HexzNeuralNetwork(nn.Module):
         cnn_channels = 32
         self.features = nn.Sequential(
             # First CNN layer
-            nn.Conv2d(board_channels, cnn_channels, kernel_size=3),  # [N, cnn_channels, 11-2, 10-2]
+            nn.Conv2d(board_channels, cnn_channels, kernel_size=3, bias=False),  # [N, cnn_channels, 9, 8]
             nn.BatchNorm2d(cnn_channels), 
             nn.ReLU(),
             # Second CNN layer
-            nn.Conv2d(cnn_channels, cnn_channels, kernel_size=3),  # # [N, cnn_channels, 7, 6]
+            nn.Conv2d(cnn_channels, cnn_channels, kernel_size=3, bias=False),  # # [N, cnn_channels, 7, 6]
             nn.BatchNorm2d(cnn_channels),
             nn.ReLU(),
         )
@@ -481,7 +481,7 @@ class HexzNeuralNetwork(nn.Module):
             nn.Linear(fc_size, fc_size),
         )
         self.move_probs = nn.Linear(fc_size, 2 * 11 * 10)
-        self.value = nn.Linear(256, 1)
+        self.value = nn.Linear(fc_size, 1)
 
     def forward(self, x):
         x = self.features(x)
@@ -530,7 +530,6 @@ class NNode:
     def __repr__(self):
         return str(self)
     
-    @timing
     def move_likelihoods(self):
         """Returns the move likelihoods for all children as a (2, 11, 10) ndarray.
         
@@ -543,7 +542,6 @@ class NNode:
             p[typ, r, c] = child.visit_count
         return p / p.sum()
     
-    @timing
     def best_child(self):
         """Returns the best among all children.
         
@@ -555,7 +553,6 @@ class NNode:
         
 class NeuralMCTS:
     """Monte Carlo tree search with a neural network (AlphaZero style)."""
-    @timing
     def __init__(self, board, model, game_id=None):
         self.board = board
         self.model = model
@@ -573,7 +570,6 @@ class NeuralMCTS:
         self.root = NNode(None, 1, None, move_probs, val)
         # Manual profiling information. Looks like %prun does not work with Torch?
         
-    @timing
     def backpropagate(self, node, result):
         while node:
             node.visit_count += 1
@@ -594,11 +590,11 @@ class NeuralMCTS:
         
     @timing
     def predict(self, board):
-        X = torch.from_numpy(board.b).to(device, dtype=torch.float32)
         with torch.no_grad():
+            X = torch.from_numpy(board.b).to(device, dtype=torch.float32)
             pred_pr, pred_val = self.model(torch.unsqueeze(X, 0))
             pred_pr = torch.exp(pred_pr).reshape((2, 11, 10))
-            return pred_pr, pred_val.item()
+            return pred_pr.numpy(), pred_val.item()
     
     @timing
     def run(self):
@@ -648,27 +644,24 @@ class NeuralMCTS:
         result = None
         n = 0
         started = time.perf_counter()
-        with profile(activities=[ProfilerActivity.CPU]) as prof:
-            with record_function("model_inference"):
-                while n < max_moves:
-                    for i in range(runs_per_move):
-                        self.run()
-                    best_child = self.root.best_child()
-                    if not best_child:
-                        # Game over
-                        result = self.board.result()
-                        break
-                    examples.append(Example(self.game_id, self.board.b.copy(), 
-                                            self.root.move_likelihoods(), best_child.player, None))
-                    # Make the move.
-                    self.board.make_move(best_child.player, best_child.move)
-                    self.root = best_child
-                    self.root.parent = None  # Allow GC and avoid backprop further up.
-                    if n < 5 or n%10 == 0:
-                        print(f"Iteration {n}: visit_count:{best_child.visit_count} ",
-                              f"move:{best_child.move} player:{best_child.player} score:{self.board.score()}")
-                    n += 1
-        print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+        while n < max_moves:
+            for i in range(runs_per_move):
+                self.run()
+            best_child = self.root.best_child()
+            if not best_child:
+                # Game over
+                result = self.board.result()
+                break
+            examples.append(Example(self.game_id, self.board.b.copy(), 
+                                    self.root.move_likelihoods(), best_child.player, None))
+            # Make the move.
+            self.board.make_move(best_child.player, best_child.move)
+            self.root = best_child
+            self.root.parent = None  # Allow GC and avoid backprop further up.
+            if n < 5 or n%10 == 0:
+                print(f"Iteration {n} @{time.perf_counter() - started:.3f}s: visit_count:{best_child.visit_count} ",
+                        f"move:{best_child.move} player:{best_child.player} score:{self.board.score()}")
+            n += 1
         elapsed = time.perf_counter() - started
         if n == max_moves:
             print(f"Reached max iterations ({n}) after {elapsed:.3f}s. Returning early.")
@@ -680,9 +673,21 @@ class NeuralMCTS:
         return examples
 
 
+def time_gameplay():
+    clear_perf_stats()
+    b = Board()
+    device = 'cpu'
+    model = HexzNeuralNetwork().to(device)
+    m = NeuralMCTS(b, model)
+    _ = m.play_game(800, max_moves=3)
+    perf_stats()
+
+
 if __name__ == "__main__":
     print(f"cuda available: {torch.cuda.is_available()}")
     print(f"mps available: {torch.backends.mps.is_available()}")
     print(f"torch version: {torch.__version__}")
     print(f"numpy version: {np.__version__}")
+    device = 'cpu'
     print(f"Using {device} device")
+    time_gameplay()
