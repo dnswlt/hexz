@@ -1,5 +1,5 @@
 import numpy as np
-
+from math import sqrt, log
     
 def c_valid_idx(r_c):
     """Returns True if (r, c) = r_c represents a valid hexz board index."""
@@ -71,6 +71,10 @@ def c_make_move(board, int player, move):
     cdef double val = move[3]
     cdef double next_val = 0
     cdef Py_ssize_t i = 0
+    cdef Py_ssize_t nr = 0
+    cdef Py_ssize_t nc = 0
+    cdef long[:] nx
+    cdef long[:] ny
     
     b[typ + player*4, r, c] = val
     played_flag = typ == 0
@@ -104,3 +108,38 @@ def c_make_move(board, int player, move):
             b[3 + player*4, nx[i], ny[i]] = 0  # Clear next value.
     if not played_flag:
         c_occupy_grass(board, player, r, c)
+
+
+
+def c_uct(move_probs, move, int parent_visit_count, int visit_count, float wins):
+    cdef Py_ssize_t typ = move[0]
+    cdef Py_ssize_t r = move[1]
+    cdef Py_ssize_t c = move[2]
+
+    cdef int pvc = parent_visit_count
+    cdef int vc = visit_count
+    cdef float q = 0.0
+    cdef float[:, :, :] pr = move_probs
+    
+    if pvc == 0:
+        pvc = 1
+    if vc == 0:
+        vc = 1
+        q = 0.5
+    else:
+        q = wins / vc
+    return q + pr[typ, r, c] * sqrt(log(pvc) / vc)
+
+
+def c_find_leaf(board, n):
+    while n.children:
+        best = None
+        best_uct = -1
+        for c in n.children:
+            u = c_uct(n.move_probs, c.move, n.visit_count, c.visit_count, c.wins)
+            if u > best_uct:
+                best = c
+                best_uct = u
+        c_make_move(board, best.player, best.move)
+        n = best
+    return n

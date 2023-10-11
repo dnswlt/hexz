@@ -1,4 +1,5 @@
 import collections
+from contextlib import contextmanager
 from functools import wraps
 import h5py
 from matplotlib import pyplot as plt
@@ -12,7 +13,7 @@ from uuid import uuid4
 
 import hexc
 
-# Stores accumulated running time in micros of functions annotated with @timing.
+# Stores accumulated running time in micros and call counts of functions annotated with @timing.
 _PERF_ACC_MICROS = collections.Counter()
 _PERF_COUNTS = collections.Counter()
 
@@ -30,12 +31,21 @@ def timing(f):
     return wrap
 
 
+@contextmanager
+def timing_ctx(name):
+    t_start = time.perf_counter_ns()
+    yield
+    t_end = time.perf_counter_ns()
+    _PERF_ACC_MICROS[name] += (t_end - t_start) // 1000
+    _PERF_COUNTS[name] += 1
+
+
 def clear_perf_stats():
     _PERF_ACC_MICROS.clear()
     _PERF_COUNTS.clear()
     
     
-def perf_stats():
+def print_perf_stats():
     ms = _PERF_ACC_MICROS
     ns = _PERF_COUNTS
     width = max(len(k) for k in ms)
@@ -504,7 +514,7 @@ device = (
 
 class NNode:
     """Nodes of the NeuralMCTS tree."""
-    def __init__(self, parent, player, move, move_probs, value):
+    def __init__(self, parent, player, move, move_probs):
         self.parent = parent
         self.player = player
         self.move = move
@@ -512,24 +522,22 @@ class NNode:
         self.visit_count = 0
         self.children = []
         self.move_probs = move_probs
-        self.value = value
     
     @timing
     def uct(self):
         typ, r, c, _ = self.move
         pvc = self.parent.visit_count
-        vc = max(1, self.visit_count)
+        vc = self.visit_count
+        if vc == 0:
+            q = 0.5
+            vc = 1
+        else:
+            q = self.wins / vc
         return (
-            self.value + 
+            q +
             self.parent.move_probs[typ, r, c] * np.sqrt(np.log(pvc) / vc)
         )
 
-    def __str__(self):
-        return f"Node(p={self.player}, m={self.move}, w={self.wins/self.visit_count:.3f}, n={self.visit_count}, u={self.uct():.3f}, cs={len(self.children)})"
-
-    def __repr__(self):
-        return str(self)
-    
     def move_likelihoods(self):
         """Returns the move likelihoods for all children as a (2, 11, 10) ndarray.
         
@@ -567,7 +575,7 @@ class NeuralMCTS:
         # In the root node it's player 1's "fake" turn. 
         # This has the desired effect that the root's children will play
         # as player 0, who makes the first move.
-        self.root = NNode(None, 1, None, move_probs, val)
+        self.root = NNode(None, 1, None, move_probs)
         # Manual profiling information. Looks like %prun does not work with Torch?
         
     def backpropagate(self, node, result):
@@ -602,16 +610,18 @@ class NeuralMCTS:
         b = Board(self.board)
         n = self.root
         # Find leaf node.
-        while n.children:
-            best = None
-            best_uct = -1
-            for c in n.children:
-                c_uct = c.uct()
-                if c_uct > best_uct:
-                    best = c
-                    best_uct = c_uct
-            b.make_move(best.player, best.move)
-            n = best
+        with timing_ctx("run_find_leaf"):
+            n = hexc.c_find_leaf(b, n)
+            # while n.children:
+            #     best = None
+            #     best_uct = -1
+            #     for c in n.children:
+            #         c_uct = c.uct()
+            #         if c_uct > best_uct:
+            #             best = c
+            #             best_uct = c_uct
+            #     b.make_move(best.player, best.move)
+            #     n = best
         # Reached a leaf node: expand
         player = 1 - n.player  # Usually it's the other player's turn.
         moves = b.next_moves(player)
@@ -623,16 +633,11 @@ class NeuralMCTS:
             # Game is over
             self.backpropagate(n, b.result())
             return
-        # Neural network time! Predict value and policy for each child.
-        model = self.model
         for move in moves:
-            cb = Board(b)
-            cb.make_move(player, move)
-            move_probs, val = self.predict(cb)
-            n.children.append(NNode(n, player, move, move_probs, val))
-        c = n.children[self.rng.integers(0, len(n.children))]
-        b.make_move(c.player, c.move)
-        self.backpropagate(c, c.value)
+            n.children.append(NNode(n, player, move, None))
+        # Neural network time! Predict value and policy for each child.
+        n.move_probs, value = self.predict(b)
+        self.backpropagate(n, value)
     
     def play_game(self, runs_per_move=500, max_moves=200):
         """Plays one full game and returns the move likelihoods per move and the final result.
@@ -679,8 +684,8 @@ def time_gameplay():
     device = 'cpu'
     model = HexzNeuralNetwork().to(device)
     m = NeuralMCTS(b, model)
-    _ = m.play_game(800, max_moves=3)
-    perf_stats()
+    _ = m.play_game(800, max_moves=200)
+    print_perf_stats()
 
 
 if __name__ == "__main__":
