@@ -16,9 +16,17 @@ import hexc
 # Stores accumulated running time in micros and call counts of functions annotated with @timing.
 _PERF_ACC_MICROS = collections.Counter()
 _PERF_COUNTS = collections.Counter()
+_PERF_TIMING_ENABLED = True
+
+
+def disable_perf_stats():
+    global _PERF_TIMING_ENABLED
+    _PERF_TIMING_ENABLED = False
 
 
 def timing(f):
+    if not _PERF_TIMING_ENABLED:
+        return f
     @wraps(f)
     def wrap(*args, **kw):
         t_start = time.perf_counter_ns()
@@ -33,6 +41,12 @@ def timing(f):
 
 @contextmanager
 def timing_ctx(name):
+    """Context manager to time a block of code. While @timing can only be used on functions,
+    this can be used on any block of code.
+    """
+    if not _PERF_TIMING_ENABLED:
+        yield
+        return
     t_start = time.perf_counter_ns()
     yield
     t_end = time.perf_counter_ns()
@@ -46,6 +60,8 @@ def clear_perf_stats():
     
     
 def print_perf_stats():
+    if not _PERF_TIMING_ENABLED:
+        return
     ms = _PERF_ACC_MICROS
     ns = _PERF_COUNTS
     width = max(len(k) for k in ms)
@@ -86,13 +102,13 @@ class PurePyBoard:
     # Used to quickly get the indices of neighbor cells.
     neighbors = _init_neighbors_map()
     
-    def __init__(self, other=None):
+    def __init__(self, other=None, dtype=np.float32):
         """Generates a new randomly initialized board or returns a copy of other, if set."""
         if other:
             self.b = other.b.copy()
             self.nflags = list(other.nflags)
             return
-        self.b = np.zeros((9, 11, 10), dtype=np.float32)
+        self.b = np.zeros((9, 11, 10), dtype=dtype)
         self.nflags = [3, 3]  # number of flags remaining per player
         # Even rows have 10 cells, odd rows only 9, so mark the last cell in odd rows as blocked for P1+P2.
         self.b[2, [1, 3, 5, 7, 9], 9] = 1
@@ -111,6 +127,16 @@ class PurePyBoard:
         self.b[2, free_cells[0][grass], free_cells[1][grass]] = 1
         self.b[6, free_cells[0][grass], free_cells[1][grass]] = 1
     
+    def b_for(self, player):
+        """Returns the underlying ndarray representing the board, oriented for the given player.
+        Only returns a copy if the board is not already oriented for the given player.
+        """
+        if player == 0:
+            return self.b
+        b = self.b.copy()
+        b[0:4], b[4:8] = self.b[4:8], self.b[0:4]
+        return b
+
     def quickview(self):
         """Returns a single slice of the board with different cell types encoded as -/+ numbers."""
         return (self.b[0] * 8) + self.b[1] - (self.b[4] * 8) - self.b[5]
@@ -208,10 +234,13 @@ class PurePyBoard:
 
     
 class CBoard(PurePyBoard):
-    """Like a PurePyBoard, but uses the fast C implementations where available."""
+    """Like a PurePyBoard, but uses the fast C implementations where available.
+    
+    A CBoard currently only works with np.float32 dtype.
+    """
     @timing
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, dtype=np.float32, **kwargs)
         
     @timing
     def make_move(self, player, move):
@@ -502,26 +531,16 @@ class HexzNeuralNetwork(nn.Module):
         return F.log_softmax(pi, dim=1), torch.tanh(v)
 
 
-# TODO: do this properly. A global variable ain't so nice
-device = (
-    "cuda"
-    if torch.cuda.is_available()
-    else "mps"
-    if torch.backends.mps.is_available()
-    else "cpu"
-)
-
-
 class NNode:
     """Nodes of the NeuralMCTS tree."""
-    def __init__(self, parent, player, move, move_probs):
+    def __init__(self, parent, player, move):
         self.parent = parent
         self.player = player
         self.move = move
         self.wins = 0.0
         self.visit_count = 0
         self.children = []
-        self.move_probs = move_probs
+        self.move_probs = None
     
     @timing
     def uct(self):
@@ -561,22 +580,23 @@ class NNode:
         
 class NeuralMCTS:
     """Monte Carlo tree search with a neural network (AlphaZero style)."""
-    def __init__(self, board, model, game_id=None):
+    def __init__(self, board, model, game_id=None, device='cpu', dtype=torch.float32):
         self.board = board
         self.model = model
         self.rng = np.random.default_rng()
         if not game_id:
             game_id = uuid4().hex[:12]
         self.game_id = game_id
+        self.device = device
+        self.dtype = dtype
 
         model.eval()  # Training is done outside of NeuralMCTS
-        # Predict move probabilities for root up front.
-        move_probs, val = self.predict(board)
         # In the root node it's player 1's "fake" turn. 
         # This has the desired effect that the root's children will play
         # as player 0, who makes the first move.
-        self.root = NNode(None, 1, None, move_probs)
-        # Manual profiling information. Looks like %prun does not work with Torch?
+        self.root = NNode(None, 1, None)
+        # Predict move probabilities for root up front.
+        self.root.move_probs, _ = self.predict(board, 0)
         
     def backpropagate(self, node, result):
         while node:
@@ -597,12 +617,14 @@ class NeuralMCTS:
         return s
         
     @timing
-    def predict(self, board):
-        with torch.no_grad():
-            X = torch.from_numpy(board.b).to(device, dtype=torch.float32)
-            pred_pr, pred_val = self.model(torch.unsqueeze(X, 0))
-            pred_pr = torch.exp(pred_pr).reshape((2, 11, 10))
-            return pred_pr.numpy(), pred_val.item()
+    @torch.inference_mode()
+    def predict(self, board, player):
+        """Predicts move probabilities and value for the given board and player."""
+        b = board.b_for(player)
+        X = torch.from_numpy(b).to(self.device, dtype=self.dtype)
+        pred_pr, pred_val = self.model(torch.unsqueeze(X, 0))
+        pred_pr = torch.exp(pred_pr).reshape((2, 11, 10))
+        return pred_pr.numpy(force=self.device!='cpu'), pred_val.item()
     
     @timing
     def run(self):
@@ -634,9 +656,9 @@ class NeuralMCTS:
             self.backpropagate(n, b.result())
             return
         for move in moves:
-            n.children.append(NNode(n, player, move, None))
+            n.children.append(NNode(n, player, move))
         # Neural network time! Predict value and policy for each child.
-        n.move_probs, value = self.predict(b)
+        n.move_probs, value = self.predict(b, player)
         self.backpropagate(n, value)
     
     def play_game(self, runs_per_move=500, max_moves=200):
@@ -657,7 +679,8 @@ class NeuralMCTS:
                 # Game over
                 result = self.board.result()
                 break
-            examples.append(Example(self.game_id, self.board.b.copy(), 
+            # Record example. Examples always contain the board as seen by the player whose turn it is.
+            examples.append(Example(self.game_id, self.board.b_for(best_child.player).copy(),
                                     self.root.move_likelihoods(), best_child.player, None))
             # Make the move.
             self.board.make_move(best_child.player, best_child.move)
@@ -678,14 +701,29 @@ class NeuralMCTS:
         return examples
 
 
-def time_gameplay():
+def time_gameplay(device):
     clear_perf_stats()
     b = Board()
-    device = 'cpu'
     model = HexzNeuralNetwork().to(device)
-    m = NeuralMCTS(b, model)
+    m = NeuralMCTS(b, model, device=device)
     _ = m.play_game(800, max_moves=200)
     print_perf_stats()
+
+
+def record_examples(device, max_seconds=60, max_games=1000):
+    disable_perf_stats()
+    started = time.time()
+    num_games = 0
+    model = HexzNeuralNetwork().to(device)
+    examples_file = f"examples-{time.strftime('%Y%m%d-%H%M%S')}.h5"
+    print(f"Saving games in {examples_file}.")
+    while time.time() - started < max_seconds and num_games < max_games:
+        b = Board()
+        m = NeuralMCTS(b, model, device=device)
+        examples = m.play_game(runs_per_move=800)
+        Example.save_all(examples_file, examples)
+        num_games += 1
+        print(f"Played {num_games} games in {time.time() - started:.1f}s.")
 
 
 if __name__ == "__main__":
@@ -693,6 +731,15 @@ if __name__ == "__main__":
     print(f"mps available: {torch.backends.mps.is_available()}")
     print(f"torch version: {torch.__version__}")
     print(f"numpy version: {np.__version__}")
+    device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+    )
+    # Current tests: only CPU.
     device = 'cpu'
     print(f"Using {device} device")
-    time_gameplay()
+    record_examples(device, max_games=10)
+    # time_gameplay(device)

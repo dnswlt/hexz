@@ -1,3 +1,7 @@
+# Compile with:
+#
+# python setup.py build_ext --inplace
+
 import numpy as np
 from math import sqrt, log
     
@@ -131,12 +135,27 @@ def c_uct(move_probs, move, int parent_visit_count, int visit_count, float wins)
     return q + pr[typ, r, c] * sqrt(log(pvc) / vc)
 
 
+def c_puct(move_probs, move, int parent_visit_count, int visit_count, float wins):
+    cdef Py_ssize_t typ = move[0]
+    cdef Py_ssize_t r = move[1]
+    cdef Py_ssize_t c = move[2]
+
+    cdef float q = 0.0
+    cdef float[:, :, :] pr = move_probs
+    
+    if visit_count == 0:
+        q = 0.5
+    else:
+        q = wins / visit_count
+    return q + pr[typ, r, c] * sqrt(parent_visit_count) / (1 + visit_count)
+
+
 def c_find_leaf(board, n):
     while n.children:
         best = None
         best_uct = -1
         for c in n.children:
-            u = c_uct(n.move_probs, c.move, n.visit_count, c.visit_count, c.wins)
+            u = c_puct(n.move_probs, c.move, n.visit_count, c.visit_count, c.wins)
             if u > best_uct:
                 best = c
                 best_uct = u
