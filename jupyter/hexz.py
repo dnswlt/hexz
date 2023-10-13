@@ -1,10 +1,13 @@
+import argparse
 import collections
 from contextlib import contextmanager
 from functools import wraps
+import glob
 import h5py
 from matplotlib import pyplot as plt
 import numpy as np
-import pandas as pd
+import os
+import sys
 import time
 import torch
 from torch import nn, optim
@@ -701,6 +704,16 @@ class NeuralMCTS:
         return examples
 
 
+def save_model(model, path):
+    torch.save(model.state_dict(), path)
+
+
+def load_model(path):
+    model = HexzNeuralNetwork()
+    model.load_state_dict(torch.load(path))
+    return model
+
+
 def time_gameplay(device):
     clear_perf_stats()
     b = Board()
@@ -710,36 +723,83 @@ def time_gameplay(device):
     print_perf_stats()
 
 
-def record_examples(device, max_seconds=60, max_games=1000):
+def record_examples(args):
     disable_perf_stats()
     started = time.time()
     num_games = 0
-    model = HexzNeuralNetwork().to(device)
-    examples_file = f"examples-{time.strftime('%Y%m%d-%H%M%S')}.h5"
-    print(f"Saving games in {examples_file}.")
-    while time.time() - started < max_seconds and num_games < max_games:
+    model_path = resolve_model_path(args)
+    device = args.device
+    model = load_model(model_path).to(device)
+    print(f"Loaded model from {model_path}")
+    examples_file = os.path.join(args.output_dir, f"examples-{time.strftime('%Y%m%d-%H%M%S')}.h5")
+    print(f"Appending game examples to {examples_file}.")
+    while time.time() - started < args.max_seconds and num_games < args.max_games:
         b = Board()
         m = NeuralMCTS(b, model, device=device)
-        examples = m.play_game(runs_per_move=800)
+        examples = m.play_game(runs_per_move=args.runs_per_move)
         Example.save_all(examples_file, examples)
         num_games += 1
         print(f"Played {num_games} games in {time.time() - started:.1f}s.")
+    print("Done recording examples after {time.time() - started:.1f}s.")
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Hexz NeuralMCTS")
+    parser.add_argument("--device", type=str, default="cpu",
+                        help="PyTorch device to use", choices=("cpu", "cuda", "mps"))
+    parser.add_argument("--model", type=str, default=None, required=True,
+                        help="Path to the model to use. If this is a directory, picks the latest model checkpoint.")
+    parser.add_argument("--output_dir", type=str, default=".",
+                        help="Directory into which outputs are written.")
+    parser.add_argument("--max-games", type=int, default=1000,
+                        help="Maximum number of games to play during self-play.")
+    parser.add_argument("--max-seconds", type=int, default=60,
+                        help="Maximum number of seconds to play during self-play.")
+    parser.add_argument("--runs-per-move", type=int, default=800,
+                        help="Number of MCTS runs per move.")
+    return parser.parse_args()
 
 
-if __name__ == "__main__":
+def resolve_model_path(args):
+    m = args.model
+    if os.path.isfile(m):
+        return m
+    if os.path.isdir(m):
+        if os.path.isfile(os.path.join(m, "model.pt")):
+            return os.path.join(m, "model.pt")
+        if os.path.basename(m) == "checkpoints":
+            models = glob.glob(os.path.join(m, "*", "model.pt"))
+        else: 
+            models = glob.glob(os.path.join(m, "checkpoints", "*", "model.pt"))
+        if not models:
+            raise ValueError(f"No model checkpoints found in {m}.")
+        # Expected dir structure: {model_name}/checkpoints/{checkpoint_number}/model.pt
+        return max(models, key=lambda p: int(p.rsplit("/", 2)[-2]))
+    else:
+        raise ValueError(f"Model path {args.model} is neither a file nor a directory.")
+    
+
+def main():
+    args = parse_args()
     print(f"cuda available: {torch.cuda.is_available()}")
     print(f"mps available: {torch.backends.mps.is_available()}")
     print(f"torch version: {torch.__version__}")
     print(f"numpy version: {np.__version__}")
-    device = (
-        "cuda"
-        if torch.cuda.is_available()
-        else "mps"
-        if torch.backends.mps.is_available()
-        else "cpu"
-    )
-    # Current tests: only CPU.
-    device = 'cpu'
-    print(f"Using {device} device")
-    record_examples(device, max_games=10)
-    # time_gameplay(device)
+    if args.device == 'cuda' and not torch.cuda.is_available():
+        print("Device cuda not available, falling back to cpu.")
+        args.device = 'cpu'
+    elif args.device == 'mps' and not torch.backends.mps.is_available():
+        print("Device mps not available, falling back to cpu.")
+        args.device = 'cpu'
+    print("Using device:", args.device)
+    # model_path = "../../hexz-models/models/flagz/genesis/generations/0/model.pt"
+    # One-off: Save an initial model.
+    # model = HexzNeuralNetwork()
+    # save_model(model, os.path.join(
+    #     os.path.dirname(sys.argv[0]),
+    #     model_path)
+    # )
+    record_examples(args)
+
+
+if __name__ == "__main__":
+    main()
