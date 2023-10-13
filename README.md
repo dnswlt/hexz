@@ -56,6 +56,7 @@ repository:
 
 ```
 protoc hexzpb/hexz.proto --go_out=. --go_opt=paths=source_relative
+protoc -Ihexzpb hexzpb/hexz.proto --python_out=jupyter 
 ```
 
 

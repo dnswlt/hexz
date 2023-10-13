@@ -764,6 +764,7 @@ def resolve_model_path(args):
     if os.path.isfile(m):
         return m
     if os.path.isdir(m):
+        # Expected dir structure: {model_name}/checkpoints/{checkpoint_number}/model.pt
         if os.path.isfile(os.path.join(m, "model.pt")):
             return os.path.join(m, "model.pt")
         if os.path.basename(m) == "checkpoints":
@@ -772,8 +773,20 @@ def resolve_model_path(args):
             models = glob.glob(os.path.join(m, "checkpoints", "*", "model.pt"))
         if not models:
             raise ValueError(f"No model checkpoints found in {m}.")
-        # Expected dir structure: {model_name}/checkpoints/{checkpoint_number}/model.pt
-        return max(models, key=lambda p: int(p.rsplit("/", 2)[-2]))
+        max_n = None
+        latest = None
+        for m in models:
+            try:
+                n = int(m.rsplit("/", 2)[-2])
+                if max_n is None or n > max_n:
+                    max_n = n
+                    latest = m
+            except ValueError as e:
+                # Ignore non-numeric checkpoint dirs.
+                pass
+        if latest is None:
+            raise ValueError(f"No numeric checkpoint dirs found in {args.model}.")
+        return latest
     else:
         raise ValueError(f"Model path {args.model} is neither a file nor a directory.")
     

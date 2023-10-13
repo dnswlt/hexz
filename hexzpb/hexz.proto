@@ -109,3 +109,22 @@ message GameEngineMove {
 	int32 col = 4;
 	Field.CellType cell_type = 5;
 }
+
+// MCTSExample encodes all data that is necessary to generate a training example
+// for the NeuraMCTS model.
+// Normally, examples would be saved as HDF5 files, but to be facilitate the
+// generation of examples in our highly optimized Go implementation, we use
+// this message format instead. Python code can transform this into HDF5 files.
+message MCTSExample {
+    // The board, at any step in a fully played game.
+    Board board = 1;
+    // The "value", i.e. the final result of the game. Always has two elements.
+    repeated int32 result = 2;
+    // The learnt "policy", i.e. the MCTS visit counts and win rates for each move.
+    message MoveStats {
+        GameEngineMove move = 1;
+        int32 visits = 2;
+        float win_rate = 3;
+    }
+    repeated MoveStats move_stats = 3;
+}

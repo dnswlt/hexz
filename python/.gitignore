@@ -4,3 +4,4 @@ data/
 *.gz
 hexc.[co]
 *.so
+__pycache__/
