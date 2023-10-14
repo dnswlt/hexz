@@ -10,6 +10,7 @@ import (
 
 // Export boards as SVG files for debugging.
 
+// hexPolySVG returns an SVG <g> element representing the hex cell (r, c).
 func hexPolySVG(sideLength float64, f *Field, r, c int) string {
 	// Unscaled SVG paths for cell icons.
 	cellIconPaths := map[CellType]string{
@@ -74,16 +75,13 @@ func hexPolySVG(sideLength float64, f *Field, r, c int) string {
 		elems = append(elems, fmt.Sprintf(`<g transform="scale(%.6f)"><path d="%s" fill-rule="evenodd" fill="%s" /></g>`, iconScale, p, iconColor))
 	}
 	if f.Value > 0 {
-		//    const fontSize = Math.floor(a);
-		// ctx.font = `${fontSize}px sans-serif`;
-		// ctx.textAlign = "center";
-		// ctx.textBaseline = "middle";
-
 		elems = append(elems, fmt.Sprintf(`<text style="text-anchor: middle; alignment-baseline: middle; font: %dpx sans-serif;" fill="%s" x="0" y="0">%d</text>`, int(a), iconColor, f.Value))
 	}
 	return fmt.Sprintf(`<g transform="%s">%s</g>`, transform, strings.Join(elems, ""))
 }
 
+// ExportSVG writes a HTML document to file that contains SVG renderings of the given boards.
+// captions contains optional captions of the boards.
 func ExportSVG(file string, boards []*Board, captions []string) error {
 	const sideLength = 30.0
 	width := 10 * math.Sqrt(3) * sideLength

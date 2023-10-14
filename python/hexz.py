@@ -100,16 +100,40 @@ def _init_neighbors_map():
 
 
 class PurePyBoard:
-    """Numpy representation of a hexz board."""
+    """Numpy representation of a hexz board.
+    
+    A board is represented by an (N, 10, 11) numpy array. Each 10x11 channel is
+    a one-hot encoding of the presence of specific type of piece/obstacle/etc.
+    The channels are:
+
+    * 0: flags by P1
+    * 1: cell value 1-5 for P1
+    * 2: cells blocked for P1 (any occupied cell or a cell next to a 5)
+    * 3: next value for P1 
+    * 4: flags by P2
+    * 5: cell value 1-5 for P2
+    * 6: cells blocked for P2
+    * 7: next value for P2
+    * 8: grass cells with value 1-5
+
+    An action is specified by a (2, 10, 11) numpy array. The first 10x11 channel
+    represents a flag move, the second one represents a regular cell move. A
+    flag move must have a single 1 set, a normal move must have a single value
+    1-5 set.
+    """
 
     # Used to quickly get the indices of neighbor cells.
     neighbors = _init_neighbors_map()
     
-    def __init__(self, other=None, dtype=np.float32):
+    def __init__(self, other=None, dtype=np.float32, board=None):
         """Generates a new randomly initialized board or returns a copy of other, if set."""
-        if other:
+        if other is not None:
             self.b = other.b.copy()
             self.nflags = list(other.nflags)
+            return
+        if board is not None:
+            self.b = board
+            self.nflags = [3-int(board[0].sum()), 3-int(board[4].sum())]
             return
         self.b = np.zeros((9, 11, 10), dtype=dtype)
         self.nflags = [3, 3]  # number of flags remaining per player
@@ -130,6 +154,12 @@ class PurePyBoard:
         self.b[2, free_cells[0][grass], free_cells[1][grass]] = 1
         self.b[6, free_cells[0][grass], free_cells[1][grass]] = 1
     
+    @classmethod
+    def from_numpy(cls, board):
+        if board.shape != (9, 11, 10):
+            raise ValueError("Invalid board shape: " + str(board.shape))
+        return cls(board=board)
+
     def b_for(self, player):
         """Returns the underlying ndarray representing the board, oriented for the given player.
         Only returns a copy if the board is not already oriented for the given player.
@@ -186,6 +216,7 @@ class PurePyBoard:
         if next_val <= 5:
             for nr, nc in zip(nx, ny):
                 if b[2 + player*4, nr, nc] == 0:
+                    # Cell is not blocked yet.
                     if next_val > 5:
                         b[3 + player*4, nr, nc] = 0
                     if b[3 + player*4, nr, nc] == 0:
@@ -235,7 +266,40 @@ class PurePyBoard:
         moves.extend((1, r, c, self.b[3 + player*4, r, c]) for r, c in zip(rs, cs))
         return moves
 
-    
+    def validate(self):
+        """Checks that this instance represents a valid board.
+        
+        Raises an exeption if that is not the case.
+        """
+        b = self.b
+        """Checks if this board is valid. Raises an exception if not."""
+        if np.any(b[1] * b[5]):
+            raise ValueError("Both players have a value in the same cell.")
+        if np.any(b[0] * b[4]):
+            raise ValueError("Both players have a flag in the same cell.")
+        if np.any(b[2] * (b[0] + b[1]) != (b[0] + b[1])):
+            raise ValueError("Not all occupied cells are marked as blocked for P1.")
+        if np.any(b[6] * (b[4] + b[5]) != (b[4] + b[5])):
+            raise ValueError("Not all occupied cells are marked as blocked for P2.")
+        if np.any(b[0] * b[1]):
+            raise ValueError("P1 has a value in a cell with a flag.")
+        if np.any(b[4] * b[5]):
+            raise ValueError("P2 has a value in a cell with a flag.")
+        if np.any(b[3] * (b[0] + b[1] + b[2])):
+            raise ValueError("P1 has a next value in an occupied cell.")
+        if np.any(b[7] * (b[4] + b[5] + b[6])):
+            raise ValueError("P2 has a next value in a blocked cell.")
+        grass_values, grass_counts = np.unique(b[8], return_counts=True)
+        if not (set(grass_values) <= set([0, 1, 2, 3, 4, 5])):
+            raise ValueError(f"Wrong values for grass cells: {grass_values}")
+        if len(grass_counts) > 1 and grass_counts[1:].max() > 1:
+            raise ValueError(f"Duplicate grass cells: {grass_values}, {grass_counts}")
+        if b.max() > 5:
+            raise ValueError("Max value is > 5.")
+        if b.min() < 0:
+            raise ValueError("Min value is < 0.")
+        
+
 class CBoard(PurePyBoard):
     """Like a PurePyBoard, but uses the fast C implementations where available.
     
@@ -493,7 +557,7 @@ class HexzDataset(torch.utils.data.Dataset):
         of batches for the labels.
         """
         data = self.h5[self.keys[k]]
-        # data["turn"][0] ignored for now.
+        # data["turn"] ignored for now.
         return data["board"][:], (data["move_probs"][:], data["result"][:])
 
     def __len__(self):

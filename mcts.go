@@ -434,3 +434,17 @@ func (mcts *MCTS) SuggestMove(gameEngine *GameEngineFlagz, maxDuration time.Dura
 	elapsed := time.Since(started)
 	return mcts.bestNextMoveWithStats(root, elapsed, gameEngine.Board().Move)
 }
+
+func (mcts *MCTS) SuggestMoveLimit(gameEngine *GameEngineFlagz, maxIterations int) (GameEngineMove, *MCTSStats) {
+	mcts.Reset()
+	root := &mcNode{}
+	root.set(0, 0, gameEngine.Board().Turn, cellNormal) // Dummy values, only the turn matters.
+	started := time.Now()
+	ge := gameEngine.Clone()
+	for n := 0; n < maxIterations; n++ {
+		ge.copyFrom(gameEngine)
+		mcts.run(ge, root)
+	}
+	elapsed := time.Since(started)
+	return mcts.bestNextMoveWithStats(root, elapsed, gameEngine.Board().Move)
+}

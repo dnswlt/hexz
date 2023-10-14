@@ -12,4 +12,5 @@ dump.rdb
 *.br
 *.log
 *.pem
-
+*.zip
+examples-*.html

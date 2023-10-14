@@ -18,7 +18,7 @@ import (
 
 func main() {
 	runTime := flag.Duration("run-time", 10*time.Second, "Time to run before exiting.")
-	thinkTime := flag.Duration("think-time", 50*time.Millisecond, "Think time per move in seconds.")
+	iterations := flag.Int("iterations", 800, "Number of MCTS iterations per move.")
 	outputDir := flag.String("output-dir", ".", "Directory to which examples are written.")
 	flag.Parse()
 	if len(flag.Args()) > 0 {
@@ -36,22 +36,25 @@ func main() {
 	nGames := 0
 	nExamples := 0
 	fmt.Printf("Generating samples for a duration of %v with thinking time %v. Examples will get written to %q.\n",
-		*runTime, *thinkTime, examplesFile)
+		*runTime, *iterations, examplesFile)
 	for time.Since(started) < *runTime {
 		ge := hexz.NewGameEngineFlagz()
+		gameId := hexz.GenerateGameId()
 		mcts := hexz.NewMCTS()
 		gameExamples := []*pb.MCTSExample{}
-		fmt.Printf("Game %d at %d examples\n", nGames, nExamples)
+		fmt.Printf("Game %d after %.1fs at %d examples\n", nGames, time.Since(started).Seconds(), nExamples)
 		for !ge.IsDone() && time.Since(started) < *runTime {
-			m, stats := mcts.SuggestMove(ge, *thinkTime)
-			if !ge.MakeMove(m) {
-				log.Fatalf("Could not make a move")
-				return
-			}
+			m, stats := mcts.SuggestMoveLimit(ge, *iterations)
 			moveStats := make([]*pb.MCTSExample_MoveStats, len(stats.Moves))
 			for i, mv := range stats.Moves {
 				moveStats[i] = &pb.MCTSExample_MoveStats{
-					Move:    m.Proto(),
+					Move: &pb.GameEngineMove{
+						PlayerNum: int32(m.PlayerNum),
+						Move:      int32(m.Move),
+						Row:       int32(mv.Row),
+						Col:       int32(mv.Col),
+						CellType:  pb.Field_CellType(mv.CellType),
+					},
 					Visits:  int32(mv.Iterations),
 					WinRate: float32(mv.Q),
 				}
@@ -59,7 +62,12 @@ func main() {
 			gameExamples = append(gameExamples, &pb.MCTSExample{
 				Board:     ge.Board().Proto(),
 				MoveStats: moveStats,
+				GameId:    gameId,
 			})
+			if !ge.MakeMove(m) {
+				log.Fatalf("Could not make a move")
+				return
+			}
 			nExamples++
 		}
 		if !ge.IsDone() {
