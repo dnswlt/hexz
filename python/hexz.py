@@ -839,10 +839,6 @@ class NeuralMCTS:
         return examples
 
 
-def save_model(model, path):
-    torch.save(model.state_dict(), path)
-
-
 def load_model(path):
     model = HexzNeuralNetwork()
     model.load_state_dict(torch.load(path))
@@ -881,8 +877,8 @@ def record_examples(args):
 def parse_args():
     parser = argparse.ArgumentParser(description="Hexz NeuralMCTS")
     parser.add_argument("--mode", type=str, default="selfplay",
-                        help="Mode to execute: selfplay to generate examples, train to ... train",
-                        choices=("selfplay", "train"))
+                        help="Mode to execute: selfplay to generate examples, genmod to generate a new randomly initialized model, train to ... train",
+                        choices=("selfplay", "train", "genmod"))
     parser.add_argument("--device", type=str, default="cpu",
                         help="PyTorch device to use", choices=("cpu", "cuda", "mps"))
     parser.add_argument("--model", type=str, default=None, required=True,
@@ -960,7 +956,7 @@ def train_model(args):
     num_epochs = args.epochs
     model_path = path_to_latest_model(args)
     examples_path = args.examples
-    if args.mode == "train" and not examples_path:
+    if not examples_path:
         examples_path = os.path.join(os.path.dirname(model_path), "examples/*.h5")
     device = args.device
     model = load_model(model_path).to(device)
@@ -1039,6 +1035,18 @@ def train_model(args):
     print("Done.")
 
 
+def generate_model(args):
+    model = HexzNeuralNetwork()
+    path = args.model
+    if os.path.isdir(path):
+        path = os.path.join(path, "model.pt")
+    if os.path.isfile(path):
+        print(f"generate_model: error: a model already exists at {path}.")
+        return
+    torch.save(model.state_dict(), path)
+    print(f"Generated a randomly initialized model at {path}")
+
+
 def main():
     args = parse_args()
     print(f"cuda available: {torch.cuda.is_available()}")
@@ -1059,11 +1067,12 @@ def main():
     #     os.path.dirname(sys.argv[0]),
     #     model_path)
     # )
-    if args.mode == 'selfplay':
+    if args.mode == "selfplay":
         record_examples(args)
-    elif args.mode == 'train':
+    elif args.mode == "train":
         train_model(args)
-
+    elif args.mode == "genmod":
+        generate_model(args)
 
 if __name__ == "__main__":
     main()
