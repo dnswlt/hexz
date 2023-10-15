@@ -640,32 +640,44 @@ class HexzNeuralNetwork(nn.Module):
         super().__init__()
         board_channels = 9
         cnn_channels = 32
-        self.features = nn.Sequential(
-            # First CNN layer
-            nn.Conv2d(board_channels, cnn_channels, kernel_size=3, bias=False),  # [N, cnn_channels, 9, 8]
-            nn.BatchNorm2d(cnn_channels), 
-            nn.ReLU(),
-            # Second CNN layer
-            nn.Conv2d(cnn_channels, cnn_channels, kernel_size=3, bias=False),  # # [N, cnn_channels, 7, 6]
-            nn.BatchNorm2d(cnn_channels),
-            nn.ReLU(),
+        num_cnn_blocks = 5
+        self.cnn_blocks = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Conv2d(board_channels, cnn_channels, kernel_size=3, bias=False, padding="same"),  # [N, cnn_channels, 11, 10]
+                    nn.BatchNorm2d(cnn_channels),
+                    nn.ReLU()) 
+            ] + [
+                nn.Sequential(
+                    nn.Conv2d(cnn_channels, cnn_channels, kernel_size=3, bias=False, padding="same"),  # [cnn_channels, cnn_channels, 11, 10]
+                    nn.BatchNorm2d(cnn_channels),
+                    nn.ReLU()
+                )
+                for i in range(num_cnn_blocks-1)
+            ]
         )
-        fc_size = 256
-        self.fc = nn.Sequential(
-            nn.Linear(cnn_channels * 7 * 6, fc_size),
-            nn.BatchNorm1d(fc_size), 
+        self.policy_head = nn.Sequential(
+            nn.Conv2d(cnn_channels, 2, kernel_size=1, bias=False),
+            nn.BatchNorm2d(2),
             nn.ReLU(),
-            nn.Linear(fc_size, fc_size),
+            nn.Flatten(),
+            nn.Linear(2 * 11 * 10, 2 * 11 * 10),
         )
-        self.move_probs = nn.Linear(fc_size, 2 * 11 * 10)
-        self.value = nn.Linear(fc_size, 1)
+        self.value_head = nn.Sequential(
+            nn.Conv2d(cnn_channels, 1, kernel_size=1, bias=False),
+            nn.BatchNorm2d(1),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(11 * 10, 11 * 10),
+            nn.ReLU(),
+            nn.Linear(11 * 10, 1)
+        )
 
     def forward(self, x):
-        x = self.features(x)
-        x = torch.flatten(x, 1)
-        x = self.fc(x)
-        pi = self.move_probs(x)
-        v = self.value(x)
+        for b in self.cnn_blocks:
+            x = b(x)
+        pi = self.policy_head(x)
+        v = self.value_head(x)
         return F.log_softmax(pi, dim=1), torch.tanh(v)
 
 
@@ -895,7 +907,7 @@ def parse_args():
                         help="Number of MCTS runs per move.")
     parser.add_argument("--batch-size", type=int, default=256,
                        help="Batch size to use during training.")
-    parser.add_argument("--epochs", type=int, default=100,
+    parser.add_argument("--epochs", type=int, default=10,
                        help="Number of epochs to train.")
     parser.add_argument("--shuffle", action=argparse.BooleanOptionalAction, default=True,
                        help="Whether to shuffle the examples during training.")
@@ -905,6 +917,8 @@ def parse_args():
                        help="Determines the pin_memory value used in the PyTorch DataLoader.")
     parser.add_argument("--num-workers", type=int, default=0,
                        help="Determines the num_workers value used in the PyTorch DataLoader. Set to 0 to disable multi-processing.")
+    parser.add_argument("--force", action=argparse.BooleanOptionalAction, default=False,
+                       help="If True, existing outputs may be overriden.")
     return parser.parse_args()
 
 
@@ -1005,7 +1019,6 @@ def train_model(args):
         #                             on_trace_ready=trace_handler) as prof:
             # with torch.profiler.record_function("batch_iteration"):
         for batch, (X, (y_pr, y_val)) in enumerate(loader):
-            started = time.perf_counter()
             # Send to device.
             X = X.to(device)
             y_pr = y_pr.to(device)
@@ -1026,12 +1039,10 @@ def train_model(args):
 
             examples_processed += len(X)
             # prof.step()
-            if batch % 10 == 0:
+            if batch % 100 == 0:
                 now = time.perf_counter()
-                print(f"Epoch #{epoch}: batch {batch} took {now-started:.3f}s")
-                print(f"Examples/s in epoch: {examples_processed/(now-epoch_started):.1f}/s ({examples_processed} total)")
-                # loss, current = loss.item(), (batch + 1) * len(X)
-                # print(f"loss: {loss:>7f}  [{current:>5d}/{total_samples:>5d}]")
+                print(f"Examples/s in epoch #{epoch}: {examples_processed/(now-epoch_started):.1f}/s ({examples_processed} total)")
+                print(f"pr_loss: {pr_loss.item():.6f}, val_loss: {val_loss.item():.6f} @{epoch}/{examples_processed}")
     print("Done.")
 
 
@@ -1040,11 +1051,11 @@ def generate_model(args):
     path = args.model
     if os.path.isdir(path):
         path = os.path.join(path, "model.pt")
-    if os.path.isfile(path):
+    if not args.force and os.path.isfile(path):
         print(f"generate_model: error: a model already exists at {path}.")
         return
     torch.save(model.state_dict(), path)
-    print(f"Generated a randomly initialized model at {path}")
+    print(f"Generated randomly initialized model with {sum(p.numel() for p in model.parameters())} parameters at {path}.")
 
 
 def main():
