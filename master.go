@@ -106,7 +106,8 @@ func (m *GameMaster) processControlEventRegister(e ControlEventRegister) {
 		playerNum = len(m.players) + 1
 		m.players[e.player.Id] = pInfo{playerNum, e.player}
 		if m.game.singlePlayer {
-			m.cpuPlayer = NewLocalCPUPlayer(playerIdCPU, m.s.config.CpuThinkTime)
+			// m.cpuPlayer = NewLocalCPUPlayer(playerIdCPU, m.s.config.CpuThinkTime)
+			m.cpuPlayer = NewRemoteCPUPlayer(playerIdCPU, "http://localhost:9094", m.s.config.CpuThinkTime)
 			m.players[playerIdCPU] =
 				pInfo{playerNum: 2, Player: Player{Id: playerIdCPU, Name: "CPU"}}
 		}

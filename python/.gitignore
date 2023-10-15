@@ -2,6 +2,7 @@
 data/
 *.h5
 *.gz
+*.html
 hexc.[co]
 *.so
 __pycache__/

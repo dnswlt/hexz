@@ -1,3 +1,6 @@
+# Cython implementations of the most performance critical parts of the
+# MCTS algorithm.
+#
 # Compile with:
 #
 # python setup.py build_ext --inplace

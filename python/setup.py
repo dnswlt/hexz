@@ -1,3 +1,6 @@
+# Run as 
+# python3 setup.py build_ext --inplace
+# to build Cython modules.
 from setuptools import setup
 from Cython.Build import cythonize
 

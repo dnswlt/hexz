@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
@@ -110,10 +111,15 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cpu.url+CpuSuggestMoveURLPath, bytes.NewReader(data))
+	remoteURL, err := url.JoinPath(cpu.url, CpuSuggestMoveURLPath)
+	if err != nil {
+		return nil, fmt.Errorf("cannot build valid URL from %s and %s: %w", cpu.url, CpuSuggestMoveURLPath, err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, remoteURL, bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("Content-Type", "application/json")
 	if requestDeadline, ok := ctx.Deadline(); ok && cpu.propagateRPCDeadline {
 		// Propagate deadline to the server. It will use this to limit the time it spends thinking.
 		req.Header.Set(HttpHeaderXRequestDeadline, requestDeadline.Format(time.RFC3339Nano))
@@ -131,6 +137,7 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz
 	if err := dec.Decode(&respData); err != nil {
 		return nil, err
 	}
+	infoLog.Printf("RemoteCPUPlayer suggested move %v", respData.Move)
 	return ControlEventMove{
 		playerId:    cpu.playerId,
 		moveRequest: respData.Move,
