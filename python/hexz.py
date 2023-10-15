@@ -809,8 +809,8 @@ class NeuralMCTS:
         # This has the desired effect that the root's children will play
         # as the other player, who makes the first move.
         self.root = NNode(None, 1 - turn, None)
-        # Predict move probabilities for root up front.
-        self.root.move_probs, _ = self.predict(board, 0)
+        # Predict move probabilities for root and board value estimate up front.
+        self.root.move_probs, self.value = self.predict(board, turn)
 
     def backpropagate(self, node, result):
         while node:
@@ -1183,7 +1183,9 @@ def train_model(args):
                 print(
                     f"pr_loss: {pr_loss.item():.6f}, val_loss: {val_loss.item():.6f} @{epoch}/{examples_processed}"
                 )
-    print("Done.")
+    output_path = "/tmp/model.pt"  # TODO: make configurable
+    torch.save(model.state_dict(), output_path)
+    print(f"Done. Saved new model to {output_path}")
 
 
 def generate_model(args):

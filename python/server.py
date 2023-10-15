@@ -50,7 +50,7 @@ def suggest_move(model: hexz.HexzNeuralNetwork, state: hexz_pb2.GameEngineState,
             "type": 0 if typ == 1 else 5,  # 5==Flag
         }
     }
-    svg.export("./latest.html", [board, board], ['Model move probs', 'MCTS move likelihoods'], [mcts.root.move_probs, mcts.root.move_likelihoods()])
+    svg.export("./latest.html", [board, board], [f"Model move probs (value: {mcts.value:.3f})", "MCTS move likelihoods"], [mcts.root.move_probs, mcts.root.move_likelihoods()])
     print(f"child qs: {[(c.wins, c.visit_count) for c in mcts.root.children]}")
     print(f"suggested move: {resp}, iterations: {n}, tree size: {mcts.size()}, best child: vc:{best_child.visit_count} {best_child.wins} {best_child.puct()}.")
     return resp, 200
@@ -64,9 +64,11 @@ def create_app():
     if not model_path:
         print("You have to set the environment variable HEXZ_MODEL_PATH to the model you intend to use.")
         sys.exit(1)
+    model_path = hexz.path_to_latest_model(model_path)
+    print(f"Loading model from {model_path}")
     for i in range(num_models):
         app.model_queue.put(
-            hexz.load_model(hexz.path_to_latest_model(model_path))
+            hexz.load_model(model_path)
         )
 
     # The path /hexz/cpu/suggest must be identical to the one the Go client uses.
