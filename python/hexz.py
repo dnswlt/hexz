@@ -1,4 +1,5 @@
 import argparse
+from bisect import bisect_left
 import collections
 from contextlib import contextmanager
 from functools import wraps
@@ -40,6 +41,15 @@ def timing(f):
         _PERF_COUNTS[name] += 1
         return result
     return wrap
+
+
+@contextmanager
+def print_time(name):
+    """Context manager to print the time a code block took to execute."""
+    t_start = time.perf_counter_ns()
+    yield
+    elapsed = time.perf_counter_ns() - t_start
+    print(f"{name} took {int(elapsed/1e6)} ms")
 
 
 @contextmanager
@@ -414,7 +424,7 @@ class Example:
     def load_all(cls, path):
         """This method is for testing only.
         
-        Use a HexzDataset to access the examples from PyTorch."""
+        Use a HDF5Dataset to access the examples from PyTorch."""
         examples = []
         with h5py.File(path, "r") as h5:
             for grp in h5:
@@ -543,25 +553,86 @@ class MCTS:
             ex.result = result
         return examples
 
-class HexzDataset(torch.utils.data.Dataset):
-    """PyTorch Dataset implementation to read Hexz samples from HDF5."""
-    def __init__(self, path):
-        self.h5 = h5py.File(path, "r")
-        self.length = len(self.h5)
-        self.keys = list(self.h5.keys())
+
+class HDF5Dataset(torch.utils.data.Dataset):
+    """PyTorch Dataset implementation to read Hexz samples from HDF5.
+    Supports reading from multiple files.
+    """
+    def __init__(self, path, in_mem=False, lazy_init=True):
+        """Builds a new dataset that reads from the .h5 file(s) pointed to by path.
+
+        Args:
+            path: can be a list of paths, a glob, or the path of a single HDF5 .h5 file.
+            in_mem: if True, *all* HDF5 datasets will be pre-loaded into memory.
+                This can speed up training significantly, but ofc only works for sufficiently
+                small datasets.
+        """
+        if isinstance(path, list):
+            self.paths = [p for p in path if os.path.isfile(p)]
+        else:
+            self.paths = glob.glob(path)
+        if not self.paths:
+            raise ValueError(f"No files found at {path}")
+        self.in_mem = in_mem
+        if not lazy_init:
+            self.init()
+        else:
+            # We need to know the size of our dataset in the master process, at it generates
+            # the batch indices. Since we cannot pickle h5py objects, but pickling is required
+            # on macos in a multiprocessing context (since spawn() is used to create the subprocesses),
+            # we precompute the size by looking at all datasets once.
+            self.size = sum(len(h5py.File(p, "r")) for p in self.paths)
+
+    
+    def init(self):
+        """Must be called to initialize this dataset.
         
+        This effectively implements a lazy initialization, allowing us to use an HDF5Dataset
+        in worker subprocesses. If we would initialize in __init__ already, we would have to
+        pickle h5py objects, which is not supported.
+        """
+        self.h5s = []
+        size = 0
+        for p in self.paths:
+            h = h5py.File(p, "r")
+            l = len(h)
+            if l > 0:
+                self.h5s.append(h)
+                size += l
+        if not self.h5s:
+            raise FileNotFoundError(f"No examples found in {self.paths}")
+        self.size = size
+        self.memcache = None
+        self.end_idxs = list(np.array([len(h) for h in self.h5s]).cumsum() - 1)
+        self.keys = [list(h.keys()) for h in self.h5s]
+        if self.in_mem:
+            self.init_memcache()
+
+    def init_memcache(self):
+        """Loads all HDF5 data into self.memcache. Expects that this object is otherwise fully initialized."""
+        mc = [None] * len(self)
+        for i in range(len(mc)):
+            mc[i] = self[i]
+        self.memcache = mc
+
     def __getitem__(self, k):
         """Returns the board as the X and two labels: move likelihoods (2, 11, 10) and (1) result.
         
         The collation function the PyTorch DataLoader handles this properly and returns a tuple
         of batches for the labels.
         """
-        data = self.h5[self.keys[k]]
+        if self.memcache:
+            return self.memcache[k]
+        i = bisect_left(self.end_idxs, k)
+        h5 = self.h5s[i]
+        if i > 0:
+            k -= self.end_idxs[i-1] + 1
+        data = h5[self.keys[i][k]]
         # data["turn"] ignored for now.
         return data["board"][:], (data["move_probs"][:], data["result"][:])
 
     def __len__(self):
-        return self.length
+        return self.size
         
 
 class HexzNeuralNetwork(nn.Module):
@@ -791,7 +862,7 @@ def record_examples(args):
     disable_perf_stats()
     started = time.time()
     num_games = 0
-    model_path = resolve_model_path(args)
+    model_path = path_to_latest_model(args)
     device = args.device
     model = load_model(model_path).to(device)
     print(f"Loaded model from {model_path}")
@@ -806,12 +877,18 @@ def record_examples(args):
         print(f"Played {num_games} games in {time.time() - started:.1f}s.")
     print("Done recording examples after {time.time() - started:.1f}s.")
 
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Hexz NeuralMCTS")
+    parser.add_argument("--mode", type=str, default="selfplay",
+                        help="Mode to execute: selfplay to generate examples, train to ... train",
+                        choices=("selfplay", "train"))
     parser.add_argument("--device", type=str, default="cpu",
                         help="PyTorch device to use", choices=("cpu", "cuda", "mps"))
     parser.add_argument("--model", type=str, default=None, required=True,
                         help="Path to the model to use. If this is a directory, picks the latest model checkpoint.")
+    parser.add_argument("--examples", type=str, default=None,
+                        help="Path or glob to the examples to use during training. Default: '{--model}/examples/*.h5'")
     parser.add_argument("--output_dir", type=str, default=".",
                         help="Directory into which outputs are written.")
     parser.add_argument("--max-games", type=int, default=1000,
@@ -820,10 +897,22 @@ def parse_args():
                         help="Maximum number of seconds to play during self-play.")
     parser.add_argument("--runs-per-move", type=int, default=800,
                         help="Number of MCTS runs per move.")
+    parser.add_argument("--batch-size", type=int, default=256,
+                       help="Batch size to use during training.")
+    parser.add_argument("--epochs", type=int, default=100,
+                       help="Number of epochs to train.")
+    parser.add_argument("--shuffle", action=argparse.BooleanOptionalAction, default=True,
+                       help="Whether to shuffle the examples during training.")
+    parser.add_argument("--in-mem", action=argparse.BooleanOptionalAction, default=False,
+                       help="Whether to load all HDF5 example data into memory for training.")
+    parser.add_argument("--pin-memory", action=argparse.BooleanOptionalAction, default=True,
+                       help="Determines the pin_memory value used in the PyTorch DataLoader.")
+    parser.add_argument("--num-workers", type=int, default=0,
+                       help="Determines the num_workers value used in the PyTorch DataLoader. Set to 0 to disable multi-processing.")
     return parser.parse_args()
 
 
-def resolve_model_path(args):
+def path_to_latest_model(args):
     m = args.model
     if os.path.isfile(m):
         return m
@@ -836,7 +925,7 @@ def resolve_model_path(args):
         else: 
             models = glob.glob(os.path.join(m, "checkpoints", "*", "model.pt"))
         if not models:
-            raise ValueError(f"No model checkpoints found in {m}.")
+            raise FileNotFoundError(f"No model checkpoints found in {m}.")
         max_n = None
         latest = None
         for m in models:
@@ -849,11 +938,106 @@ def resolve_model_path(args):
                 # Ignore non-numeric checkpoint dirs.
                 pass
         if latest is None:
-            raise ValueError(f"No numeric checkpoint dirs found in {args.model}.")
+            raise FileNotFoundError(f"No numeric checkpoint dirs found in {args.model}.")
         return latest
     else:
-        raise ValueError(f"Model path {args.model} is neither a file nor a directory.")
+        raise FileNotFoundError(f"Model path {args.model} is neither a file nor a directory.")
     
+
+def worker_init_fn(worker_id):
+    print(f"worker_init_fn: {worker_id}")
+    w = torch.utils.data.get_worker_info()
+    if w:
+        if isinstance(w.dataset, HDF5Dataset):
+            w.dataset.init()
+    else:
+        print("worker_init_fn: Called in main process!")
+
+
+def train_model(args):
+    num_workers = args.num_workers
+    batch_size = args.batch_size
+    num_epochs = args.epochs
+    model_path = path_to_latest_model(args)
+    examples_path = args.examples
+    if args.mode == "train" and not examples_path:
+        examples_path = os.path.join(os.path.dirname(model_path), "examples/*.h5")
+    device = args.device
+    model = load_model(model_path).to(device)
+    with print_time("HDF5Dataset()"):
+        ds = HDF5Dataset(examples_path, in_mem=args.in_mem, lazy_init=num_workers > 0)
+    # https://pytorch.org/tutorials/recipes/recipes/tuning_guide.html
+    # loader.num_workers > 0 uses separate processes to load data. Uses pickle, not supported with h5py...
+    # pin_memory=True
+    
+    # https://github.com/pytorch/pytorch/issues/77799
+    # Discussion about mps vs cpu device performance.
+    
+   
+    
+    loader = torch.utils.data.DataLoader(dataset=ds, 
+                                         batch_size=batch_size, 
+                                         shuffle=args.shuffle, 
+                                         pin_memory=args.pin_memory,
+                                         num_workers=num_workers,
+                                         worker_init_fn=worker_init_fn)
+    print(f"DataLoader.num_workers: {loader.num_workers}")
+    print(f"torch.autograd.gradcheck:  {torch.autograd.gradcheck}")
+    for X, (y_pr, y_val) in loader:
+        print(f"Shape of X [N, C, H, W]: {X.shape}: {X.dtype}")
+        print(f"Shape of y_pr [N, C, H, W]: {y_pr.shape}: {y_pr.dtype}")
+        print(f"Shape of y_val [N, V]: {y_val.shape}: {y_val.dtype}")
+        break
+
+    pr_loss_fn = nn.CrossEntropyLoss()
+    val_loss_fn = nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+    # def trace_handler(prof):
+    #     print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=30))
+
+    for epoch in range(num_epochs):
+        epoch_started = time.perf_counter()
+        examples_processed = 0
+        # with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU],
+        #                             schedule=torch.profiler.schedule(
+        #                                 wait=5,
+        #                                 warmup=5,
+        #                                 active=1,
+        #                                 repeat=1,
+        #                             ),
+        #                             on_trace_ready=trace_handler) as prof:
+            # with torch.profiler.record_function("batch_iteration"):
+        for batch, (X, (y_pr, y_val)) in enumerate(loader):
+            started = time.perf_counter()
+            # Send to device.
+            X = X.to(device)
+            y_pr = y_pr.to(device)
+            y_val = y_val.to(device)
+
+            # Predict
+            pred_pr, pred_val = model(X)
+
+            # Compute loss
+            pr_loss = pr_loss_fn(pred_pr.flatten(1), y_pr.flatten(1))
+            val_loss = val_loss_fn(pred_val, y_val)
+            loss = pr_loss + val_loss
+
+            # Backpropagation
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
+
+            examples_processed += len(X)
+            # prof.step()
+            if batch % 10 == 0:
+                now = time.perf_counter()
+                print(f"Epoch #{epoch}: batch {batch} took {now-started:.3f}s")
+                print(f"Examples/s in epoch: {examples_processed/(now-epoch_started):.1f}/s ({examples_processed} total)")
+                # loss, current = loss.item(), (batch + 1) * len(X)
+                # print(f"loss: {loss:>7f}  [{current:>5d}/{total_samples:>5d}]")
+    print("Done.")
+
 
 def main():
     args = parse_args()
@@ -875,7 +1059,10 @@ def main():
     #     os.path.dirname(sys.argv[0]),
     #     model_path)
     # )
-    record_examples(args)
+    if args.mode == 'selfplay':
+        record_examples(args)
+    elif args.mode == 'train':
+        train_model(args)
 
 
 if __name__ == "__main__":

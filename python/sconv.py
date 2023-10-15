@@ -69,7 +69,7 @@ def parse_args():
                         help="Maximum number of examples to convert.")
     parser.add_argument("files", type=str, nargs="+",
                         help="Input files to convert.")
-    parser.add_argument("--draw-probs", type=bool, default=False,
+    parser.add_argument("--draw-probs", action=argparse.BooleanOptionalAction, default=False,
                         help="Draw move probabilities instead of next values (HTML export only).")
     return parser.parse_args()
 
