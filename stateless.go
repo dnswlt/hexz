@@ -671,7 +671,7 @@ func (s *StatelessServer) defaultHandler(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *StatelessServer) createMux() *http.ServeMux {
-	// TODO: the handler functions are copy&pasted from server.go. We should
+	// TODO: Several generic handler functions are copy&pasted from server.go. We should
 	// refactor them into a common place.
 
 	mux := &http.ServeMux{}

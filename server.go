@@ -26,23 +26,24 @@ import (
 )
 
 type ServerConfig struct {
-	ServerHost        string
-	ServerPort        int
-	DocumentRoot      string        // Path to static resource files.
-	GameHistoryRoot   string        // Path to game history files.
-	LoginDatabasePath string        // Path to the file where the player DB is stored. If empty, no persistent storage is used.
-	RedisAddr         string        // Address of the Redis server. If empty, local storage is used.
-	PostgresURL       string        // URL of the PostgreSQL server. If empty, no persistent storage is used.
-	InactivityTimeout time.Duration // Time after which a game is ended due to inactivity.
-	PlayerRemoveDelay time.Duration // Time to wait before removing an unregistered player from the game.
-	LoginTTL          time.Duration
-	CpuThinkTime      time.Duration
-	CpuMaxFlags       int
-	AuthTokenSha256   string // Used in http Basic authentication for /statusz. Must be a SHA256 checksum.
-	DisableUndo       bool   // If true, Undo/Redo is enabled for all games
-	TlsCertChain      string
-	TlsPrivKey        string
-	DebugMode         bool
+	ServerHost         string
+	ServerPort         int
+	DocumentRoot       string        // Path to static resource files.
+	GameHistoryRoot    string        // Path to game history files.
+	LoginDatabasePath  string        // Path to the file where the player DB is stored. If empty, no persistent storage is used.
+	RemoteCPUPlayerURL string        // Base URL of the remote CPU player server. If emtpy, a local CPU player is used.
+	RedisAddr          string        // Address of the Redis server. If empty, local storage is used.
+	PostgresURL        string        // URL of the PostgreSQL server. If empty, no persistent storage is used.
+	InactivityTimeout  time.Duration // Time after which a game is ended due to inactivity.
+	PlayerRemoveDelay  time.Duration // Time to wait before removing an unregistered player from the game.
+	LoginTTL           time.Duration
+	CpuThinkTime       time.Duration
+	CpuMaxFlags        int
+	AuthTokenSha256    string // Used in http Basic authentication for /statusz. Must be a SHA256 checksum.
+	DisableUndo        bool   // If true, Undo/Redo is enabled for all games
+	TlsCertChain       string
+	TlsPrivKey         string
+	DebugMode          bool
 	// If true, run stateless server (e.g. for Cloud Run). RedisAddr must also be set in this case.
 	Stateless bool
 }

@@ -70,15 +70,15 @@ func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz)
 
 type RemoteCPUPlayer struct {
 	playerId             PlayerId
-	url                  string // Base URL of the remote CPU player server.
+	baseURL              string // Base URL of the remote CPU player server.
 	maxThinkTime         time.Duration
 	propagateRPCDeadline bool // Experimental: set to true to propagate the RPC deadline to the server.
 }
 
-func NewRemoteCPUPlayer(playerId PlayerId, url string, maxThinkTime time.Duration) *RemoteCPUPlayer {
+func NewRemoteCPUPlayer(playerId PlayerId, baseURL string, maxThinkTime time.Duration) *RemoteCPUPlayer {
 	return &RemoteCPUPlayer{
 		playerId:             playerId,
-		url:                  url,
+		baseURL:              baseURL,
 		maxThinkTime:         maxThinkTime,
 		propagateRPCDeadline: false,
 	}
@@ -111,9 +111,9 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz
 	if err != nil {
 		return nil, err
 	}
-	remoteURL, err := url.JoinPath(cpu.url, CpuSuggestMoveURLPath)
+	remoteURL, err := url.JoinPath(cpu.baseURL, CpuSuggestMoveURLPath)
 	if err != nil {
-		return nil, fmt.Errorf("cannot build valid URL from %s and %s: %w", cpu.url, CpuSuggestMoveURLPath, err)
+		return nil, fmt.Errorf("cannot build valid URL from %s and %s: %w", cpu.baseURL, CpuSuggestMoveURLPath, err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, remoteURL, bytes.NewReader(data))
 	if err != nil {

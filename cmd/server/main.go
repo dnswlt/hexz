@@ -32,6 +32,8 @@ func main() {
 		"Root directory in whicih to read/write history files. If empty, history is disabled.")
 	flag.StringVar(&cfg.LoginDatabasePath, "userdb", "_logins.json",
 		"File in which to store login information if the local in-memory login store is used.")
+	flag.StringVar(&cfg.RemoteCPUPlayerURL, "remote-cpu-url", "",
+		"Base URL of the CPU player server. If empty, the in-process or WASM CPU engine is used.")
 	flag.StringVar(&cfg.RedisAddr, "redis-addr", "",
 		"Address of the Redis server. Only used by the -stateless server (default: localhost:6379).")
 	flag.StringVar(&cfg.PostgresURL, "postgres-url", "",

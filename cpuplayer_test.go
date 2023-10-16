@@ -172,7 +172,7 @@ func TestRemoteCPUPlayerIncompleteRequestData(t *testing.T) {
 		GameEngineState: data,
 	})
 	r := httptest.NewRequest(http.MethodPost, CpuSuggestMoveURLPath, bytes.NewReader(requestData))
-	s.handleSuggestMove(w, r) // TODO: this will crash!
+	s.handleSuggestMove(w, r)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected status code 400, got %d", w.Code)
 	}
