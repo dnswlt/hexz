@@ -147,7 +147,7 @@ def c_puct(move_probs, move, int parent_visit_count, int visit_count, float wins
     cdef float[:, :, :] pr = move_probs
     
     if visit_count == 0:
-        q = 0.5
+        q = 0.0
     else:
         q = wins / visit_count
     return q + pr[typ, r, c] * sqrt(parent_visit_count) / (1 + visit_count)

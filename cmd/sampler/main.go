@@ -64,7 +64,7 @@ func main() {
 			}
 		}
 	}()
-	fmt.Printf("Generating samples for a duration of %v with thinking time %v. Examples will get written to %q.\n",
+	fmt.Printf("Generating samples for a duration of %v with %v iterations per move. Examples will get written to %q.\n",
 		*runTime, *iterations, *outputDir)
 	for i := 0; i < *parallelTasks; i++ {
 		examplesFile := path.Join(*outputDir, fmt.Sprintf("examples-%s-%03d.zip", time.Now().Format("20060102-150405"), i))
@@ -89,8 +89,14 @@ func main() {
 				// The idea is that examples in which every move is equally good and likely
 				// don't bring much value. So we stop generating further examples for such games.
 				subseqUniformMoves := 0
+				nMoves := 0
 				for !ge.IsDone() && time.Since(started) < *runTime {
-					m, stats := mcts.SuggestMoveLimit(ge, *iterations)
+					limit := *iterations
+					if nMoves < 6 {
+						// Double the "think time" for the first 6 iterations, i.e. where flags are usually placed.
+						limit *= 2
+					}
+					m, stats := mcts.SuggestMoveLimit(ge, limit)
 					moveStats := make([]*pb.MCTSExample_MoveStats, len(stats.Moves))
 					for i, mv := range stats.Moves {
 						moveStats[i] = &pb.MCTSExample_MoveStats{
@@ -117,7 +123,7 @@ func main() {
 						GameId:    gameId,
 					})
 					countCh <- 1
-					nExamples++
+					nMoves++
 					if !ge.MakeMove(m) {
 						log.Fatalf("Could not make a move")
 						return

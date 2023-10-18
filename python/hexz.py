@@ -11,6 +11,7 @@ from functools import wraps
 import glob
 import h5py
 from matplotlib import pyplot as plt
+import multiprocessing as mp
 import numpy as np
 import os
 import sys
@@ -674,46 +675,46 @@ class HexzNeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
         board_channels = 9
-        cnn_channels = 32
-        num_cnn_blocks = 5
+        cnn_filters = 128
+        num_cnn_blocks = 10
         self.cnn_blocks = nn.ModuleList(
             [
                 nn.Sequential(
                     nn.Conv2d(
                         board_channels,
-                        cnn_channels,
+                        cnn_filters,
                         kernel_size=3,
                         bias=False,
                         padding="same",
                     ),  # [N, cnn_channels, 11, 10]
-                    nn.BatchNorm2d(cnn_channels),
+                    nn.BatchNorm2d(cnn_filters),
                     nn.ReLU(),
                 )
             ]
             + [
                 nn.Sequential(
                     nn.Conv2d(
-                        cnn_channels,
-                        cnn_channels,
+                        cnn_filters,
+                        cnn_filters,
                         kernel_size=3,
                         bias=False,
                         padding="same",
                     ),  # [cnn_channels, cnn_channels, 11, 10]
-                    nn.BatchNorm2d(cnn_channels),
+                    nn.BatchNorm2d(cnn_filters),
                     nn.ReLU(),
                 )
                 for i in range(num_cnn_blocks - 1)
             ]
         )
         self.policy_head = nn.Sequential(
-            nn.Conv2d(cnn_channels, 2, kernel_size=1, bias=False),
+            nn.Conv2d(cnn_filters, 2, kernel_size=1, bias=False),
             nn.BatchNorm2d(2),
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(2 * 11 * 10, 2 * 11 * 10),
         )
         self.value_head = nn.Sequential(
-            nn.Conv2d(cnn_channels, 1, kernel_size=1, bias=False),
+            nn.Conv2d(cnn_filters, 1, kernel_size=1, bias=False),
             nn.BatchNorm2d(1),
             nn.ReLU(),
             nn.Flatten(),
@@ -756,11 +757,12 @@ class NNode:
 
     def puct(self):
         typ, r, c, _ = self.move
+        pr = self.parent.move_probs
         if self.visit_count == 0:
-            q = 0.5
+            q = 0.0
         else:
             q = self.wins / self.visit_count
-        return q + self.parent.move_probs[typ, r, c] * np.sqrt(self.parent.visit_count) / (1 + self.visit_count)
+        return q + pr[typ, r, c] * np.sqrt(self.parent.visit_count) / (1 + self.visit_count)
 
     def move_likelihoods(self):
         """Returns the move likelihoods for all children as a (2, 11, 10) ndarray.
@@ -943,26 +945,58 @@ def time_gameplay(device):
     print_perf_stats()
 
 
-def record_examples(args):
+def record_examples(progress_queue: mp.Queue, args):
+    worker_id = os.getpid()
+    print(f"Worker {worker_id} started.")
     disable_perf_stats()
     started = time.time()
     num_games = 0
     model_path = path_to_latest_model(args.model)
     device = args.device
     model = load_model(model_path).to(device)
-    print(f"Loaded model from {model_path}")
+    print(f"W{worker_id}: loaded model from {model_path}")
     examples_file = os.path.join(
-        args.output_dir, f"examples-{time.strftime('%Y%m%d-%H%M%S')}.h5"
+        args.output_dir, f"examples-{time.strftime('%Y%m%d-%H%M%S')}-{worker_id}.h5"
     )
-    print(f"Appending game examples to {examples_file}.")
+    print(f"W{worker_id}: Appending game examples to {examples_file}. {args.runs_per_move=}")
     while time.time() - started < args.max_seconds and num_games < args.max_games:
         b = Board()
         m = NeuralMCTS(b, model, device=device)
         examples = m.play_game(runs_per_move=args.runs_per_move)
         Example.save_all(examples_file, examples)
         num_games += 1
-        print(f"Played {num_games} games in {time.time() - started:.1f}s.")
-    print("Done recording examples after {time.time() - started:.1f}s.")
+        progress_queue.put({
+            'examples': len(examples),
+            'games': 1,
+            'done': False,
+        })
+    progress_queue.put({
+        'done': True,
+    })
+
+def record_examples_mp(args):
+    num_workers = args.num_workers
+    progress_queue = mp.Queue()
+    procs = []
+    started = time.perf_counter()
+    for _ in range(num_workers):
+        p = mp.Process(target=record_examples, args=(progress_queue, args))
+        p.start()
+        procs.append(p)
+    # Process status updates until all workers are done
+    running = num_workers
+    num_examples = 0
+    num_games = 0
+    while running > 0:
+        msg = progress_queue.get()
+        if msg.get('done', False):
+            running -= 1
+        num_examples += msg.get('examples', 0)
+        num_games += msg.get('games', 0)
+        elapsed = time.perf_counter()-started
+        print(f"At {elapsed:.1f}s: examples:{num_examples} games:{num_games} ({num_examples/elapsed:.1f} examples/s).")
+    for p in procs:
+        p.join()
 
 
 def parse_args():
@@ -971,8 +1005,8 @@ def parse_args():
         "--mode",
         type=str,
         default="selfplay",
-        help="Mode to execute: selfplay to generate examples, genmod to generate a new randomly initialized model, train to ... train",
-        choices=("selfplay", "train", "genmod"),
+        help="Mode to execute: selfplay to generate examples, generate to generate a new randomly initialized model, train to ... train",
+        choices=("selfplay", "train", "generate", "print"),
     )
     parser.add_argument(
         "--device",
@@ -1068,22 +1102,11 @@ def path_to_latest_model(base_path):
             models = glob.glob(os.path.join(m, "checkpoints", "*", "model.pt"))
         if not models:
             raise FileNotFoundError(f"No model checkpoints found in {m}.")
-        max_n = None
-        latest = None
-        for m in models:
-            try:
-                n = int(m.rsplit("/", 2)[-2])
-                if max_n is None or n > max_n:
-                    max_n = n
-                    latest = m
-            except ValueError as e:
-                # Ignore non-numeric checkpoint dirs.
-                pass
-        if latest is None:
-            raise FileNotFoundError(
-                f"No numeric checkpoint dirs found in {base_path}."
-            )
-        return latest
+        try:
+            models = sorted(models, key=lambda m: int(m.rsplit("/", 2)[-2]))
+            return models[-1]
+        except ValueError:
+            raise ValueError(f"Non-numeric checkpoint dirs: {models}")
     else:
         raise FileNotFoundError(
             f"Model path {base_path} is neither a file nor a directory."
@@ -1091,7 +1114,7 @@ def path_to_latest_model(base_path):
 
 
 def worker_init_fn(worker_id):
-    print(f"worker_init_fn: {worker_id}")
+    """Called to initialize a DataLoader worker if multiprocessing is used."""
     w = torch.utils.data.get_worker_info()
     if w:
         if isinstance(w.dataset, HDF5Dataset):
@@ -1110,12 +1133,13 @@ def train_model(args):
         examples_path = os.path.join(os.path.dirname(model_path), "examples/*.h5")
     device = args.device
     model = load_model(model_path).to(device)
+    started = time.perf_counter()
     with print_time("HDF5Dataset()"):
         ds = HDF5Dataset(examples_path, in_mem=args.in_mem, lazy_init=num_workers > 0)
     # https://pytorch.org/tutorials/recipes/recipes/tuning_guide.html
-    # loader.num_workers > 0 uses separate processes to load data. Uses pickle, not supported with h5py...
-    # pin_memory=True
-
+    # loader.num_workers > 0 uses separate processes to load data.
+    # pin_memory=True should speed up the CPU->GPU data transfer
+    #
     # https://github.com/pytorch/pytorch/issues/77799
     # Discussion about mps vs cpu device performance.
 
@@ -1185,7 +1209,8 @@ def train_model(args):
                 )
     output_path = "/tmp/model.pt"  # TODO: make configurable
     torch.save(model.state_dict(), output_path)
-    print(f"Done. Saved new model to {output_path}")
+    total_duration = time.perf_counter() - started
+    print(f"Done after {total_duration:.1f}s. Saved new model to {output_path}.")
 
 
 def generate_model(args):
@@ -1200,6 +1225,12 @@ def generate_model(args):
     print(
         f"Generated randomly initialized model with {sum(p.numel() for p in model.parameters())} parameters at {path}."
     )
+
+
+def print_model_info(args):
+    model_path = path_to_latest_model(args.model)
+    model = load_model(model_path)
+    print(model)
 
 
 def main():
@@ -1223,11 +1254,13 @@ def main():
     #     model_path)
     # )
     if args.mode == "selfplay":
-        record_examples(args)
+        record_examples_mp(args)
     elif args.mode == "train":
         train_model(args)
-    elif args.mode == "genmod":
+    elif args.mode == "generate":
         generate_model(args)
+    elif args.mode == "print":
+        print_model_info(args)
 
 
 if __name__ == "__main__":
