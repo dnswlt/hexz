@@ -19,6 +19,7 @@ import time
 import torch
 from torch import nn, optim
 import torch.nn.functional as F
+from typing import Optional
 from uuid import uuid4
 
 import hexc
@@ -420,7 +421,7 @@ class Example:
         self.result = result
 
     @classmethod
-    def save_all(self, path, examples, mode="a"):
+    def save_all(self, path, examples, mode="a", dtype=np.float32):
         """Saves the examples in a HDF5 file at the given path.
 
         Args:
@@ -435,8 +436,8 @@ class Example:
                 grp.attrs["game_id"] = ex.game_id
                 grp.create_dataset("board", data=ex.board)
                 grp.create_dataset("move_probs", data=ex.move_probs)
-                grp.create_dataset("turn", data=np.array([ex.turn]))
-                grp.create_dataset("result", data=np.array([ex.result]))
+                grp.create_dataset("turn", data=np.array([ex.turn], dtype=dtype))
+                grp.create_dataset("result", data=np.array([ex.result], dtype=dtype))
 
     @classmethod
     def load_all(cls, path):
@@ -620,6 +621,7 @@ class HDF5Dataset(torch.utils.data.Dataset):
             # we precompute the size by looking at all datasets once.
             self.size = sum(len(h5py.File(p, "r")) for p in self.paths)
 
+    @timing
     def init(self):
         """Must be called to initialize this dataset.
 
@@ -676,7 +678,7 @@ class HexzNeuralNetwork(nn.Module):
         super().__init__()
         board_channels = 9
         cnn_filters = 128
-        num_cnn_blocks = 10
+        num_cnn_blocks = 5
         self.cnn_blocks = nn.ModuleList(
             [
                 nn.Sequential(
@@ -734,13 +736,13 @@ class HexzNeuralNetwork(nn.Module):
 class NNode:
     """Nodes of the NeuralMCTS tree."""
 
-    def __init__(self, parent, player, move):
+    def __init__(self, parent: 'Optional[NNode]', player: int, move):
         self.parent = parent
         self.player = player
         self.move = move
         self.wins = 0.0
-        self.visit_count = 0
-        self.children = []
+        self.visit_count: int = 0
+        self.children: list[NNode] = []
         self.move_probs = None
 
     @timing
@@ -764,13 +766,13 @@ class NNode:
             q = self.wins / self.visit_count
         return q + pr[typ, r, c] * np.sqrt(self.parent.visit_count) / (1 + self.visit_count)
 
-    def move_likelihoods(self):
+    def move_likelihoods(self, dtype=np.float32):
         """Returns the move likelihoods for all children as a (2, 11, 10) ndarray.
 
         The ndarray indicates the likelihoods (based on visit count) for flags
         and normal moves. It sums to 1.
         """
-        p = np.zeros((2, 11, 10))
+        p = np.zeros((2, 11, 10), dtype=dtype)
         for child in self.children:
             typ, r, c, _ = child.move
             p[typ, r, c] = child.visit_count
@@ -788,11 +790,12 @@ class NNode:
 class NeuralMCTS:
     """Monte Carlo tree search with a neural network (AlphaZero style)."""
 
+    @timing
     def __init__(
         self,
         board: Board,
         model: HexzNeuralNetwork,
-        game_id: str = None,
+        game_id: Optional[str] = None,
         turn: int = 0,
         device: str = "cpu",
         dtype = torch.float32,
@@ -810,7 +813,7 @@ class NeuralMCTS:
         # The root node has the opposite player whose actual turn it is.
         # This has the desired effect that the root's children will play
         # as the other player, who makes the first move.
-        self.root = NNode(None, 1 - turn, None)
+        self.root: NNode = NNode(None, 1 - turn, None)
         # Predict move probabilities for root and board value estimate up front.
         self.root.move_probs, self.value = self.predict(board, turn)
 
@@ -842,6 +845,20 @@ class NeuralMCTS:
         pred_pr = torch.exp(pred_pr).reshape((2, 11, 10))
         return pred_pr.numpy(force=self.device != "cpu"), pred_val.item()
 
+    def find_leaf(self, b):
+        n = self.root
+        while n.children:
+            best = None
+            best_uct = -1
+            for c in n.children:
+                c_uct = c.puct()
+                if c_uct > best_uct:
+                    best = c
+                    best_uct = c_uct
+            b.make_move(best.player, best.move)
+            n = best
+        return n
+
     @timing
     def run(self):
         """Runs a single round of the neural MCTS loop."""
@@ -850,16 +867,7 @@ class NeuralMCTS:
         # Find leaf node.
         with timing_ctx("run_find_leaf"):
             n = hexc.c_find_leaf(b, n)
-            # while n.children:
-            #     best = None
-            #     best_uct = -1
-            #     for c in n.children:
-            #         c_uct = c.uct()
-            #         if c_uct > best_uct:
-            #             best = c
-            #             best_uct = c_uct
-            #     b.make_move(best.player, best.move)
-            #     n = best
+            # n = self.find_leaf(b)
         # Reached a leaf node: expand
         player = 1 - n.player  # Usually it's the other player's turn.
         moves = b.next_moves(player)
@@ -877,7 +885,7 @@ class NeuralMCTS:
         n.move_probs, value = self.predict(b, player)
         self.backpropagate(n, value)
 
-    def play_game(self, runs_per_move=500, max_moves=200):
+    def play_game(self, runs_per_move=500, max_moves=200, progress_queue=None):
         """Plays one full game and returns the move likelihoods per move and the final result.
 
         Args:
@@ -905,6 +913,10 @@ class NeuralMCTS:
                     None,
                 )
             )
+            if progress_queue:
+                progress_queue.put({
+                    'examples': 1,
+                })
             # Make the move.
             self.board.make_move(best_child.player, best_child.move)
             self.root = best_child
@@ -930,9 +942,9 @@ class NeuralMCTS:
         return examples
 
 
-def load_model(path):
+def load_model(path, map_location='cpu'):
     model = HexzNeuralNetwork()
-    model.load_state_dict(torch.load(path))
+    model.load_state_dict(torch.load(path, map_location=map_location))
     return model
 
 
@@ -948,12 +960,13 @@ def time_gameplay(device):
 def record_examples(progress_queue: mp.Queue, args):
     worker_id = os.getpid()
     print(f"Worker {worker_id} started.")
-    disable_perf_stats()
+    # disable_perf_stats()
     started = time.time()
     num_games = 0
     model_path = path_to_latest_model(args.model)
     device = args.device
     model = load_model(model_path).to(device)
+    # model = torch.compile(model)
     print(f"W{worker_id}: loaded model from {model_path}")
     examples_file = os.path.join(
         args.output_dir, f"examples-{time.strftime('%Y%m%d-%H%M%S')}-{worker_id}.h5"
@@ -962,17 +975,18 @@ def record_examples(progress_queue: mp.Queue, args):
     while time.time() - started < args.max_seconds and num_games < args.max_games:
         b = Board()
         m = NeuralMCTS(b, model, device=device)
-        examples = m.play_game(runs_per_move=args.runs_per_move)
+        examples = m.play_game(runs_per_move=args.runs_per_move, progress_queue=progress_queue)
         Example.save_all(examples_file, examples)
         num_games += 1
         progress_queue.put({
-            'examples': len(examples),
             'games': 1,
             'done': False,
         })
     progress_queue.put({
         'done': True,
     })
+    print_perf_stats()
+
 
 def record_examples_mp(args):
     num_workers = args.num_workers
@@ -1029,7 +1043,7 @@ def parse_args():
         help="Path or glob to the examples to use during training. Default: '{--model}/examples/*.h5'",
     )
     parser.add_argument(
-        "--output_dir",
+        "--output-dir",
         type=str,
         default=".",
         help="Directory into which outputs are written.",

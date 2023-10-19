@@ -57,9 +57,9 @@ func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz)
 		cpu.thinkTime = cpu.maxThinkTime // use full time allowed.
 	}
 	return ControlEventMove{
-		playerId:  cpu.playerId,
-		mctsStats: stats,
-		moveRequest: &MoveRequest{
+		PlayerId:  cpu.playerId,
+		MCTSStats: stats,
+		MoveRequest: &MoveRequest{
 			Move: mv.Move,
 			Row:  mv.Row,
 			Col:  mv.Col,
@@ -137,11 +137,11 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz
 	if err := dec.Decode(&respData); err != nil {
 		return nil, err
 	}
-	infoLog.Printf("RemoteCPUPlayer suggested move %v", respData.Move)
+	// infoLog.Printf("RemoteCPUPlayer suggested move %v", respData.Move)
 	return ControlEventMove{
-		playerId:    cpu.playerId,
-		moveRequest: respData.Move,
-		mctsStats:   respData.Stats,
+		PlayerId:    cpu.playerId,
+		MoveRequest: respData.Move,
+		MCTSStats:   respData.Stats,
 	}, nil
 }
 

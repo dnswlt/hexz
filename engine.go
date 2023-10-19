@@ -95,7 +95,7 @@ func (b *Board) ViewFor(playerNum int) *BoardView {
 	}
 }
 
-func (b *Board) copy() *Board {
+func (b *Board) Copy() *Board {
 	var score []int
 	if b.Score != nil {
 		score = make([]int, len(b.Score))

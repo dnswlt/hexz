@@ -228,7 +228,7 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 func (g *GameEngineFlagz) Board() *Board { return g.B }
 func (g *GameEngineFlagz) Clone() *GameEngineFlagz {
 	return &GameEngineFlagz{
-		B:           g.B.copy(),
+		B:           g.B.Copy(),
 		FreeCells:   g.FreeCells,
 		NormalMoves: g.NormalMoves,
 	}

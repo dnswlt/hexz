@@ -164,12 +164,12 @@ func (m *GameMaster) processControlEventUnregister(e ControlEventUnregister) {
 }
 
 func (m *GameMaster) processControlEventMove(e ControlEventMove) {
-	p, ok := m.players[e.playerId]
+	p, ok := m.players[e.PlayerId]
 	if !ok || m.gameEngine.Board().State != Running {
 		// Ignore invalid move request
 		return
 	}
-	mr := e.moveRequest
+	mr := e.MoveRequest
 	if m.gameEngine.MakeMove(GameEngineMove{PlayerNum: p.playerNum, Move: mr.Move, Row: mr.Row, Col: mr.Col, CellType: mr.Type}) {
 		if !m.s.config.DisableUndo {
 			if he, ok := m.gameEngine.(*GameEngineFlagz); ok {
@@ -188,8 +188,8 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 						winnerName))
 			}
 		}
-		if e.mctsStats != nil {
-			evt.Announcements = append(evt.Announcements, fmt.Sprintf("CPU confidence: %.3f", e.mctsStats.MaxQ()))
+		if e.MCTSStats != nil {
+			evt.Announcements = append(evt.Announcements, fmt.Sprintf("CPU confidence: %.3f", e.MCTSStats.MaxQ()))
 		}
 		if m.cpuPlayer != nil && m.gameEngine.Board().Turn != 1 && !m.gameEngine.IsDone() {
 			// Ask CPU player to make a move.
@@ -207,12 +207,12 @@ func (m *GameMaster) processControlEventMove(e ControlEventMove) {
 			}(m.game.ctx)
 		}
 		var moveScores *MoveScores
-		if e.mctsStats != nil {
-			moveScores = e.mctsStats.MoveScores()
+		if e.MCTSStats != nil {
+			moveScores = e.MCTSStats.MoveScores()
 		}
 		m.historyWriter.Write(&GameHistoryEntry{
 			EntryType:  "move",
-			Move:       e.moveRequest,
+			Move:       e.MoveRequest,
 			Board:      m.gameEngine.Board().ViewFor(0),
 			MoveScores: moveScores,
 		})

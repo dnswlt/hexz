@@ -41,10 +41,10 @@ func TestRemoteCPUPlayer(t *testing.T) {
 	}
 	if !ge.MakeMove(GameEngineMove{
 		PlayerNum: ge.Board().Turn,
-		Move:      mv.moveRequest.Move,
-		Row:       mv.moveRequest.Row,
-		Col:       mv.moveRequest.Col,
-		CellType:  mv.moveRequest.Type,
+		Move:      mv.MoveRequest.Move,
+		Row:       mv.MoveRequest.Row,
+		Col:       mv.MoveRequest.Col,
+		CellType:  mv.MoveRequest.Type,
 	}) {
 		t.Fatal("failed to make move")
 	}

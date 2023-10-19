@@ -214,9 +214,9 @@ type ControlEventUnregister struct {
 }
 
 type ControlEventMove struct {
-	playerId    PlayerId
-	moveRequest *MoveRequest
-	mctsStats   *MCTSStats // Optional, only populated by CPU players.
+	PlayerId    PlayerId
+	MoveRequest *MoveRequest
+	MCTSStats   *MCTSStats // Optional, only populated by CPU players.
 }
 
 type ControlEventReset struct {
@@ -560,7 +560,7 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid cell type", http.StatusBadRequest)
 		return
 	}
-	game.sendEvent(ControlEventMove{playerId: player.Id, moveRequest: req})
+	game.sendEvent(ControlEventMove{PlayerId: player.Id, MoveRequest: req})
 }
 
 func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {

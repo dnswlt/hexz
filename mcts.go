@@ -249,9 +249,9 @@ func (mcts *MCTS) runInternal(ge *GameEngineFlagz, node *mcNode, curDepth int) (
 		}
 		winner = mcts.playRandomGame(ge)
 		if winner == 1 && mcts.WinningBoard == nil {
-			mcts.WinningBoard = b.copy()
+			mcts.WinningBoard = b.Copy()
 		} else if winner == 2 && mcts.LosingBoard == nil {
-			mcts.LosingBoard = b.copy()
+			mcts.LosingBoard = b.Copy()
 		}
 		// Record counts and wins for child.
 		c.incr(winner)
