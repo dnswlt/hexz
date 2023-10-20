@@ -1175,7 +1175,8 @@ def train_model(args):
 
     pr_loss_fn = nn.CrossEntropyLoss()
     val_loss_fn = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
 
     # def trace_handler(prof):
     #     print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=30))
