@@ -1,0 +1,10 @@
+name: pyhexz
+channels:
+  - defaults
+  - pytorch
+dependencies:
+  - pytest
+  - numpy
+  - h5py
+  - pytorch
+  - cython

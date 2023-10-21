@@ -1,9 +1,8 @@
 # Cython implementations of the most performance critical parts of the
 # MCTS algorithm.
 #
-# Compile with:
-#
-# python setup.py build_ext --inplace
+# See the setup.py file in the parent directory for instructions
+# how to compile this file.
 
 from math import sqrt, log
 import numpy as np

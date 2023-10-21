@@ -24,7 +24,7 @@ def parse_args():
         type=str,
         required=True,
         help="Mode to execute: selfplay to generate examples, generate to generate a new randomly initialized model, train to ... train",
-        choices=("selfplay", "train", "generate", "print"),
+        choices=("selfplay", "train", "generate", "print", "hello"),
     )
     parser.add_argument(
         "--device",
@@ -129,6 +129,8 @@ def main():
         hexz.generate_model(args)
     elif args.mode == "print":
         hexz.print_model_info(args)
+    elif args.mode == "hello":
+        print("Hello from hexz!")
 
 
 if __name__ == "__main__":
