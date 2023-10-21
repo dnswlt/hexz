@@ -11,4 +11,4 @@ conda activate pyhexz
 
 # exec the final command:
 cd src
-exec python3 -m pyhexz.run --mode=hello --model=none
+exec python3 -m pyhexz.run "$@"

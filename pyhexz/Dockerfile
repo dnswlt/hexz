@@ -13,8 +13,17 @@ RUN echo "conda activate pyhexz" >> ~/.bashrc
 
 SHELL ["/bin/bash", "-c"] 
 
-# Now copy all remaining files.
-COPY . ./
+# Now copy source files required to build the app.
+# Avoid copying other stuff so that the Docker layer is only rebuilt
+# if there are actual source code changes.
+COPY entrypoint.sh setup.py ./
+COPY ./src/pyhexz/*.py ./src/pyhexz/*.pyx ./src/pyhexz/
+
+# Usually we'd do the compilation in a separate stage to keep the container slim
+# (https://docs.docker.com/build/building/multi-stage/), but since we're at
+# 2.83 GB for the whole numpy/pytorch/h5py/cython conda environment already,
+# the additional ~200 MB for gcc are just a drop in the ocean.
+RUN apt-get update && apt-get install -y gcc && apt-get clean
 
 RUN source ~/.bashrc && python3 setup.py build_ext --build-lib=src
 
@@ -22,5 +31,6 @@ RUN chmod +x ./entrypoint.sh
 
 # The code to run when container is started:
 ENTRYPOINT ["./entrypoint.sh"]
+CMD ["--mode=hello", "--model=none"]
 
 # EXPOSE 8080
