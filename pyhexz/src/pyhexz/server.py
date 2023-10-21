@@ -6,13 +6,14 @@ import sys
 import time
 import typing
 
-from pyhexz import hexz
+from pyhexz.board import Board
+from pyhexz.hexz import HexzNeuralNetwork, NeuralMCTS, load_model, path_to_latest_model
 from pyhexz import hexz_pb2
 from pyhexz import sconv
 from pyhexz import svg
 
 
-def suggest_move(model: hexz.HexzNeuralNetwork, state: hexz_pb2.GameEngineState, think_time: float) -> tuple[dict[str, typing.Any], int]:
+def suggest_move(model: HexzNeuralNetwork, state: hexz_pb2.GameEngineState, think_time: float) -> tuple[dict[str, typing.Any], int]:
     """Runs the ML model to obtain a move suggestion.
     
     Returns:
@@ -23,14 +24,14 @@ def suggest_move(model: hexz.HexzNeuralNetwork, state: hexz_pb2.GameEngineState,
         state: the game state, including the player whose turn it is, and the board.
         think_time: thinking time in seconds.
     """
-    board = hexz.Board.from_numpy(sconv.convert_board(state.flagz.board))
+    board = Board.from_numpy(sconv.convert_board(state.flagz.board))
     try:
         board.validate()
     except ValueError as e:
         return str(e), 400
     turn = state.flagz.board.turn - 1  # Go impl uses (1, 2), we use (0, 1).
     print(f"Board info: flags:{board.nflags}, turn:{turn}")
-    mcts = hexz.NeuralMCTS(board, model, game_id=time.strftime("CPU-%Y%m%d-%H%M%S"), turn=turn)
+    mcts = NeuralMCTS(board, model, game_id=time.strftime("CPU-%Y%m%d-%H%M%S"), turn=turn)
     n = 0
     started = time.perf_counter()
     while True:
@@ -65,11 +66,11 @@ def create_app():
     if not model_path:
         print("You have to set the environment variable HEXZ_MODEL_PATH to the model you intend to use.")
         sys.exit(1)
-    model_path = hexz.path_to_latest_model(model_path)
+    model_path = path_to_latest_model(model_path)
     print(f"Loading model from {model_path}")
     for i in range(num_models):
         app.model_queue.put(
-            hexz.load_model(model_path)
+            load_model(model_path)
         )
 
     # The path /hexz/cpu/suggest must be identical to the one the Go client uses.

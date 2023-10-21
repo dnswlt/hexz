@@ -11,6 +11,5 @@ __all__ = [
 
 __version__ = "0.1.0"
 
-
-from pyhexz.svg import export
-from pyhexz.hexz import train_model
+from pyhexz import svg as svg
+from pyhexz.hexz import NeuralMCTS

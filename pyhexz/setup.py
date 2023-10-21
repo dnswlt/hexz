@@ -1,10 +1,14 @@
 # Run as 
-# python3 setup.py build_ext --inplace
-# to build Cython modules.
-from setuptools import setup
+#
+#   python3 setup.py build_ext --build-lib=src
+#
+# to build Cython modules during development and place .so files into src/pyhexz.
+from setuptools import setup, Extension
 from Cython.Build import cythonize
 
 setup(
     name='pyhexz',
-    ext_modules=cythonize("pyhexz/hexc.pyx"),
+    ext_modules=cythonize([
+        Extension("pyhexz.hexc", ["src/pyhexz/hexc.pyx"]),
+    ])
 )
