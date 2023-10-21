@@ -10,19 +10,18 @@ from contextlib import contextmanager
 from functools import wraps
 import glob
 import h5py
-from matplotlib import pyplot as plt
 import multiprocessing as mp
 import numpy as np
 import os
-import sys
 import time
 import torch
-from torch import nn, optim
+from torch import nn
 import torch.nn.functional as F
 from typing import Optional
 from uuid import uuid4
 
-import hexc
+from pyhexz import hexc
+
 
 # Stores accumulated running time in micros and call counts of functions annotated with @timing.
 _PERF_ACC_MICROS = collections.Counter()

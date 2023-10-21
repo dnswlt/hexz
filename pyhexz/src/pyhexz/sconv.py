@@ -2,13 +2,14 @@
 
 import argparse
 import h5py
-from hexz import Board, Example
-import hexz_pb2
 import numpy as np
 import os.path
 import svg
 import sys
 import zipfile
+
+from pyhexz.hexz import Board, Example
+from pyhexz import hexz_pb2
 
 
 def convert_board(proto_board: hexz_pb2.Board, dtype=np.float32) -> np.ndarray:

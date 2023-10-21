@@ -5,9 +5,10 @@
 #
 # python setup.py build_ext --inplace
 
-import numpy as np
 from math import sqrt, log
+import numpy as np
     
+
 def c_valid_idx(r_c):
     """Returns True if (r, c) = r_c represents a valid hexz board index."""
     r, c = r_c

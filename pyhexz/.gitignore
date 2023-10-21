@@ -3,6 +3,6 @@ data/
 *.h5
 *.gz
 *.html
-hexc.[co]
+*.o
 *.so
 __pycache__/

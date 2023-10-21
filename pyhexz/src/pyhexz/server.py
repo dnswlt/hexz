@@ -1,14 +1,15 @@
 import base64
 from flask import Flask, current_app, make_response, request
-import hexz
-import hexz_pb2
 import os
 import queue
-import sconv
-import svg
 import sys
 import time
 import typing
+
+from pyhexz import hexz
+from pyhexz import hexz_pb2
+from pyhexz import sconv
+from pyhexz import svg
 
 
 def suggest_move(model: hexz.HexzNeuralNetwork, state: hexz_pb2.GameEngineState, think_time: float) -> tuple[dict[str, typing.Any], int]:
