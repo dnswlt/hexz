@@ -1,0 +1,9 @@
+{
+    "python.envFile": "${workspaceFolder}/pyhexz/.env",
+    "python.autoComplete.extraPaths": [
+        "${workspaceFolder}/pyhexz/src",
+    ],
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/pyhexz/src"
+    ],
+}

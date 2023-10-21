@@ -206,7 +206,7 @@ class PurePyBoard:
         moves.extend((1, r, c, self.b[3 + player * 4, r, c]) for r, c in zip(rs, cs))
         return moves
 
-    def validate(self):
+    def validate(self) -> None:
         """Checks that this instance represents a valid board.
 
         Raises an exeption if that is not the case.
@@ -252,7 +252,7 @@ class CBoard(PurePyBoard):
         super().__init__(*args, dtype=np.float32, **kwargs)
 
     @timing
-    def make_move(self, player, move):
+    def make_move(self, player: int, move):
         hexc.c_make_move(self, player, move)
 
     @timing

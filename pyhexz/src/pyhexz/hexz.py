@@ -376,13 +376,13 @@ class NeuralMCTS:
         n.move_probs, value = self.predict(b, player)
         self.backpropagate(n, value)
 
-    def play_game(self, runs_per_move=500, max_moves=200, progress_queue=None):
+    def play_game(self, runs_per_move=500, max_moves=200, progress_queue=None) -> list[Example]:
         """Plays one full game and returns the move likelihoods per move and the final result.
 
         Args:
             runs_per_move: number of MCTS runs to make per move.
         """
-        examples = []
+        examples: list[Example] = []
         result = None
         n = 0
         started = time.perf_counter()
