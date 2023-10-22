@@ -11,4 +11,9 @@ conda activate pyhexz
 
 # exec the final command:
 cd src
+if [ "$HEXZ_ENTRYPOINT_MODE" = "gunicorn" ]; then
+    # Run as a web server
+    exec gunicorn --bind :$PORT "$@"
+fi
+# Run as a batch command.
 exec python3 -m pyhexz.run "$@"

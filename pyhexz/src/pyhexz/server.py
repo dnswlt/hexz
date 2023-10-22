@@ -1,6 +1,10 @@
 import base64
+from contextlib import contextmanager
+import datetime
 from flask import Flask, current_app, make_response, request
+import json
 import os
+import pytz
 import queue
 import sys
 import time
@@ -60,18 +64,25 @@ def suggest_move(model: HexzNeuralNetwork, state: hexz_pb2.GameEngineState, thin
 
 def create_app():
     app = Flask(__name__)
-    num_models = 1
-    app.model_queue = queue.LifoQueue(maxsize=num_models)
+    app.model_queue = queue.SimpleQueue()
     model_path = os.getenv("HEXZ_MODEL_PATH")
-    if not model_path:
-        print("You have to set the environment variable HEXZ_MODEL_PATH to the model you intend to use.")
-        sys.exit(1)
-    model_path = path_to_latest_model(model_path)
-    print(f"Loading model from {model_path}")
-    for i in range(num_models):
-        app.model_queue.put(
-            load_model(model_path)
-        )
+    app.model_path = path_to_latest_model(model_path) if model_path else None
+
+    @contextmanager
+    def get_model():
+        """Gets a model from the model_queue, if one is available. Otherwise, loads a new one.
+        
+        The idea is that each thread processing a request needs exclusive access to a model.
+        """
+        try:
+            model = current_app.model_queue.get_nowait()
+        except queue.Empty:
+            model = load_model(current_app.model_path)
+        try:
+            yield model
+        finally:
+            current_app.model_queue.put(model)
+
 
     # The path /hexz/cpu/suggest must be identical to the one the Go client uses.
     @app.post("/hexz/cpu/suggest")
@@ -81,21 +92,32 @@ def create_app():
         enc_state = req["gameEngineState"]
         ge_state = hexz_pb2.GameEngineState()
         ge_state.ParseFromString(base64.b64decode(enc_state))
-        try:
-            model = current_app.model_queue.get(timeout=5)
+        if not current_app.model_path:
+            return "Missing model_path", 500
+        with get_model() as model:
             return suggest_move(model, ge_state, think_time_ns/1e9)
-        except queue.Empty:
-            return "No model available, try again later", 503  # 503 Service Unavailable
-        finally:
-            current_app.model_queue.put(model)
-
 
     @app.get("/")
     def index():
-        resp = make_response("Hello from Python hexz!")
+        now = datetime.datetime.now(tz=pytz.UTC).isoformat()
+        resp = make_response(f"Hello from Python hexz at {now}!\n")
         resp.headers["Content-Type"] = "text/plain"
         return resp
     
+    @app.get("/status")
+    def status():
+        now = datetime.datetime.now(tz=pytz.UTC).isoformat(timespec='milliseconds')
+        resp = make_response(json.dumps({
+            "timestamp": now,
+            "model": {
+                "path": current_app.model_path,
+                "pool_size": current_app.model_queue.qsize(),
+            },
+        }, indent=True))
+        resp.headers["Content-Type"] = "application/json"
+        return resp
+
+
     # For debugging bad requests:
     # @app.errorhandler(400)
     # def handle_bad_request(e):

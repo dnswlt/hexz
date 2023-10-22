@@ -8,3 +8,7 @@ dependencies:
   - h5py
   - pytorch
   - cython
+  - pytz
+  - protobuf
+  - gunicorn
+  - flask

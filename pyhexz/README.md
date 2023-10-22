@@ -39,6 +39,13 @@ cd src
 HEXZ_MODEL_PATH=$HOME/git/github.com/dnswlt/hexz-models/models/flagz/cain python3 -m flask --app pyhexz.server run --port 9094
 ```
 
+The Flask app runs behind a `gunicorn` WSGI web server in the Docker container. To reproduce that
+locally, run the app as
+
+```bash
+gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.server:create_app()'
+```
+
 ### Self-play
 
 ```bash
