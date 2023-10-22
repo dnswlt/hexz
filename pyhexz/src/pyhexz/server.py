@@ -6,7 +6,6 @@ import json
 import os
 import pytz
 import queue
-import sys
 import time
 import typing
 
