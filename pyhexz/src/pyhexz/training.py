@@ -227,7 +227,12 @@ class TrainingTask(threading.Thread):
             reply_q.put(None)
             return
         if self.model_bytes is None or self.model_bytes_version != (name, checkpoint):
-            self.model_bytes = self.repo.get_model(name, checkpoint, as_bytes=True)
+            try:
+                self.model_bytes = self.repo.get_model(name, checkpoint, as_bytes=True)
+            except FileNotFoundError as e:
+                self.logger.error(f"Cannot get model {name}:{checkpoint}: {e}")
+                reply_q.put(None)
+                return
             self.model_bytes_version = (name, checkpoint)
         reply_q.put(self.model_bytes)
 
