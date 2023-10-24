@@ -22,7 +22,9 @@ class AddTrainingExamplesResponse(_message.Message):
     ACCEPTED: AddTrainingExamplesResponse.Status
     ERROR_MESSAGE_FIELD_NUMBER: ClassVar[int]
     LATEST_MODEL_FIELD_NUMBER: ClassVar[int]
-    REJECTED: AddTrainingExamplesResponse.Status
+    REJECTED_OTHER: AddTrainingExamplesResponse.Status
+    REJECTED_TRAINING: AddTrainingExamplesResponse.Status
+    REJECTED_WRONG_MODEL: AddTrainingExamplesResponse.Status
     STATUS_FIELD_NUMBER: ClassVar[int]
     STATUS_UNSPECIFIED: AddTrainingExamplesResponse.Status
     error_message: str

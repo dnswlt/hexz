@@ -1,4 +1,3 @@
-import collections
 from google.protobuf.message import DecodeError
 import io
 import multiprocessing as mp
@@ -11,22 +10,10 @@ from typing import Optional
 from pyhexz import hexz_pb2
 
 from pyhexz.board import Board
+from pyhexz.config import WorkerConfig
 from pyhexz.errors import HexzError
-from pyhexz.hexz import NeuralMCTS
-from pyhexz.modelserver import LocalModelRepository, ModelRepository
+from pyhexz.hexz import HexzNeuralNetwork, NeuralMCTS
 import pyhexz.timing as tm
-
-
-Config = collections.namedtuple(
-    "Config",
-    [
-        "device",
-        "max_seconds",
-        "runs_per_move",
-        "model_repo_base_dir",
-        "training_server_url",
-    ],
-)
 
 
 def np_tobytes(X: np.ndarray) -> bytes:
@@ -35,23 +22,38 @@ def np_tobytes(X: np.ndarray) -> bytes:
     return b.getvalue()
 
 
-def record_examples(
-    repo: ModelRepository, config: Config, progress_queue: Optional[mp.Queue] = None
-):
+def fetch_model(training_server_url, model_name: str = None, checkpoint: int = None) -> (HexzNeuralNetwork, str, int):
+    if model_name is None:
+        resp = requests.get(training_server_url + "/models/current")
+        if not resp.ok:
+            raise HexzError(
+                f"Failed to get model info from {training_server_url}: {resp.status_code}"
+            )
+        j = resp.json()
+        model_name = j["model_name"]
+        checkpoint = j["checkpoint"]
+        print(
+            f"Server at {training_server_url} is using model {model_name}:{checkpoint}."
+        )
+    resp = requests.get(training_server_url + f"/models/{model_name}/checkpoints/{checkpoint}")
+    if not resp.ok:
+        raise HexzError(f"Cannot fetch model {model_name}:{checkpoint} from training server: {resp.status_code}")
+    model = HexzNeuralNetwork()
+    model.load_state_dict(torch.load(io.BytesIO(resp.content), map_location="cpu"))
+    return model, model_name, checkpoint
+
+
+def record_examples(config: WorkerConfig, progress_queue: Optional[mp.Queue] = None) -> None:
     tm.clear_perf_stats()
     worker_id = os.getpid()
     print(f"Worker {worker_id} started.")
     started = time.time()
     num_games = 0
     device = config.device
-    resp = requests.get(config.training_server_url + "/models")
-    if not resp.ok:
-        raise HexzError(f"Failed to get model info from {config.training_server_url}: {resp.status_code}")
-    j = resp.json()
-    model_name = j["model_name"]
-    checkpoint = j["checkpoint"]
-    print(f"Server at {config.training_server_url} is using model {model_name}:{checkpoint}.")
-    model = repo.get_model(model_name, checkpoint)
+    model, model_name, checkpoint = fetch_model(config.training_server_url)
+    print(
+        f"Server at {config.training_server_url} is using model {model_name}:{checkpoint}."
+    )
     # model = torch.compile(model)
     while time.time() - started < config.max_seconds:
         b = Board()
@@ -80,22 +82,40 @@ def record_examples(
                     result=ex.result,
                 )
             )
-        http_resp = requests.post(config.training_server_url + "/examples", data=req.SerializeToString())
-        if not http_resp.ok:
-            raise HexzError(f"Failed to send examples to server: {http_resp.status_code}")
-        try:
-            resp = hexz_pb2.AddTrainingExamplesResponse.FromString(http_resp.content)
-        except DecodeError as e:
-            raise HexzError(f"Server replied with invalid AddTrainingExamplesResponse: {e}")
-        if resp.status != hexz_pb2.AddTrainingExamplesResponse.ACCEPTED:
-            print(f"Server refused our examples: {resp.error_message=}")
-        if resp.HasField("latest_model"):
-            if model_name != resp.latest_model.name:
-                raise HexzError(f"Server started using a different model: {model_name} => {resp.latest_model.name}")
-            if checkpoint != resp.latest_model.checkpoint:
-                print(f"Server started using a different checkpoint: {checkpoint} => {resp.latest_model.checkpoint}")
-                checkpoint = resp.latest_model.checkpoint
-        
+        data = req.SerializeToString()
+        for i in range(100):
+            # Try to POST our examples to the training server in an exponential backoff loop.
+            http_resp = requests.post(
+                config.training_server_url + "/examples", data=data
+            )
+            if not http_resp.ok:
+                raise HexzError(
+                    f"Failed to send examples to server: {http_resp.status_code}"
+                )
+            try:
+                resp = hexz_pb2.AddTrainingExamplesResponse.FromString(
+                    http_resp.content
+                )
+            except DecodeError as e:
+                raise HexzError(
+                    f"Server replied with invalid AddTrainingExamplesResponse: {e}"
+                )
+            if resp.status != hexz_pb2.AddTrainingExamplesResponse.REJECTED_TRAINING:
+                break
+            # Server is training. Back off exponentially (with 10% jitter) and try again later.
+            backoff_secs = (1.5**i) * np.random.uniform(0.90, 1.10)
+            print(f"Server is training. Backing off for {backoff_secs:.2f}s (#{i})")
+            time.sleep(backoff_secs)
+        if resp.status == hexz_pb2.AddTrainingExamplesResponse.REJECTED_WRONG_MODEL:
+            # Load newer model
+            model_name = resp.latest_model.name
+            checkpoint = resp.latest_model.checkpoint
+            model, _, _ = fetch_model(config.training_server_url, model_name, checkpoint)
+            print(f"Using new model {model_name}:{checkpoint}")
+        elif resp.status != hexz_pb2.AddTrainingExamplesResponse.ACCEPTED:
+            raise HexzError(
+                f"Unexpected return code from training server: {hexz_pb2.AddTrainingExamplesResponse.Status.Name(resp.status)}"
+            )
 
     if progress_queue:
         progress_queue.put(
@@ -107,13 +127,7 @@ def record_examples(
 
 
 def main():
-    config = Config(
-        device=os.getenv("PYTORCH_DEVICE") or "cpu",
-        max_seconds=int(os.getenv("HEXZ_MAX_SECONDS") or "60"),
-        runs_per_move=int(os.getenv("HEXZ_RUNS_PER_MOVE") or "800"),
-        training_server_url=os.getenv("HEXZ_TRAINING_SERVER_URL"),
-        model_repo_base_dir=os.getenv("HEXZ_MODEL_REPO_BASE_DIR"),
-    )
+    config = WorkerConfig.from_env()
     print(f"cuda available: {torch.cuda.is_available()}")
     print(f"mps available: {torch.backends.mps.is_available()}")
     print(f"torch version: {torch.__version__}")
@@ -124,11 +138,8 @@ def main():
         print("Device mps not available, falling back to cpu.")
         config.device = "cpu"
     print(f"Running with {config=}")
-    
-    if not config.model_repo_base_dir:
-        raise HexzError("No model_repo_base_dir given. Did you forget to set HEXZ_MODEL_REPO_BASE_DIR?")
-    repo = LocalModelRepository(config.model_repo_base_dir)
-    record_examples(repo, config, progress_queue=None)
+
+    record_examples(config, progress_queue=None)
 
 
 if __name__ == "__main__":

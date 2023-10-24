@@ -18,7 +18,7 @@ from pyhexz.hexz import HexzNeuralNetwork, NeuralMCTS
 from pyhexz import hexz_pb2
 from pyhexz import sconv
 from pyhexz import svg
-from pyhexz.modelserver import LocalModelRepository
+from pyhexz.modelrepo import LocalModelRepository
 from pyhexz import training
 
 
@@ -96,6 +96,7 @@ def create_app():
             repo=app.model_repo,
             config=config,
             queue=app.training_task_queue,
+            logger=app.logger,
         )
         t.daemon = True
         t.start()
@@ -120,6 +121,7 @@ def create_app():
     # The path /hexz/cpu/suggest must be identical to the one the Go client uses.
     @app.post("/hexz/cpu/suggest")
     def suggestmove():
+        """This request is used when using the server as a remote CPU player."""
         req = request.json
         think_time_ns = req["maxThinkTime"]
         enc_state = req["gameEngineState"]
@@ -156,26 +158,53 @@ def create_app():
 
     @app.post("/examples")
     def examples():
+        """Part of the training workflow. Called by workers to upload new examples."""
         reply_q = queue.SimpleQueue()
-        current_app.training_task_queue.put({
-            "type": "AddTrainingExamplesRequest",
-            "data": request.data,
-            "reply_q": reply_q,
-            })
+        current_app.training_task_queue.put(
+            {
+                "type": "AddTrainingExamplesRequest",
+                "data": request.data,
+                "reply_q": reply_q,
+            }
+        )
         return reply_q.get(timeout=5)
 
-    @app.get("/models")
+    @app.get("/models/current")
     def model():
+        """Part of the training workflow. Called by workers to retrieve information
+        about the model to use when generating examples.
+        """
         reply_q = queue.SimpleQueue()
-        current_app.training_task_queue.put({
-            "type": "GetModelKey",
-            "reply_q": reply_q,
-            })
+        current_app.training_task_queue.put(
+            {
+                "type": "GetModelKey",
+                "reply_q": reply_q,
+            }
+        )
         model_key: hexz_pb2.ModelKey = reply_q.get(timeout=5)
         return {
             "model_name": model_key.name,
             "checkpoint": model_key.checkpoint,
         }
+
+    @app.get("/models/<name>/checkpoints/<int:checkpoint>")
+    def model_bytes(name, checkpoint):
+        """Returns the requested model in raw bytes.
+        Will only return data if the requested model is relevant for training.
+        """
+        reply_q = queue.SimpleQueue()
+        current_app.training_task_queue.put(
+            {
+                "type": "GetModel",
+                "name": name,
+                "checkpoint": checkpoint,
+                "reply_q": reply_q,
+            }
+        )
+        data = reply_q.get(timeout=5)
+        if data is None:
+            return "", 404
+        return data, {"Content-Type": "application/octet-stream"}
 
     # For debugging bad requests:
     # @app.errorhandler(400)

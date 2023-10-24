@@ -1,6 +1,7 @@
 """Classes used for training in a training server."""
 
 from collections.abc import Mapping
+import logging
 from google.protobuf.message import DecodeError
 import io
 import numpy as np
@@ -14,7 +15,7 @@ from typing import Any, Optional
 from pyhexz.config import TrainingConfig
 from pyhexz import hexz_pb2
 from pyhexz.errors import HexzError
-from pyhexz.modelserver import ModelRepository
+from pyhexz.modelrepo import ModelRepository
 
 
 class InMemoryDataset(torch.utils.data.Dataset):
@@ -77,12 +78,6 @@ class TrainingRunnerTask(threading.Thread):
             shuffle=self.config.shuffle,
             pin_memory=self.config.pin_memory,
         )
-        print(f"torch.autograd.gradcheck:  {torch.autograd.gradcheck}")
-        for X, (y_pr, y_val) in loader:
-            print(f"Shape of X [N, C, H, W]: {X.shape}: {X.dtype}")
-            print(f"Shape of y_pr [N, C, H, W]: {y_pr.shape}: {y_pr.dtype}")
-            print(f"Shape of y_val [N, V]: {y_val.shape}: {y_val.dtype}")
-            break
 
         pr_loss_fn = nn.CrossEntropyLoss()
         val_loss_fn = nn.MSELoss()
@@ -108,6 +103,8 @@ class TrainingRunnerTask(threading.Thread):
                 loss.backward()
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
+
+        # Training is done. Save model under incremented checkpoint.
         self.model_key.checkpoint += 1
         self.repo.store_model(
             name=self.model_key.name,
@@ -125,7 +122,11 @@ class TrainingTask(threading.Thread):
     _STATE_TRAINING = "TRAINING"
 
     def __init__(
-        self, repo: ModelRepository, config: TrainingConfig, queue: queue.SimpleQueue
+        self,
+        repo: ModelRepository,
+        config: TrainingConfig,
+        queue: queue.SimpleQueue,
+        logger: logging.Logger,
     ):
         super().__init__()
         self.repo = repo
@@ -139,15 +140,18 @@ class TrainingTask(threading.Thread):
         self.batch = InMemoryDataset()
         self.training_runner_task: Optional[TrainingRunnerTask] = None
         self.state = self._STATE_ACCEPTING
+        self.model_bytes = None
+        self.model_bytes_version = ("undefined", -1)
+        self.logger = logger
 
     def start_training_runner_task(self):
         t = TrainingRunnerTask(
             self.repo, self.model_key, self.config, self.batch, self.queue
         )
         t.start()
+        self.logger.info("Started TrainingRunnerTask")
         self.training_runner_task = t
         self.state = self._STATE_TRAINING
-        self.batch = InMemoryDataset()
 
     def handle_training_examples(self, msg: Mapping[str, Any]):
         data = msg["data"]
@@ -155,7 +159,7 @@ class TrainingTask(threading.Thread):
         batch = self.batch
         if self.state != self._STATE_ACCEPTING:
             resp = hexz_pb2.AddTrainingExamplesResponse(
-                status=hexz_pb2.AddTrainingExamplesResponse.REJECTED,
+                status=hexz_pb2.AddTrainingExamplesResponse.REJECTED_TRAINING,
                 error_message=f"Server is currently not accepting examples",
             )
             reply_q.put(resp.SerializeToString())
@@ -164,14 +168,14 @@ class TrainingTask(threading.Thread):
             req = hexz_pb2.AddTrainingExamplesRequest.FromString(data)
         except DecodeError as e:
             resp = hexz_pb2.AddTrainingExamplesResponse(
-                status=hexz_pb2.AddTrainingExamplesResponse.REJECTED,
+                status=hexz_pb2.AddTrainingExamplesResponse.REJECTED_OTHER,
                 error_message=f"Failed to decode AddTrainingExamplesResponse: {e}",
             )
             reply_q.put(resp.SerializeToString())
             return
         if req.model_key != self.model_key:
             resp = hexz_pb2.AddTrainingExamplesResponse(
-                status=hexz_pb2.AddTrainingExamplesResponse.REJECTED,
+                status=hexz_pb2.AddTrainingExamplesResponse.REJECTED_WRONG_MODEL,
                 latest_model=self.model_key,
             )
             reply_q.put(resp.SerializeToString())
@@ -194,23 +198,43 @@ class TrainingTask(threading.Thread):
             self.start_training_runner_task()
 
     def handle_training_result(self, msg: Mapping[str, Any]):
+        # The training runner task must be done now.
+        self.training_runner_task.join()
         # Start a new batch, whether training was successful or not.
+        self.batch = InMemoryDataset()
         self.state = self._STATE_ACCEPTING
         if msg["status"] == "OK":
             self.model_key = msg["model_key"]
             elapsed = msg["elapsed"]
-            print(
+            self.logger.info(
                 f"Finished training batch of size {self.config.batch_size} for {self.config.num_epochs} epochs in {elapsed:.1f}s."
             )
-            print(f"Updated model key to {self.model_key.name}:{self.model_key.checkpoint}.")
+            self.logger.info(
+                f"Updated model key to {self.model_key.name}:{self.model_key.checkpoint}."
+            )
         else:
-            print(f"Training failed: {msg.get('error')}")
+            self.logger.info(f"Training failed: {msg.get('error')}")
 
     def handle_get_model_key(self, msg):
         reply_q = msg["reply_q"]
         reply_q.put(self.model_key)
-        
+
+    def handle_get_model(self, msg):
+        name = msg["name"]
+        checkpoint = msg["checkpoint"]
+        reply_q = msg["reply_q"]
+        if (name, checkpoint) != (self.model_key.name, self.model_key.checkpoint):
+            reply_q.put(None)
+            return
+        if self.model_bytes is None or self.model_bytes_version != (name, checkpoint):
+            self.model_bytes = self.repo.get_model(name, checkpoint, as_bytes=True)
+            self.model_bytes_version = (name, checkpoint)
+        reply_q.put(self.model_bytes)
+
     def run(self):
+        """This is the main dispatcher loop of the TrainingTask.
+        All requests to this task must be sent via self.queue and are processed sequentially.
+        """
         while True:
             # We use bytes as input and output in the communication with this
             # TrainingTask to simplify serialization when running in a separate process.
@@ -221,6 +245,8 @@ class TrainingTask(threading.Thread):
                 self.handle_training_examples(msg)
             elif msg["type"] == "GetModelKey":
                 self.handle_get_model_key(msg)
+            elif msg["type"] == "GetModel":
+                self.handle_get_model(msg)
             else:
                 raise HexzError(
                     f"TrainingTask: received unknown message type {msg['type']}"

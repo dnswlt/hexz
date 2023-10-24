@@ -6,6 +6,9 @@ import typing
 
 
 def _from_env(cls):
+    """Returns a config in which each field is optionally overridden by its corresponding
+        environment variable HEXZ_FIELD_NAME.
+    """
     envvars = {}
     for f in cls._fields:
         typ = cls.__annotations__.get(f)
@@ -28,7 +31,15 @@ class TrainingConfig(typing.NamedTuple):
 
     @classmethod
     def from_env(cls):
-        """Returns a config in which each field is optionally overridden by its corresponding
-         environment variable HEXZ_FIELD_NAME.
-        """
+        return _from_env(cls)
+
+
+class WorkerConfig(typing.NamedTuple):
+    training_server_url: str
+    device: str = "cpu"
+    max_seconds: int = 60
+    runs_per_move: int = 800
+
+    @classmethod
+    def from_env(cls):
         return _from_env(cls)
