@@ -49,8 +49,8 @@ To do so anyway, run the following command in the root directory of this
 repository:
 
 ```bash
-protoc hexzpb/hexz.proto --go_out=. --go_opt=paths=source_relative
-protoc -Ihexzpb hexzpb/hexz.proto --python_out=python 
+protoc hexzpb/hexz.proto --go_out=. --go_opt=paths=source_relative && \
+protoc -Ihexzpb hexzpb/hexz.proto --python_out=pyhexz/src/pyhexz --pyi_out=pyhexz/src/pyhexz 
 ```
 
 ## WASM

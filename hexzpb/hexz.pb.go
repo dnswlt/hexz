@@ -134,6 +134,55 @@ func (Field_CellType) EnumDescriptor() ([]byte, []int) {
 	return file_hexzpb_hexz_proto_rawDescGZIP(), []int{1, 0}
 }
 
+type AddTrainingExamplesResponse_Status int32
+
+const (
+	AddTrainingExamplesResponse_STATUS_UNSPECIFIED AddTrainingExamplesResponse_Status = 0
+	AddTrainingExamplesResponse_ACCEPTED           AddTrainingExamplesResponse_Status = 1
+	AddTrainingExamplesResponse_REJECTED           AddTrainingExamplesResponse_Status = 2
+)
+
+// Enum value maps for AddTrainingExamplesResponse_Status.
+var (
+	AddTrainingExamplesResponse_Status_name = map[int32]string{
+		0: "STATUS_UNSPECIFIED",
+		1: "ACCEPTED",
+		2: "REJECTED",
+	}
+	AddTrainingExamplesResponse_Status_value = map[string]int32{
+		"STATUS_UNSPECIFIED": 0,
+		"ACCEPTED":           1,
+		"REJECTED":           2,
+	}
+)
+
+func (x AddTrainingExamplesResponse_Status) Enum() *AddTrainingExamplesResponse_Status {
+	p := new(AddTrainingExamplesResponse_Status)
+	*p = x
+	return p
+}
+
+func (x AddTrainingExamplesResponse_Status) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AddTrainingExamplesResponse_Status) Descriptor() protoreflect.EnumDescriptor {
+	return file_hexzpb_hexz_proto_enumTypes[2].Descriptor()
+}
+
+func (AddTrainingExamplesResponse_Status) Type() protoreflect.EnumType {
+	return &file_hexzpb_hexz_proto_enumTypes[2]
+}
+
+func (x AddTrainingExamplesResponse_Status) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AddTrainingExamplesResponse_Status.Descriptor instead.
+func (AddTrainingExamplesResponse_Status) EnumDescriptor() ([]byte, []int) {
+	return file_hexzpb_hexz_proto_rawDescGZIP(), []int{14, 0}
+}
+
 type Board struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -1016,6 +1065,263 @@ func (x *MCTSExample) GetMoveStats() []*MCTSExample_MoveStats {
 	return nil
 }
 
+type ModelKey struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Name       string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Checkpoint int32  `protobuf:"varint,2,opt,name=checkpoint,proto3" json:"checkpoint,omitempty"`
+}
+
+func (x *ModelKey) Reset() {
+	*x = ModelKey{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_hexzpb_hexz_proto_msgTypes[12]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ModelKey) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ModelKey) ProtoMessage() {}
+
+func (x *ModelKey) ProtoReflect() protoreflect.Message {
+	mi := &file_hexzpb_hexz_proto_msgTypes[12]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ModelKey.ProtoReflect.Descriptor instead.
+func (*ModelKey) Descriptor() ([]byte, []int) {
+	return file_hexzpb_hexz_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ModelKey) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ModelKey) GetCheckpoint() int32 {
+	if x != nil {
+		return x.Checkpoint
+	}
+	return 0
+}
+
+// Used by workers to upload examples to the training server.
+type AddTrainingExamplesRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	ModelKey *ModelKey          `protobuf:"bytes,1,opt,name=model_key,json=modelKey,proto3" json:"model_key,omitempty"`
+	Examples []*TrainingExample `protobuf:"bytes,2,rep,name=examples,proto3" json:"examples,omitempty"`
+}
+
+func (x *AddTrainingExamplesRequest) Reset() {
+	*x = AddTrainingExamplesRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_hexzpb_hexz_proto_msgTypes[13]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *AddTrainingExamplesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddTrainingExamplesRequest) ProtoMessage() {}
+
+func (x *AddTrainingExamplesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hexzpb_hexz_proto_msgTypes[13]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddTrainingExamplesRequest.ProtoReflect.Descriptor instead.
+func (*AddTrainingExamplesRequest) Descriptor() ([]byte, []int) {
+	return file_hexzpb_hexz_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *AddTrainingExamplesRequest) GetModelKey() *ModelKey {
+	if x != nil {
+		return x.ModelKey
+	}
+	return nil
+}
+
+func (x *AddTrainingExamplesRequest) GetExamples() []*TrainingExample {
+	if x != nil {
+		return x.Examples
+	}
+	return nil
+}
+
+type AddTrainingExamplesResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Status AddTrainingExamplesResponse_Status `protobuf:"varint,1,opt,name=status,proto3,enum=github.com.dnswlt.hexz.AddTrainingExamplesResponse_Status" json:"status,omitempty"`
+	// Tells the worker which model to use for subsequent requests.
+	LatestModel *ModelKey `protobuf:"bytes,2,opt,name=latest_model,json=latestModel,proto3" json:"latest_model,omitempty"`
+	// Populated if there was an error processing the request.
+	ErrorMessage string `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+}
+
+func (x *AddTrainingExamplesResponse) Reset() {
+	*x = AddTrainingExamplesResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_hexzpb_hexz_proto_msgTypes[14]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *AddTrainingExamplesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddTrainingExamplesResponse) ProtoMessage() {}
+
+func (x *AddTrainingExamplesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_hexzpb_hexz_proto_msgTypes[14]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddTrainingExamplesResponse.ProtoReflect.Descriptor instead.
+func (*AddTrainingExamplesResponse) Descriptor() ([]byte, []int) {
+	return file_hexzpb_hexz_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *AddTrainingExamplesResponse) GetStatus() AddTrainingExamplesResponse_Status {
+	if x != nil {
+		return x.Status
+	}
+	return AddTrainingExamplesResponse_STATUS_UNSPECIFIED
+}
+
+func (x *AddTrainingExamplesResponse) GetLatestModel() *ModelKey {
+	if x != nil {
+		return x.LatestModel
+	}
+	return nil
+}
+
+func (x *AddTrainingExamplesResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+// TrainingExample is used to send training examples across the wire and store
+// them on disk in the Python implementation.
+type TrainingExample struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Timestamp at which this example was generated.
+	UnixMicros int64 `protobuf:"varint,1,opt,name=unix_micros,json=unixMicros,proto3" json:"unix_micros,omitempty"`
+	// Training inputs.
+	// Numpy array containing the (9, 11, 10) Board.
+	// Serialized to bytes using np.save.
+	Board []byte `protobuf:"bytes,2,opt,name=board,proto3" json:"board,omitempty"`
+	// Training labels.
+	// Numpy array containing the (2, 11, 10) move likelihoods.
+	// Serialized to bytes using np.save.
+	MoveProbs []byte `protobuf:"bytes,3,opt,name=move_probs,json=moveProbs,proto3" json:"move_probs,omitempty"`
+	// The outcome of the game, from the perspective of player 0.
+	Result float32 `protobuf:"fixed32,4,opt,name=result,proto3" json:"result,omitempty"`
+}
+
+func (x *TrainingExample) Reset() {
+	*x = TrainingExample{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_hexzpb_hexz_proto_msgTypes[15]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *TrainingExample) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TrainingExample) ProtoMessage() {}
+
+func (x *TrainingExample) ProtoReflect() protoreflect.Message {
+	mi := &file_hexzpb_hexz_proto_msgTypes[15]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TrainingExample.ProtoReflect.Descriptor instead.
+func (*TrainingExample) Descriptor() ([]byte, []int) {
+	return file_hexzpb_hexz_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *TrainingExample) GetUnixMicros() int64 {
+	if x != nil {
+		return x.UnixMicros
+	}
+	return 0
+}
+
+func (x *TrainingExample) GetBoard() []byte {
+	if x != nil {
+		return x.Board
+	}
+	return nil
+}
+
+func (x *TrainingExample) GetMoveProbs() []byte {
+	if x != nil {
+		return x.MoveProbs
+	}
+	return nil
+}
+
+func (x *TrainingExample) GetResult() float32 {
+	if x != nil {
+		return x.Result
+	}
+	return 0
+}
+
 // The learnt "policy", i.e. the MCTS visit counts and win rates for each move.
 type MCTSExample_MoveStats struct {
 	state         protoimpl.MessageState
@@ -1030,7 +1336,7 @@ type MCTSExample_MoveStats struct {
 func (x *MCTSExample_MoveStats) Reset() {
 	*x = MCTSExample_MoveStats{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_hexzpb_hexz_proto_msgTypes[12]
+		mi := &file_hexzpb_hexz_proto_msgTypes[16]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1043,7 +1349,7 @@ func (x *MCTSExample_MoveStats) String() string {
 func (*MCTSExample_MoveStats) ProtoMessage() {}
 
 func (x *MCTSExample_MoveStats) ProtoReflect() protoreflect.Message {
-	mi := &file_hexzpb_hexz_proto_msgTypes[12]
+	mi := &file_hexzpb_hexz_proto_msgTypes[16]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1233,6 +1539,46 @@ var file_hexzpb_hexz_proto_rawDesc = []byte{
 	0x06, 0x76, 0x69, 0x73, 0x69, 0x74, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x05, 0x52, 0x06, 0x76,
 	0x69, 0x73, 0x69, 0x74, 0x73, 0x12, 0x19, 0x0a, 0x08, 0x77, 0x69, 0x6e, 0x5f, 0x72, 0x61, 0x74,
 	0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x02, 0x52, 0x07, 0x77, 0x69, 0x6e, 0x52, 0x61, 0x74, 0x65,
+	0x22, 0x3e, 0x0a, 0x08, 0x4d, 0x6f, 0x64, 0x65, 0x6c, 0x4b, 0x65, 0x79, 0x12, 0x12, 0x0a, 0x04,
+	0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65,
+	0x12, 0x1e, 0x0a, 0x0a, 0x63, 0x68, 0x65, 0x63, 0x6b, 0x70, 0x6f, 0x69, 0x6e, 0x74, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x05, 0x52, 0x0a, 0x63, 0x68, 0x65, 0x63, 0x6b, 0x70, 0x6f, 0x69, 0x6e, 0x74,
+	0x22, 0xa0, 0x01, 0x0a, 0x1a, 0x41, 0x64, 0x64, 0x54, 0x72, 0x61, 0x69, 0x6e, 0x69, 0x6e, 0x67,
+	0x45, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
+	0x3d, 0x0a, 0x09, 0x6d, 0x6f, 0x64, 0x65, 0x6c, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0b, 0x32, 0x20, 0x2e, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2e,
+	0x64, 0x6e, 0x73, 0x77, 0x6c, 0x74, 0x2e, 0x68, 0x65, 0x78, 0x7a, 0x2e, 0x4d, 0x6f, 0x64, 0x65,
+	0x6c, 0x4b, 0x65, 0x79, 0x52, 0x08, 0x6d, 0x6f, 0x64, 0x65, 0x6c, 0x4b, 0x65, 0x79, 0x12, 0x43,
+	0x0a, 0x08, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0b,
+	0x32, 0x27, 0x2e, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2e, 0x64, 0x6e,
+	0x73, 0x77, 0x6c, 0x74, 0x2e, 0x68, 0x65, 0x78, 0x7a, 0x2e, 0x54, 0x72, 0x61, 0x69, 0x6e, 0x69,
+	0x6e, 0x67, 0x45, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x52, 0x08, 0x65, 0x78, 0x61, 0x6d, 0x70,
+	0x6c, 0x65, 0x73, 0x22, 0x99, 0x02, 0x0a, 0x1b, 0x41, 0x64, 0x64, 0x54, 0x72, 0x61, 0x69, 0x6e,
+	0x69, 0x6e, 0x67, 0x45, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x12, 0x52, 0x0a, 0x06, 0x73, 0x74, 0x61, 0x74, 0x75, 0x73, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x0e, 0x32, 0x3a, 0x2e, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d,
+	0x2e, 0x64, 0x6e, 0x73, 0x77, 0x6c, 0x74, 0x2e, 0x68, 0x65, 0x78, 0x7a, 0x2e, 0x41, 0x64, 0x64,
+	0x54, 0x72, 0x61, 0x69, 0x6e, 0x69, 0x6e, 0x67, 0x45, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x73,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x52,
+	0x06, 0x73, 0x74, 0x61, 0x74, 0x75, 0x73, 0x12, 0x43, 0x0a, 0x0c, 0x6c, 0x61, 0x74, 0x65, 0x73,
+	0x74, 0x5f, 0x6d, 0x6f, 0x64, 0x65, 0x6c, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x20, 0x2e,
+	0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2e, 0x64, 0x6e, 0x73, 0x77, 0x6c,
+	0x74, 0x2e, 0x68, 0x65, 0x78, 0x7a, 0x2e, 0x4d, 0x6f, 0x64, 0x65, 0x6c, 0x4b, 0x65, 0x79, 0x52,
+	0x0b, 0x6c, 0x61, 0x74, 0x65, 0x73, 0x74, 0x4d, 0x6f, 0x64, 0x65, 0x6c, 0x12, 0x23, 0x0a, 0x0d,
+	0x65, 0x72, 0x72, 0x6f, 0x72, 0x5f, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x03, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x0c, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67,
+	0x65, 0x22, 0x3c, 0x0a, 0x06, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x12, 0x16, 0x0a, 0x12, 0x53,
+	0x54, 0x41, 0x54, 0x55, 0x53, 0x5f, 0x55, 0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45,
+	0x44, 0x10, 0x00, 0x12, 0x0c, 0x0a, 0x08, 0x41, 0x43, 0x43, 0x45, 0x50, 0x54, 0x45, 0x44, 0x10,
+	0x01, 0x12, 0x0c, 0x0a, 0x08, 0x52, 0x45, 0x4a, 0x45, 0x43, 0x54, 0x45, 0x44, 0x10, 0x02, 0x22,
+	0x7f, 0x0a, 0x0f, 0x54, 0x72, 0x61, 0x69, 0x6e, 0x69, 0x6e, 0x67, 0x45, 0x78, 0x61, 0x6d, 0x70,
+	0x6c, 0x65, 0x12, 0x1f, 0x0a, 0x0b, 0x75, 0x6e, 0x69, 0x78, 0x5f, 0x6d, 0x69, 0x63, 0x72, 0x6f,
+	0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x0a, 0x75, 0x6e, 0x69, 0x78, 0x4d, 0x69, 0x63,
+	0x72, 0x6f, 0x73, 0x12, 0x14, 0x0a, 0x05, 0x62, 0x6f, 0x61, 0x72, 0x64, 0x18, 0x02, 0x20, 0x01,
+	0x28, 0x0c, 0x52, 0x05, 0x62, 0x6f, 0x61, 0x72, 0x64, 0x12, 0x1d, 0x0a, 0x0a, 0x6d, 0x6f, 0x76,
+	0x65, 0x5f, 0x70, 0x72, 0x6f, 0x62, 0x73, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x09, 0x6d,
+	0x6f, 0x76, 0x65, 0x50, 0x72, 0x6f, 0x62, 0x73, 0x12, 0x16, 0x0a, 0x06, 0x72, 0x65, 0x73, 0x75,
+	0x6c, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x02, 0x52, 0x06, 0x72, 0x65, 0x73, 0x75, 0x6c, 0x74,
 	0x42, 0x1f, 0x5a, 0x1d, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64,
 	0x6e, 0x73, 0x77, 0x6c, 0x74, 0x2f, 0x68, 0x65, 0x78, 0x7a, 0x2f, 0x68, 0x65, 0x78, 0x7a, 0x70,
 	0x62, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
@@ -1250,52 +1596,61 @@ func file_hexzpb_hexz_proto_rawDescGZIP() []byte {
 	return file_hexzpb_hexz_proto_rawDescData
 }
 
-var file_hexzpb_hexz_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_hexzpb_hexz_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_hexzpb_hexz_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_hexzpb_hexz_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_hexzpb_hexz_proto_goTypes = []interface{}{
-	(Board_GameState)(0),            // 0: github.com.dnswlt.hexz.Board.GameState
-	(Field_CellType)(0),             // 1: github.com.dnswlt.hexz.Field.CellType
-	(*Board)(nil),                   // 2: github.com.dnswlt.hexz.Board
-	(*Field)(nil),                   // 3: github.com.dnswlt.hexz.Field
-	(*ResourceInfo)(nil),            // 4: github.com.dnswlt.hexz.ResourceInfo
-	(*Player)(nil),                  // 5: github.com.dnswlt.hexz.Player
-	(*GameInfo)(nil),                // 6: github.com.dnswlt.hexz.GameInfo
-	(*GameState)(nil),               // 7: github.com.dnswlt.hexz.GameState
-	(*GameEngineState)(nil),         // 8: github.com.dnswlt.hexz.GameEngineState
-	(*GameEngineFlagzState)(nil),    // 9: github.com.dnswlt.hexz.GameEngineFlagzState
-	(*GameEngineClassicState)(nil),  // 10: github.com.dnswlt.hexz.GameEngineClassicState
-	(*GameEngineFreeformState)(nil), // 11: github.com.dnswlt.hexz.GameEngineFreeformState
-	(*GameEngineMove)(nil),          // 12: github.com.dnswlt.hexz.GameEngineMove
-	(*MCTSExample)(nil),             // 13: github.com.dnswlt.hexz.MCTSExample
-	(*MCTSExample_MoveStats)(nil),   // 14: github.com.dnswlt.hexz.MCTSExample.MoveStats
-	(*timestamppb.Timestamp)(nil),   // 15: google.protobuf.Timestamp
+	(Board_GameState)(0),                    // 0: github.com.dnswlt.hexz.Board.GameState
+	(Field_CellType)(0),                     // 1: github.com.dnswlt.hexz.Field.CellType
+	(AddTrainingExamplesResponse_Status)(0), // 2: github.com.dnswlt.hexz.AddTrainingExamplesResponse.Status
+	(*Board)(nil),                           // 3: github.com.dnswlt.hexz.Board
+	(*Field)(nil),                           // 4: github.com.dnswlt.hexz.Field
+	(*ResourceInfo)(nil),                    // 5: github.com.dnswlt.hexz.ResourceInfo
+	(*Player)(nil),                          // 6: github.com.dnswlt.hexz.Player
+	(*GameInfo)(nil),                        // 7: github.com.dnswlt.hexz.GameInfo
+	(*GameState)(nil),                       // 8: github.com.dnswlt.hexz.GameState
+	(*GameEngineState)(nil),                 // 9: github.com.dnswlt.hexz.GameEngineState
+	(*GameEngineFlagzState)(nil),            // 10: github.com.dnswlt.hexz.GameEngineFlagzState
+	(*GameEngineClassicState)(nil),          // 11: github.com.dnswlt.hexz.GameEngineClassicState
+	(*GameEngineFreeformState)(nil),         // 12: github.com.dnswlt.hexz.GameEngineFreeformState
+	(*GameEngineMove)(nil),                  // 13: github.com.dnswlt.hexz.GameEngineMove
+	(*MCTSExample)(nil),                     // 14: github.com.dnswlt.hexz.MCTSExample
+	(*ModelKey)(nil),                        // 15: github.com.dnswlt.hexz.ModelKey
+	(*AddTrainingExamplesRequest)(nil),      // 16: github.com.dnswlt.hexz.AddTrainingExamplesRequest
+	(*AddTrainingExamplesResponse)(nil),     // 17: github.com.dnswlt.hexz.AddTrainingExamplesResponse
+	(*TrainingExample)(nil),                 // 18: github.com.dnswlt.hexz.TrainingExample
+	(*MCTSExample_MoveStats)(nil),           // 19: github.com.dnswlt.hexz.MCTSExample.MoveStats
+	(*timestamppb.Timestamp)(nil),           // 20: google.protobuf.Timestamp
 }
 var file_hexzpb_hexz_proto_depIdxs = []int32{
-	3,  // 0: github.com.dnswlt.hexz.Board.flat_fields:type_name -> github.com.dnswlt.hexz.Field
-	4,  // 1: github.com.dnswlt.hexz.Board.resources:type_name -> github.com.dnswlt.hexz.ResourceInfo
+	4,  // 0: github.com.dnswlt.hexz.Board.flat_fields:type_name -> github.com.dnswlt.hexz.Field
+	5,  // 1: github.com.dnswlt.hexz.Board.resources:type_name -> github.com.dnswlt.hexz.ResourceInfo
 	0,  // 2: github.com.dnswlt.hexz.Board.state:type_name -> github.com.dnswlt.hexz.Board.GameState
 	1,  // 3: github.com.dnswlt.hexz.Field.type:type_name -> github.com.dnswlt.hexz.Field.CellType
-	15, // 4: github.com.dnswlt.hexz.GameInfo.started:type_name -> google.protobuf.Timestamp
-	6,  // 5: github.com.dnswlt.hexz.GameState.game_info:type_name -> github.com.dnswlt.hexz.GameInfo
-	15, // 6: github.com.dnswlt.hexz.GameState.modified:type_name -> google.protobuf.Timestamp
-	5,  // 7: github.com.dnswlt.hexz.GameState.players:type_name -> github.com.dnswlt.hexz.Player
-	8,  // 8: github.com.dnswlt.hexz.GameState.engine_state:type_name -> github.com.dnswlt.hexz.GameEngineState
-	9,  // 9: github.com.dnswlt.hexz.GameEngineState.flagz:type_name -> github.com.dnswlt.hexz.GameEngineFlagzState
-	10, // 10: github.com.dnswlt.hexz.GameEngineState.classic:type_name -> github.com.dnswlt.hexz.GameEngineClassicState
-	11, // 11: github.com.dnswlt.hexz.GameEngineState.freeform:type_name -> github.com.dnswlt.hexz.GameEngineFreeformState
-	2,  // 12: github.com.dnswlt.hexz.GameEngineFlagzState.board:type_name -> github.com.dnswlt.hexz.Board
-	12, // 13: github.com.dnswlt.hexz.GameEngineFlagzState.moves:type_name -> github.com.dnswlt.hexz.GameEngineMove
-	2,  // 14: github.com.dnswlt.hexz.GameEngineClassicState.board:type_name -> github.com.dnswlt.hexz.Board
-	2,  // 15: github.com.dnswlt.hexz.GameEngineFreeformState.board:type_name -> github.com.dnswlt.hexz.Board
+	20, // 4: github.com.dnswlt.hexz.GameInfo.started:type_name -> google.protobuf.Timestamp
+	7,  // 5: github.com.dnswlt.hexz.GameState.game_info:type_name -> github.com.dnswlt.hexz.GameInfo
+	20, // 6: github.com.dnswlt.hexz.GameState.modified:type_name -> google.protobuf.Timestamp
+	6,  // 7: github.com.dnswlt.hexz.GameState.players:type_name -> github.com.dnswlt.hexz.Player
+	9,  // 8: github.com.dnswlt.hexz.GameState.engine_state:type_name -> github.com.dnswlt.hexz.GameEngineState
+	10, // 9: github.com.dnswlt.hexz.GameEngineState.flagz:type_name -> github.com.dnswlt.hexz.GameEngineFlagzState
+	11, // 10: github.com.dnswlt.hexz.GameEngineState.classic:type_name -> github.com.dnswlt.hexz.GameEngineClassicState
+	12, // 11: github.com.dnswlt.hexz.GameEngineState.freeform:type_name -> github.com.dnswlt.hexz.GameEngineFreeformState
+	3,  // 12: github.com.dnswlt.hexz.GameEngineFlagzState.board:type_name -> github.com.dnswlt.hexz.Board
+	13, // 13: github.com.dnswlt.hexz.GameEngineFlagzState.moves:type_name -> github.com.dnswlt.hexz.GameEngineMove
+	3,  // 14: github.com.dnswlt.hexz.GameEngineClassicState.board:type_name -> github.com.dnswlt.hexz.Board
+	3,  // 15: github.com.dnswlt.hexz.GameEngineFreeformState.board:type_name -> github.com.dnswlt.hexz.Board
 	1,  // 16: github.com.dnswlt.hexz.GameEngineMove.cell_type:type_name -> github.com.dnswlt.hexz.Field.CellType
-	2,  // 17: github.com.dnswlt.hexz.MCTSExample.board:type_name -> github.com.dnswlt.hexz.Board
-	14, // 18: github.com.dnswlt.hexz.MCTSExample.move_stats:type_name -> github.com.dnswlt.hexz.MCTSExample.MoveStats
-	12, // 19: github.com.dnswlt.hexz.MCTSExample.MoveStats.move:type_name -> github.com.dnswlt.hexz.GameEngineMove
-	20, // [20:20] is the sub-list for method output_type
-	20, // [20:20] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	3,  // 17: github.com.dnswlt.hexz.MCTSExample.board:type_name -> github.com.dnswlt.hexz.Board
+	19, // 18: github.com.dnswlt.hexz.MCTSExample.move_stats:type_name -> github.com.dnswlt.hexz.MCTSExample.MoveStats
+	15, // 19: github.com.dnswlt.hexz.AddTrainingExamplesRequest.model_key:type_name -> github.com.dnswlt.hexz.ModelKey
+	18, // 20: github.com.dnswlt.hexz.AddTrainingExamplesRequest.examples:type_name -> github.com.dnswlt.hexz.TrainingExample
+	2,  // 21: github.com.dnswlt.hexz.AddTrainingExamplesResponse.status:type_name -> github.com.dnswlt.hexz.AddTrainingExamplesResponse.Status
+	15, // 22: github.com.dnswlt.hexz.AddTrainingExamplesResponse.latest_model:type_name -> github.com.dnswlt.hexz.ModelKey
+	13, // 23: github.com.dnswlt.hexz.MCTSExample.MoveStats.move:type_name -> github.com.dnswlt.hexz.GameEngineMove
+	24, // [24:24] is the sub-list for method output_type
+	24, // [24:24] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_hexzpb_hexz_proto_init() }
@@ -1449,6 +1804,54 @@ func file_hexzpb_hexz_proto_init() {
 			}
 		}
 		file_hexzpb_hexz_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ModelKey); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_hexzpb_hexz_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*AddTrainingExamplesRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_hexzpb_hexz_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*AddTrainingExamplesResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_hexzpb_hexz_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*TrainingExample); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_hexzpb_hexz_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*MCTSExample_MoveStats); i {
 			case 0:
 				return &v.state
@@ -1471,8 +1874,8 @@ func file_hexzpb_hexz_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_hexzpb_hexz_proto_rawDesc,
-			NumEnums:      2,
-			NumMessages:   13,
+			NumEnums:      3,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

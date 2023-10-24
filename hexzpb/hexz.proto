@@ -129,3 +129,46 @@ message MCTSExample {
     }
     repeated MoveStats move_stats = 4;
 }
+
+message ModelKey {
+    string name = 1;
+    int32 checkpoint = 2;
+}
+
+// Used by workers to upload examples to the training server.
+message AddTrainingExamplesRequest {
+    ModelKey model_key = 1;
+    repeated TrainingExample examples = 2;
+}
+
+message AddTrainingExamplesResponse {
+    enum Status {
+        STATUS_UNSPECIFIED = 0;
+        ACCEPTED = 1;
+        REJECTED = 2;
+    }
+    Status status = 1;
+    // Tells the worker which model to use for subsequent requests.
+    ModelKey latest_model = 2;
+    // Populated if there was an error processing the request.
+    string error_message = 3;
+}
+
+// TrainingExample is used to send training examples across the wire and store
+// them on disk in the Python implementation.
+message TrainingExample {
+    // Timestamp at which this example was generated.
+    int64 unix_micros = 1;
+
+    // Training inputs.
+    // Numpy array containing the (9, 11, 10) Board.
+    // Serialized to bytes using np.save.
+    bytes board = 2;
+
+    // Training labels.
+    // Numpy array containing the (2, 11, 10) move likelihoods.
+    // Serialized to bytes using np.save.
+    bytes move_probs = 3;
+    // The outcome of the game, from the perspective of player 0.
+    float result = 4;
+}
