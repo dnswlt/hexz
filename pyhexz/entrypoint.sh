@@ -16,4 +16,4 @@ if [ "$HEXZ_ENTRYPOINT_MODE" = "gunicorn" ]; then
     exec gunicorn --bind :$PORT "$@"
 fi
 # Run as a batch command.
-exec python3 -m pyhexz.run "$@"
+exec python3 -m pyhexz.worker "$@"

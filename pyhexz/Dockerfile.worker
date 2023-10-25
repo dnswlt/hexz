@@ -36,4 +36,3 @@ RUN source ~/.bashrc && python3 setup.py build_ext --build-lib=src
 
 # The code to run when the container is started:
 ENTRYPOINT ["./entrypoint.sh"]
-CMD ["--mode=hello", "--model=none"]

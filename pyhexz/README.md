@@ -58,44 +58,62 @@ python3 -m pyhexz.hexz --mode=selfplay --model=../../hexz-models/models/flagz/ca
 WIP
 
 ```bash
-docker build . -f Dockerfile.server --tag europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/server:latest && \
-  docker push europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/server:latest
-docker build . -f Dockerfile.worker --tag europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/worker:latest && \
-  docker push europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/worker:latest
+# server
+docker build . -f Dockerfile.server --tag europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/server:latest
+docker push europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/server:latest
+# worker
+docker build . -f Dockerfile.worker --tag europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/worker:latest
+docker push europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/worker:latest
+```
+
+Running these images locally:
+
+```bash
+# server
+PORT=8080 && docker run -p 8080:${PORT} -e PORT=${PORT} \
+  -e HEXZ_MODEL_REPO_BASE_DIR=/tmp/hexz/models \
+  -e HEXZ_BATCH_SIZE=512 \
+  -e HEXZ_MODEL_NAME=test \
+  europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/server:latest
+```
+
+```bash
+# worker
+docker run \
+  -e HEXZ_TRAINING_SERVER_URL=http://nuc:8080 \
+  europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/worker:latest
 ```
 
 ## Training and self-play in the Cloud
 
 The architecture is as follows:
 
-* A single `server` running on a GCE VM is responsible for training and distributing model updates.
+* A single `server` running in a Docker container on a GCE VM is responsible for training and 
+  distributing model updates.
   * It holds the latest checkpoint of the configured model in memory (specified by the `MODEL_NAME` and
     loaded from GCS).
-  * On loading the model, it also stores the model in Redis so that workers can read it.
-  * It accepts `http POST` requests containing a `NumpyExample` protobuf message at `/training/examples`.
+  * It accepts `http POST` requests for `AddTrainingExamplesRequest` protobuf messages at `/examples`.
     These are sent from workers, see below.
-  * Once enough (4096, configurable via `MINIBATCH_SIZE`) examples have been posted, it trains the
+  * Once enough (configurable via `HEXZ_BATCH_SIZE`) examples have been posted, it trains the
     current model with the collected examples, resulting in an updated model.
-  * The new model is stored on GCS as the next checkpoint. The model stored in Redis is also updated.
-    To inform workers about the new model, it publishes the latest model checkpoint number via Redis
-    Pubsub to all workers.
+  * The new model is stored in memory and on local disk as the next checkpoint.
+    Workers are informed about the new model in the `AddTrainingExamplesResponse`. They can also poll
+    the training server (`/models/current`) to obtain the current model version.
 
-* Multiple `worker` jobs running on Cloud Run generate training examples via self-play and send them
-  to the server.
+* Multiple `worker` jobs running as batch jobs on Cloud Run generate training examples via self-play
+  and send them to the server.
   * Workers expect the server to be present.
-  * They read the latest model (identified by `MODEL_NAME`) from Redis (where the server put it)
-    and use it for self-play until a new model checkpoint gets published via Redis Pubsub.
-  * During self-play, workers POST the generated examples to the server, one example at a time.
-    Workers do not store any data themselves.
-  * Once workers receive a notification that a new model checkpoint is available, they load the
-    the new checkpoint from Redis and continue their self-play using that model.
+  * They query the training server for the latest model version (`/models/current`), download this
+    model (`/models/{model_name}/checkpoints/{checkpoint}`), and use it for self-play. On delivering
+    examples to the training server (`/examples`) they learn about model updates and download a new
+    model as necessary.
   * Workers run for a configurable amount of time, before they quit.
 
-Models and examples are stored by the `server` in a GCS bucket using the following folder structure:
+Models and examples are stored by the `server` on local disk using the following folder structure:
 
-* `/models/flagz/{model_name}/checkpoints/{checkpoint_num}/`
+* `$HEXZ_MODEL_REPO_BASE_DIR/models/flagz/{model_name}/checkpoints/{checkpoint_num}/`
   * `model.pt`
-  * `examples/{example_batch}.zip`
+  * `examples/{example_batch}.zip`  (not implemented yet)
 
 Models are stored in the standard PyTorch format using `torch.save`. Examples are stored as zip files
 containing binary protobuf messages of type `github.com.dnswlt.hexz.NumpyExample`.

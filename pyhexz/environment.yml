@@ -12,3 +12,4 @@ dependencies:
   - protobuf
   - gunicorn
   - flask
+  - requests
