@@ -10,7 +10,6 @@ import threading
 import time
 import torch
 from torch import nn
-import torch.nn.functional as F
 from typing import Any, Optional
 from pyhexz.config import TrainingConfig
 from pyhexz import hexz_pb2
@@ -154,7 +153,7 @@ class TrainingTask(threading.Thread):
         self.state = self._STATE_TRAINING
 
     def handle_training_examples(self, msg: Mapping[str, Any]):
-        data = msg["data"]
+        req: hexz_pb2.AddTrainingExamplesRequest = msg["request"]
         reply_q = msg["reply_q"]
         batch = self.batch
         if self.state != self._STATE_ACCEPTING:
@@ -162,29 +161,20 @@ class TrainingTask(threading.Thread):
                 status=hexz_pb2.AddTrainingExamplesResponse.REJECTED_TRAINING,
                 error_message=f"Server is currently not accepting examples",
             )
-            reply_q.put(resp.SerializeToString())
-            return
-        try:
-            req = hexz_pb2.AddTrainingExamplesRequest.FromString(data)
-        except DecodeError as e:
-            resp = hexz_pb2.AddTrainingExamplesResponse(
-                status=hexz_pb2.AddTrainingExamplesResponse.REJECTED_OTHER,
-                error_message=f"Failed to decode AddTrainingExamplesResponse: {e}",
-            )
-            reply_q.put(resp.SerializeToString())
+            reply_q.put(resp)
             return
         if req.model_key != self.model_key:
             resp = hexz_pb2.AddTrainingExamplesResponse(
                 status=hexz_pb2.AddTrainingExamplesResponse.REJECTED_WRONG_MODEL,
                 latest_model=self.model_key,
             )
-            reply_q.put(resp.SerializeToString())
+            reply_q.put(resp)
             return
         resp = hexz_pb2.AddTrainingExamplesResponse(
             status=hexz_pb2.AddTrainingExamplesResponse.ACCEPTED,
             latest_model=self.model_key,
         )
-        reply_q.put(resp.SerializeToString())
+        reply_q.put(resp)
 
         # Add examples and run training if we have a full batch.
         lim = min(len(req.examples), self.config.batch_size - len(batch))

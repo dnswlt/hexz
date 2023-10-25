@@ -1,8 +1,8 @@
 import base64
-import collections
 from contextlib import contextmanager
 import datetime
 from flask import Flask, current_app, make_response, request
+from google.protobuf.message import DecodeError
 import json
 import logging
 import os
@@ -18,7 +18,7 @@ from pyhexz.hexz import HexzNeuralNetwork, NeuralMCTS
 from pyhexz import hexz_pb2
 from pyhexz import sconv
 from pyhexz import svg
-from pyhexz.modelrepo import LocalModelRepository
+from pyhexz.modelrepo import LocalModelRepository, ModelRepository
 from pyhexz import training
 
 
@@ -78,6 +78,16 @@ def suggest_move(
     return resp, 200
 
 
+def init_repo_if_missing(app: Flask) -> None:
+    repo: ModelRepository = app.model_repo
+    name: str = app.hexz_config.model_name
+    if repo.get_latest_checkpoint(name) is not None:
+        return
+    model = HexzNeuralNetwork()
+    repo.store_model(name, 0, model)
+    app.logger.info(f"Created new initial model in repo for model '{name}'")
+
+
 def create_app():
     app = Flask(__name__)
     app.logger.setLevel(logging.INFO)
@@ -92,6 +102,8 @@ def create_app():
             raise HexzError(
                 "No model_name specified. Did you forget to set HEXZ_MODEL_NAME?"
             )
+        init_repo_if_missing(app)
+        # Start the background training task.
         t = training.TrainingTask(
             repo=app.model_repo,
             config=config,
@@ -159,20 +171,28 @@ def create_app():
     @app.post("/examples")
     def examples():
         """Part of the training workflow. Called by workers to upload new examples."""
+        try:
+            req = hexz_pb2.AddTrainingExamplesRequest.FromString(request.data)
+        except DecodeError as e:
+            return "Invalid AddTrainingExamplesRequest protocol buffer", 400
         reply_q = queue.SimpleQueue()
         current_app.training_task_queue.put(
             {
                 "type": "AddTrainingExamplesRequest",
-                "data": request.data,
+                "request": req,
                 "reply_q": reply_q,
             }
         )
-        return reply_q.get(timeout=5)
+        resp: hexz_pb2.AddTrainingExamplesResponse = reply_q.get(timeout=5)
+        return resp.SerializeToString(), {"Content-Type": "application/x-protobuf"}
 
     @app.get("/models/current")
     def model():
         """Part of the training workflow. Called by workers to retrieve information
         about the model to use when generating examples.
+
+        This returns JSON and not a protobuf so that we can also get this information
+        from a web browser.
         """
         reply_q = queue.SimpleQueue()
         current_app.training_task_queue.put(
@@ -190,7 +210,10 @@ def create_app():
     @app.get("/models/<name>/checkpoints/<int:checkpoint>")
     def model_bytes(name, checkpoint):
         """Returns the requested model in raw bytes.
-        Will only return data if the requested model is relevant for training.
+        Will only return data if the requested model is currently relevant for training.
+        (The reason is that we don't want to turn our server into a model download server just yet.)
+
+        This returns the raw bytes of the PyTorch encoded model and not a protobuf or JSON.
         """
         reply_q = queue.SimpleQueue()
         current_app.training_task_queue.put(

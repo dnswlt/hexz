@@ -20,9 +20,15 @@ class ModelRepository:
     """Interface type for local and remote model repositories."""
 
     def get_latest_checkpoint(self, name: str) -> Optional[int]:
+        """Returns the latest checkpoint number for the given model, or None if no checkpoint exists."""
         pass
 
     def get_model(self, name: str, checkpoint: int = None, as_bytes: bool = False) -> (HexzNeuralNetwork | bytes):
+        """Loads the given model name and checkpoint from the repository.
+
+        Args:
+            as_bytes: If True, the raw serialized PyTorch model bytes are returned.
+        """
         pass
 
     def store_model(
@@ -51,7 +57,6 @@ class LocalModelRepository:
         )
 
     def get_latest_checkpoint(self, name: str) -> Optional[int]:
-        """Returns the latest checkpoint number for the given model, or None if no checkpoint exists."""
         cpdir = os.path.join(self._model_base(name), "checkpoints")
         regex = re.compile(r"^\d+$")
         try:
@@ -63,10 +68,6 @@ class LocalModelRepository:
             return None
 
     def get_model(self, name: str, checkpoint: int = None, map_location="cpu", as_bytes=False) -> (HexzNeuralNetwork | bytes):
-        """Loads the given model name and checkpoint from the repository.
-
-        The returned bytes typically represent a PyTorch saved model.
-        """
         if checkpoint is None:
             checkpoint = self.get_latest_checkpoint(name)
         p = self._model_path(name, checkpoint)
