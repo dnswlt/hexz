@@ -153,20 +153,21 @@ def create_app():
     @app.get("/status")
     def status():
         now = datetime.datetime.now(tz=pytz.UTC).isoformat(timespec="milliseconds")
-        resp = make_response(
-            json.dumps(
-                {
-                    "timestamp": now,
-                    "model": {
-                        "path": current_app.model_path,
-                        "pool_size": current_app.model_queue.qsize(),
-                    },
-                },
-                indent=True,
-            )
+        reply_q = queue.SimpleQueue()
+        current_app.training_task_queue.put(
+            {
+                "type": "GetTrainingInfo",
+                "reply_q": reply_q,
+            }
         )
-        resp.headers["Content-Type"] = "application/json"
-        return resp
+        training_info = reply_q.get(timeout=5)
+        return json.dumps(
+            {
+                "timestamp": now,
+                "training": training_info,
+            },
+            indent=True,
+        ), {"Content-Type": "application/json"}
 
     @app.post("/examples")
     def examples():

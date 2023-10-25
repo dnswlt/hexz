@@ -1,5 +1,6 @@
 """Classes used for training in a training server."""
 
+from collections import defaultdict
 from collections.abc import Mapping
 import logging
 from google.protobuf.message import DecodeError
@@ -55,13 +56,13 @@ class TrainingRunnerTask(threading.Thread):
         try:
             started = time.perf_counter()
             self.run_training()
-            elapsed = time.perf_counter() - started
             reply["status"] = "OK"
             reply["model_key"] = self.model_key
-            reply["elapsed"] = elapsed
         except Exception as e:
             reply["error"] = str(e)
         finally:
+            elapsed = time.perf_counter() - started
+            reply["elapsed"] = elapsed
             self.done_queue.put(reply)
 
     def run_training(self):
@@ -142,6 +143,9 @@ class TrainingTask(threading.Thread):
         self.model_bytes = None
         self.model_bytes_version = ("undefined", -1)
         self.logger = logger
+        self.stats = defaultdict(lambda: 0)
+        self.started = time.time()
+        self.training_time = 0
 
     def start_training_runner_task(self):
         t = TrainingRunnerTask(
@@ -183,6 +187,7 @@ class TrainingTask(threading.Thread):
             pr = np.load(io.BytesIO(ex.move_probs))
             val = np.array([ex.result], dtype=np.float32)
             batch.append((board, (pr, val)))
+        self.stats["examples"] += lim
 
         if len(batch) >= self.config.batch_size:
             self.start_training_runner_task()
@@ -190,6 +195,8 @@ class TrainingTask(threading.Thread):
     def handle_training_result(self, msg: Mapping[str, Any]):
         # The training runner task must be done now.
         self.training_runner_task.join()
+        self.stats["training_runs"] += 1
+        self.training_time += msg.get("elapsed", 0)
         # Start a new batch, whether training was successful or not.
         self.batch = InMemoryDataset()
         self.state = self._STATE_ACCEPTING
@@ -226,6 +233,23 @@ class TrainingTask(threading.Thread):
             self.model_bytes_version = (name, checkpoint)
         reply_q.put(self.model_bytes)
 
+    def handle_get_training_info(self, msg):
+        reply_q = msg["reply_q"]
+        now = time.time()
+        info = {
+            "model_key": {
+                "name": self.model_key.name,
+                "checkpoint": self.model_key.checkpoint,
+            },
+            "config": self.config._asdict(),
+            "state": self.state,
+            "stats": dict(self.stats),
+            "current_batch_size": len(self.batch),
+            "uptime_seconds": round(now - self.started, 3),
+            "training_time_pct": round(self.training_time / (now - self.started) * 100, 2),
+        }
+        reply_q.put(info)
+
     def run(self):
         """This is the main dispatcher loop of the TrainingTask.
         All requests to this task must be sent via self.queue and are processed sequentially.
@@ -242,6 +266,8 @@ class TrainingTask(threading.Thread):
                 self.handle_get_model_key(msg)
             elif msg["type"] == "GetModel":
                 self.handle_get_model(msg)
+            elif msg["type"] == "GetTrainingInfo":
+                self.handle_get_training_info(msg)
             else:
                 raise HexzError(
                     f"TrainingTask: received unknown message type {msg['type']}"

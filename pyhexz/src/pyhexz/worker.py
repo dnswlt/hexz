@@ -45,9 +45,6 @@ class SelfPlayWorker:
             j = resp.json()
             model_name = j["model_name"]
             checkpoint = j["checkpoint"]
-            self.logger.info(
-                f"Server at {training_server_url} is using model {model_name}:{checkpoint}."
-            )
         resp = requests.get(
             training_server_url + f"/models/{model_name}/checkpoints/{checkpoint}"
         )
