@@ -3,8 +3,8 @@
 from collections import defaultdict
 from collections.abc import Mapping
 import logging
-from google.protobuf.message import DecodeError
 import io
+import typing
 import numpy as np
 import queue
 import threading
@@ -113,6 +113,28 @@ class TrainingRunnerTask(threading.Thread):
         )
 
 
+class TimingStats:
+    def __init__(self):
+        self.sum_duration_micros: int = 0
+        self.sum_duration_sq: float = 0.0
+        self.min_duration_micros: int = 2**30
+        self.max_duration_micros: int = 0
+        self.count: int = 0
+
+    def summarize(self):
+        """Returns a dict with summary stats."""
+        if self.count == 0:
+            return {"count": 0}
+        avg_duration = self.sum_duration_micros / 1e6 / self.count
+        return {
+            "count": self.count,
+            "min_duration": self.min_duration_micros / 1e6,
+            "max_duration": self.max_duration_micros / 1e6,
+            "avg_duration": avg_duration,
+            "std_duration": np.sqrt(self.sum_duration_sq/self.count - avg_duration**2)
+        }
+
+
 class TrainingTask(threading.Thread):
     """TrainingTask runs as a separate thread, accepts training data and
     spaws a separate thread or process to train the model and save new
@@ -144,8 +166,16 @@ class TrainingTask(threading.Thread):
         self.model_bytes_version = ("undefined", -1)
         self.logger = logger
         self.stats = defaultdict(lambda: 0)
+        self.timing_stats = TimingStats()
         self.started = time.time()
         self.training_time = 0
+
+    def accept_model_key(self, model_key: hexz_pb2.ModelKey):
+        return (
+            model_key.name == self.model_key.name and
+            model_key.checkpoint <= self.model_key.checkpoint and
+            (self.model_key.checkpoint - model_key.checkpoint) <= self.config.max_checkpoint_diff
+        )
 
     def start_training_runner_task(self):
         t = TrainingRunnerTask(
@@ -167,7 +197,7 @@ class TrainingTask(threading.Thread):
             )
             reply_q.put(resp)
             return
-        if req.model_key != self.model_key:
+        if not self.accept_model_key(req.model_key):
             resp = hexz_pb2.AddTrainingExamplesResponse(
                 status=hexz_pb2.AddTrainingExamplesResponse.REJECTED_WRONG_MODEL,
                 latest_model=self.model_key,
@@ -183,6 +213,13 @@ class TrainingTask(threading.Thread):
         # Add examples and run training if we have a full batch.
         lim = min(len(req.examples), self.config.batch_size - len(batch))
         for ex in req.examples[:lim]:
+            # Update timing stats.
+            self.timing_stats.count += 1
+            self.timing_stats.min_duration_micros = min(self.timing_stats.min_duration_micros, ex.duration_micros)
+            self.timing_stats.max_duration_micros = max(self.timing_stats.max_duration_micros, ex.duration_micros)
+            self.timing_stats.sum_duration_micros += ex.duration_micros
+            self.timing_stats.sum_duration_sq += (ex.duration_micros/1e6)**2
+            # Extract example data.
             board = np.load(io.BytesIO(ex.board))
             pr = np.load(io.BytesIO(ex.move_probs))
             val = np.array([ex.result], dtype=np.float32)
@@ -244,6 +281,7 @@ class TrainingTask(threading.Thread):
             "config": self.config._asdict(),
             "state": self.state,
             "stats": dict(self.stats),
+            "example_timing_stats": self.timing_stats.summarize(),
             "current_batch_size": len(self.batch),
             "uptime_seconds": round(now - self.started, 3),
             "training_time_pct": round(self.training_time / (now - self.started) * 100, 2),

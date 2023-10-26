@@ -161,6 +161,9 @@ message AddTrainingExamplesResponse {
 message TrainingExample {
     // Timestamp at which this example was generated.
     int64 unix_micros = 1;
+    // Time it took to generate this example (i.e., to generate the corresponding
+    // neural MCTS move suggestion).
+    int64 duration_micros = 5;
 
     // Training inputs.
     // Numpy array containing the (9, 11, 10) Board.

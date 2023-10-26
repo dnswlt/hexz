@@ -79,11 +79,11 @@ class SelfPlayWorker:
             )
             num_games += 1
             req = hexz_pb2.AddTrainingExamplesRequest(model_key=model_key)
-            unix_micros = time.time_ns() // 1000
             for ex in examples:
                 req.examples.append(
                     hexz_pb2.TrainingExample(
-                        unix_micros=unix_micros,
+                        unix_micros=time.time_ns() // 1000,
+                        duration_micros=ex.duration_micros,
                         board=np_tobytes(ex.board),
                         move_probs=np_tobytes(ex.move_probs),
                         result=ex.result,
@@ -172,11 +172,7 @@ def main():
         print("Device mps not available, falling back to cpu.")
         config.device = "cpu"
 
-    try:
-        worker.generate_examples()
-    except HexzError as e:
-        worker.logger.error(f"generate_examples failed: {e}")
-        raise
+    worker.generate_examples()
 
 
 if __name__ == "__main__":

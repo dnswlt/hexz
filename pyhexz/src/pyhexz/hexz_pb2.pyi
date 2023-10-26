@@ -203,13 +203,15 @@ class ResourceInfo(_message.Message):
     def __init__(self, num_pieces: Optional[Iterable[int]] = ...) -> None: ...
 
 class TrainingExample(_message.Message):
-    __slots__ = ["board", "move_probs", "result", "unix_micros"]
+    __slots__ = ["board", "duration_micros", "move_probs", "result", "unix_micros"]
     BOARD_FIELD_NUMBER: ClassVar[int]
+    DURATION_MICROS_FIELD_NUMBER: ClassVar[int]
     MOVE_PROBS_FIELD_NUMBER: ClassVar[int]
     RESULT_FIELD_NUMBER: ClassVar[int]
     UNIX_MICROS_FIELD_NUMBER: ClassVar[int]
     board: bytes
+    duration_micros: int
     move_probs: bytes
     result: float
     unix_micros: int
-    def __init__(self, unix_micros: Optional[int] = ..., board: Optional[bytes] = ..., move_probs: Optional[bytes] = ..., result: Optional[float] = ...) -> None: ...
+    def __init__(self, unix_micros: Optional[int] = ..., duration_micros: Optional[int] = ..., board: Optional[bytes] = ..., move_probs: Optional[bytes] = ..., result: Optional[float] = ...) -> None: ...

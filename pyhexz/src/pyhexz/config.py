@@ -23,6 +23,11 @@ def _from_env(cls):
 class TrainingConfig(typing.NamedTuple):
     model_repo_base_dir: str
     model_name: str
+    # Maximum difference between the model that examples were
+    # generated with and the current model for which training
+    # examples are collected. Set to 0 to only accept examples
+    # for the current model.
+    max_checkpoint_diff: int = 1
     batch_size: int = 4096
     num_epochs: int = 7
     device: str = "cpu"

@@ -18,6 +18,7 @@ from typing import Optional
 from uuid import uuid4
 
 from pyhexz import hexc
+from pyhexz.errors import HexzError
 from pyhexz.timing import timing, timing_ctx, clear_perf_stats, print_perf_stats, print_time
 from pyhexz.board import Board
 
@@ -25,7 +26,7 @@ from pyhexz.board import Board
 class Example:
     """Data holder for one step of a fully played MCTS game."""
 
-    def __init__(self, game_id, board, move_probs, turn, result):
+    def __init__(self, game_id, board, move_probs, turn, result, duration_micros=None):
         """
         Args:
             game_id: arbitrary string identifying the game that this example belongs to.
@@ -39,6 +40,7 @@ class Example:
         self.move_probs = move_probs
         self.turn = turn
         self.result = result
+        self.duration_micros = duration_micros
 
     @classmethod
     def save_all(self, path, examples, mode="a", dtype=np.float32):
@@ -376,7 +378,7 @@ class NeuralMCTS:
         n.move_probs, value = self.predict(b, player)
         self.backpropagate(n, value)
 
-    def play_game(self, runs_per_move=500, max_moves=200, progress_queue=None) -> list[Example]:
+    def play_game(self, runs_per_move=500, progress_queue=None) -> list[Example]:
         """Plays one full game and returns the move likelihoods per move and the final result.
 
         Args:
@@ -384,9 +386,11 @@ class NeuralMCTS:
         """
         examples: list[Example] = []
         result = None
-        n = 0
         started = time.perf_counter()
-        while n < max_moves:
+        # There less than 11 * 10 possible moves in a flagz game.
+        n = 0
+        while True:
+            t_start = time.perf_counter_ns()
             for i in range(runs_per_move):
                 self.run()
             best_child = self.root.best_child()
@@ -394,6 +398,7 @@ class NeuralMCTS:
                 # Game over
                 result = self.board.result()
                 break
+            duration_ns = time.perf_counter_ns() - t_start
             # Record example. Examples always contain the board as seen by the player whose turn it is.
             examples.append(
                 Example(
@@ -402,6 +407,7 @@ class NeuralMCTS:
                     self.root.move_likelihoods(),
                     best_child.player,
                     None,
+                    duration_micros=duration_ns//1000,
                 )
             )
             if progress_queue:
@@ -419,11 +425,6 @@ class NeuralMCTS:
                 )
             n += 1
         elapsed = time.perf_counter() - started
-        if n == max_moves:
-            print(
-                f"Reached max iterations ({n}) after {elapsed:.3f}s. Returning early."
-            )
-            return []
         print(
             f"Done in {elapsed:.3f}s after {n} moves. Final score: {self.board.score()}."
         )
@@ -444,7 +445,7 @@ def time_gameplay(device):
     b = Board()
     model = HexzNeuralNetwork().to(device)
     m = NeuralMCTS(b, model, device=device)
-    _ = m.play_game(800, max_moves=200)
+    _ = m.play_game(runs_per_move=800)
     print_perf_stats()
 
 
