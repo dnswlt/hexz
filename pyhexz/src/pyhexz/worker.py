@@ -1,4 +1,4 @@
-import sys
+from google.protobuf import json_format
 from google.protobuf.message import DecodeError
 import io
 import logging
@@ -33,28 +33,27 @@ class SelfPlayWorker:
         self.config = config
 
     def fetch_model(
-        self, model_name: str = None, checkpoint: int = None
-    ) -> (HexzNeuralNetwork, str, int):
+        self, model_key: hexz_pb2.ModelKey = None
+    ) -> tuple[hexz_pb2.ModelKey, HexzNeuralNetwork]:
         training_server_url = self.config.training_server_url
-        if model_name is None:
+        if model_key is None:
             resp = requests.get(training_server_url + "/models/current")
             if not resp.ok:
                 raise HexzError(
                     f"Failed to get model info from {training_server_url}: {resp.status_code}"
                 )
-            j = resp.json()
-            model_name = j["model_name"]
-            checkpoint = j["checkpoint"]
+            model_key = json_format.Parse(resp.content, hexz_pb2.ModelKey())
         resp = requests.get(
-            training_server_url + f"/models/{model_name}/checkpoints/{checkpoint}"
+            training_server_url
+            + f"/models/{model_key.name}/checkpoints/{model_key.checkpoint}"
         )
         if not resp.ok:
             raise HexzError(
-                f"Cannot fetch model {model_name}:{checkpoint} from training server: {resp.status_code}"
+                f"Cannot fetch model {model_key} from training server: {resp.status_code}"
             )
         model = HexzNeuralNetwork()
         model.load_state_dict(torch.load(io.BytesIO(resp.content), map_location="cpu"))
-        return model, model_name, checkpoint
+        return model_key, model
 
     def generate_examples(self) -> None:
         config = self.config
@@ -63,9 +62,9 @@ class SelfPlayWorker:
         started = time.time()
         num_games = 0
         device = config.device
-        model, model_name, checkpoint = self.fetch_model()
+        model_key, model = self.fetch_model()
         self.logger.info(
-            f"Server at {config.training_server_url} is using model {model_name}:{checkpoint}."
+            f"Server at {config.training_server_url} is using model {model_key.name}:{model_key.checkpoint}."
         )
         # model = torch.compile(model)
         while time.time() - started < config.max_seconds:
@@ -75,9 +74,7 @@ class SelfPlayWorker:
                 runs_per_move=config.runs_per_move, progress_queue=None
             )
             num_games += 1
-            req = hexz_pb2.AddTrainingExamplesRequest(
-                model_key=hexz_pb2.ModelKey(name=model_name, checkpoint=checkpoint)
-            )
+            req = hexz_pb2.AddTrainingExamplesRequest(model_key=model_key)
             unix_micros = time.time_ns() // 1000
             for ex in examples:
                 req.examples.append(
@@ -119,10 +116,8 @@ class SelfPlayWorker:
                 time.sleep(backoff_secs)
             if resp.status == hexz_pb2.AddTrainingExamplesResponse.REJECTED_WRONG_MODEL:
                 # Load newer model
-                model_name = resp.latest_model.name
-                checkpoint = resp.latest_model.checkpoint
-                model, _, _ = self.fetch_model(model_name, checkpoint)
-                self.logger.info(f"Using new model {model_name}:{checkpoint}")
+                model_key, model = self.fetch_model(resp.latest_model)
+                self.logger.info(f"Using new model {model_key.name}:{model_key.checkpoint}")
             elif resp.status != hexz_pb2.AddTrainingExamplesResponse.ACCEPTED:
                 raise HexzError(
                     f"Unexpected return code from training server: {hexz_pb2.AddTrainingExamplesResponse.Status.Name(resp.status)}"
@@ -155,7 +150,7 @@ def main():
                     "level": "INFO",
                     "propagate": False,
                 }
-            }
+            },
         }
     )
     worker = SelfPlayWorker(config)

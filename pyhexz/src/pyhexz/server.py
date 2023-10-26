@@ -3,9 +3,9 @@ from contextlib import contextmanager
 import datetime
 from flask import Flask, current_app, make_response, request
 from google.protobuf.message import DecodeError
+from google.protobuf import json_format
 import json
 import logging
-import os
 import pytz
 import queue
 import time
@@ -203,9 +203,8 @@ def create_app():
             }
         )
         model_key: hexz_pb2.ModelKey = reply_q.get(timeout=5)
-        return {
-            "model_name": model_key.name,
-            "checkpoint": model_key.checkpoint,
+        return json_format.MessageToJson(model_key), {
+            "Content-Type": "application/json",
         }
 
     @app.get("/models/<name>/checkpoints/<int:checkpoint>")
