@@ -39,6 +39,8 @@ class WorkerConfig(typing.NamedTuple):
     device: str = "cpu"
     max_seconds: int = 60
     runs_per_move: int = 800
+    # Timeout for http requests, in seconds.
+    http_client_timeout: float = 1.0
 
     @classmethod
     def from_env(cls):

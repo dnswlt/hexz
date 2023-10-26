@@ -37,7 +37,10 @@ class SelfPlayWorker:
     ) -> tuple[hexz_pb2.ModelKey, HexzNeuralNetwork]:
         training_server_url = self.config.training_server_url
         if model_key is None:
-            resp = requests.get(training_server_url + "/models/current")
+            resp = requests.get(
+                training_server_url + "/models/current",
+                timeout=self.config.http_client_timeout,
+            )
             if not resp.ok:
                 raise HexzError(
                     f"Failed to get model info from {training_server_url}: {resp.status_code}"
@@ -45,7 +48,8 @@ class SelfPlayWorker:
             model_key = json_format.Parse(resp.content, hexz_pb2.ModelKey())
         resp = requests.get(
             training_server_url
-            + f"/models/{model_key.name}/checkpoints/{model_key.checkpoint}"
+            + f"/models/{model_key.name}/checkpoints/{model_key.checkpoint}",
+            timeout=self.config.http_client_timeout,
         )
         if not resp.ok:
             raise HexzError(
@@ -117,7 +121,9 @@ class SelfPlayWorker:
             if resp.status == hexz_pb2.AddTrainingExamplesResponse.REJECTED_WRONG_MODEL:
                 # Load newer model
                 model_key, model = self.fetch_model(resp.latest_model)
-                self.logger.info(f"Using new model {model_key.name}:{model_key.checkpoint}")
+                self.logger.info(
+                    f"Using new model {model_key.name}:{model_key.checkpoint}"
+                )
             elif resp.status != hexz_pb2.AddTrainingExamplesResponse.ACCEPTED:
                 raise HexzError(
                     f"Unexpected return code from training server: {hexz_pb2.AddTrainingExamplesResponse.Status.Name(resp.status)}"
@@ -166,7 +172,11 @@ def main():
         print("Device mps not available, falling back to cpu.")
         config.device = "cpu"
 
-    worker.generate_examples()
+    try:
+        worker.generate_examples()
+    except HexzError as e:
+        worker.logger.error(f"generate_examples failed: {e}")
+        raise
 
 
 if __name__ == "__main__":
