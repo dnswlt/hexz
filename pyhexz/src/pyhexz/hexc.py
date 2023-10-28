@@ -75,8 +75,7 @@ class CNN:
 
     @cython.cfunc
     def puct(self) -> cython.float:
-        uct_c: cython.float = 4  # Constant weight of the exploration term.
-        assert self._parent._move_probs.shape == (2, 11, 10)
+        uct_c: cython.float = 5  # Constant weight of the exploration term.
         typ: cython.size_t = self._move[0]
         r: cython.size_t = self._move[1]
         c: cython.size_t = self._move[2]

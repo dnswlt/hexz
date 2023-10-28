@@ -87,3 +87,15 @@ PurePyBoard.next_moves      1.032s     113739   110228.9
 NeuralMCTS.run             80.875s      66400      821.0
 CBoard.make_move            0.001s         82    64012.5
 ```
+
+2023-10-28 mac M1 Pro with new hexc.py implementation:
+
+Done in 48.210s after 53 moves. Final score: (68.0, 73.0).
+method                   total_sec      count      ops/s
+NeuralMCTS.__init__         0.000s          2     7168.5
+CBoard.__init__             0.133s      83202   624330.3
+run_find_leaf              12.118s      83200     6865.7
+PurePyBoard.next_moves      0.842s     103783   123188.5
+NeuralMCTS.predict         74.413s      71313      958.3
+NeuralMCTS.run             90.630s      83200      918.0
+CBoard.make_move            0.001s        102   185118.0

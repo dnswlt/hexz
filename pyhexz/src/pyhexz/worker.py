@@ -9,7 +9,7 @@ import time
 import torch
 from pyhexz import hexz_pb2
 
-from pyhexz.board import Board
+from pyhexz.board import CBoard
 from pyhexz.config import WorkerConfig
 from pyhexz.errors import HexzError
 from pyhexz.hexz import HexzNeuralNetwork, NeuralMCTS
@@ -72,10 +72,9 @@ class SelfPlayWorker:
         )
         # model = torch.compile(model)
         while time.time() - started < config.max_seconds:
-            b = Board()
-            m = NeuralMCTS(b, model, device=device)
+            m = NeuralMCTS(model, device=device)
             examples = m.play_game(
-                runs_per_move=config.runs_per_move, progress_queue=None
+                CBoard(), runs_per_move=config.runs_per_move, progress_queue=None
             )
             num_games += 1
             req = hexz_pb2.AddTrainingExamplesRequest(model_key=model_key)

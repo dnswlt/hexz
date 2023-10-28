@@ -19,14 +19,28 @@ from uuid import uuid4
 
 from pyhexz import hexc
 from pyhexz.errors import HexzError
-from pyhexz.timing import timing, timing_ctx, clear_perf_stats, print_perf_stats, print_time
+from pyhexz.timing import (
+    timing,
+    timing_ctx,
+    clear_perf_stats,
+    print_perf_stats,
+    print_time,
+)
 from pyhexz.board import Board, CBoard
 
 
 class Example:
     """Data holder for one step of a fully played MCTS game."""
 
-    def __init__(self, game_id: str, board: np.ndarray, move_probs: np.ndarray, turn: int, result: int, duration_micros: int = None):
+    def __init__(
+        self,
+        game_id: str,
+        board: np.ndarray,
+        move_probs: np.ndarray,
+        turn: int,
+        result: int,
+        duration_micros: int = None,
+    ):
         """
         Args:
             game_id: arbitrary string identifying the game that this example belongs to.
@@ -229,7 +243,7 @@ class HexzNeuralNetwork(nn.Module):
 class NNode:
     """Nodes of the NeuralMCTS tree."""
 
-    def __init__(self, parent: 'Optional[NNode]', player: int, move):
+    def __init__(self, parent: "Optional[NNode]", player: int, move):
         self.parent = parent
         self.player = player
         self.move = move
@@ -257,7 +271,9 @@ class NNode:
             q = 0.0
         else:
             q = self.wins / self.visit_count
-        return q + pr[typ, r, c] * np.sqrt(self.parent.visit_count) / (1 + self.visit_count)
+        return q + pr[typ, r, c] * np.sqrt(self.parent.visit_count) / (
+            1 + self.visit_count
+        )
 
     def move_likelihoods(self, dtype=np.float32):
         """Returns the move likelihoods for all children as a (2, 11, 10) ndarray.
@@ -271,7 +287,7 @@ class NNode:
             p[typ, r, c] = child.visit_count
         return p / p.sum()
 
-    def best_child(self) -> 'NNode':
+    def best_child(self) -> "NNode":
         """Returns the best among all children.
 
         The best child is the one with the greatest visit count, a common
@@ -286,31 +302,17 @@ class NeuralMCTS:
     @timing
     def __init__(
         self,
-        board: CBoard,
         model: HexzNeuralNetwork,
         game_id: Optional[str] = None,
-        turn: int = 0,
         device: str = "cpu",
-        dtype = torch.float32,
+        dtype=torch.float32,
     ):
-        self.board = board
         self.model = model
         self.rng = np.random.default_rng()
-        if not game_id:
-            game_id = uuid4().hex[:12]
-        self.game_id = game_id
         self.device = device
         self.dtype = dtype
 
         model.eval()  # Training is done outside of NeuralMCTS
-        # The root node has the opposite player whose actual turn it is.
-        # This has the desired effect that the root's children will play
-        # as the other player, who makes the first move.
-        self.root: hexc.CNN = hexc.CNN(None, 1 - turn, (0, 0, 0, 0.0))
-        # Predict move probabilities for root and board value estimate up front.
-        move_probs, self.value = self.predict(board, turn)
-        self.root.set_move_probs(move_probs)
-
 
     @timing
     @torch.inference_mode()
@@ -323,17 +325,17 @@ class NeuralMCTS:
         return pred_pr.numpy(force=self.device != "cpu"), pred_val.item()
 
     @timing
-    def run(self):
+    def run(self, root: hexc.CNN, board: Board) -> None:
         """Runs a single round of the neural MCTS loop."""
-        b = Board(self.board)
-        n = self.root
+        b = Board(board)  # work on a copy.
+
         # Find leaf node.
         with timing_ctx("run_find_leaf"):
-            n = hexc.c_find_leaf(b, n)
+            n = hexc.c_find_leaf(b, root)
         # Reached a leaf node: expand
         player = 1 - n.player()  # Usually it's the other player's turn.
         moves = b.next_moves(player)
-        if not moves and n is not self.root:
+        if not moves and n is not root:
             # No more moves for player. Try other player, but not for the first move.
             player = 1 - player
             moves = b.next_moves(player)
@@ -347,67 +349,75 @@ class NeuralMCTS:
         n.set_move_probs(move_probs)
         n.backpropagate(value)
 
-    def play_game(self, runs_per_move=500, max_moves=200, progress_queue=None) -> list[Example]:
+    def play_game(
+        self, board: CBoard, runs_per_move=500, max_moves=200, progress_queue=None
+    ) -> list[Example]:
         """Plays one full game and returns the move likelihoods per move and the final result.
 
         Args:
-            runs_per_move: number of MCTS runs to make per move.
+            runs_per_move: number of MCTS runs to make per move. The first six moves get twice that number of moves,
+                because they are the most critical for the whole game.
         """
+        game_id = uuid4().hex[:12]
         examples: list[Example] = []
         result = None
         started = time.perf_counter()
-        # There less than 11 * 10 possible moves in a flagz game.
         n = 0
+        player = 0  # Player 0 always starts.
         for _ in range(max_moves):
             t_start = time.perf_counter_ns()
-            for i in range(runs_per_move):
-                self.run()
-            best_child = self.root.best_child()
+            # Root's children have the player whose turn it actually is.
+            # So root has the opposite player.
+            root: hexc.CNN = hexc.CNN(None, 1 - player, (0, 0, 0, 0.0))
+            for i in range(runs_per_move if n >= 6 else 2 * runs_per_move):
+                self.run(root, board)
+            best_child = root.best_child()
             if not best_child:
                 # Game over
-                result = self.board.result()
+                result = board.result()
                 break
-            p = best_child.player()
+            best_child_player = best_child.player()
             duration_ns = time.perf_counter_ns() - t_start
             # Record example. Examples always contain the board as seen by the player whose turn it is.
             examples.append(
                 Example(
-                    self.game_id,
-                    self.board.b_for(p).copy(),
-                    self.root.move_likelihoods(),
-                    p,
+                    game_id,
+                    board.b_for(best_child_player).copy(),
+                    root.move_likelihoods(),
+                    best_child_player,
                     None,
-                    duration_micros=duration_ns//1000,
+                    duration_micros=duration_ns // 1000,
                 )
             )
             if progress_queue:
-                progress_queue.put({
-                    'examples': 1,
-                })
+                progress_queue.put(
+                    {
+                        "examples": 1,
+                    }
+                )
             # Make the move.
-            self.board.make_move(p, best_child.move())
+            board.make_move(best_child_player, best_child.move())
+            player = 1 - best_child_player
             if n < 5 or n % 10 == 0:
                 print(
-                    f"Iteration {n} @{time.perf_counter() - started:.3f}s: root:{self.root}, score:{self.board.score()}",
+                    f"Iteration {n} @{time.perf_counter() - started:.3f}s: {best_child_player=} {root=}, score:{board.score()}",
                 )
-            self.root = best_child
-            self.root.clear_parent()  # Allow GC and avoid backprop further up.
             n += 1
         elapsed = time.perf_counter() - started
         if not result:
-            print(f"Game aborted early after {n} moves. Current score: {self.board.score()}.")
+            print(
+                f"Game aborted early after {n} moves. Current score: {board.score()}."
+            )
             return []  # No examples without a result.
-        
-        print(
-            f"Done in {elapsed:.3f}s after {n} moves. Final score: {self.board.score()}."
-        )
+
+        print(f"Done in {elapsed:.3f}s after {n} moves. Final score: {board.score()}.")
         # Update all examples with result.
         for ex in examples:
             ex.result = result
         return examples
 
 
-def load_model(path, map_location='cpu'):
+def load_model(path, map_location="cpu"):
     model = HexzNeuralNetwork()
     model.load_state_dict(torch.load(path, map_location=map_location))
     return model
@@ -436,20 +446,28 @@ def record_examples(progress_queue: mp.Queue, args):
     examples_file = os.path.join(
         args.output_dir, f"examples-{time.strftime('%Y%m%d-%H%M%S')}-{worker_id}.h5"
     )
-    print(f"W{worker_id}: Appending game examples to {examples_file}. {args.runs_per_move=}")
+    print(
+        f"W{worker_id}: Appending game examples to {examples_file}. {args.runs_per_move=}"
+    )
     while time.time() - started < args.max_seconds and num_games < args.max_games:
         b = Board()
         m = NeuralMCTS(b, model, device=device)
-        examples = m.play_game(runs_per_move=args.runs_per_move, progress_queue=progress_queue)
+        examples = m.play_game(
+            runs_per_move=args.runs_per_move, progress_queue=progress_queue
+        )
         Example.save_all(examples_file, examples)
         num_games += 1
-        progress_queue.put({
-            'games': 1,
-            'done': False,
-        })
-    progress_queue.put({
-        'done': True,
-    })
+        progress_queue.put(
+            {
+                "games": 1,
+                "done": False,
+            }
+        )
+    progress_queue.put(
+        {
+            "done": True,
+        }
+    )
     print_perf_stats()
 
 
@@ -470,12 +488,14 @@ def record_examples_mp(args):
     num_games = 0
     while running > 0:
         msg = progress_queue.get()
-        if msg.get('done', False):
+        if msg.get("done", False):
             running -= 1
-        num_examples += msg.get('examples', 0)
-        num_games += msg.get('games', 0)
-        elapsed = time.perf_counter()-started
-        print(f"At {elapsed:.1f}s: examples:{num_examples} games:{num_games} ({num_examples/elapsed:.1f} examples/s).")
+        num_examples += msg.get("examples", 0)
+        num_games += msg.get("games", 0)
+        elapsed = time.perf_counter() - started
+        print(
+            f"At {elapsed:.1f}s: examples:{num_examples} games:{num_games} ({num_examples/elapsed:.1f} examples/s)."
+        )
     for p in procs:
         p.join()
 
@@ -553,7 +573,7 @@ def train_model(args):
 
     pr_loss_fn = nn.CrossEntropyLoss()
     val_loss_fn = nn.MSELoss()
-    
+
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
 
     # def trace_handler(prof):
