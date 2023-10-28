@@ -303,7 +303,6 @@ class NeuralMCTS:
     def __init__(
         self,
         model: HexzNeuralNetwork,
-        game_id: Optional[str] = None,
         device: str = "cpu",
         dtype=torch.float32,
     ):
@@ -400,7 +399,7 @@ class NeuralMCTS:
             player = 1 - best_child_player
             if n < 5 or n % 10 == 0:
                 print(
-                    f"Iteration {n} @{time.perf_counter() - started:.3f}s: {best_child_player=} {root=}, score:{board.score()}",
+                    f"Iteration {n} @{time.perf_counter() - started:.3f}s: {best_child=}, score:{board.score()}",
                 )
             n += 1
         elapsed = time.perf_counter() - started

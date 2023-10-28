@@ -7,6 +7,9 @@ from typing import Optional
 from pyhexz.board import CBoard
 
 
+_RNG = np.random.default_rng()
+
+
 @cython.cclass
 class CNN:
     _parent: Optional[CNN]
@@ -15,7 +18,7 @@ class CNN:
     _wins: cython.float
     _visit_count: cython.int
     _move_probs: Optional[np.ndarray]
-    _children: list[CNN]
+    _children: np.ndarray
 
     def __init__(
         self, parent: Optional[CNN], player: int, move: tuple[int, int, int, float]
@@ -29,14 +32,15 @@ class CNN:
         self._move_probs = None
 
     def __repr__(self):
-        c: CNN
-        vc = [0] * len(self._children)
-        qs = [0.0] * len(self._children)
-        for i in range(len(self._children)):
-            c = self._children[i]
-            vc[i] = c._visit_count
-            qs[i] = c._visit_count and c._wins / c._visit_count
-        return f"CNN({self._visit_count=}, {self._move=}, {self._player=}, vc={vc}, qs={qs}, size={self.size()})"
+        # c: CNN
+        # vc = [0] * len(self._children)
+        # qs = [0.0] * len(self._children)
+        # for i in range(len(self._children)):
+        #     c = self._children[i]
+        #     vc[i] = c._visit_count
+        #     qs[i] = c._visit_count and c._wins / c._visit_count
+        # return f"CNN({self._visit_count=}, {self._move=}, {self._player=}, vc={vc}, qs={qs}, size={self.size()})"
+        return f"CNN({self._visit_count=}, {self._move=}, {self._player=})"
 
     def size(self):
         n: CNN
@@ -55,23 +59,17 @@ class CNN:
     def player(self) -> int:
         return self._player
 
-    def other_player(self) -> int:
-        return 1 - self._player
-
-    def clear_parent(self) -> None:
-        self._parent = None
-
     def move(self) -> tuple[int, int, int, float]:
         return self._move
 
     def create_children(
         self, player: int, moves: list[tuple[int, int, int, float]]
     ) -> None:
-        self._children = [None] * len(moves)
-        cnn: CNN
+        self._children = np.empty(len(moves), dtype=np.object_)
         for i in range(len(moves)):
-            cnn = CNN(self, player, moves[i])
-            self._children[i] = cnn
+            self._children[i] = CNN(self, player, moves[i])
+        # Avoid bias towards making the first moves in the list:
+        _RNG.shuffle(self._children)
 
     @cython.cfunc
     def puct(self) -> cython.float:
@@ -252,7 +250,7 @@ def c_make_move(board: CBoard, player: int, move: tuple[int, int, int, float]):
 
 def c_find_leaf(board: CBoard, n: CNN):
     i: cython.size_t = 0
-    while n._children:
+    while len(n._children) > 0:
         c: CNN = n._children[0]
         best: CNN = n._children[0]
         best_uct: cython.float = -1
