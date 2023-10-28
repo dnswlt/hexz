@@ -31,26 +31,23 @@ Just run `pytest` without any arguments. The `pytest.ini` file tells pytest wher
 
 ### Flask web server
 
-WIP: to start the Flask web server and run a remote CPU player that can be called from the
-Go server:
+The Flask app runs behind a `gunicorn` WSGI web server, both locally and in a Docker container. To run
+locally:
 
 ```bash
 cd src
-HEXZ_MODEL_PATH=$HOME/git/github.com/dnswlt/hexz-models/models/flagz/cain python3 -m flask --app pyhexz.server run --port 9094
+HEXZ_BATCH_SIZE=128 HEXZ_MODEL_NAME=test HEXZ_MODEL_REPO_BASE_DIR=$HOME/git/github.com/dnswlt/hexz-models \
+  gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.server:create_app()'
 ```
 
-The Flask app runs behind a `gunicorn` WSGI web server in the Docker container. To reproduce that
-locally, run the app as
+### Generating examples with a worker
 
-```bash
-gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.server:create_app()'
-```
-
-### Self-play
+With a Flask training server up and running, run the following command to generate examples in
+a separate worker process and send them to the training server:
 
 ```bash
 cd src
-python3 -m pyhexz.hexz --mode=selfplay --model=../../hexz-models/models/flagz/cain --num-workers=6 --device=mps --max-games=10000000 --max-seconds=60 --runs-per-move=800 --output-dir=/tmp
+HEXZ_RUNS_PER_MOVE=800 HEXZ_TRAINING_SERVER_URL=http://localhost:8080 python3 -m pyhexz.worker
 ```
 
 ### Docker and Cloud Run
@@ -71,6 +68,7 @@ Running these images locally:
 ```bash
 # server
 PORT=8080 && docker run -p 8080:${PORT} -e PORT=${PORT} \
+  -e PYTHONUNBUFFERED=1 \
   -e HEXZ_MODEL_REPO_BASE_DIR=/tmp/hexz/models \
   -e HEXZ_BATCH_SIZE=512 \
   -e HEXZ_MODEL_NAME=test \
@@ -81,6 +79,7 @@ PORT=8080 && docker run -p 8080:${PORT} -e PORT=${PORT} \
 # worker
 docker run \
   -e HEXZ_TRAINING_SERVER_URL=http://nuc:8080 \
+  -e PYTHONUNBUFFERED=1 \
   europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/worker:latest
 ```
 

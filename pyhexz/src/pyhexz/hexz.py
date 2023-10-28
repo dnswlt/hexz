@@ -20,17 +20,17 @@ from uuid import uuid4
 from pyhexz import hexc
 from pyhexz.errors import HexzError
 from pyhexz.timing import timing, timing_ctx, clear_perf_stats, print_perf_stats, print_time
-from pyhexz.board import Board
+from pyhexz.board import Board, CBoard
 
 
 class Example:
     """Data holder for one step of a fully played MCTS game."""
 
-    def __init__(self, game_id, board, move_probs, turn, result, duration_micros=None):
+    def __init__(self, game_id: str, board: np.ndarray, move_probs: np.ndarray, turn: int, result: int, duration_micros: int = None):
         """
         Args:
             game_id: arbitrary string identifying the game that this example belongs to.
-            board: the board (Board.b) as an (N, 11, 10) ndarray.
+            board: the board as an (N, 11, 10) ndarray.
             move_probs: (2, 11, 10) ndarray of move likelihoods.
             turn: 0 or 1, indicating which player's turn it was.
             result: -1, 0, 1, indicating the player that won (1 = player 0 won).
@@ -286,7 +286,7 @@ class NeuralMCTS:
     @timing
     def __init__(
         self,
-        board: Board,
+        board: CBoard,
         model: HexzNeuralNetwork,
         game_id: Optional[str] = None,
         turn: int = 0,
@@ -306,27 +306,11 @@ class NeuralMCTS:
         # The root node has the opposite player whose actual turn it is.
         # This has the desired effect that the root's children will play
         # as the other player, who makes the first move.
-        self.root: NNode = NNode(None, 1 - turn, None)
+        self.root: hexc.CNN = hexc.CNN(None, 1 - turn, (0, 0, 0, 0.0))
         # Predict move probabilities for root and board value estimate up front.
-        self.root.move_probs, self.value = self.predict(board, turn)
+        move_probs, self.value = self.predict(board, turn)
+        self.root.set_move_probs(move_probs)
 
-    def backpropagate(self, node, result):
-        while node:
-            node.visit_count += 1
-            if node.player == 0:
-                node.wins += (result + 1) / 2
-            else:
-                node.wins += (-result + 1) / 2
-            node = node.parent
-
-    def size(self):
-        q = [self.root]
-        s = 0
-        while q:
-            n = q.pop()
-            s += 1
-            q.extend(n.children)
-        return s
 
     @timing
     @torch.inference_mode()
@@ -338,20 +322,6 @@ class NeuralMCTS:
         pred_pr = torch.exp(pred_pr).reshape((2, 11, 10))
         return pred_pr.numpy(force=self.device != "cpu"), pred_val.item()
 
-    def find_leaf(self, b):
-        n = self.root
-        while n.children:
-            best = None
-            best_uct = -1
-            for c in n.children:
-                c_uct = c.puct()
-                if c_uct > best_uct:
-                    best = c
-                    best_uct = c_uct
-            b.make_move(best.player, best.move)
-            n = best
-        return n
-
     @timing
     def run(self):
         """Runs a single round of the neural MCTS loop."""
@@ -360,9 +330,8 @@ class NeuralMCTS:
         # Find leaf node.
         with timing_ctx("run_find_leaf"):
             n = hexc.c_find_leaf(b, n)
-            # n = self.find_leaf(b)
         # Reached a leaf node: expand
-        player = 1 - n.player  # Usually it's the other player's turn.
+        player = 1 - n.player()  # Usually it's the other player's turn.
         moves = b.next_moves(player)
         if not moves and n is not self.root:
             # No more moves for player. Try other player, but not for the first move.
@@ -370,15 +339,15 @@ class NeuralMCTS:
             moves = b.next_moves(player)
         if not moves:
             # Game is over
-            self.backpropagate(n, b.result())
+            n.backpropagate(b.result())
             return
-        for move in moves:
-            n.children.append(NNode(n, player, move))
+        n.create_children(player, moves)
         # Neural network time! Predict value and policy for next move.
-        n.move_probs, value = self.predict(b, player)
-        self.backpropagate(n, value)
+        move_probs, value = self.predict(b, player)
+        n.set_move_probs(move_probs)
+        n.backpropagate(value)
 
-    def play_game(self, runs_per_move=500, progress_queue=None) -> list[Example]:
+    def play_game(self, runs_per_move=500, max_moves=200, progress_queue=None) -> list[Example]:
         """Plays one full game and returns the move likelihoods per move and the final result.
 
         Args:
@@ -389,7 +358,7 @@ class NeuralMCTS:
         started = time.perf_counter()
         # There less than 11 * 10 possible moves in a flagz game.
         n = 0
-        while True:
+        for _ in range(max_moves):
             t_start = time.perf_counter_ns()
             for i in range(runs_per_move):
                 self.run()
@@ -398,14 +367,15 @@ class NeuralMCTS:
                 # Game over
                 result = self.board.result()
                 break
+            p = best_child.player()
             duration_ns = time.perf_counter_ns() - t_start
             # Record example. Examples always contain the board as seen by the player whose turn it is.
             examples.append(
                 Example(
                     self.game_id,
-                    self.board.b_for(best_child.player).copy(),
+                    self.board.b_for(p).copy(),
                     self.root.move_likelihoods(),
-                    best_child.player,
+                    p,
                     None,
                     duration_micros=duration_ns//1000,
                 )
@@ -415,16 +385,19 @@ class NeuralMCTS:
                     'examples': 1,
                 })
             # Make the move.
-            self.board.make_move(best_child.player, best_child.move)
-            self.root = best_child
-            self.root.parent = None  # Allow GC and avoid backprop further up.
+            self.board.make_move(p, best_child.move())
             if n < 5 or n % 10 == 0:
                 print(
-                    f"Iteration {n} @{time.perf_counter() - started:.3f}s: visit_count:{best_child.visit_count} ",
-                    f"move:{best_child.move} player:{best_child.player} score:{self.board.score()}",
+                    f"Iteration {n} @{time.perf_counter() - started:.3f}s: root:{self.root}, score:{self.board.score()}",
                 )
+            self.root = best_child
+            self.root.clear_parent()  # Allow GC and avoid backprop further up.
             n += 1
         elapsed = time.perf_counter() - started
+        if not result:
+            print(f"Game aborted early after {n} moves. Current score: {self.board.score()}.")
+            return []  # No examples without a result.
+        
         print(
             f"Done in {elapsed:.3f}s after {n} moves. Final score: {self.board.score()}."
         )

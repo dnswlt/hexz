@@ -1,4 +1,4 @@
-# Run as 
+# Run as
 #
 #   python3 setup.py build_ext --build-lib=src
 #
@@ -7,8 +7,11 @@ from setuptools import setup, Extension
 from Cython.Build import cythonize
 
 setup(
-    name='pyhexz',
-    ext_modules=cythonize([
-        Extension("pyhexz.hexc", ["src/pyhexz/hexc.pyx"]),
-    ])
+    name="pyhexz",
+    ext_modules=cythonize(
+        [
+            Extension("pyhexz.hexc", ["src/pyhexz/hexc.py"]),
+        ],
+        language_level="3",
+    ),
 )

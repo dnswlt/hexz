@@ -55,7 +55,7 @@ def suggest_move(
     best_child = mcts.root.best_child()
     if not best_child:
         raise ValueError("No next move")
-    typ, r, c, _ = best_child.move
+    typ, r, c, _ = best_child._move
     # Return a SuggestMoveResponse JSON.
     resp = {
         "move": {
@@ -69,11 +69,11 @@ def suggest_move(
         "./latest.html",
         [board, board],
         [f"Model move probs (value: {mcts.value:.3f})", "MCTS move likelihoods"],
-        [mcts.root.move_probs, mcts.root.move_likelihoods()],
+        [mcts.root._move_probs, mcts.root.move_likelihoods()],
     )
-    print(f"child qs: {[(c.wins, c.visit_count) for c in mcts.root.children]}")
+    print(f"child qs: {[(c._wins, c._visit_count) for c in mcts.root._children]}")
     print(
-        f"suggested move: {resp}, iterations: {n}, tree size: {mcts.size()}, best child: vc:{best_child.visit_count} {best_child.wins} {best_child.puct()}."
+        f"suggested move: {resp}, iterations: {n}, tree size: {mcts.size()}, best child: vc:{best_child._visit_count} {best_child._wins} {best_child.puct()}."
     )
     return resp, 200
 
@@ -113,7 +113,7 @@ def create_app():
         t.daemon = True
         t.start()
         app.training_task = t
-        app.logger.info("Started training task")
+        app.logger.info("Started training background thread")
 
     @contextmanager
     def get_model():
