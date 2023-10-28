@@ -52,8 +52,6 @@ HEXZ_RUNS_PER_MOVE=800 HEXZ_TRAINING_SERVER_URL=http://localhost:8080 python3 -m
 
 ### Docker and Cloud Run
 
-WIP
-
 ```bash
 # server
 docker build . -f Dockerfile.server --tag europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/server:latest

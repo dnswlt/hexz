@@ -403,7 +403,7 @@ class NeuralMCTS:
                 )
             n += 1
         elapsed = time.perf_counter() - started
-        if not result:
+        if result is None:
             print(
                 f"Game aborted early after {n} moves. Current score: {board.score()}."
             )
