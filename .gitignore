@@ -4,7 +4,6 @@ _logins.json
 *.prof
 *.test
 /bench
-*.txt
 /hist
 dump.rdb
 *.wasm
@@ -14,3 +13,4 @@ dump.rdb
 *.pem
 *.zip
 examples-*.html
+*.cred.txt

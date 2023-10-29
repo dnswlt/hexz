@@ -1,5 +1,5 @@
 syntax = "proto3";
-package github.com.dnswlt.hexz;
+package hexzpb;
 
 import "google/protobuf/timestamp.proto";
 option go_package = "github.com/dnswlt/hexz/hexzpb";

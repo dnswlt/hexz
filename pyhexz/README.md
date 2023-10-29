@@ -76,6 +76,7 @@ PORT=8080 && docker run -p 8080:${PORT} -e PORT=${PORT} \
 ```bash
 # worker
 docker run \
+  --security-opt seccomp=unconfined \
   -e HEXZ_TRAINING_SERVER_URL=http://nuc:8080 \
   -e PYTHONUNBUFFERED=1 \
   europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/worker:latest
