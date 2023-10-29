@@ -34,6 +34,17 @@ find_package(protobuf REQUIRED CONFIG)
 find_package(Torch REQUIRED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
+#
+# GoogleTest
+#
+# f8d7d77c06936315286eb55f8de22cd23c188571 is v1.14.
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/f8d7d77c06936315286eb55f8de22cd23c188571.zip
+)
+FetchContent_MakeAvailable(googletest)
+
+
 # Debug output for some vars that were relevant getting this whole mess to work:
 message(CMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH}")
 message(CMAKE_FIND_PACKAGE_REDIRECTS_DIR="${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}")
@@ -47,3 +58,20 @@ target_link_libraries(hexzpb PUBLIC protobuf::libprotobuf)
 add_executable(worker worker_main.cc)
 
 target_link_libraries(worker PRIVATE hexzpb cpr::cpr "${TORCH_LIBRARIES}")
+
+#
+# Testing
+#
+enable_testing()
+
+add_executable(
+  worker_test
+  worker_test.cc
+)
+target_link_libraries(
+  worker_test
+  GTest::gtest_main
+)
+
+include(GoogleTest)
+gtest_discover_tests(worker_test)
