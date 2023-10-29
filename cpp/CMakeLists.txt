@@ -54,24 +54,22 @@ message(CMAKE_FIND_PACKAGE_REDIRECTS_DIR="${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}")
 add_library(hexzpb hexz.pb.h hexz.pb.cc)
 target_link_libraries(hexzpb PUBLIC protobuf::libprotobuf)
 
+add_library(worker_lib board.cc)
+target_link_libraries(worker_lib PUBLIC "${TORCH_LIBRARIES}")
+
 # Add the executable
 add_executable(worker worker_main.cc)
 
-target_link_libraries(worker PRIVATE hexzpb cpr::cpr "${TORCH_LIBRARIES}")
+target_link_libraries(worker PRIVATE worker_lib hexzpb cpr::cpr)
 
 #
 # Testing
 #
 enable_testing()
 
-add_executable(
-  worker_test
-  worker_test.cc
-)
-target_link_libraries(
-  worker_test
-  GTest::gtest_main
-)
+add_executable(board_test board_test.cc)
+
+target_link_libraries(board_test GTest::gtest_main worker_lib)
 
 include(GoogleTest)
-gtest_discover_tests(worker_test)
+gtest_discover_tests(board_test)
