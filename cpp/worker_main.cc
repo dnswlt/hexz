@@ -2,7 +2,7 @@
 #include <chrono>
 #include <ctime>
 #include <iostream>
-// #include <torch/torch.h>
+#include <torch/torch.h>
 
 #include "hexz.pb.h"
 
@@ -29,8 +29,8 @@ void Run() {
   std::cout << r.text << "\n";
   
   // Check that torch works:
-  // torch::Tensor tensor = torch::rand({2, 3});
-  // std::cout << tensor << std::endl;
+  torch::Tensor tensor = torch::rand({2, 3});
+  std::cout << tensor << std::endl;
 
   // Check that protobuf works:
   const int64_t duration_micros = unix_micros() - started_micros;
