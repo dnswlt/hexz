@@ -1,3 +1,5 @@
+#include <cpr/cpr.h>
+
 #include <chrono>
 #include <ctime>
 #include <iostream>
@@ -12,9 +14,17 @@ int main() {
       std::chrono::duration_cast<std::chrono::microseconds>(
           started.time_since_epoch())
           .count();
+  cpr::Response r = cpr::Get(
+      cpr::Url{"https://api.github.com/repos/whoshuu/cpr/contributors"},
+      cpr::Authentication{"user", "pass", cpr::AuthMode::BASIC},
+      cpr::Parameters{{"anon", "true"}, {"key", "value"}});
+  std::cout << "Status: " << r.status_code << "\n";
+  std::cout << "content-type: " << r.header["content-type"] << "\n";
+  std::cout << r.text << "\n";
   const int64_t duration_micros =
       std::chrono::duration_cast<std::chrono::microseconds>(
-          std::chrono::steady_clock::now() - started).count();
+          std::chrono::steady_clock::now() - started)
+          .count();
   TrainingExample example;
   example.set_result(1.0);
   example.set_duration_micros(duration_micros);

@@ -5,6 +5,17 @@ cmake_minimum_required(VERSION 3.10)
 
 project(HexzWorker)
 
+
+include(FetchContent)
+
+# cpr is a nice wrapper around libcurl. We use it to make http requests to
+# the training server.
+
+# The commit hash is for 1.10.5, found on https://github.com/libcpr/cpr/releases.
+FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/libcpr/cpr.git
+                         GIT_TAG 3b15fa82ea74739b574d705fea44959b58142eb8)
+FetchContent_MakeAvailable(cpr)
+
 # We use protocol buffers to communicate with the training server.
 # Need to use REQUIRED CONFIG to ensure CMake uses the protobuf-config.cmake file
 # that comes with the protobuf library, not its own outdated FindProtobuf package:
@@ -22,5 +33,4 @@ target_link_libraries(hexzpb PUBLIC protobuf::libprotobuf)
 # Add the executable
 add_executable(worker worker_main.cpp)
 
-target_link_libraries(worker PRIVATE hexzpb)
-
+target_link_libraries(worker PRIVATE hexzpb cpr::cpr)

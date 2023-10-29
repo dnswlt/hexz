@@ -18,5 +18,5 @@ All commands assume you are in the `cpp` subdirectory.
 ```bash
 mkdir build
 cd build
-cmake .. && cmake --build . --clean-first
+cmake .. && cmake --build .
 ```
