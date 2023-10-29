@@ -40,7 +40,7 @@ def _init_neighbors_map():
 class PurePyBoard:
     """Numpy representation of a hexz board.
 
-    A board is represented by an (N, 10, 11) numpy array. Each 10x11 channel is
+    A board is represented by an (N, 11, 10) numpy array. Each 11x10 channel is
     a one-hot encoding of the presence of specific type of piece/obstacle/etc.
     The channels are:
 
@@ -54,7 +54,7 @@ class PurePyBoard:
     * 7: next value for P2
     * 8: grass cells with value 1-5
 
-    An action is specified by a (2, 10, 11) numpy array. The first 10x11 channel
+    An action is specified by a (2, 11, 10) numpy array. The first 11x10 channel
     represents a flag move, the second one represents a regular cell move. A
     flag move must have a single 1 set, a normal move must have a single value
     1-5 set.
@@ -155,8 +155,6 @@ class PurePyBoard:
             for nr, nc in zip(nx, ny):
                 if b[2 + player * 4, nr, nc] == 0:
                     # Cell is not blocked yet.
-                    if next_val > 5:
-                        b[3 + player * 4, nr, nc] = 0
                     if b[3 + player * 4, nr, nc] == 0:
                         b[3 + player * 4, nr, nc] = next_val
                     elif b[3 + player * 4, nr, nc] > next_val:

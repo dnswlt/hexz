@@ -72,6 +72,11 @@
         "unordered_set": "cpp",
         "variant": "cpp",
         "vector": "cpp",
-        "algorithm": "cpp"
+        "algorithm": "cpp",
+        "cinttypes": "cpp",
+        "stack": "cpp",
+        "typeindex": "cpp",
+        "valarray": "cpp"
     },
+    "cmake.sourceDirectory": "/Users/denniswalter/git/github.com/dnswlt/hexz/cpp",
 }

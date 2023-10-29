@@ -6,7 +6,7 @@
                 "${workspaceFolder}/**",
                 "/opt/homebrew/Cellar/protobuf/24.4/include/",
                 "/opt/homebrew/Cellar/abseil/20230802.1/include/",
-                "/opt/libtorch/include/torch/csrc/api/include/"
+                "/Users/denniswalter/miniconda3/pkgs/pytorch-2.1.0-py3.11_0/lib/python3.11/site-packages/torch/include/torch/csrc/api/include/"
             ],
             "defines": [],
             "macFrameworkPath": [
