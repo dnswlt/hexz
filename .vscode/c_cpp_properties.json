@@ -6,6 +6,7 @@
                 "${workspaceFolder}/**",
                 "/opt/homebrew/Cellar/protobuf/24.4/include/",
                 "/opt/homebrew/Cellar/abseil/20230802.1/include/",
+                "/opt/libtorch/include/torch/csrc/api/include/"
             ],
             "defines": [],
             "macFrameworkPath": [

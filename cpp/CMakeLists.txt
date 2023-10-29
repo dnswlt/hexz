@@ -5,7 +5,6 @@ cmake_minimum_required(VERSION 3.10)
 
 project(HexzWorker)
 
-
 include(FetchContent)
 
 # cpr is a nice wrapper around libcurl. We use it to make http requests to
@@ -22,15 +21,16 @@ FetchContent_MakeAvailable(cpr)
 # https://github.com/protocolbuffers/protobuf/issues/12292#issuecomment-1529680040
 find_package(protobuf REQUIRED CONFIG)
 
-message(Protobuf_INCLUDE_DIR="${Protobuf_INCLUDE_DIR}")
-message(Protobuf_PROTOC_EXECUTABLE="${Protobuf_PROTOC_EXECUTABLE}")
+# Debug output for some vars that were relevant getting this whole mess to work:
+message(CMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH}")
+message(CMAKE_FIND_PACKAGE_REDIRECTS_DIR="${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}")
 
-include_directories("${CMAKE_CURRENT_BINARY_DIR}" "${Protobuf_INCLUDE_DIR}")
+# include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
 add_library(hexzpb hexz.pb.h hexz.pb.cc)
 target_link_libraries(hexzpb PUBLIC protobuf::libprotobuf)
 
 # Add the executable
-add_executable(worker worker_main.cpp)
+add_executable(worker worker_main.cc)
 
 target_link_libraries(worker PRIVATE hexzpb cpr::cpr)
