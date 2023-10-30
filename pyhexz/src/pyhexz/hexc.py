@@ -56,6 +56,9 @@ class CNN:
         self._move_probs = move_probs
         assert self._move_probs.shape == (2, 11, 10)
 
+    def make_root(self) -> None:
+        self._parent = None
+    
     def player(self) -> int:
         return self._player
 

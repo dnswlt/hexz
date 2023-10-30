@@ -1,29 +1,51 @@
 #include <cpr/cpr.h>
+#include <torch/script.h>
 
 #include <algorithm>
 #include <cassert>
-#include <chrono>
 #include <ctime>
 #include <iostream>
 
-#include "hexz.pb.h"
 #include "board.h"
+#include "hexz.pb.h"
+#include "mcts.h"
+#include "util.h"
 
 namespace hexz {
 
 using hexzpb::TrainingExample;
 
-int64_t UnixMicros() {
-  return std::chrono::duration_cast<std::chrono::microseconds>(
-             std::chrono::steady_clock::now().time_since_epoch())
-      .count();
-}
-
 struct Config {
   std::string test_url;
+  std::string training_server_url;
+  // Path to a local model.pt file.
+  // Can be used for local runs without the training server.
+  std::string local_model_path;
+  int runs_per_move;
 };
 
-void Run(Config config) {
+void PlayGameLocally(const Config& config) {
+  torch::jit::script::Module model;
+  try {
+    model = torch::jit::load(config.local_model_path);
+    model.to(torch::kCPU);
+  } catch (const c10::Error& e) {
+    std::cerr << "Failed to load model from " << config.local_model_path << ": "
+              << e.msg() << "\n";
+    return;
+  }
+  NeuralMCTS mcts{model};
+  Board b = Board::RandomBoard();
+  auto t_started = UnixMicros();
+  mcts.PlayGame(b, config.runs_per_move, 10);
+  auto duration = UnixMicros() - t_started;
+  std::cout << "Playing the game took " << double(duration) / 1e6
+            << "s. Module.forward took "
+            << double(mcts.GetPredictionStats().acc_duration_micros) / 1e6
+            << "s.\n";
+}
+
+void TrialRun(const Config& config) {
   const auto started_micros = UnixMicros();
 
   // Check that cpr works:
@@ -53,6 +75,12 @@ void Run(Config config) {
   assert(b.Score() != zero_score);
   std::cout << b.Score() << "\n";
 
+  if (config.local_model_path != "") {
+    PlayGameLocally(config);
+  } else {
+    std::cout << "HEXZ_LOCAL_MODEL_PATH not set. Skipping game play.\n";
+  }
+
   // Check that protobuf works:
   const int64_t duration_micros = UnixMicros() - started_micros;
   TrainingExample example;
@@ -65,10 +93,14 @@ void Run(Config config) {
 }  // namespace hexz
 
 int main() {
-  const char* test_url = std::getenv("HEXZ_TEST_URL");
+  const char* training_server_url = std::getenv("HEXZ_TRAINING_SERVER_URL");
   auto config = hexz::Config{
-      .test_url = test_url != nullptr ? std::string(test_url) : "",
+      .test_url = hexz::GetEnv("HEXZ_TEST_URL"),
+      .training_server_url = hexz::GetEnv("HEXZ_TRAINING_SERVER_URL"),
+      .local_model_path = hexz::GetEnv("HEXZ_LOCAL_MODEL_PATH"),
+      .runs_per_move = hexz::GetEnvAsInt("HEXZ_RUNS_PER_MOVE", 800),
   };
-  hexz::Run(config);
+  hexz::TrialRun(config);
   return 0;
+
 }

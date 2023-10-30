@@ -7,6 +7,9 @@ project(HexzWorker)
 
 include(FetchContent)
 
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_options(-pg)
+endif()
 #
 # cpr
 #
@@ -46,6 +49,9 @@ FetchContent_MakeAvailable(googletest)
 
 
 # Debug output for some vars that were relevant getting this whole mess to work:
+message(CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}")
+message(CMAKE_CXX_FLAGS_RELEASE="${CMAKE_CXX_FLAGS_RELEASE}")
+message(CMAKE_CXX_FLAGS_DEBUG="${CMAKE_CXX_FLAGS_DEBUG}")
 message(CMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH}")
 message(CMAKE_FIND_PACKAGE_REDIRECTS_DIR="${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}")
 
@@ -54,22 +60,27 @@ message(CMAKE_FIND_PACKAGE_REDIRECTS_DIR="${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}")
 add_library(hexzpb hexz.pb.h hexz.pb.cc)
 target_link_libraries(hexzpb PUBLIC protobuf::libprotobuf)
 
-add_library(worker_lib board.cc)
-target_link_libraries(worker_lib PUBLIC "${TORCH_LIBRARIES}")
+add_library(mcts board.cc mcts.cc util.cc)
+target_link_libraries(mcts PUBLIC hexzpb "${TORCH_LIBRARIES}")
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_link_options(mcts PRIVATE -pg)
+endif()
 
 # Add the executable
 add_executable(worker worker_main.cc)
-
-target_link_libraries(worker PRIVATE worker_lib hexzpb cpr::cpr)
+target_link_libraries(worker PRIVATE mcts hexzpb cpr::cpr)
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_link_options(worker PRIVATE -pg)
+endif()
 
 #
 # Testing
 #
 enable_testing()
 
-add_executable(board_test board_test.cc)
+add_executable(mcts_test board_test.cc)
 
-target_link_libraries(board_test GTest::gtest_main worker_lib)
+target_link_libraries(mcts_test GTest::gtest_main mcts)
 
 include(GoogleTest)
-gtest_discover_tests(board_test)
+gtest_discover_tests(mcts_test)

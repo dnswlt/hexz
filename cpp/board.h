@@ -1,8 +1,10 @@
-#include <random>
-#include <vector>
-#include <utility>
-
+#ifndef __HEXZ_BOARD_H__
+#define __HEXZ_BOARD_H__
 #include <torch/torch.h>
+
+#include <random>
+#include <utility>
+#include <vector>
 
 namespace hexz {
 
@@ -12,7 +14,6 @@ struct Move {
   int c;
   float value;
 };
-
 
 // Torch representation of a hexz board.
 // A board is represented by an (9, 11, 10) tensor. Each 11x10 channel is
@@ -43,9 +44,11 @@ class Board {
   std::pair<float, float> Score() const;
   float Result() const;
 
+  torch::Tensor Tensor() const { return b_; }
+
   int Flags(int player) const;
 
-  void MakeMove(int player, const Move& move); 
+  void MakeMove(int player, const Move& move);
   void OccupyGrass(int player, const Move& move);
   std::vector<Move> NextMoves(int player) const;
 
@@ -58,3 +61,4 @@ class Board {
 };
 
 }  // namespace hexz
+#endif  // __HEXZ_BOARD_H__

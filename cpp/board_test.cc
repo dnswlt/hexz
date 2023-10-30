@@ -30,4 +30,12 @@ TEST(BoardTest, PlayFullGame) {
   EXPECT_EQ(b.Flags(1), 0);
 }
 
+TEST(TorchTest, TensorIsRef) {
+  // Shows that copying a tensor does not copy the underlying data.
+  torch::Tensor t1 = torch::ones({2, 2});
+  torch::Tensor t2 = t1;
+  t2.index_put_({0, 0}, 2);
+  EXPECT_EQ(t1.index({0, 0}).item<float>(), 2);
+}
+
 }  // namespace hexz

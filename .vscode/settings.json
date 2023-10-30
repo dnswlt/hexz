@@ -76,7 +76,9 @@
         "cinttypes": "cpp",
         "stack": "cpp",
         "typeindex": "cpp",
-        "valarray": "cpp"
+        "valarray": "cpp",
+        "any": "cpp",
+        "cassert": "cpp"
     },
     "cmake.sourceDirectory": "/Users/denniswalter/git/github.com/dnswlt/hexz/cpp",
 }

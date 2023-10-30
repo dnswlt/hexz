@@ -3,7 +3,6 @@
 This file includes the game, MCTS, and neural network implementations.
 """
 
-import argparse
 from bisect import bisect_left
 import glob
 import h5py
@@ -18,7 +17,6 @@ from typing import Optional
 from uuid import uuid4
 
 from pyhexz import hexc
-from pyhexz.errors import HexzError
 from pyhexz.timing import (
     timing,
     timing_ctx,
@@ -363,11 +361,11 @@ class NeuralMCTS:
         started = time.perf_counter()
         n = 0
         player = 0  # Player 0 always starts.
+        root: hexc.CNN = hexc.CNN(None, 1 - player, (0, 0, 0, 0.0))
         for _ in range(max_moves):
             t_start = time.perf_counter_ns()
             # Root's children have the player whose turn it actually is.
             # So root has the opposite player.
-            root: hexc.CNN = hexc.CNN(None, 1 - player, (0, 0, 0, 0.0))
             for i in range(runs_per_move if n >= 6 else 2 * runs_per_move):
                 self.run(root, board)
             best_child = root.best_child()
@@ -401,6 +399,8 @@ class NeuralMCTS:
                 print(
                     f"Iteration {n} @{time.perf_counter() - started:.3f}s: {best_child=}, score:{board.score()}",
                 )
+            root = best_child
+            root.make_root()
             n += 1
         elapsed = time.perf_counter() - started
         if result is None:
@@ -636,6 +636,21 @@ def generate_model(args):
     torch.save(model.state_dict(), path)
     print(
         f"Generated randomly initialized model with {sum(p.numel() for p in model.parameters())} parameters at {path}."
+    )
+
+
+def export_model(args):
+    model = HexzNeuralNetwork()
+    path = args.model
+    if os.path.isdir(path):
+        path = os.path.join(path, "model.pt")
+    if not args.force and os.path.isfile(path):
+        print(f"export_model: error: a model already exists at {path}.")
+        return
+    sm = torch.jit.trace(model, torch.rand(1, 9, 11, 10))
+    sm.save(path)
+    print(
+        f"Exported randomly initialized ScriptModule with {sum(p.numel() for p in model.parameters())} parameters to {path}."
     )
 
 
