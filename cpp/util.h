@@ -2,6 +2,7 @@
 #define __HEXZ_UTIL_H__
 
 #include <cassert>
+#include <chrono>
 #include <string>
 
 namespace hexz {
@@ -30,7 +31,7 @@ class Perfm {
 
   struct Scope {
     Perfm::Label label;
-    std::chrono::time_point<std::chrono::steady_clock> started;
+    std::chrono::steady_clock::time_point started;
     Scope(Perfm::Label label)
         : label{label}, started{std::chrono::steady_clock::now()} {}
     ~Scope() {
