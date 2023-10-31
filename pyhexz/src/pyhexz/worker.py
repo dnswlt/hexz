@@ -57,6 +57,13 @@ class SelfPlayWorker:
             )
         model = HexzNeuralNetwork()
         model.load_state_dict(torch.load(io.BytesIO(resp.content), map_location="cpu"))
+        # Make sure to put the model in evaluation mode. It is significantly slower in training mode
+        # due to the BatchNorm2d layers!
+        model.eval()
+        # Compile the model into a ScriptModule. This had a mild positive impact on performance,
+        # even when running in PyTorch (as opposed to libtorch/C++).
+        model = torch.jit.script(model)
+        # model = torch.jit.trace(model, torch.rand(1, 9, 11, 10))
         return model_key, model
 
     def generate_examples(self) -> None:

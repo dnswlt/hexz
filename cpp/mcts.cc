@@ -82,12 +82,15 @@ void Node::CreateChildren(int player, const std::vector<Move>& moves) {
 
 NeuralMCTS::NeuralMCTS(torch::jit::script::Module module) : module_{module} {
   module_.eval();
+  pstats_[PS_Predict].label = "Predict";
+  pstats_[PS_FindLeaf].label = "FindLeaf";
+  pstats_[PS_MakeMove].label = "MakeMove";
 }
 
 NeuralMCTS::Prediction NeuralMCTS::Predict(int player, const Board& board) {
-  auto t_before = UnixMicros();
+  auto start_micros = UnixMicros();
   torch::NoGradGuard no_grad;
-  auto input = board.Tensor().unsqueeze(0);
+  auto input = board.Tensor(player).unsqueeze(0);
   std::vector<torch::jit::IValue> inputs{
       input,
   };
@@ -101,22 +104,33 @@ NeuralMCTS::Prediction NeuralMCTS::Predict(int player, const Board& board) {
   const auto dim = logits.sizes();
   assert(dim.size() == 2 && dim[0] == 1 && dim[1] == 2 * 11 * 10);
   const auto value = output_tuple->elements()[1].toTensor().item<float>();
-  pred_stats_.count++;
-  pred_stats_.acc_duration_micros += UnixMicros() - t_before;
+  pstats_[PS_Predict].Record(start_micros);
   return NeuralMCTS::Prediction{
       .move_probs = logits.reshape({2, 11, 10}).exp(),
       .value = value,
   };
 }
 
+std::vector<NeuralMCTS::PerfStats> NeuralMCTS::GetPerfStats() const {
+  std::vector<NeuralMCTS::PerfStats> result;
+  for (int i = 0; i < PerStatsSize; i++) {
+    result.push_back(pstats_[i]);
+  }
+  return result;
+}
+
 bool NeuralMCTS::Run(Node* root, const Board& board) {
   Board b(board);
   Node* n = root;
   // Move to leaf node.
+  auto t_start = UnixMicros();
   while (!n->IsLeaf()) {
     n = n->MaxPuctChild();
+    auto t_make_move = UnixMicros();
     b.MakeMove(n->Player(), n->GetMove());
+    pstats_[PS_MakeMove].Record(t_make_move);
   }
+  pstats_[PS_FindLeaf].Record(t_start);
   // Expand leaf node. Usually it's the opponent's turn.
   int player = 1 - n->Player();
   auto moves = b.NextMoves(player);
@@ -170,6 +184,5 @@ std::vector<hexzpb::TrainingExample> NeuralMCTS::PlayGame(const Board& board,
   }
   return examples;
 }
-
 
 }  // namespace hexz

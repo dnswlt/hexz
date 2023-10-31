@@ -29,6 +29,7 @@ void PlayGameLocally(const Config& config) {
   try {
     model = torch::jit::load(config.local_model_path);
     model.to(torch::kCPU);
+    model.eval();
   } catch (const c10::Error& e) {
     std::cerr << "Failed to load model from " << config.local_model_path << ": "
               << e.msg() << "\n";
@@ -39,10 +40,10 @@ void PlayGameLocally(const Config& config) {
   auto t_started = UnixMicros();
   mcts.PlayGame(b, config.runs_per_move, 10);
   auto duration = UnixMicros() - t_started;
-  std::cout << "Playing the game took " << double(duration) / 1e6
-            << "s. Module.forward took "
-            << double(mcts.GetPredictionStats().acc_duration_micros) / 1e6
-            << "s.\n";
+  std::cout << "Playing the game took " << double(duration) / 1e6 << "s.\n";
+  for (const auto& stat : mcts.GetPerfStats()) {
+    std::cout << "  " << stat.label << ": " << double(stat.acc_duration_micros)/1e6 << "s\n";
+  }
 }
 
 void TrialRun(const Config& config) {

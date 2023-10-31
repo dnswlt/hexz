@@ -29,6 +29,14 @@ so the small example from https://pytorch.org/cppdocs/installing.html does not w
 The easiest way to get libtorch for arm64 is by installing torch via Anaconda (or miniconda3),
 and then adding the path to the torch `cmake` folder to `CMAKE_PREFIX_PATH` (see above).
 
+### Linux
+
+Build protobuf as a shared library:
+
+```bash
+
+```
+
 
 ### VS Code
 

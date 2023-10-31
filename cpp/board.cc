@@ -131,6 +131,15 @@ Board::Board(const Board& other) {
   nflags_[1] = other.nflags_[1];
 }
 
+torch::Tensor Board::Tensor(int player) const {
+    if (player == 0) {
+        return b_;
+    }
+    // Swap channels for player 0 and player 1. Leave grass unchanged.
+    // index_select returns a new Tensor that uses its own storage.
+    return b_.index_select(0, torch::tensor({4, 5, 6, 7, 0, 1, 2, 3, 8}));
+}
+
 std::pair<float, float> Board::Score() const {
   return {b_.index({1}).sum().item<float>(), b_.index({5}).sum().item<float>()};
 }

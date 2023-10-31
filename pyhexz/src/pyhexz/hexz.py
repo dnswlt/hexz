@@ -313,7 +313,7 @@ class NeuralMCTS:
 
     @timing
     @torch.inference_mode()
-    def predict(self, board, player):
+    def predict(self, board: CBoard, player: int):
         """Predicts move probabilities and value for the given board and player."""
         b = board.b_for(player)
         X = torch.from_numpy(b).to(self.device, dtype=self.dtype)
@@ -647,7 +647,11 @@ def export_model(args):
     if not args.force and os.path.isfile(path):
         print(f"export_model: error: a model already exists at {path}.")
         return
-    sm = torch.jit.trace(model, torch.rand(1, 9, 11, 10))
+    # Make sure to put the model into eval mode before creating the ScriptModule.
+    # At least a model exported with torch.jit.trace cannot be put back into
+    # eval mode! (Not sure about the torch.jit.script case).
+    model.eval()
+    sm = torch.jit.script(model)
     sm.save(path)
     print(
         f"Exported randomly initialized ScriptModule with {sum(p.numel() for p in model.parameters())} parameters to {path}."

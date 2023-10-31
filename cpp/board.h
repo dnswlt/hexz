@@ -44,7 +44,7 @@ class Board {
   std::pair<float, float> Score() const;
   float Result() const;
 
-  torch::Tensor Tensor() const { return b_; }
+  torch::Tensor Tensor(int player) const;
 
   int Flags(int player) const;
 

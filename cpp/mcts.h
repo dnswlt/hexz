@@ -7,6 +7,7 @@
 
 #include "board.h"
 #include "hexz.pb.h"
+#include "util.h"
 
 namespace hexz {
 
@@ -16,8 +17,6 @@ class Node {
 
   int Player() const { return player_; }
   const Move& GetMove() const { return move_; }
-
-  float Puct() const;
 
   Node* MaxPuctChild();
   // Returns a pointer to the child with the greated visit count,
@@ -38,6 +37,8 @@ class Node {
   void SetMoveProbs(torch::Tensor move_probs) { move_probs_ = move_probs; }
 
  private:
+  float Puct() const;
+
   Node* parent_;
   int player_;
   Move move_;
@@ -52,9 +53,14 @@ class NeuralMCTS {
     torch::Tensor move_probs;
     float value;
   };
-  struct PredictionStats {
+  struct PerfStats {
+    std::string label;
     int64_t acc_duration_micros = 0;
     int64_t count = 0;
+    void Record(int64_t start_micros) {
+        acc_duration_micros += UnixMicros() - start_micros;
+        count++;
+    }
   };
 
  public:
@@ -65,11 +71,18 @@ class NeuralMCTS {
   std::vector<hexzpb::TrainingExample> PlayGame(const Board& board,
                                                 int runs_per_move = 500,
                                                 int max_moves = 200);
-  PredictionStats GetPredictionStats() const { return pred_stats_; }
+  std::vector<PerfStats> GetPerfStats() const;
 
  private:
+  enum PerfStatsIdx {
+    PS_Predict = 0,
+    PS_FindLeaf = 1,
+    PS_MakeMove = 2,
+    PerStatsSize = 3,
+  };
+
   torch::jit::script::Module module_;
-  PredictionStats pred_stats_;
+  PerfStats pstats_[PerStatsSize];
 };
 
 }  // namespace hexz
