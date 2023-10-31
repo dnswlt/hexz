@@ -8,6 +8,8 @@
 #include <string>
 #include <unordered_map>
 
+#include "util.h"
+
 namespace hexz {
 
 // Hashable indexes into the hexz board.
@@ -132,12 +134,12 @@ Board::Board(const Board& other) {
 }
 
 torch::Tensor Board::Tensor(int player) const {
-    if (player == 0) {
-        return b_;
-    }
-    // Swap channels for player 0 and player 1. Leave grass unchanged.
-    // index_select returns a new Tensor that uses its own storage.
-    return b_.index_select(0, torch::tensor({4, 5, 6, 7, 0, 1, 2, 3, 8}));
+  if (player == 0) {
+    return b_;
+  }
+  // Swap channels for player 0 and player 1. Leave grass unchanged.
+  // index_select returns a new Tensor that uses its own storage.
+  return b_.index_select(0, torch::tensor({4, 5, 6, 7, 0, 1, 2, 3, 8}));
 }
 
 std::pair<float, float> Board::Score() const {
@@ -158,6 +160,7 @@ float Board::Result() const {
 int Board::Flags(int player) const { return nflags_[player]; }
 
 void Board::MakeMove(int player, const Move& move) {
+  Perfm::Scope ps(Perfm::MakeMove);
   b_.index_put_({move.typ + player * 4, move.r, move.c}, move.value);
   bool played_flag = move.typ == 0;
   b_.index_put_({2, move.r, move.c}, 1);

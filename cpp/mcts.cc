@@ -19,17 +19,24 @@ Node::Node(Node* parent, int player, Move move)
     : parent_{parent}, player_{player}, move_{move} {}
 
 float Node::Puct() const {
+  Perfm::Scope ps(Perfm::Puct);
+
   constexpr float uct_c = 5.0;  // Constant weight of the exploration term.
   float q = 0.0;
   if (visit_count_ > 0) {
     q = wins_ / visit_count_;
   }
-  float pr =
-      parent_->move_probs_.index({move_.typ, move_.r, move_.c}).item<float>();
+  float pr = 0.0;
+  {
+    Perfm::Scope ps(Perfm::PuctMoveProbs);
+    pr =
+        parent_->move_probs_.index({move_.typ, move_.r, move_.c}).item<float>();
+  }
   return q + uct_c * pr * std::sqrt(parent_->visit_count_) / (1 + visit_count_);
 }
 
 Node* Node::MaxPuctChild() {
+  Perfm::Scope ps(Perfm::MaxPuctChild);
   if (children_.empty()) {
     return nullptr;
   }
@@ -82,13 +89,10 @@ void Node::CreateChildren(int player, const std::vector<Move>& moves) {
 
 NeuralMCTS::NeuralMCTS(torch::jit::script::Module module) : module_{module} {
   module_.eval();
-  pstats_[PS_Predict].label = "Predict";
-  pstats_[PS_FindLeaf].label = "FindLeaf";
-  pstats_[PS_MakeMove].label = "MakeMove";
 }
 
 NeuralMCTS::Prediction NeuralMCTS::Predict(int player, const Board& board) {
-  auto start_micros = UnixMicros();
+  Perfm::Scope ps(Perfm::Predict);
   torch::NoGradGuard no_grad;
   auto input = board.Tensor(player).unsqueeze(0);
   std::vector<torch::jit::IValue> inputs{
@@ -104,19 +108,10 @@ NeuralMCTS::Prediction NeuralMCTS::Predict(int player, const Board& board) {
   const auto dim = logits.sizes();
   assert(dim.size() == 2 && dim[0] == 1 && dim[1] == 2 * 11 * 10);
   const auto value = output_tuple->elements()[1].toTensor().item<float>();
-  pstats_[PS_Predict].Record(start_micros);
   return NeuralMCTS::Prediction{
       .move_probs = logits.reshape({2, 11, 10}).exp(),
       .value = value,
   };
-}
-
-std::vector<NeuralMCTS::PerfStats> NeuralMCTS::GetPerfStats() const {
-  std::vector<NeuralMCTS::PerfStats> result;
-  for (int i = 0; i < PerStatsSize; i++) {
-    result.push_back(pstats_[i]);
-  }
-  return result;
 }
 
 bool NeuralMCTS::Run(Node* root, const Board& board) {
@@ -124,13 +119,13 @@ bool NeuralMCTS::Run(Node* root, const Board& board) {
   Node* n = root;
   // Move to leaf node.
   auto t_start = UnixMicros();
-  while (!n->IsLeaf()) {
-    n = n->MaxPuctChild();
-    auto t_make_move = UnixMicros();
-    b.MakeMove(n->Player(), n->GetMove());
-    pstats_[PS_MakeMove].Record(t_make_move);
+  {
+    Perfm::Scope ps(Perfm::FindLeaf);
+    while (!n->IsLeaf()) {
+      n = n->MaxPuctChild();
+      b.MakeMove(n->Player(), n->GetMove());
+    }
   }
-  pstats_[PS_FindLeaf].Record(t_start);
   // Expand leaf node. Usually it's the opponent's turn.
   int player = 1 - n->Player();
   auto moves = b.NextMoves(player);

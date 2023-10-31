@@ -35,14 +35,11 @@ void PlayGameLocally(const Config& config) {
               << e.msg() << "\n";
     return;
   }
-  NeuralMCTS mcts{model};
-  Board b = Board::RandomBoard();
-  auto t_started = UnixMicros();
-  mcts.PlayGame(b, config.runs_per_move, 10);
-  auto duration = UnixMicros() - t_started;
-  std::cout << "Playing the game took " << double(duration) / 1e6 << "s.\n";
-  for (const auto& stat : mcts.GetPerfStats()) {
-    std::cout << "  " << stat.label << ": " << double(stat.acc_duration_micros)/1e6 << "s\n";
+  {
+    Perfm::Scope ps(Perfm::PlayGameLocally);
+    NeuralMCTS mcts{model};
+    Board b = Board::RandomBoard();
+    mcts.PlayGame(b, config.runs_per_move, /*max_moves=*/3);
   }
 }
 
@@ -94,6 +91,7 @@ void TrialRun(const Config& config) {
 }  // namespace hexz
 
 int main() {
+  hexz::Perfm::Init();
   const char* training_server_url = std::getenv("HEXZ_TRAINING_SERVER_URL");
   auto config = hexz::Config{
       .test_url = hexz::GetEnv("HEXZ_TEST_URL"),
@@ -102,6 +100,6 @@ int main() {
       .runs_per_move = hexz::GetEnvAsInt("HEXZ_RUNS_PER_MOVE", 800),
   };
   hexz::TrialRun(config);
+  hexz::Perfm::PrintStats();
   return 0;
-
 }

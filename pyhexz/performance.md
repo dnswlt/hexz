@@ -99,3 +99,26 @@ PurePyBoard.next_moves      0.842s     103783   123188.5
 NeuralMCTS.predict         74.413s      71313      958.3
 NeuralMCTS.run             90.630s      83200      918.0
 CBoard.make_move            0.001s        102   185118.0
+
+
+## 2023-10-31
+
+https://github.com/gperftools/gperftools/issues/532
+
+Neither gprof nor gperftools yield any reasonable profiling results:
+
+```
+(pprof) top20
+Showing nodes accounting for 34.01s, 93.15% of 36.51s total
+Dropped 351 nodes (cum <= 0.18s)
+Showing top 20 nodes out of 71
+      flat  flat%   sum%        cum   cum%
+    17.51s 47.96% 47.96%     17.51s 47.96%  omp_get_num_procs
+     6.27s 17.17% 65.13%      6.27s 17.17%  mkl_blas_avx2_sgemm_kernel_0
+     3.45s  9.45% 74.58%      3.45s  9.45%  mkl_blas_avx2_sgemm_kernel_0_b0
+     2.39s  6.55% 81.13%      3.60s  9.86%  at::native::(anonymous namespace)::unfolded2d_copy(float*, float*, long, long, long, long, long, long, long, long, long, long, long)::{lambda(long, long)#1}::operator()
+     1.23s  3.37% 84.50%      1.23s  3.37%  __nss_database_lookup
+     0.97s  2.66% 87.15%      0.97s  2.66%  mkl_blas_avx2_sgemm_scopy_right4_ea
+     0.57s  1.56% 88.72%      0.57s  1.56%  mkl_blas_avx2_sgemm_scopy_down24_ea
+     0.50s  1.37% 90.08%      0.57s  1.56%  gblock_by_k_omp
+```
