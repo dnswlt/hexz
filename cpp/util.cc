@@ -1,7 +1,9 @@
 #include "util.h"
 
+#include <algorithm>
 #include <chrono>
 #include <string>
+#include <vector>
 
 namespace hexz {
 
