@@ -18,7 +18,7 @@ All commands assume you are in the `cpp` subdirectory.
 ```bash
 mkdir build
 cd build
-cmake -DCMAKE_PREFIX_PATH="$HOME/miniconda3/pkgs/pytorch-2.1.0-py3.11_0/lib/python3.11/site-packages/torch/share/cmake" .. && cmake --build .
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$HOME/miniconda3/pkgs/pytorch-2.1.0-py3.11_0/lib/python3.11/site-packages/torch/share/cmake" .. && cmake --build .
 ```
 
 ### ARM-based Macs
@@ -75,7 +75,7 @@ To build the worker on Linux, now finally run:
 cd $HEXZ_REPO_DIR/cpp
 mkdir build
 cd build
-cmake -DCPR_ENABLE_SSL=OFF -DCMAKE_PREFIX_PATH="$HOME/opt/libtorch/share/cmake;/usr/local/lib/cmake/protobuf" ..
+cmake -DCMAKE_BUILD_TYPE=Release -DCPR_ENABLE_SSL=OFF -DCMAKE_PREFIX_PATH="$HOME/opt/libtorch/share/cmake;/usr/local/lib/cmake/protobuf" ..
 cmake --build .
 # Run the binary, AT LAST!
 LD_LIBRARY_PATH=/usr/local/lib HEXZ_LOCAL_MODEL_PATH=/tmp/scriptmodule.pt ./worker

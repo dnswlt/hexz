@@ -7,9 +7,6 @@ project(HexzWorker)
 
 include(FetchContent)
 
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    add_compile_options(-pg)
-endif()
 #
 # cpr
 #
@@ -62,25 +59,22 @@ target_link_libraries(hexzpb PUBLIC protobuf::libprotobuf)
 
 add_library(mcts board.cc mcts.cc util.cc)
 target_link_libraries(mcts PUBLIC hexzpb "${TORCH_LIBRARIES}")
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_link_options(mcts PRIVATE -pg)
-endif()
 
 # Add the executable
 add_executable(worker worker_main.cc)
 target_link_libraries(worker PRIVATE mcts hexzpb cpr::cpr)
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_link_options(worker PRIVATE -pg)
-endif()
 
 #
 # Testing
 #
 enable_testing()
 
-add_executable(mcts_test board_test.cc)
+add_executable(board_test board_test.cc)
+add_executable(mcts_test mcts_test.cc)
 
 target_link_libraries(mcts_test GTest::gtest_main mcts)
+target_link_libraries(board_test GTest::gtest_main mcts)
 
 include(GoogleTest)
 gtest_discover_tests(mcts_test)
+gtest_discover_tests(board_test)

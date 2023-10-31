@@ -16,7 +16,7 @@ std::mt19937 rng{std::random_device{}()};
 }
 
 Node::Node(Node* parent, int player, Move move)
-    : parent_{parent}, player_{player}, move_{move} {}
+    : parent_{parent}, player_{player}, move_{move}, flat_idx_{move.typ * 11 * 10 + move.r * 10 + move.c} {}
 
 float Node::Puct() const {
   Perfm::Scope ps(Perfm::Puct);
@@ -29,8 +29,7 @@ float Node::Puct() const {
   float pr = 0.0;
   {
     Perfm::Scope ps(Perfm::PuctMoveProbs);
-    pr =
-        parent_->move_probs_.index({move_.typ, move_.r, move_.c}).item<float>();
+    pr = parent_->move_probs_[flat_idx_];
   }
   return q + uct_c * pr * std::sqrt(parent_->visit_count_) / (1 + visit_count_);
 }

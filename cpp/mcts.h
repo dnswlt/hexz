@@ -34,7 +34,12 @@ class Node {
   // Adds children representing the given moves to this node.
   // Children will be shuffled randomly, to avoid selection bias.
   void CreateChildren(int player, const std::vector<Move>& moves);
-  void SetMoveProbs(torch::Tensor move_probs) { move_probs_ = move_probs; }
+  void SetMoveProbs(torch::Tensor move_probs) {
+    assert(move_probs.numel() == 2 * 11 * 10);
+    move_probs_ =
+        std::vector<float>(move_probs.data_ptr<float>(),
+                           move_probs.data_ptr<float>() + move_probs.numel());
+  }
 
  private:
   float Puct() const;
@@ -42,9 +47,10 @@ class Node {
   Node* parent_;
   int player_;
   Move move_;
+  int flat_idx_;
   float wins_;
   int visit_count_;
-  torch::Tensor move_probs_;
+  std::vector<float> move_probs_;
   std::vector<std::unique_ptr<Node>> children_;
 };
 
@@ -64,7 +70,6 @@ class NeuralMCTS {
                                                 int max_moves = 200);
 
  private:
-
   torch::jit::script::Module module_;
 };
 
