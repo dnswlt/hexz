@@ -30,7 +30,7 @@ class Perfm {
 
   struct Scope {
     Perfm::Label label;
-    std::chrono::steady_clock::time_point started;
+    std::chrono::time_point<std::chrono::steady_clock> started;
     Scope(Perfm::Label label)
         : label{label}, started{std::chrono::steady_clock::now()} {}
     ~Scope() {
