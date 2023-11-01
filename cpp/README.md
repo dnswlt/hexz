@@ -40,7 +40,9 @@ cd /tmp
 wget https://github.com/protocolbuffers/protobuf/releases/download/v24.4/protobuf-24.4.tar.gz
 tar xzf protobuf-24.4.tar.gz
 cd protobuf-24.4
-cmake -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_SHARED_LIBS=ON -Dprotobuf_BUILD_TESTS=OFF .
+cd third_party
+
+cmake -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_SHARED_LIBS=ON -Dprotobuf_BUILD_TESTS=OFF -Dprotobuf_BUILD_PROTOC_BINARIES=OFF .
 cmake --build . --parallel 4 
 sudo cmake --install .
 ```

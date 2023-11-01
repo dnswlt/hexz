@@ -1,6 +1,7 @@
 /hexz
 _users.json
 _logins.json
+_auth.txt
 *.prof
 *.test
 /bench
