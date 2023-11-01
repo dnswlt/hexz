@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <inttypes.h>
 #include <string>
 #include <vector>
 
@@ -35,7 +36,7 @@ void Perfm::PrintStats() {
               "count", "ops/s");
 
   for (const auto& s : stats) {
-    std::printf("%-*s %9.3fs %10lld %12.3f\n", scope_len,
+    std::printf("%-*s %9.3fs %10" PRId64 " %12.3f\n", scope_len,
                 Perfm::LabelName(s.label).c_str(),
                 double(s.elapsed_nanos) / 1e9, s.count,
                 s.count * 1e9 / s.elapsed_nanos);
@@ -60,7 +61,7 @@ int GetEnvAsInt(const std::string& name, int default_value) {
 
 int64_t UnixMicros() {
   return std::chrono::duration_cast<std::chrono::microseconds>(
-             std::chrono::steady_clock::now().time_since_epoch())
+             std::chrono::high_resolution_clock::now().time_since_epoch())
       .count();
 }
 

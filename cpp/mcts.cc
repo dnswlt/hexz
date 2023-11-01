@@ -113,6 +113,7 @@ NeuralMCTS::Prediction NeuralMCTS::Predict(int player, const Board& board) {
 }
 
 bool NeuralMCTS::Run(Node* root, const Board& board) {
+  Perfm::Scope ps(Perfm::NeuralMCTS_Run);
   Board b(board);
   Node* n = root;
   // Move to leaf node.

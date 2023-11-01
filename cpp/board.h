@@ -49,7 +49,6 @@ class Board {
   int Flags(int player) const;
 
   void MakeMove(int player, const Move& move);
-  void OccupyGrass(int player, const Move& move);
   std::vector<Move> NextMoves(int player) const;
 
  private:

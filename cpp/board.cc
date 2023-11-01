@@ -195,18 +195,14 @@ void Board::MakeMove(int player, const Move& move) {
     }
   }
   if (!played_flag) {
-    OccupyGrass(player, move);
-  }
-}
-
-void Board::OccupyGrass(int player, const Move& move) {
-  for (const auto& nb : NeighborsOf(Idx{move.r, move.c})) {
-    float grass_val = b_.index({8, nb.r, nb.c}).item<float>();
-    if (grass_val > 0 &&
-        grass_val <= b_.index({1 + player * 4, move.r, move.c}).item<float>()) {
-      // Occupy grass cell: remove grass value and add it to player's value.
-      b_.index_put_({8, nb.r, nb.c}, 0);
-      MakeMove(player, Move{1, nb.r, nb.c, grass_val});
+    // Occupy grass fields
+    for (const auto& nb : NeighborsOf(Idx{move.r, move.c})) {
+      float grass_val = b_acc[8][nb.r][nb.c];
+      if (grass_val > 0 && grass_val <= b_acc[1 + player * 4][move.r][move.c]) {
+        // Occupy grass cell: remove grass value and add it to player's value.
+        b_acc[8][nb.r][nb.c] = 0;
+        MakeMove(player, Move{1, nb.r, nb.c, grass_val});
+      }
     }
   }
 }

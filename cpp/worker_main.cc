@@ -22,6 +22,7 @@ struct Config {
   // Can be used for local runs without the training server.
   std::string local_model_path;
   int runs_per_move;
+  int max_moves_per_game;
 };
 
 void PlayGameLocally(const Config& config) {
@@ -39,7 +40,7 @@ void PlayGameLocally(const Config& config) {
     Perfm::Scope ps(Perfm::PlayGameLocally);
     NeuralMCTS mcts{model};
     Board b = Board::RandomBoard();
-    mcts.PlayGame(b, config.runs_per_move, /*max_moves=*/3);
+    mcts.PlayGame(b, config.runs_per_move, config.max_moves_per_game);
   }
 }
 
@@ -98,6 +99,7 @@ int main() {
       .training_server_url = hexz::GetEnv("HEXZ_TRAINING_SERVER_URL"),
       .local_model_path = hexz::GetEnv("HEXZ_LOCAL_MODEL_PATH"),
       .runs_per_move = hexz::GetEnvAsInt("HEXZ_RUNS_PER_MOVE", 800),
+      .max_moves_per_game = hexz::GetEnvAsInt("HEXZ_MAX_MOVES_PER_GAME", 200),
   };
   hexz::TrialRun(config);
   hexz::Perfm::PrintStats();

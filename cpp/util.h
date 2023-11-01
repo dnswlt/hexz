@@ -26,19 +26,20 @@ class Perfm {
     MaxPuctChild = 4,
     Puct = 5,
     NextMoves = 6,
-    StatsSize = 7,
+    NeuralMCTS_Run = 7,
+    StatsSize = 8,
   };
 
   struct Scope {
     Perfm::Label label;
-    std::chrono::steady_clock::time_point started;
+    std::chrono::high_resolution_clock::time_point started;
     Scope(Perfm::Label label)
-        : label{label}, started{std::chrono::steady_clock::now()} {}
+        : label{label}, started{std::chrono::high_resolution_clock::now()} {}
     ~Scope() {
       Perfm::stats_[label].count++;
       Perfm::stats_[label].elapsed_nanos +=
           std::chrono::duration_cast<std::chrono::nanoseconds>(
-              std::chrono::steady_clock::now() - started)
+              std::chrono::high_resolution_clock::now() - started)
               .count();
     }
   };
@@ -58,6 +59,7 @@ class Perfm {
         "MaxPuctChild",
         "Puct",
         "NextMoves",
+        "NeuralMCTS::Run",
     };
     assert(label < StatsSize);
     return names[label];
