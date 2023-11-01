@@ -161,12 +161,15 @@ int Board::Flags(int player) const { return nflags_[player]; }
 
 void Board::MakeMove(int player, const Move& move) {
   Perfm::Scope ps(Perfm::MakeMove);
-  b_.index_put_({move.typ + player * 4, move.r, move.c}, move.value);
+  auto b_acc = b_.accessor<float, 3>();
+  b_acc[move.typ + player * 4][move.r][move.c] = move.value;
   bool played_flag = move.typ == 0;
-  b_.index_put_({2, move.r, move.c}, 1);
-  b_.index_put_({6, move.r, move.c}, 1);
-  b_.index_put_({3, move.r, move.c}, 0);
-  b_.index_put_({7, move.r, move.c}, 0);
+  // Occupy cell for both players
+  b_acc[2][move.r][move.c] = 1;
+  b_acc[6][move.r][move.c] = 1;
+  // Zero next value.
+  b_acc[3][move.r][move.c] = 0;
+  b_acc[7][move.r][move.c] = 0;
   float next_val = 1;
   if (played_flag) {
     nflags_[player]--;
@@ -175,19 +178,20 @@ void Board::MakeMove(int player, const Move& move) {
   }
   for (const auto& nb : NeighborsOf(Idx{move.r, move.c})) {
     if (next_val <= 5) {
-      if (b_.index({2 + player * 4, nb.r, nb.c}).item<float>() == 0) {
-        // Cell is not blocked yet.
-        if (b_.index({3 + player * 4, nb.r, nb.c}).item<float>() == 0) {
-          b_.index_put_({3 + player * 4, nb.r, nb.c}, next_val);
-        } else if (b_.index({3 + player * 4, nb.r, nb.c}).item<float>() >
-                   next_val) {
-          b_.index_put_({3 + player * 4, nb.r, nb.c}, next_val);
+      if (b_acc[2 + player * 4][nb.r][nb.c] == 0) {
+        // Neighbor cell is not blocked.
+        if (b_acc[3 + player * 4][nb.r][nb.c] == 0) {
+          // Neighbor cell did not have a next value yet.
+          b_acc[3 + player * 4][nb.r][nb.c] = next_val;
+        } else if (b_acc[3 + player * 4][nb.r][nb.c] > next_val) {
+          // Neighbor cell's value was larger: decrease.
+          b_acc[3 + player * 4][nb.r][nb.c] = next_val;
         }
       }
     } else {
       // Played a 5: block neighboring cells and clear next value.
-      b_.index_put_({2 + player * 4, nb.r, nb.c}, 1);
-      b_.index_put_({3 + player * 4, nb.r, nb.c}, 0);
+      b_acc[2 + player * 4][nb.r][nb.c] = 1;
+      b_acc[3 + player * 4][nb.r][nb.c] = 0;
     }
   }
   if (!played_flag) {
@@ -208,6 +212,7 @@ void Board::OccupyGrass(int player, const Move& move) {
 }
 
 std::vector<Move> Board::NextMoves(int player) const {
+  Perfm::Scope ps(Perfm::NextMoves);
   std::vector<Move> moves;
   auto b_acc = b_.accessor<float, 3>();
   bool flag = nflags_[player] > 0;

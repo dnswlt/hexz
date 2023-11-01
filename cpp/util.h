@@ -25,7 +25,7 @@ class Perfm {
     PlayGameLocally = 3,
     MaxPuctChild = 4,
     Puct = 5,
-    PuctMoveProbs = 6,
+    NextMoves = 6,
     StatsSize = 7,
   };
 
@@ -57,7 +57,7 @@ class Perfm {
         "PlayGameLocally",
         "MaxPuctChild",
         "Puct",
-        "PuctMoveProbs",
+        "NextMoves",
     };
     assert(label < StatsSize);
     return names[label];

@@ -38,4 +38,13 @@ TEST(TorchTest, TensorIsRef) {
   EXPECT_EQ(t1.index({0, 0}).item<float>(), 2);
 }
 
+TEST(TorchTest, TensorAccessorWrites) {
+  // Shows that writing to a TensorAccessor modifies the original tensor.
+  auto opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU);
+  torch::Tensor t = torch::ones({2, 2}, opts);
+  auto t_acc = t.accessor<float, 2>();
+  t_acc[1][1] = 101;
+  EXPECT_EQ(t.index({1, 1}).item<float>(), 101);
+}
+
 }  // namespace hexz
