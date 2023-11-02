@@ -220,6 +220,38 @@ inline bool AddTrainingExamplesResponse_Status_Parse(absl::string_view name, Add
   return ::google::protobuf::internal::ParseNamedEnum<AddTrainingExamplesResponse_Status>(
       AddTrainingExamplesResponse_Status_descriptor(), name, value);
 }
+enum TrainingExample_Encoding : int {
+  TrainingExample_Encoding_NUMPY = 0,
+  TrainingExample_Encoding_PYTORCH = 1,
+  TrainingExample_Encoding_TrainingExample_Encoding_INT_MIN_SENTINEL_DO_NOT_USE_ =
+      std::numeric_limits<::int32_t>::min(),
+  TrainingExample_Encoding_TrainingExample_Encoding_INT_MAX_SENTINEL_DO_NOT_USE_ =
+      std::numeric_limits<::int32_t>::max(),
+};
+
+bool TrainingExample_Encoding_IsValid(int value);
+constexpr TrainingExample_Encoding TrainingExample_Encoding_Encoding_MIN = static_cast<TrainingExample_Encoding>(0);
+constexpr TrainingExample_Encoding TrainingExample_Encoding_Encoding_MAX = static_cast<TrainingExample_Encoding>(1);
+constexpr int TrainingExample_Encoding_Encoding_ARRAYSIZE = 1 + 1;
+const ::google::protobuf::EnumDescriptor*
+TrainingExample_Encoding_descriptor();
+template <typename T>
+const std::string& TrainingExample_Encoding_Name(T value) {
+  static_assert(std::is_same<T, TrainingExample_Encoding>::value ||
+                    std::is_integral<T>::value,
+                "Incorrect type passed to Encoding_Name().");
+  return TrainingExample_Encoding_Name(static_cast<TrainingExample_Encoding>(value));
+}
+template <>
+inline const std::string& TrainingExample_Encoding_Name(TrainingExample_Encoding value) {
+  return ::google::protobuf::internal::NameOfDenseEnum<TrainingExample_Encoding_descriptor,
+                                                 0, 1>(
+      static_cast<int>(value));
+}
+inline bool TrainingExample_Encoding_Parse(absl::string_view name, TrainingExample_Encoding* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<TrainingExample_Encoding>(
+      TrainingExample_Encoding_descriptor(), name, value);
+}
 
 // ===================================================================
 
@@ -3672,6 +3704,26 @@ class TrainingExample final :
 
   // nested types ----------------------------------------------------
 
+  using Encoding = TrainingExample_Encoding;
+  static constexpr Encoding NUMPY = TrainingExample_Encoding_NUMPY;
+  static constexpr Encoding PYTORCH = TrainingExample_Encoding_PYTORCH;
+  static inline bool Encoding_IsValid(int value) {
+    return TrainingExample_Encoding_IsValid(value);
+  }
+  static constexpr Encoding Encoding_MIN = TrainingExample_Encoding_Encoding_MIN;
+  static constexpr Encoding Encoding_MAX = TrainingExample_Encoding_Encoding_MAX;
+  static constexpr int Encoding_ARRAYSIZE = TrainingExample_Encoding_Encoding_ARRAYSIZE;
+  static inline const ::google::protobuf::EnumDescriptor* Encoding_descriptor() {
+    return TrainingExample_Encoding_descriptor();
+  }
+  template <typename T>
+  static inline const std::string& Encoding_Name(T value) {
+    return TrainingExample_Encoding_Name(value);
+  }
+  static inline bool Encoding_Parse(absl::string_view name, Encoding* value) {
+    return TrainingExample_Encoding_Parse(name, value);
+  }
+
   // accessors -------------------------------------------------------
 
   enum : int {
@@ -3680,6 +3732,7 @@ class TrainingExample final :
     kUnixMicrosFieldNumber = 1,
     kDurationMicrosFieldNumber = 5,
     kResultFieldNumber = 4,
+    kEncodingFieldNumber = 6,
   };
   // bytes board = 2;
   void clear_board() ;
@@ -3743,12 +3796,22 @@ class TrainingExample final :
   void _internal_set_result(float value);
 
   public:
+  // .hexzpb.TrainingExample.Encoding encoding = 6;
+  void clear_encoding() ;
+  ::hexzpb::TrainingExample_Encoding encoding() const;
+  void set_encoding(::hexzpb::TrainingExample_Encoding value);
+
+  private:
+  ::hexzpb::TrainingExample_Encoding _internal_encoding() const;
+  void _internal_set_encoding(::hexzpb::TrainingExample_Encoding value);
+
+  public:
   // @@protoc_insertion_point(class_scope:hexzpb.TrainingExample)
  private:
   class _Internal;
 
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<3, 5, 0, 0, 2> _table_;
+  static const ::google::protobuf::internal::TcParseTable<3, 6, 0, 0, 2> _table_;
   template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
@@ -3758,6 +3821,7 @@ class TrainingExample final :
     ::int64_t unix_micros_;
     ::int64_t duration_micros_;
     float result_;
+    int encoding_;
     mutable ::google::protobuf::internal::CachedSize _cached_size_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -6546,6 +6610,28 @@ inline void TrainingExample::_internal_set_duration_micros(::int64_t value) {
   _impl_.duration_micros_ = value;
 }
 
+// .hexzpb.TrainingExample.Encoding encoding = 6;
+inline void TrainingExample::clear_encoding() {
+  _impl_.encoding_ = 0;
+}
+inline ::hexzpb::TrainingExample_Encoding TrainingExample::encoding() const {
+  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.encoding)
+  return _internal_encoding();
+}
+inline void TrainingExample::set_encoding(::hexzpb::TrainingExample_Encoding value) {
+  _internal_set_encoding(value);
+  // @@protoc_insertion_point(field_set:hexzpb.TrainingExample.encoding)
+}
+inline ::hexzpb::TrainingExample_Encoding TrainingExample::_internal_encoding() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return static_cast<::hexzpb::TrainingExample_Encoding>(_impl_.encoding_);
+}
+inline void TrainingExample::_internal_set_encoding(::hexzpb::TrainingExample_Encoding value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.encoding_ = value;
+}
+
 // bytes board = 2;
 inline void TrainingExample::clear_board() {
   _impl_.board_.ClearToEmpty();
@@ -6698,6 +6784,12 @@ struct is_proto_enum<::hexzpb::AddTrainingExamplesResponse_Status> : std::true_t
 template <>
 inline const EnumDescriptor* GetEnumDescriptor<::hexzpb::AddTrainingExamplesResponse_Status>() {
   return ::hexzpb::AddTrainingExamplesResponse_Status_descriptor();
+}
+template <>
+struct is_proto_enum<::hexzpb::TrainingExample_Encoding> : std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor<::hexzpb::TrainingExample_Encoding>() {
+  return ::hexzpb::TrainingExample_Encoding_descriptor();
 }
 
 }  // namespace protobuf

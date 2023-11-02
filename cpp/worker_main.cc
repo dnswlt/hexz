@@ -70,7 +70,7 @@ void PlayGameLocally(const Config& config) {
   }
 }
 
-absl::StatusOr<torch::jit::script::Module> FetchModule(const Config& config) {
+absl::StatusOr<torch::jit::Module> FetchModule(const Config& config) {
   // Get info about the current model.
   cpr::Response key_resp = cpr::Get(
       cpr::Url{config.training_server_url + "/models/current"},
@@ -131,7 +131,9 @@ void TrialRun(const Config& config) {
     ABSL_LOG(INFO) << "Successully initialized model. Playing a game for fun.";
     NeuralMCTS mcts{*model_or};
     Board b = Board::RandomBoard();
-    mcts.PlayGame(b, config.runs_per_move, config.max_moves_per_game);
+    auto examples = mcts.PlayGame(b, config.runs_per_move, config.max_moves_per_game);
+    hexzpb::AddTrainingExamplesRequest req;
+    req.mutable_model_key()->set
   }
 }
 

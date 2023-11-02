@@ -122,3 +122,34 @@ Showing top 20 nodes out of 71
      0.57s  1.56% 88.72%      0.57s  1.56%  mkl_blas_avx2_sgemm_scopy_down24_ea
      0.50s  1.37% 90.08%      0.57s  1.56%  gblock_by_k_omp
 ```
+
+
+## 2023-11-02
+
+C++ worker in Docker:
+
+```
+scope              total_time      count        ops/s
+NeuralMCTS::Run      107.590s      70401      654.342
+Predict              104.542s      49316      471.735
+FindLeaf               2.510s      70401    28048.097
+MaxPuctChild           2.001s    1170674   585037.079
+Puct                   1.328s   16254895 12239552.417
+MakeMove               0.440s    1239104  2815945.426
+NextMoves              0.080s      92847  1159550.630
+```
+
+Outside Docker
+
+```
+scope              total_time      count        ops/s
+NeuralMCTS::Run      111.378s      72001      646.454
+Predict              109.295s      55952      511.935
+FindLeaf               1.600s      72001    44999.839
+MaxPuctChild           1.300s     644303   495758.242
+Puct                   0.904s   10161038 11245034.907
+MakeMove               0.271s     688451  2539308.996
+NextMoves              0.082s      88679  1086000.210
+```
+
+Nice, they're essentially running equally fast.

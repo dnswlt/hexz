@@ -34,6 +34,11 @@ class Node {
   // Adds children representing the given moves to this node.
   // Children will be shuffled randomly, to avoid selection bias.
   void CreateChildren(int player, const std::vector<Move>& moves);
+
+  torch::Tensor MoveProbs() {
+    assert(move_probs_.size() == 2 * 11 * 10);
+    return torch::from_blob(move_probs_.data(), {2, 11, 10});
+  }
   void SetMoveProbs(torch::Tensor move_probs) {
     assert(move_probs.numel() == 2 * 11 * 10);
     move_probs_ =

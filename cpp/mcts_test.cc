@@ -67,5 +67,43 @@ TEST(MCTSTest, TorchPickleSave) {
   EXPECT_GT(e.board().size(), 100);
 }
 
+TEST(MCTSTest, PlayGame) {
+  // The file "testdata/scriptmodule.pt" is expected to be a ScriptModule of the
+  // right shape to be used by NeuralMCTS.
+  //
+  // It can be generated from the pyhexz/src directory by running
+  // 
+  //    python3 -m pyhexz.run --mode=export --model=../../cpp/build/scriptmodule.pt
+  auto model = torch::jit::load("testdata/scriptmodule.pt");
+  model.to(torch::kCPU);
+  model.eval();
+  NeuralMCTS mcts(model);
+  auto b = Board::RandomBoard();
+
+  auto examples = mcts.PlayGame(b, /*runs_per_move=*/10);
+
+  ASSERT_GT(examples.size(), 0);
+  auto ex0 = examples[0];
+  EXPECT_EQ(ex0.encoding(), hexzpb::TrainingExample::PYTORCH);
+  EXPECT_GT(ex0.unix_micros(), 0);
+  EXPECT_GT(ex0.duration_micros(), 0);
+  // Check board is a Tensor of the right shape.
+  auto board_val = torch::pickle_load(
+      std::vector<char>(ex0.board().begin(), ex0.board().end()));
+  ASSERT_TRUE(board_val.isTensor());
+  auto board = board_val.toTensor();
+  EXPECT_EQ(board.sizes()[0], 9);
+  EXPECT_EQ(board.sizes()[1], 11);
+  EXPECT_EQ(board.sizes()[2], 10);
+  // Check move_probs is a Tensor of the right shape.
+  auto pr_val = torch::pickle_load(
+      std::vector<char>(ex0.move_probs().begin(), ex0.move_probs().end()));
+  ASSERT_TRUE(pr_val.isTensor());
+  auto pr = pr_val.toTensor();
+  EXPECT_EQ(pr.sizes()[0], 2);
+  EXPECT_EQ(pr.sizes()[1], 11);
+  EXPECT_EQ(pr.sizes()[2], 10);
+}
+
 }  // namespace
 }  // namespace hexz

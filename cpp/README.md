@@ -45,6 +45,7 @@ cd third_party
 cmake -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_SHARED_LIBS=ON -Dprotobuf_BUILD_TESTS=OFF -Dprotobuf_BUILD_PROTOC_BINARIES=OFF .
 cmake --build . --parallel 4 
 sudo cmake --install .
+ldconfig
 ```
 
 [^1] NOTE: I had linker error when trying to use the statically linked protobuf library. It
@@ -77,10 +78,10 @@ To build the worker on Linux, now finally run:
 cd $HEXZ_REPO_DIR/cpp
 mkdir build
 cd build
-cmake -DCMAKE_BUILD_TYPE=Release -DCPR_ENABLE_SSL=OFF -DCMAKE_PREFIX_PATH="$HOME/opt/libtorch/share/cmake;/usr/local/lib/cmake/protobuf" ..
-cmake --build .
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$HOME/opt/libtorch/share/cmake;/usr/local/lib/cmake/protobuf" ..
+cmake --build . --parallel 4
 # Run the binary, AT LAST!
-LD_LIBRARY_PATH=/usr/local/lib HEXZ_LOCAL_MODEL_PATH=/tmp/scriptmodule.pt ./worker
+HEXZ_LOCAL_MODEL_PATH=/tmp/scriptmodule.pt ./worker
 ```
 
 

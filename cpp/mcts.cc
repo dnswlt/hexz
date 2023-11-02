@@ -159,7 +159,7 @@ std::vector<hexzpb::TrainingExample> NeuralMCTS::PlayGame(Board& board,
   for (; n < max_moves; n++) {
     int64_t move_started = UnixMicros();
     ABSL_LOG(INFO) << "Move " << n << " after "
-              << (float)(move_started - started_micros) / 1000000 << "s";
+                   << (float)(move_started - started_micros) / 1000000 << "s";
     // Root's children have the player whose turn it actually is.
     // So root has the opposite player.
     bool progress = true;
@@ -175,11 +175,18 @@ std::vector<hexzpb::TrainingExample> NeuralMCTS::PlayGame(Board& board,
       result = board.Result();
       break;
     }
+    // Add example.
     hexzpb::TrainingExample example;
     int64_t move_ready = UnixMicros();
     example.set_unix_micros(move_ready);
     example.set_duration_micros(move_ready - move_started);
+    example.set_encoding(hexzpb::TrainingExample::PYTORCH);
+    auto enc_b =  torch::pickle_save(board.Tensor(player));
+    example.mutable_board()->assign(enc_b.begin(), enc_b.end());
+    auto enc_pr = torch::pickle_save(root->MoveProbs());
+    example.mutable_move_probs()->assign(enc_pr.begin(), enc_pr.end());
     examples.push_back(example);
+
     std::unique_ptr<Node> best_child = root->MostVisitedChildAsRoot();
     board.MakeMove(best_child->Player(), best_child->GetMove());
     player = 1 - best_child->Player();

@@ -165,6 +165,15 @@ message TrainingExample {
     // neural MCTS move suggestion).
     int64 duration_micros = 5;
 
+    // Encoding indicates how the bytes fields were encoded.
+    // In Python workers, we use numpy (np.save), while in C++ we use
+    // PyTorch (torch::pickle_save), since numpy is not available.
+    enum Encoding {
+        NUMPY = 0;
+        PYTORCH = 1;
+    }
+    Encoding encoding = 6;
+
     // Training inputs.
     // Numpy array containing the (9, 11, 10) Board.
     // Serialized to bytes using np.save.

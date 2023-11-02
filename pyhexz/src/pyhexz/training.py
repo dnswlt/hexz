@@ -192,7 +192,6 @@ class TrainingTask(threading.Thread):
     def handle_training_examples(self, msg: Mapping[str, Any]):
         req: hexz_pb2.AddTrainingExamplesRequest = msg["request"]
         reply_q = msg["reply_q"]
-        batch = self.batch
         if self.state != self._STATE_ACCEPTING:
             resp = hexz_pb2.AddTrainingExamplesResponse(
                 status=hexz_pb2.AddTrainingExamplesResponse.REJECTED_TRAINING,
@@ -214,7 +213,8 @@ class TrainingTask(threading.Thread):
         reply_q.put(resp)
 
         # Add examples and run training if we have a full batch.
-        lim = min(len(req.examples), self.config.batch_size - len(batch))
+        lim = min(len(req.examples), self.config.batch_size - len(self.batch))
+        new_batch = []
         for ex in req.examples[:lim]:
             # Update timing stats.
             self.timing_stats.count += 1
@@ -223,13 +223,24 @@ class TrainingTask(threading.Thread):
             self.timing_stats.sum_duration_micros += ex.duration_micros
             self.timing_stats.sum_duration_sq += (ex.duration_micros/1e6)**2
             # Extract example data.
-            board = np.load(io.BytesIO(ex.board))
-            pr = np.load(io.BytesIO(ex.move_probs))
+            if ex.encoding == hexz_pb2.TrainingExample.PYTORCH:
+                board = torch.load(io.BytesIO(ex.board)).numpy()
+                pr = torch.load(io.BytesIO(ex.move_probs)).numpy()
+            else:
+                board = np.load(io.BytesIO(ex.board))
+                pr = np.load(io.BytesIO(ex.move_probs))
+            if board.shape != (9, 11, 10):
+                self.logger.error(f"Received board with wrong shape: {board.shape}. Ignored.")
+                return
+            if pr.shape != (2, 11, 10):
+                self.logger.error(f"Received move_probs with wrong shape: {pr.shape}. Ignored.")
+                return
             val = np.array([ex.result], dtype=np.float32)
-            batch.append((board, (pr, val)))
-        self.stats["examples"] += lim
+            new_batch.append((board, (pr, val)))
+        self.stats["examples"] += len(new_batch)
+        self.batch.extend(new_batch)
 
-        if len(batch) >= self.config.batch_size:
+        if len(self.batch) >= self.config.batch_size:
             self.start_training_runner_task()
 
     def handle_training_result(self, msg: Mapping[str, Any]):
