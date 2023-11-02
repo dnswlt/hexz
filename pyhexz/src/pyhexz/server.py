@@ -215,12 +215,18 @@ def create_app():
 
         This returns the raw bytes of the PyTorch encoded model and not a protobuf or JSON.
         """
+        repr = request.args.get("repr", "state_dict").lower()
+        if repr not in ("state_dict", "scriptmodule"):
+            return "repr must be state_dict or scriptmodule", 400
         reply_q = queue.SimpleQueue()
         current_app.training_task_queue.put(
             {
                 "type": "GetModel",
-                "name": name,
-                "checkpoint": checkpoint,
+                "model_key": hexz_pb2.ModelKey(
+                    name=name,
+                    checkpoint=checkpoint,
+                ),
+                "repr": repr,
                 "reply_q": reply_q,
             }
         )

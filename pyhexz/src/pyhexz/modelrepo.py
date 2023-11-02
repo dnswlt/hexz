@@ -23,7 +23,13 @@ class ModelRepository:
         """Returns the latest checkpoint number for the given model, or None if no checkpoint exists."""
         pass
 
-    def get_model(self, name: str, checkpoint: int = None, as_bytes: bool = False) -> (HexzNeuralNetwork | bytes):
+    def get_model(
+        self,
+        name: str,
+        checkpoint: int = None,
+        as_bytes: bool = False,
+        repr: str = "state_dict",
+    ) -> HexzNeuralNetwork | bytes:
         """Loads the given model name and checkpoint from the repository.
 
         Args:
@@ -32,8 +38,19 @@ class ModelRepository:
         pass
 
     def store_model(
-        self, name: str, checkpoint: int, model: HexzNeuralNetwork, overwrite=False
+        self,
+        name: str,
+        checkpoint: int,
+        model: HexzNeuralNetwork,
+        overwrite=False,
+        store_sm=True,
     ) -> str:
+        """Stores the given model in the repository as a state_dict.
+
+        Args:
+            overwrite: if True, overwrites any existing model with the same name and checkpoint.
+            store_sm: if True, stores a torch.jit.ScriptModule in addition to the state_dict.
+        """
         pass
 
     def add_examples(
@@ -56,6 +73,11 @@ class LocalModelRepository:
             self._model_base(name), "checkpoints", str(checkpoint), "model.pt"
         )
 
+    def _scriptmodule_path(self, name: str, checkpoint: int):
+        return os.path.join(
+            self._model_base(name), "checkpoints", str(checkpoint), "scriptmodule.pt"
+        )
+
     def get_latest_checkpoint(self, name: str) -> Optional[int]:
         cpdir = os.path.join(self._model_base(name), "checkpoints")
         regex = re.compile(r"^\d+$")
@@ -67,9 +89,23 @@ class LocalModelRepository:
             # Raised by os.listdir if cpdir does not exist.
             return None
 
-    def get_model(self, name: str, checkpoint: int = None, map_location="cpu", as_bytes=False) -> (HexzNeuralNetwork | bytes):
+    def get_model(
+        self,
+        name: str,
+        checkpoint: int = None,
+        map_location="cpu",
+        as_bytes=False,
+        repr="state_dict",
+    ) -> HexzNeuralNetwork | torch.jit.ScriptModule | bytes:
         if checkpoint is None:
             checkpoint = self.get_latest_checkpoint(name)
+        if repr == "scriptmodule":
+            p = self._scriptmodule_path(name, checkpoint)
+            if as_bytes:
+                with open(p, "rb") as f_in:
+                    return f_in.read()
+            return torch.jit.load(p)
+        # Treat as state_dict
         p = self._model_path(name, checkpoint)
         if as_bytes:
             with open(p, "rb") as f_in:
@@ -79,14 +115,24 @@ class LocalModelRepository:
         return model
 
     def store_model(
-        self, name: str, checkpoint: int, model: HexzNeuralNetwork, overwrite=False
+        self,
+        name: str,
+        checkpoint: int,
+        model: HexzNeuralNetwork,
+        overwrite=False,
+        store_sm=True,
     ) -> str:
-        p = self._model_path(name, checkpoint)
-        if not overwrite and os.path.exists(p):
-            raise IOError(f"Model already exists at {p}")
-        os.makedirs(os.path.dirname(p), exist_ok=True)
-        torch.save(model.state_dict(), p)
-        return p
+        m_path = self._model_path(name, checkpoint)
+        if not overwrite and os.path.exists(m_path):
+            raise IOError(f"Model already exists at {m_path}")
+        os.makedirs(os.path.dirname(m_path), exist_ok=True)
+        torch.save(model.state_dict(), m_path)
+        if store_sm:
+            # Generate and store a ScriptModule as well.
+            sm_path = self._scriptmodule_path(name, checkpoint)
+            sm = torch.jit.script(model)
+            sm.save(sm_path)
+        return m_path
 
     def add_examples(
         self, name: str, checkpoint: int, examples: Iterable[hexz_pb2.TrainingExample]
@@ -98,4 +144,3 @@ class LocalModelRepository:
         with zipfile.ZipFile(filename, "w") as zip:
             for i, ex in enumerate(examples):
                 zip.writestr(f"{i:06d}.pb", ex.SerializeToString())
-        

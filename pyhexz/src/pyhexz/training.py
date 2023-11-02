@@ -162,8 +162,11 @@ class TrainingTask(threading.Thread):
         self.batch = InMemoryDataset()
         self.training_runner_task: Optional[TrainingRunnerTask] = None
         self.state = self._STATE_ACCEPTING
-        self.model_bytes = None
-        self.model_bytes_version = ("undefined", -1)
+        self.model_cache = {
+            "model_key": None,
+            "state_dict": None,
+            "scriptmodule": None,
+        }
         self.logger = logger
         self.stats = defaultdict(lambda: 0)
         self.timing_stats = TimingStats()
@@ -254,21 +257,32 @@ class TrainingTask(threading.Thread):
         reply_q.put(self.model_key)
 
     def handle_get_model(self, msg):
-        name = msg["name"]
-        checkpoint = msg["checkpoint"]
+        model_key = msg["model_key"]
+        repr = msg["repr"]
         reply_q = msg["reply_q"]
-        if (name, checkpoint) != (self.model_key.name, self.model_key.checkpoint):
+
+        if model_key != self.model_key:
+            # Requested wrong model key.
             reply_q.put(None)
             return
-        if self.model_bytes is None or self.model_bytes_version != (name, checkpoint):
-            try:
-                self.model_bytes = self.repo.get_model(name, checkpoint, as_bytes=True)
-            except FileNotFoundError as e:
-                self.logger.error(f"Cannot get model {name}:{checkpoint}: {e}")
-                reply_q.put(None)
-                return
-            self.model_bytes_version = (name, checkpoint)
-        reply_q.put(self.model_bytes)
+        if self.model_cache["model_key"] != self.model_key:
+            # Invalidate cache.
+            self.model_cache.clear()
+            self.model_cache["model_key"] = hexz_pb2.ModelKey()
+            self.model_cache["model_key"].CopyFrom(self.model_key)
+
+        cached = self.model_cache.get(repr)
+        if cached is not None:
+            reply_q.put(cached)
+            return
+        # Load from disk and cache.
+        try:
+            mbytes = self.repo.get_model(model_key.name, model_key.checkpoint, as_bytes=True, repr=repr)
+            self.model_cache[repr] = mbytes
+            reply_q.put(mbytes)
+        except FileNotFoundError as e:
+            self.logger.error(f"Cannot get model {model_key}: {e}")
+            reply_q.put(None)
 
     def handle_get_training_info(self, msg):
         reply_q = msg["reply_q"]

@@ -26,6 +26,7 @@ FetchContent_MakeAvailable(cpr)
 # that comes with the protobuf library, not its own outdated FindProtobuf package:
 # https://github.com/protocolbuffers/protobuf/issues/12292#issuecomment-1529680040
 find_package(protobuf REQUIRED CONFIG)
+find_package(absl REQUIRED CONFIG)
 
 #
 # libtorch
@@ -58,11 +59,11 @@ add_library(hexzpb hexz.pb.h hexz.pb.cc)
 target_link_libraries(hexzpb PUBLIC protobuf::libprotobuf)
 
 add_library(mcts board.cc mcts.cc util.cc)
-target_link_libraries(mcts PUBLIC hexzpb "${TORCH_LIBRARIES}")
+target_link_libraries(mcts PUBLIC absl::log hexzpb "${TORCH_LIBRARIES}")
 
 # Add the executable
 add_executable(worker worker_main.cc)
-target_link_libraries(worker PRIVATE mcts hexzpb cpr::cpr)
+target_link_libraries(worker PRIVATE mcts hexzpb cpr::cpr absl::statusor absl::strings absl::log)
 
 #
 # Testing

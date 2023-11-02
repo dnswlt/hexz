@@ -36,7 +36,7 @@ locally:
 
 ```bash
 cd src
-HEXZ_BATCH_SIZE=128 HEXZ_MODEL_NAME=test HEXZ_MODEL_REPO_BASE_DIR=$HOME/git/github.com/dnswlt/hexz-models \
+HEXZ_BATCH_SIZE=1024 HEXZ_MODEL_NAME=test HEXZ_MODEL_REPO_BASE_DIR=/tmp/models \
   gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.server:create_app()'
 ```
 

@@ -21,6 +21,11 @@ RUN apt-get update && apt-get install -y \
 # but currently our CMakeLists.txt depends on the protobuf-config.cmake file, which
 # is not included in that package.
 # TODO: figure out a way to configure CMakeLists.txt s.t. it doesn't need the .cmake file.
+# Update 2023-11-01: We also use absl::StatusOr and friends now, so compiling this is
+# is probably OK.
+#
+# Running ldconfig is required b/c otherwise not all absl .so files ended up in the
+# /etc/ld.so.cache (e.g. libabsl_strings.so.0 was there, but libabsl_base.so.0 was missing).
 RUN curl -L -o protobuf-24.4.tar.gz https://github.com/protocolbuffers/protobuf/releases/download/v24.4/protobuf-24.4.tar.gz \
     && tar xzf protobuf-24.4.tar.gz \
     && rm protobuf-24.4.tar.gz \
@@ -30,7 +35,8 @@ RUN curl -L -o protobuf-24.4.tar.gz https://github.com/protocolbuffers/protobuf/
     && cmake --build . --parallel 4 \
     && cmake --install . \
     && cd .. \
-    && rm -rf protobuf-24.4
+    && rm -rf protobuf-24.4 \
+    && ldconfig
 
 RUN curl -L -o libtorch.zip https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.1.0%2Bcpu.zip \
     && unzip libtorch.zip \
@@ -39,13 +45,6 @@ RUN curl -L -o libtorch.zip https://download.pytorch.org/libtorch/cpu/libtorch-c
 # Copy source files. Do this after required libraries were installed to avoid repeating that
 # each time a source changes.
 COPY . ./
-
-# It's very weird that this is needed; but some of the abseil shared libs are found
-# in the container (when running `ldd ./mcts_test`, for example), while others are not:
-#   libabsl_strings.so.0 => /usr/local/lib/libabsl_strings.so.0 (0x00007f3e83ea1000)
-#   libabsl_base.so.0 => not found
-# I saw this on the nuc as well, but then it disappeared. :shrug:
-ENV LD_LIBRARY_PATH /usr/local/lib
 
 RUN mkdir build \
     && cd build \

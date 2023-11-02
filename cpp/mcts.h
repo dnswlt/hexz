@@ -63,13 +63,14 @@ class NeuralMCTS {
  public:
   NeuralMCTS(torch::jit::script::Module module);
 
-  Prediction Predict(int player, const Board& board);
-  bool Run(Node* root, const Board& board);
-  std::vector<hexzpb::TrainingExample> PlayGame(const Board& board,
+  std::vector<hexzpb::TrainingExample> PlayGame(Board& board,
                                                 int runs_per_move = 500,
                                                 int max_moves = 200);
 
  private:
+  bool Run(Node& root, Board& board);
+  Prediction Predict(int player, const Board& board);
+
   torch::jit::script::Module module_;
 };
 

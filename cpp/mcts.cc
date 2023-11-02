@@ -1,5 +1,6 @@
 #include "mcts.h"
 
+#include <absl/log/absl_log.h>
 #include <torch/torch.h>
 
 #include <algorithm>
@@ -112,52 +113,53 @@ NeuralMCTS::Prediction NeuralMCTS::Predict(int player, const Board& board) {
   };
 }
 
-bool NeuralMCTS::Run(Node* root, const Board& board) {
+bool NeuralMCTS::Run(Node& root, Board& board) {
   Perfm::Scope ps(Perfm::NeuralMCTS_Run);
-  Board b(board);
-  Node* n = root;
+  Node* n = &root;
   // Move to leaf node.
   auto t_start = UnixMicros();
   {
     Perfm::Scope ps(Perfm::FindLeaf);
     while (!n->IsLeaf()) {
       n = n->MaxPuctChild();
-      b.MakeMove(n->Player(), n->GetMove());
+      board.MakeMove(n->Player(), n->GetMove());
     }
   }
   // Expand leaf node. Usually it's the opponent's turn.
   int player = 1 - n->Player();
-  auto moves = b.NextMoves(player);
+  auto moves = board.NextMoves(player);
   if (moves.empty()) {
     // Opponent has no valid moves left. Try other player.
     player = 1 - player;
-    moves = b.NextMoves(player);
+    moves = board.NextMoves(player);
   }
   if (moves.empty()) {
     // No player can make a move => game over.
-    n->Backpropagate(b.Result());
-    return n != root;  // Return if we made any progress at all in this run.
+    n->Backpropagate(board.Result());
+    return n != &root;  // Return if we made any progress at all in this run.
   }
   n->CreateChildren(player, moves);
-  auto pred = Predict(player, b);
+  auto pred = Predict(player, board);
   n->SetMoveProbs(pred.move_probs);
   n->Backpropagate(pred.value);
   return true;
 }
 
-std::vector<hexzpb::TrainingExample> NeuralMCTS::PlayGame(const Board& board,
+std::vector<hexzpb::TrainingExample> NeuralMCTS::PlayGame(Board& board,
                                                           int runs_per_move,
                                                           int max_moves) {
-  Board b(board);
   std::vector<hexzpb::TrainingExample> examples;
   int64_t started_micros = UnixMicros();
   int n = 0;
   int player = 0;
   auto root =
       std::make_unique<Node>(nullptr, 1 - player, Move{-1, -1, -1, -1.0});
+  float result = 0.0;
+  bool game_over = false;
   for (; n < max_moves; n++) {
-    std::cout << "Move " << n << " after "
-              << (float(UnixMicros() - started_micros) / 1000000) << "s\n";
+    int64_t move_started = UnixMicros();
+    ABSL_LOG(INFO) << "Move " << n << " after "
+              << (float)(move_started - started_micros) / 1000000 << "s";
     // Root's children have the player whose turn it actually is.
     // So root has the opposite player.
     bool progress = true;
@@ -165,16 +167,28 @@ std::vector<hexzpb::TrainingExample> NeuralMCTS::PlayGame(const Board& board,
     // those.
     int limit = n >= 6 ? runs_per_move : 2 * runs_per_move;
     for (int i = 0; i < limit && progress; i++) {
-      progress = Run(root.get(), b);
+      Board b(board);
+      progress = Run(*root, b);
     }
     if (root->IsLeaf()) {
-      // Game over
+      game_over = true;
+      result = board.Result();
       break;
     }
+    hexzpb::TrainingExample example;
+    int64_t move_ready = UnixMicros();
+    example.set_unix_micros(move_ready);
+    example.set_duration_micros(move_ready - move_started);
+    examples.push_back(example);
     std::unique_ptr<Node> best_child = root->MostVisitedChildAsRoot();
-    b.MakeMove(best_child->Player(), best_child->GetMove());
+    board.MakeMove(best_child->Player(), best_child->GetMove());
     player = 1 - best_child->Player();
     root = std::move(best_child);
+  }
+  if (game_over) {
+    for (auto& ex : examples) {
+      ex.set_result(result);
+    }
   }
   return examples;
 }
