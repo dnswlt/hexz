@@ -133,7 +133,7 @@ void TrialRun(const Config& config) {
     Board b = Board::RandomBoard();
     auto examples = mcts.PlayGame(b, config.runs_per_move, config.max_moves_per_game);
     hexzpb::AddTrainingExamplesRequest req;
-    req.mutable_model_key()->set
+    // XXX HERE
   }
 }
 
