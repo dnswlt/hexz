@@ -151,17 +151,16 @@ std::vector<hexzpb::TrainingExample> NeuralMCTS::PlayGame(Board& board,
   std::vector<hexzpb::TrainingExample> examples;
   int64_t started_micros = UnixMicros();
   int n = 0;
-  int player = 0;
+  // Root's children have the player whose turn it actually is.
+  // Every game starts with player 0, so root must use player 1. 
   auto root =
-      std::make_unique<Node>(nullptr, 1 - player, Move{-1, -1, -1, -1.0});
+      std::make_unique<Node>(nullptr, /*player=*/1, Move{-1, -1, -1, -1.0});
   float result = 0.0;
   bool game_over = false;
   for (; n < max_moves; n++) {
     int64_t move_started = UnixMicros();
     ABSL_LOG(INFO) << "Move " << n << " after "
                    << (float)(move_started - started_micros) / 1000000 << "s";
-    // Root's children have the player whose turn it actually is.
-    // So root has the opposite player.
     bool progress = true;
     // The first moves are the most important ones. Think twice as hard for
     // those.
@@ -175,21 +174,23 @@ std::vector<hexzpb::TrainingExample> NeuralMCTS::PlayGame(Board& board,
       result = board.Result();
       break;
     }
+    std::unique_ptr<Node> best_child = root->MostVisitedChildAsRoot();
+
     // Add example.
     hexzpb::TrainingExample example;
     int64_t move_ready = UnixMicros();
     example.set_unix_micros(move_ready);
     example.set_duration_micros(move_ready - move_started);
     example.set_encoding(hexzpb::TrainingExample::PYTORCH);
-    auto enc_b =  torch::pickle_save(board.Tensor(player));
+    // The board in the example must be viewed from the perspective of the
+    // player whose turn it is, i.e. from best_child->Player().
+    auto enc_b = torch::pickle_save(board.Tensor(best_child->Player()));
     example.mutable_board()->assign(enc_b.begin(), enc_b.end());
     auto enc_pr = torch::pickle_save(root->MoveProbs());
     example.mutable_move_probs()->assign(enc_pr.begin(), enc_pr.end());
     examples.push_back(example);
 
-    std::unique_ptr<Node> best_child = root->MostVisitedChildAsRoot();
     board.MakeMove(best_child->Player(), best_child->GetMove());
-    player = 1 - best_child->Player();
     root = std::move(best_child);
   }
   if (game_over) {

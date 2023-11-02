@@ -23,6 +23,7 @@
 
 namespace hexz {
 
+using google::protobuf::RepeatedPtrFieldBackInserter;
 using hexzpb::TrainingExample;
 
 struct Config {
@@ -70,17 +71,22 @@ void PlayGameLocally(const Config& config) {
   }
 }
 
-absl::StatusOr<torch::jit::Module> FetchModule(const Config& config) {
+struct KeyedModel {
+  hexzpb::ModelKey key;
+  torch::jit::Module model;
+};
+
+absl::StatusOr<KeyedModel> FetchModule(const Config& config) {
   // Get info about the current model.
   cpr::Response key_resp = cpr::Get(
       cpr::Url{config.training_server_url + "/models/current"},
       cpr::Timeout{1000}, cpr::Header{{"Accept", "application/x-protobuf"}});
   if (key_resp.status_code == 0) {
-    return absl::FailedPreconditionError(
+    return absl::UnavailableError(
         absl::StrCat("Server unreachable: ", key_resp.error.message));
   }
   if (key_resp.status_code != 200) {
-    return absl::FailedPreconditionError(
+    return absl::AbortedError(
         absl::StrCat("Server returned status code ", key_resp.status_code));
   }
   hexzpb::ModelKey model_key;
@@ -98,18 +104,26 @@ absl::StatusOr<torch::jit::Module> FetchModule(const Config& config) {
                                      model_key.checkpoint())},
                cpr::Parameters{{"repr", "scriptmodule"}},  //
                cpr::Timeout{1000});
+  if (model_resp.status_code == 404) {
+    // This *might* be a concurrent model change between our call to
+    // /models/current and the failed fetch. We should try again.
+    return absl::NotFoundError("Server returned 404");
+  }
   if (model_resp.status_code != 200) {
-    return absl::FailedPreconditionError(absl::StrCat(
+    return absl::AbortedError(absl::StrCat(
         "Fetch model: server returned status code ", model_resp.status_code));
   }
-  std::istringstream model_is(model_resp.text);
   try {
-    auto model = torch::jit::load(model_is); // , torch::kCPU);
+    std::istringstream model_is(model_resp.text);
+    auto model = torch::jit::load(model_is);  // , torch::kCPU);
     model.to(torch::kCPU);
     model.eval();
-    return model;
+    return KeyedModel{
+        .key = model_key,
+        .model = model,
+    };
   } catch (const c10::Error& e) {
-    return absl::FailedPreconditionError(
+    return absl::InternalError(
         absl::StrCat("Failed to load torch module: ", e.msg()));
   }
 }
@@ -124,16 +138,35 @@ void TrialRun(const Config& config) {
   }
 
   if (config.training_server_url != "") {
-    auto model_or = FetchModule(config);
-    if (!model_or.ok()) {
-      ABSL_LOG(ERROR) << "FetchModule failed: " << model_or.status();
+    auto km = FetchModule(config);
+    if (!km.ok()) {
+      ABSL_LOG(ERROR) << "FetchModule failed: " << km.status();
+      return;
     }
     ABSL_LOG(INFO) << "Successully initialized model. Playing a game for fun.";
-    NeuralMCTS mcts{*model_or};
+    NeuralMCTS mcts{km->model};
     Board b = Board::RandomBoard();
-    auto examples = mcts.PlayGame(b, config.runs_per_move, config.max_moves_per_game);
+    auto examples =
+        mcts.PlayGame(b, config.runs_per_move, config.max_moves_per_game);
     hexzpb::AddTrainingExamplesRequest req;
-    // XXX HERE
+    *req.mutable_model_key() = km->key;
+    req.mutable_examples()->Reserve(examples.size());
+    std::move(examples.begin(), examples.end(),
+              RepeatedPtrFieldBackInserter(req.mutable_examples()));
+    cpr::Response resp = cpr::Post(
+        cpr::Url{config.training_server_url + "/examples"}, cpr::Timeout{1000},
+        cpr::Header{{"Content-Type", "application/x-protobuf"}},
+        cpr::Body{req.SerializeAsString()});
+    if (resp.status_code != 200) {
+      ABSL_LOG(ERROR) << "Server did not like our request: " <<resp.status_code;
+      return;
+    }
+    hexzpb::AddTrainingExamplesResponse response;
+    if (!response.ParseFromString(resp.text)) {
+      ABSL_LOG(ERROR) << "Cannot parse reponse as AddTrainingExamplesResponse";
+      return;
+    }
+    ABSL_LOG(INFO) << "Nice response from the server: " << response.DebugString();
   }
 }
 

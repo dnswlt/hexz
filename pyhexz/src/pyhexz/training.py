@@ -31,6 +31,9 @@ class InMemoryDataset(torch.utils.data.Dataset):
     def append(self, example):
         self.examples.append(example)
 
+    def extend(self, examples):
+        self.examples.extend(examples)
+
 
 class TrainingRunnerTask(threading.Thread):
     def __init__(
