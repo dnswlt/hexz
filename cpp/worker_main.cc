@@ -23,6 +23,10 @@
 
 namespace hexz {
 
+std::string ModelId(const hexzpb::ModelKey& key) {
+  return absl::StrCat(key.name(), ":", key.checkpoint());
+}
+
 void PlayGameLocally(const Config& config) {
   torch::jit::script::Module model;
   try {
@@ -38,8 +42,9 @@ void PlayGameLocally(const Config& config) {
     Perfm::Scope ps(Perfm::PlayGameLocally);
     NeuralMCTS mcts{model, config};
     Board b = Board::RandomBoard();
-    if (auto result = mcts.PlayGame(b, /*max_runtime_seconds=*/0); !result.ok()) {
-        ABSL_LOG(ERROR) << "Game failed: " << result.status();
+    if (auto result = mcts.PlayGame(b, /*max_runtime_seconds=*/0);
+        !result.ok()) {
+      ABSL_LOG(ERROR) << "Game failed: " << result.status();
     }
   }
 }
@@ -63,20 +68,55 @@ void GenerateExamples(const Config& config) {
         config.max_runtime_seconds - (now - started_micros) / 1'000'000;
     auto examples = mcts.PlayGame(b, max_runtime_seconds);
     if (!examples.ok()) {
-        if (absl::IsDeadlineExceeded(examples.status())) {
-            break;
-        }
-        ABSL_LOG(ERROR) << "Aborting: PlayGame returned an error: " << examples.status();
-        return;
-    }
-    auto resp = rpc.SendExamples(km->key, *std::move(examples));
-    if (!resp.ok()) {
-      ABSL_LOG(ERROR) << "Server did not like our examples: " << resp.status();
+      if (absl::IsDeadlineExceeded(examples.status())) {
+        break;
+      }
+      ABSL_LOG(ERROR) << "Aborting: PlayGame returned an error: "
+                      << examples.status();
       return;
     }
-    ABSL_LOG(INFO) << "Sent examples to training server at "
-                   << config.training_server_url
-                   << ". Response was: " << resp->DebugString();
+    const int n_examples = examples->size();
+    auto resp = rpc.SendExamples(km->key, *std::move(examples));
+    if (!resp.ok()) {
+      ABSL_LOG(ERROR) << "Failed to send examples: " << resp.status();
+      return;
+    }
+    if (resp->status() ==
+        hexzpb::AddTrainingExamplesResponse::REJECTED_AT_CAPACITY) {
+      // For now, immediately exit if server is at capacity.
+      // There are too many workers sending examples.
+      ABSL_LOG(ERROR) << "Server is at capacity: " << resp->error_message();
+      return;
+    }
+    if (resp->status() ==
+        hexzpb::AddTrainingExamplesResponse::REJECTED_WRONG_MODEL) {
+      // Since the server should accept both the previous and the latest model
+      // version, this should be a rare event, and we should probably tune our
+      // batch size. Individual workers are not able to generate new examples
+      // before the model got updated twice.
+      ABSL_LOG(ERROR)
+          << "Server rejected out examples due to an old model. Sent: "
+          << ModelId(km->key) << ", want: " << ModelId(resp->latest_model());
+    }
+    if (resp->status() != hexzpb::AddTrainingExamplesResponse::ACCEPTED) {
+      ABSL_LOG(ERROR) << "Server did not like our examples: "
+                      << hexzpb::AddTrainingExamplesResponse::Status_Name(
+                             resp->status())
+                      << ": " << resp->error_message();
+      return;
+    }
+    // Check if we need to update to a new model.
+    if (resp->latest_model().name() != km->key.name() ||
+        resp->latest_model().checkpoint() != km->key.checkpoint()) {
+      km = rpc.FetchLatestModel();
+      if (!km.ok()) {
+        ABSL_LOG(ERROR) << "FetchModule failed: " << km.status();
+        return;
+      }
+    }
+    ABSL_LOG(INFO) << "Successfully sent " << n_examples
+                   << " examples to training server at "
+                   << config.training_server_url;
   }
 }
 

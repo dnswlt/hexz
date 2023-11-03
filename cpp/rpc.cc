@@ -32,7 +32,8 @@ absl::StatusOr<KeyedModel> RPCClient::FetchLatestModel() {
         absl::StrCat("Server returned status code ", resp.status_code));
   }
   if (resp.header["X-Model-Key"] == "") {
-    return absl::InternalError("Server did not respond with X-Model-Key header");
+    return absl::InternalError(
+        "Server did not respond with X-Model-Key header");
   }
   hexzpb::ModelKey model_key;
   if (auto status = google::protobuf::util::JsonStringToMessage(
@@ -71,9 +72,13 @@ absl::StatusOr<hexzpb::AddTrainingExamplesResponse> RPCClient::SendExamples(
                 cpr::Timeout{1000},                                       //
                 cpr::Header{{"Content-Type", "application/x-protobuf"}},  //
                 cpr::Body{req.SerializeAsString()});
+  if (resp.status_code == 0) {
+    return absl::UnavailableError(
+        absl::StrCat("Server unreachable: ", resp.error.message));
+  }
   if (resp.status_code != 200) {
     return absl::AbortedError(
-        absl::StrCat("Server did not like our request: ", resp.status_code));
+        absl::StrCat("Server responded did not like our request: ", resp.status_code));
   }
   hexzpb::AddTrainingExamplesResponse response;
   if (!response.ParseFromString(resp.text)) {

@@ -170,8 +170,6 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       return absl::DeadlineExceededError(
           "max_runtime_seconds exceeded before the game was finished");
     }
-    ABSL_LOG(INFO) << "Move " << n << " after "
-                   << (float)(move_started - started_micros) / 1000000 << "s";
     bool progress = true;
     // The first moves are the most important ones. Think twice as hard for
     // those.
@@ -200,6 +198,15 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     auto enc_pr = torch::pickle_save(root->MoveProbs());
     example.mutable_move_probs()->assign(enc_pr.begin(), enc_pr.end());
     examples.push_back(example);
+
+    if (n < 5 || n % 10 == 0) {
+      ABSL_LOG(INFO) << "Move " << n << " after "
+                     << (float)(move_started - started_micros) / 1000000 << "s";
+    } else {
+        
+      ABSL_DLOG(INFO) << "Move " << n << " after "
+                     << (float)(move_started - started_micros) / 1000000 << "s";
+    }
 
     board.MakeMove(best_child->Player(), best_child->GetMove());
     root = std::move(best_child);

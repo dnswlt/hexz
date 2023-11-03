@@ -202,13 +202,13 @@ class AddTrainingExamplesResponse(_message.Message):
         __slots__ = []
         STATUS_UNSPECIFIED: _ClassVar[AddTrainingExamplesResponse.Status]
         ACCEPTED: _ClassVar[AddTrainingExamplesResponse.Status]
-        REJECTED_TRAINING: _ClassVar[AddTrainingExamplesResponse.Status]
         REJECTED_WRONG_MODEL: _ClassVar[AddTrainingExamplesResponse.Status]
+        REJECTED_AT_CAPACITY: _ClassVar[AddTrainingExamplesResponse.Status]
         REJECTED_OTHER: _ClassVar[AddTrainingExamplesResponse.Status]
     STATUS_UNSPECIFIED: AddTrainingExamplesResponse.Status
     ACCEPTED: AddTrainingExamplesResponse.Status
-    REJECTED_TRAINING: AddTrainingExamplesResponse.Status
     REJECTED_WRONG_MODEL: AddTrainingExamplesResponse.Status
+    REJECTED_AT_CAPACITY: AddTrainingExamplesResponse.Status
     REJECTED_OTHER: AddTrainingExamplesResponse.Status
     STATUS_FIELD_NUMBER: _ClassVar[int]
     LATEST_MODEL_FIELD_NUMBER: _ClassVar[int]

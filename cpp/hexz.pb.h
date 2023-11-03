@@ -188,8 +188,8 @@ inline bool Field_CellType_Parse(absl::string_view name, Field_CellType* value) 
 enum AddTrainingExamplesResponse_Status : int {
   AddTrainingExamplesResponse_Status_STATUS_UNSPECIFIED = 0,
   AddTrainingExamplesResponse_Status_ACCEPTED = 1,
-  AddTrainingExamplesResponse_Status_REJECTED_TRAINING = 2,
-  AddTrainingExamplesResponse_Status_REJECTED_WRONG_MODEL = 3,
+  AddTrainingExamplesResponse_Status_REJECTED_WRONG_MODEL = 2,
+  AddTrainingExamplesResponse_Status_REJECTED_AT_CAPACITY = 3,
   AddTrainingExamplesResponse_Status_REJECTED_OTHER = 4,
   AddTrainingExamplesResponse_Status_AddTrainingExamplesResponse_Status_INT_MIN_SENTINEL_DO_NOT_USE_ =
       std::numeric_limits<::int32_t>::min(),
@@ -3490,8 +3490,8 @@ class AddTrainingExamplesResponse final :
   using Status = AddTrainingExamplesResponse_Status;
   static constexpr Status STATUS_UNSPECIFIED = AddTrainingExamplesResponse_Status_STATUS_UNSPECIFIED;
   static constexpr Status ACCEPTED = AddTrainingExamplesResponse_Status_ACCEPTED;
-  static constexpr Status REJECTED_TRAINING = AddTrainingExamplesResponse_Status_REJECTED_TRAINING;
   static constexpr Status REJECTED_WRONG_MODEL = AddTrainingExamplesResponse_Status_REJECTED_WRONG_MODEL;
+  static constexpr Status REJECTED_AT_CAPACITY = AddTrainingExamplesResponse_Status_REJECTED_AT_CAPACITY;
   static constexpr Status REJECTED_OTHER = AddTrainingExamplesResponse_Status_REJECTED_OTHER;
   static inline bool Status_IsValid(int value) {
     return AddTrainingExamplesResponse_Status_IsValid(value);

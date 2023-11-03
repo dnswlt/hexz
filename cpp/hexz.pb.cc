@@ -702,20 +702,20 @@ const char descriptor_table_protodef_hexz_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
     "heckpoint\030\002 \001(\005\"l\n\032AddTrainingExamplesRe"
     "quest\022#\n\tmodel_key\030\001 \001(\0132\020.hexzpb.ModelK"
     "ey\022)\n\010examples\030\002 \003(\0132\027.hexzpb.TrainingEx"
-    "ample\"\215\002\n\033AddTrainingExamplesResponse\022:\n"
+    "ample\"\220\002\n\033AddTrainingExamplesResponse\022:\n"
     "\006status\030\001 \001(\0162*.hexzpb.AddTrainingExampl"
     "esResponse.Status\022&\n\014latest_model\030\002 \001(\0132"
     "\020.hexzpb.ModelKey\022\025\n\rerror_message\030\003 \001(\t"
-    "\"s\n\006Status\022\026\n\022STATUS_UNSPECIFIED\020\000\022\014\n\010AC"
-    "CEPTED\020\001\022\025\n\021REJECTED_TRAINING\020\002\022\030\n\024REJEC"
-    "TED_WRONG_MODEL\020\003\022\022\n\016REJECTED_OTHER\020\004\"\312\001"
-    "\n\017TrainingExample\022\023\n\013unix_micros\030\001 \001(\003\022\027"
-    "\n\017duration_micros\030\005 \001(\003\0222\n\010encoding\030\006 \001("
-    "\0162 .hexzpb.TrainingExample.Encoding\022\r\n\005b"
-    "oard\030\002 \001(\014\022\022\n\nmove_probs\030\003 \001(\014\022\016\n\006result"
-    "\030\004 \001(\002\"\"\n\010Encoding\022\t\n\005NUMPY\020\000\022\013\n\007PYTORCH"
-    "\020\001B\037Z\035github.com/dnswlt/hexz/hexzpbb\006pro"
-    "to3"
+    "\"v\n\006Status\022\026\n\022STATUS_UNSPECIFIED\020\000\022\014\n\010AC"
+    "CEPTED\020\001\022\030\n\024REJECTED_WRONG_MODEL\020\002\022\030\n\024RE"
+    "JECTED_AT_CAPACITY\020\003\022\022\n\016REJECTED_OTHER\020\004"
+    "\"\312\001\n\017TrainingExample\022\023\n\013unix_micros\030\001 \001("
+    "\003\022\027\n\017duration_micros\030\005 \001(\003\0222\n\010encoding\030\006"
+    " \001(\0162 .hexzpb.TrainingExample.Encoding\022\r"
+    "\n\005board\030\002 \001(\014\022\022\n\nmove_probs\030\003 \001(\014\022\016\n\006res"
+    "ult\030\004 \001(\002\"\"\n\010Encoding\022\t\n\005NUMPY\020\000\022\013\n\007PYTO"
+    "RCH\020\001B\037Z\035github.com/dnswlt/hexz/hexzpbb\006"
+    "proto3"
 };
 static const ::_pbi::DescriptorTable* const descriptor_table_hexz_2eproto_deps[1] =
     {
@@ -725,7 +725,7 @@ static ::absl::once_flag descriptor_table_hexz_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_hexz_2eproto = {
     false,
     false,
-    2363,
+    2366,
     descriptor_table_protodef_hexz_2eproto,
     "hexz.proto",
     &descriptor_table_hexz_2eproto_once,
@@ -841,8 +841,8 @@ bool AddTrainingExamplesResponse_Status_IsValid(int value) {
 
 constexpr AddTrainingExamplesResponse_Status AddTrainingExamplesResponse::STATUS_UNSPECIFIED;
 constexpr AddTrainingExamplesResponse_Status AddTrainingExamplesResponse::ACCEPTED;
-constexpr AddTrainingExamplesResponse_Status AddTrainingExamplesResponse::REJECTED_TRAINING;
 constexpr AddTrainingExamplesResponse_Status AddTrainingExamplesResponse::REJECTED_WRONG_MODEL;
+constexpr AddTrainingExamplesResponse_Status AddTrainingExamplesResponse::REJECTED_AT_CAPACITY;
 constexpr AddTrainingExamplesResponse_Status AddTrainingExamplesResponse::REJECTED_OTHER;
 constexpr AddTrainingExamplesResponse_Status AddTrainingExamplesResponse::Status_MIN;
 constexpr AddTrainingExamplesResponse_Status AddTrainingExamplesResponse::Status_MAX;

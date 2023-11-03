@@ -72,6 +72,7 @@ class TrainingRunnerTask(threading.Thread):
         batch = self.batch
         device = self.config.device
         model = self.repo.get_model(self.model_key.name, self.model_key.checkpoint)
+        model.train()
         model = model.to(device)
         num_epochs = self.config.num_epochs
         batch_size = self.config.batch_size
@@ -186,6 +187,9 @@ class TrainingTask(threading.Thread):
             <= self.config.max_checkpoint_diff
         )
 
+    def capacity(self) -> int:
+        return max(0, self.config.batch_size - len(self.batch))
+
     def start_training_runner_task(self):
         t = TrainingRunnerTask(
             self.repo, self.model_key, self.config, self.batch, self.queue
@@ -194,21 +198,30 @@ class TrainingTask(threading.Thread):
         self.logger.info("Started TrainingRunnerTask")
         self.training_runner_task = t
         self.state = self._STATE_TRAINING
+        # Start a new batch to be able to accept examples during training.
+        self.batch = InMemoryDataset()
 
     def handle_training_examples(self, msg: Mapping[str, Any]):
+        """Expects a AddTrainingExamplesRequest and adds it to the current batch.
+
+        If the current batch is already full, and a training is still ongoing,
+        the TrainingTask is at capacity and will respond 
+        """
         req: hexz_pb2.AddTrainingExamplesRequest = msg["request"]
         reply_q = msg["reply_q"]
-        if self.state != self._STATE_ACCEPTING:
-            resp = hexz_pb2.AddTrainingExamplesResponse(
-                status=hexz_pb2.AddTrainingExamplesResponse.REJECTED_TRAINING,
-                error_message=f"Server is currently not accepting examples",
-            )
-            reply_q.put(resp)
-            return
         if not self.accept_model_key(req.model_key):
             resp = hexz_pb2.AddTrainingExamplesResponse(
                 status=hexz_pb2.AddTrainingExamplesResponse.REJECTED_WRONG_MODEL,
                 latest_model=self.model_key,
+            )
+            reply_q.put(resp)
+            return
+        if self.capacity() == 0:
+            # We are at capacity. Signal this to the client.
+            self.logger.warning(f"TrainingTask is at capacity. Rejecting {len(req.examples)} examples.")
+            resp = hexz_pb2.AddTrainingExamplesResponse(
+                status=hexz_pb2.AddTrainingExamplesResponse.REJECTED_AT_CAPACITY,
+                error_message=f"Server is currently not able to accept more examples",
             )
             reply_q.put(resp)
             return
@@ -218,10 +231,9 @@ class TrainingTask(threading.Thread):
         )
         reply_q.put(resp)
 
-        # Add examples and run training if we have a full batch.
-        lim = min(len(req.examples), self.config.batch_size - len(self.batch))
+        # Translate examples.
         new_batch = []
-        for ex in req.examples[:lim]:
+        for ex in req.examples:
             # Update timing stats.
             self.timing_stats.count += 1
             self.timing_stats.min_duration_micros = min(
@@ -251,11 +263,22 @@ class TrainingTask(threading.Thread):
                 return
             val = np.array([ex.result], dtype=np.float32)
             new_batch.append((board, (pr, val)))
-        self.stats["examples"] += len(new_batch)
-        self.batch.extend(new_batch)
-
-        if len(self.batch) >= self.config.batch_size:
+        self.stats["examples"] += len(req.examples)
+        lim = min(len(req.examples), self.capacity())
+        # Add translated examples to batch and trigger a training run if we have a full batch.
+        batch_add, batch_buf = new_batch[:lim], new_batch[lim:]
+        self.batch.extend(batch_add)
+        if len(self.batch) >= self.config.batch_size and self.state != self._STATE_TRAINING:
+            # Only start a new training task if we're not already training.
             self.start_training_runner_task()
+        cap = self.capacity()
+        if cap > 0:
+            # New capacity for the remaining batch_buf elements since we started a new training round.
+            if len(batch_buf) >= cap:
+                n_dropped = len(batch_buf) - (self.config.batch_size)
+                batch_buf = batch_buf[:self.config.batch_size]
+                self.logger.warning(f"Dropped {n_dropped} examples. Examples from request exceeded {self.config.batch_size=}.")
+            self.batch.extend(batch_buf)
 
     def handle_training_result(self, msg: Mapping[str, Any]):
         # The training runner task must be done now.
