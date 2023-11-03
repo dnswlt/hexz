@@ -7,11 +7,6 @@
 
 namespace hexz {
 
-std::string GetEnv(const std::string& name);
-int GetEnvAsInt(const std::string& name, int default_value);
-
-int64_t UnixMicros();
-
 class Perfm {
  public:
   enum Label {
@@ -28,6 +23,12 @@ class Perfm {
     NextMoves = 6,
     NeuralMCTS_Run = 7,
     StatsSize = 8,
+  };
+
+  // Helper struct to use RAII for initialization and printing final results.
+  struct InitScope {
+    InitScope() { Perfm::Init(); }
+    ~InitScope() { Perfm::PrintStats(); }
   };
 
   struct Scope {
@@ -52,14 +53,8 @@ class Perfm {
 
   static const std::string& LabelName(Perfm::Label label) {
     static std::string names[StatsSize] = {
-        "Predict",
-        "FindLeaf",
-        "MakeMove",
-        "PlayGameLocally",
-        "MaxPuctChild",
-        "Puct",
-        "NextMoves",
-        "NeuralMCTS::Run",
+        "Predict",      "FindLeaf", "MakeMove",  "PlayGameLocally",
+        "MaxPuctChild", "Puct",     "NextMoves", "NeuralMCTS::Run",
     };
     assert(label < StatsSize);
     return names[label];

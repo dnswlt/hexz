@@ -35,14 +35,7 @@ absl::Status ReadFile(const std::string& path, std::vector<char>& buf) {
 }
 
 TEST(MCTSTest, TorchPickleLoad) {
-  // Load a (2, 2) Tensor that was saved in Python using
-  //
-  /*
-python3 -c '
-import torch
-t = torch.tensor([[1, 2], [3, 4]], dtype=torch.float32)
-torch.save(t, "testdata/tensor_2x2.pt")'
-  */
+  // Load a (2, 2) Tensor that was saved in Python.
   std::vector<char> data;
   auto status = ReadFile("testdata/tensor_2x2.pt", data);
   ASSERT_TRUE(status.ok()) << status;
@@ -71,9 +64,7 @@ TEST(MCTSTest, PlayGame) {
   // The file "testdata/scriptmodule.pt" is expected to be a ScriptModule of the
   // right shape to be used by NeuralMCTS.
   //
-  // It can be generated from the pyhexz/src directory by running
-  // 
-  //    python3 -m pyhexz.run --mode=export --model=../../cpp/build/scriptmodule.pt
+  // It can be generated with the regenerate.sh sidecar script.
   auto model = torch::jit::load("testdata/scriptmodule.pt");
   model.to(torch::kCPU);
   model.eval();

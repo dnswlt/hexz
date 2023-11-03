@@ -8,7 +8,8 @@
 #include <cmath>
 #include <vector>
 
-#include "util.h"
+#include "base.h"
+#include "perfm.h"
 
 namespace hexz {
 

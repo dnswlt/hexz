@@ -173,6 +173,7 @@ def create_app():
     def examples():
         """Part of the training workflow. Called by workers to upload new examples."""
         try:
+            app.logger.info(f"Received AddTrainingExamplesRequest: size={len(request.data)}")
             req = hexz_pb2.AddTrainingExamplesRequest.FromString(request.data)
         except DecodeError as e:
             return "Invalid AddTrainingExamplesRequest protocol buffer", 400

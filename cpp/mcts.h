@@ -7,7 +7,7 @@
 
 #include "board.h"
 #include "hexz.pb.h"
-#include "util.h"
+#include "perfm.h"
 
 namespace hexz {
 

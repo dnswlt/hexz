@@ -58,12 +58,12 @@ message(CMAKE_FIND_PACKAGE_REDIRECTS_DIR="${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}")
 add_library(hexzpb hexz.pb.h hexz.pb.cc)
 target_link_libraries(hexzpb PUBLIC protobuf::libprotobuf)
 
-add_library(mcts board.cc mcts.cc util.cc)
-target_link_libraries(mcts PUBLIC absl::log hexzpb "${TORCH_LIBRARIES}")
+add_library(mcts base.cc board.cc mcts.cc perfm.cc rpc.cc)
+target_link_libraries(mcts PUBLIC absl::statusor absl::strings absl::log cpr::cpr hexzpb "${TORCH_LIBRARIES}")
 
 # Add the executable
 add_executable(worker worker_main.cc)
-target_link_libraries(worker PRIVATE mcts hexzpb cpr::cpr absl::statusor absl::strings absl::log)
+target_link_libraries(worker PRIVATE mcts)
 
 #
 # Testing
@@ -77,5 +77,5 @@ target_link_libraries(mcts_test GTest::gtest_main mcts)
 target_link_libraries(board_test GTest::gtest_main mcts)
 
 include(GoogleTest)
-gtest_discover_tests(mcts_test)
-gtest_discover_tests(board_test)
+gtest_discover_tests(mcts_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+gtest_discover_tests(board_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
