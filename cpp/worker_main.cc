@@ -23,9 +23,6 @@
 
 namespace hexz {
 
-using google::protobuf::RepeatedPtrFieldBackInserter;
-using hexzpb::TrainingExample;
-
 void PlayGameLocally(const Config& config) {
   torch::jit::script::Module model;
   try {
@@ -39,28 +36,40 @@ void PlayGameLocally(const Config& config) {
   }
   {
     Perfm::Scope ps(Perfm::PlayGameLocally);
-    NeuralMCTS mcts{model};
+    NeuralMCTS mcts{model, config};
     Board b = Board::RandomBoard();
-    mcts.PlayGame(b, config.runs_per_move, config.max_moves_per_game);
+    if (auto result = mcts.PlayGame(b, /*max_runtime_seconds=*/0); !result.ok()) {
+        ABSL_LOG(ERROR) << "Game failed: " << result.status();
+    }
   }
 }
 
 void GenerateExamples(const Config& config) {
   const auto started_micros = UnixMicros();
-
-  if (config.training_server_url != "") {
-    RPCClient rpc(config);
-    auto km = rpc.FetchLatestModel();
-    if (!km.ok()) {
-      ABSL_LOG(ERROR) << "FetchModule failed: " << km.status();
-      return;
+  RPCClient rpc(config);
+  auto km = rpc.FetchLatestModel();
+  if (!km.ok()) {
+    ABSL_LOG(ERROR) << "FetchModule failed: " << km.status();
+    return;
+  }
+  while (true) {
+    auto now = UnixMicros();
+    if (now >= started_micros + config.max_runtime_seconds * 1'000'000) {
+      break;
     }
-    ABSL_LOG(INFO) << "Successully initialized model. Playing a game for fun.";
-    NeuralMCTS mcts{km->model};
+    NeuralMCTS mcts(km->model, config);
     Board b = Board::RandomBoard();
-    auto examples =
-        mcts.PlayGame(b, config.runs_per_move, config.max_moves_per_game);
-    auto resp = rpc.SendExamples(km->key, std::move(examples));
+    int max_runtime_seconds =
+        config.max_runtime_seconds - (now - started_micros) / 1'000'000;
+    auto examples = mcts.PlayGame(b, max_runtime_seconds);
+    if (!examples.ok()) {
+        if (absl::IsDeadlineExceeded(examples.status())) {
+            break;
+        }
+        ABSL_LOG(ERROR) << "Aborting: PlayGame returned an error: " << examples.status();
+        return;
+    }
+    auto resp = rpc.SendExamples(km->key, *std::move(examples));
     if (!resp.ok()) {
       ABSL_LOG(ERROR) << "Server did not like our examples: " << resp.status();
       return;
@@ -81,22 +90,19 @@ int main() {
   absl::InitializeLog();
   // Config
   const char* training_server_url = std::getenv("HEXZ_TRAINING_SERVER_URL");
-  auto config = hexz::Config{
-      .test_url = hexz::GetEnv("HEXZ_TEST_URL"),
-      .training_server_url = hexz::GetEnv("HEXZ_TRAINING_SERVER_URL"),
-      .local_model_path = hexz::GetEnv("HEXZ_LOCAL_MODEL_PATH"),
-      .runs_per_move = hexz::GetEnvAsInt("HEXZ_RUNS_PER_MOVE", 800),
-      .max_moves_per_game = hexz::GetEnvAsInt("HEXZ_MAX_MOVES_PER_GAME", 200),
-  };
+  auto config = hexz::Config::FromEnv();
+
   // Execute
   ABSL_LOG(INFO) << "Worker started with " << config.String();
   if (config.local_model_path != "") {
-    ABSL_LOG(INFO) << "HEXZ_LOCAL_MODEL_PATH is set. Playing a game with a local model.";
+    ABSL_LOG(INFO)
+        << "HEXZ_LOCAL_MODEL_PATH is set. Playing a game with a local model.";
     PlayGameLocally(config);
     return 0;
   }
   if (config.training_server_url != "") {
-    ABSL_LOG(INFO) << "Generating examples and sending them to the training server.";
+    ABSL_LOG(INFO)
+        << "Generating examples and sending them to the training server.";
     hexz::GenerateExamples(config);
     return 0;
   }

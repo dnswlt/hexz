@@ -145,9 +145,8 @@ message AddTrainingExamplesResponse {
     enum Status {
         STATUS_UNSPECIFIED = 0;
         ACCEPTED = 1;
-        REJECTED_TRAINING = 2;
-        REJECTED_WRONG_MODEL = 3;
-        REJECTED_OTHER = 4;
+        REJECTED_WRONG_MODEL = 2;
+        REJECTED_OTHER = 3;
     }
     Status status = 1;
     // Tells the worker which model to use for subsequent requests.

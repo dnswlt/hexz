@@ -1,10 +1,13 @@
 #ifndef __HEXZ_MCTS_H__
 #define __HEXZ_MCTS_H__
+
+#include <absl/status/statusor.h>
 #include <torch/script.h>
 #include <torch/torch.h>
 
 #include <vector>
 
+#include "base.h"
 #include "board.h"
 #include "hexz.pb.h"
 #include "perfm.h"
@@ -66,15 +69,17 @@ class NeuralMCTS {
   };
 
  public:
-  NeuralMCTS(torch::jit::script::Module module);
+  NeuralMCTS(torch::jit::script::Module module, const Config& config);
 
-  std::vector<hexzpb::TrainingExample> PlayGame(Board& board,
-                                                int runs_per_move = 500,
-                                                int max_moves = 200);
+  absl::StatusOr<std::vector<hexzpb::TrainingExample>> PlayGame(
+      Board& board, int max_runtime_seconds);
 
  private:
   bool Run(Node& root, Board& board);
   Prediction Predict(int player, const Board& board);
+
+  int runs_per_move_;
+  int max_moves_per_game_;
 
   torch::jit::script::Module module_;
 };

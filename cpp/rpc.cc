@@ -13,6 +13,8 @@
 
 namespace hexz {
 
+using google::protobuf::RepeatedPtrFieldBackInserter;
+
 absl::StatusOr<KeyedModel> RPCClient::FetchLatestModel() {
   // Download the latest model.
   cpr::Response resp =

@@ -68,13 +68,16 @@ TEST(MCTSTest, PlayGame) {
   auto model = torch::jit::load("testdata/scriptmodule.pt");
   model.to(torch::kCPU);
   model.eval();
-  NeuralMCTS mcts(model);
+  Config config{
+      .runs_per_move = 10,
+  };
+  NeuralMCTS mcts(model, config);
   auto b = Board::RandomBoard();
 
-  auto examples = mcts.PlayGame(b, /*runs_per_move=*/10);
-
-  ASSERT_GT(examples.size(), 0);
-  auto ex0 = examples[0];
+  auto examples = mcts.PlayGame(b, /*max_runtime_seconds=*/0);
+  ASSERT_TRUE(examples.ok());
+  ASSERT_GT(examples->size(), 0);
+  auto ex0 = (*examples)[0];
   EXPECT_EQ(ex0.encoding(), hexzpb::TrainingExample::PYTORCH);
   EXPECT_GT(ex0.unix_micros(), 0);
   EXPECT_GT(ex0.duration_micros(), 0);

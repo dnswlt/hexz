@@ -1,6 +1,7 @@
 #include "mcts.h"
 
 #include <absl/log/absl_log.h>
+#include <absl/status/statusor.h>
 #include <torch/torch.h>
 
 #include <algorithm>
@@ -87,7 +88,10 @@ void Node::CreateChildren(int player, const std::vector<Move>& moves) {
   std::shuffle(children_.begin(), children_.end(), rng);
 }
 
-NeuralMCTS::NeuralMCTS(torch::jit::script::Module module) : module_{module} {
+NeuralMCTS::NeuralMCTS(torch::jit::script::Module module, const Config& config)
+    : module_{module},
+      runs_per_move_{config.runs_per_move},
+      max_moves_per_game_{config.max_moves_per_game} {
   module_.eval();
 }
 
@@ -146,26 +150,32 @@ bool NeuralMCTS::Run(Node& root, Board& board) {
   return true;
 }
 
-std::vector<hexzpb::TrainingExample> NeuralMCTS::PlayGame(Board& board,
-                                                          int runs_per_move,
-                                                          int max_moves) {
+absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
+    Board& board, int max_runtime_seconds) {
   std::vector<hexzpb::TrainingExample> examples;
   int64_t started_micros = UnixMicros();
   int n = 0;
   // Root's children have the player whose turn it actually is.
-  // Every game starts with player 0, so root must use player 1. 
+  // Every game starts with player 0, so root must use player 1.
   auto root =
       std::make_unique<Node>(nullptr, /*player=*/1, Move{-1, -1, -1, -1.0});
   float result = 0.0;
   bool game_over = false;
-  for (; n < max_moves; n++) {
+  const int64_t max_micros =
+      max_runtime_seconds > 0 ? started_micros + max_runtime_seconds * 1'000'000
+                              : std::numeric_limits<int64_t>::max();
+  for (; n < max_moves_per_game_; n++) {
     int64_t move_started = UnixMicros();
+    if (move_started > max_micros) {
+      return absl::DeadlineExceededError(
+          "max_runtime_seconds exceeded before the game was finished");
+    }
     ABSL_LOG(INFO) << "Move " << n << " after "
                    << (float)(move_started - started_micros) / 1000000 << "s";
     bool progress = true;
     // The first moves are the most important ones. Think twice as hard for
     // those.
-    int limit = n >= 6 ? runs_per_move : 2 * runs_per_move;
+    int limit = n >= 6 ? runs_per_move_ : 2 * runs_per_move_;
     for (int i = 0; i < limit && progress; i++) {
       Board b(board);
       progress = Run(*root, b);
