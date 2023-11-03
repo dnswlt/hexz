@@ -113,7 +113,6 @@ def create_app():
         t.daemon = True
         t.start()
         app.training_task = t
-        app.logger.info("Started training background thread")
 
     @contextmanager
     def get_model():
@@ -173,7 +172,9 @@ def create_app():
     def examples():
         """Part of the training workflow. Called by workers to upload new examples."""
         try:
-            app.logger.info(f"Received AddTrainingExamplesRequest: size={len(request.data)}")
+            app.logger.info(
+                f"Received AddTrainingExamplesRequest: size={len(request.data)}"
+            )
             req = hexz_pb2.AddTrainingExamplesRequest.FromString(request.data)
         except DecodeError as e:
             return "Invalid AddTrainingExamplesRequest protocol buffer", 400
@@ -206,6 +207,30 @@ def create_app():
         model_key: hexz_pb2.ModelKey = reply_q.get(timeout=5)
         return json_format.MessageToJson(model_key), {
             "Content-Type": "application/json",
+        }
+
+    @app.get("/models/latest")
+    def latest_model():
+        """Part of the training workflow. Called by workers to download the latest
+        model straight away. The model key is sent JSON-encoded in the X-Model-Key header.
+        """
+        repr = request.args.get("repr", "state_dict").lower()
+        if repr not in ("state_dict", "scriptmodule"):
+            return "repr must be state_dict or scriptmodule", 400
+        reply_q = queue.SimpleQueue()
+        current_app.training_task_queue.put(
+            {
+                "type": "GetModel",
+                "repr": repr,
+                "reply_q": reply_q,
+            }
+        )
+        r = reply_q.get(timeout=5)
+        if r.get("error") is not None:
+            return r["error"], 500
+        return r["data"], {
+            "Content-Type": "application/octet-stream",
+            "X-Model-Key": json_format.MessageToJson(r["model_key"], indent=None),
         }
 
     @app.get("/models/<name>/checkpoints/<int:checkpoint>")

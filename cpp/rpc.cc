@@ -14,44 +14,35 @@
 namespace hexz {
 
 absl::StatusOr<KeyedModel> RPCClient::FetchLatestModel() {
-  // Get info about the current model.
-  cpr::Response key_resp =
-      cpr::Get(cpr::Url{training_server_url_ + "/models/current"},  //
+  // Download the latest model.
+  cpr::Response resp =
+      cpr::Get(cpr::Url{training_server_url_ + "/models/latest"},   //
                cpr::Timeout{1000},                                  //
-               cpr::Header{{"Accept", "application/x-protobuf"}});
-  if (key_resp.status_code == 0) {
+               cpr::Parameters{{"repr", "scriptmodule"}},           //
+               cpr::Header{{"Accept", "application/octet-stream"}}  //
+      );
+  if (resp.status_code == 0) {
     return absl::UnavailableError(
-        absl::StrCat("Server unreachable: ", key_resp.error.message));
+        absl::StrCat("Server unreachable: ", resp.error.message));
   }
-  if (key_resp.status_code != 200) {
+  if (resp.status_code != 200) {
     return absl::AbortedError(
-        absl::StrCat("Server returned status code ", key_resp.status_code));
+        absl::StrCat("Server returned status code ", resp.status_code));
+  }
+  if (resp.header["X-Model-Key"] == "") {
+    return absl::InternalError("Server did not respond with X-Model-Key header");
   }
   hexzpb::ModelKey model_key;
   if (auto status = google::protobuf::util::JsonStringToMessage(
-          key_resp.text, &model_key,
+          resp.header["X-Model-Key"], &model_key,
           google::protobuf::util::JsonParseOptions());
       !status.ok()) {
     return status;
   }
-  ABSL_LOG(INFO) << "Fetching model " << model_key.name() << ":"
+  ABSL_LOG(INFO) << "Fetched model " << model_key.name() << ":"
                  << model_key.checkpoint();
-  cpr::Response model_resp = cpr::Get(
-      cpr::Url{absl::StrCat(training_server_url_, "/models/", model_key.name(),
-                            "/checkpoints/", model_key.checkpoint())},  //
-      cpr::Parameters{{"repr", "scriptmodule"}},                        //
-      cpr::Timeout{1000});
-  if (model_resp.status_code == 404) {
-    // This *might* be caused by a concurrent model change between our call to
-    // /models/current and the failed fetch. We should try again.
-    return absl::NotFoundError("Server returned 404");
-  }
-  if (model_resp.status_code != 200) {
-    return absl::AbortedError(absl::StrCat(
-        "Fetch model: server returned status code ", model_resp.status_code));
-  }
   try {
-    std::istringstream model_is(model_resp.text);
+    std::istringstream model_is(resp.text);
     auto model = torch::jit::load(model_is);  // , torch::kCPU);
     model.to(torch::kCPU);
     model.eval();
@@ -67,7 +58,7 @@ absl::StatusOr<KeyedModel> RPCClient::FetchLatestModel() {
 
 absl::StatusOr<hexzpb::AddTrainingExamplesResponse> RPCClient::SendExamples(
     const hexzpb::ModelKey& key,
-    const std::vector<hexzpb::TrainingExample>& examples) {
+    std::vector<hexzpb::TrainingExample>&& examples) {
   hexzpb::AddTrainingExamplesRequest req;
   *req.mutable_model_key() = key;
   req.mutable_examples()->Reserve(examples.size());

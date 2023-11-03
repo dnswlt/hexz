@@ -134,7 +134,9 @@ class TimingStats:
             "min_duration": self.min_duration_micros / 1e6,
             "max_duration": self.max_duration_micros / 1e6,
             "avg_duration": avg_duration,
-            "std_duration": np.sqrt(self.sum_duration_sq/self.count - avg_duration**2)
+            "std_duration": np.sqrt(
+                self.sum_duration_sq / self.count - avg_duration**2
+            ),
         }
 
 
@@ -178,9 +180,10 @@ class TrainingTask(threading.Thread):
 
     def accept_model_key(self, model_key: hexz_pb2.ModelKey):
         return (
-            model_key.name == self.model_key.name and
-            model_key.checkpoint <= self.model_key.checkpoint and
-            (self.model_key.checkpoint - model_key.checkpoint) <= self.config.max_checkpoint_diff
+            model_key.name == self.model_key.name
+            and model_key.checkpoint <= self.model_key.checkpoint
+            and (self.model_key.checkpoint - model_key.checkpoint)
+            <= self.config.max_checkpoint_diff
         )
 
     def start_training_runner_task(self):
@@ -221,10 +224,14 @@ class TrainingTask(threading.Thread):
         for ex in req.examples[:lim]:
             # Update timing stats.
             self.timing_stats.count += 1
-            self.timing_stats.min_duration_micros = min(self.timing_stats.min_duration_micros, ex.duration_micros)
-            self.timing_stats.max_duration_micros = max(self.timing_stats.max_duration_micros, ex.duration_micros)
+            self.timing_stats.min_duration_micros = min(
+                self.timing_stats.min_duration_micros, ex.duration_micros
+            )
+            self.timing_stats.max_duration_micros = max(
+                self.timing_stats.max_duration_micros, ex.duration_micros
+            )
             self.timing_stats.sum_duration_micros += ex.duration_micros
-            self.timing_stats.sum_duration_sq += (ex.duration_micros/1e6)**2
+            self.timing_stats.sum_duration_sq += (ex.duration_micros / 1e6) ** 2
             # Extract example data.
             if ex.encoding == hexz_pb2.TrainingExample.PYTORCH:
                 board = torch.load(io.BytesIO(ex.board)).numpy()
@@ -233,10 +240,14 @@ class TrainingTask(threading.Thread):
                 board = np.load(io.BytesIO(ex.board))
                 pr = np.load(io.BytesIO(ex.move_probs))
             if board.shape != (9, 11, 10):
-                self.logger.error(f"Received board with wrong shape: {board.shape}. Ignored.")
+                self.logger.error(
+                    f"Received board with wrong shape: {board.shape}. Ignored."
+                )
                 return
             if pr.shape != (2, 11, 10):
-                self.logger.error(f"Received move_probs with wrong shape: {pr.shape}. Ignored.")
+                self.logger.error(
+                    f"Received move_probs with wrong shape: {pr.shape}. Ignored."
+                )
                 return
             val = np.array([ex.result], dtype=np.float32)
             new_batch.append((board, (pr, val)))
@@ -271,32 +282,35 @@ class TrainingTask(threading.Thread):
         reply_q.put(self.model_key)
 
     def handle_get_model(self, msg):
-        model_key = msg["model_key"]
+        model_key = msg.get("model_key", self.model_key)
         repr = msg["repr"]
         reply_q = msg["reply_q"]
 
         if model_key != self.model_key:
-            # Requested wrong model key.
-            reply_q.put(None)
+            reply_q.put({"error": "requested wrong model key"})
             return
-        if self.model_cache["model_key"] != self.model_key:
+        # Create a copy and work with it, so we can return it safely.
+        model_key = hexz_pb2.ModelKey()
+        model_key.CopyFrom(self.model_key)
+        if self.model_cache["model_key"] != model_key:
             # Invalidate cache.
             self.model_cache.clear()
-            self.model_cache["model_key"] = hexz_pb2.ModelKey()
-            self.model_cache["model_key"].CopyFrom(self.model_key)
+            self.model_cache["model_key"] = model_key
 
         cached = self.model_cache.get(repr)
         if cached is not None:
-            reply_q.put(cached)
+            reply_q.put({"data": cached, "model_key": model_key})
             return
         # Load from disk and cache.
         try:
-            mbytes = self.repo.get_model(model_key.name, model_key.checkpoint, as_bytes=True, repr=repr)
+            mbytes = self.repo.get_model(
+                model_key.name, model_key.checkpoint, as_bytes=True, repr=repr
+            )
             self.model_cache[repr] = mbytes
-            reply_q.put(mbytes)
+            reply_q.put({"data": mbytes, "model_key": model_key})
         except FileNotFoundError as e:
-            self.logger.error(f"Cannot get model {model_key}: {e}")
-            reply_q.put(None)
+            self.logger.error(f"Cannot load model {model_key}: {e}")
+            reply_q.put({"error": f"Cannot load model {model_key}"})
 
     def handle_get_training_info(self, msg):
         reply_q = msg["reply_q"]
@@ -312,7 +326,9 @@ class TrainingTask(threading.Thread):
             "example_timing_stats": self.timing_stats.summarize(),
             "current_batch_size": len(self.batch),
             "uptime_seconds": round(now - self.started, 3),
-            "training_time_pct": round(self.training_time / (now - self.started) * 100, 2),
+            "training_time_pct": round(
+                self.training_time / (now - self.started) * 100, 2
+            ),
         }
         reply_q.put(info)
 
@@ -320,6 +336,9 @@ class TrainingTask(threading.Thread):
         """This is the main dispatcher loop of the TrainingTask.
         All requests to this task must be sent via self.queue and are processed sequentially.
         """
+        self.logger.info(
+            f"TrainingTask started. Using model {self.model_key.name}:{self.model_key.checkpoint}"
+        )
         while True:
             # We use bytes as input and output in the communication with this
             # TrainingTask to simplify serialization when running in a separate process.

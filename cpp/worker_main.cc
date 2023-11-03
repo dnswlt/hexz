@@ -12,6 +12,7 @@
 #include <ctime>
 #include <iostream>
 #include <sstream>
+#include <utility>
 
 #include "base.h"
 #include "board.h"
@@ -59,7 +60,7 @@ void GenerateExamples(const Config& config) {
     Board b = Board::RandomBoard();
     auto examples =
         mcts.PlayGame(b, config.runs_per_move, config.max_moves_per_game);
-    auto resp = rpc.SendExamples(km->key, examples);
+    auto resp = rpc.SendExamples(km->key, std::move(examples));
     if (!resp.ok()) {
       ABSL_LOG(ERROR) << "Server did not like our examples: " << resp.status();
       return;
