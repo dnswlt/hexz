@@ -3,6 +3,8 @@
 #include <absl/strings/str_format.h>
 #include <absl/strings/str_join.h>
 
+#include <chrono>
+
 namespace hexz {
 
 std::string Config::String() const {

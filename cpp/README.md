@@ -13,6 +13,8 @@ brew install protobuf
 
 ## Build the binary
 
+### ARM-based Macs
+
 All commands assume you are in the `cpp` subdirectory.
 
 ```bash
@@ -21,8 +23,6 @@ cd build
 cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$HOME/miniconda3/pkgs/pytorch-2.1.0-py3.11_0/lib/python3.11/site-packages/torch/share/cmake" ..
 cmake --build . --parallell 4
 ```
-
-### ARM-based Macs
 
 As of Oct 2023 there are no official pre-built arm64 binaries for libtorch on pytorch.org,
 so the small example from https://pytorch.org/cppdocs/installing.html does not work.
@@ -85,6 +85,11 @@ cmake --build . --parallel 4
 HEXZ_LOCAL_MODEL_PATH=/tmp/scriptmodule.pt ./worker
 ```
 
+### Docker
+
+```bash
+docker build . -f Dockerfile.ccworker --tag europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/ccworker:latest
+```
 
 ### VS Code
 
