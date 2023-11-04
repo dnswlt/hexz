@@ -15,6 +15,36 @@ namespace {
 
 std::mt19937 rng{std::random_device{}()};
 
+TEST(NodeTest, InitializedToZero) {
+    Node n(nullptr, 0, Move{});
+    EXPECT_EQ(n.visit_count(), 0);
+}
+
+TEST(NodeTest, IsLeaf) {
+    Node n(nullptr, 0, Move{});
+    EXPECT_TRUE(n.IsLeaf());
+    std::vector<Move> moves{
+        Move{0, 0, 0, 0},
+    };
+    n.CreateChildren(0, moves);
+    EXPECT_FALSE(n.IsLeaf());
+}
+
+TEST(NodeTest, MaxPuctChild) {
+    Node n(nullptr, 0, Move{});
+    std::vector<Move> moves{
+        Move{0, 0, 0, 0},
+    };
+    n.CreateChildren(0, moves);
+    auto pr = torch::ones({2, 11, 10});
+    pr = pr / pr.sum();
+    n.SetMoveProbs(pr);
+    Node* c = n.MaxPuctChild();
+    ASSERT_TRUE(c != nullptr);
+    EXPECT_EQ(c->parent(), &n);
+    EXPECT_EQ(c->Puct(), 0);
+}
+
 TEST(MCTSTest, TensorAsVector) {
   torch::Tensor t = torch::rand({2, 11, 10}, torch::kFloat32);
   std::vector<float> data(t.data_ptr<float>(), t.data_ptr<float>() + t.numel());
@@ -58,6 +88,18 @@ TEST(MCTSTest, TorchPickleSave) {
   std::vector<char> data = torch::pickle_save(t);
   e.set_board(data.data(), data.size());
   EXPECT_GT(e.board().size(), 100);
+}
+
+TEST(MCTSTest, NumRuns) {
+  Config config{
+      .runs_per_move = 100,
+      .runs_per_move_gradient = -0.01,
+  };
+  torch::jit::Module dummy;
+  NeuralMCTS mcts(dummy, config);
+  EXPECT_EQ(mcts.NumRuns(0), 100);
+  EXPECT_EQ(mcts.NumRuns(25), 75);
+  EXPECT_EQ(mcts.NumRuns(50), 50);
 }
 
 TEST(MCTSTest, PlayGame) {

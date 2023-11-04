@@ -72,10 +72,13 @@ enable_testing()
 
 add_executable(board_test board_test.cc)
 add_executable(mcts_test mcts_test.cc)
+add_executable(base_test base_test.cc)
 
 target_link_libraries(mcts_test GTest::gtest_main mcts)
 target_link_libraries(board_test GTest::gtest_main mcts)
+target_link_libraries(base_test GTest::gtest_main mcts)
 
 include(GoogleTest)
 gtest_discover_tests(mcts_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 gtest_discover_tests(board_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+gtest_discover_tests(base_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

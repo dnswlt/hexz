@@ -57,7 +57,9 @@ void GenerateExamples(const Config& config) {
     ABSL_LOG(ERROR) << "FetchModule failed: " << km.status();
     return;
   }
-  while (true) {
+  int max_games =
+      config.max_games > 0 ? config.max_games : std::numeric_limits<int>::max();
+  for (int i = 0; i < max_games; i++) {
     auto now = UnixMicros();
     if (now >= started_micros + config.max_runtime_seconds * 1'000'000) {
       break;
@@ -66,7 +68,9 @@ void GenerateExamples(const Config& config) {
     Board b = Board::RandomBoard();
     int max_runtime_seconds =
         config.max_runtime_seconds - (now - started_micros) / 1'000'000;
+
     auto examples = mcts.PlayGame(b, max_runtime_seconds);
+
     if (!examples.ok()) {
       if (absl::IsDeadlineExceeded(examples.status())) {
         break;
@@ -129,8 +133,8 @@ int main() {
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
   absl::InitializeLog();
   // Config
-  const char* training_server_url = std::getenv("HEXZ_TRAINING_SERVER_URL");
   auto config = hexz::Config::FromEnv();
+  hexz::Node::uct_c = config.uct_c;
 
   // Execute
   ABSL_LOG(INFO) << "Worker started with " << config.String();

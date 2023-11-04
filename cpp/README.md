@@ -79,7 +79,7 @@ To build the worker on Linux, now finally run:
 cd $HEXZ_REPO_DIR/cpp
 mkdir build
 cd build
-cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$HOME/opt/libtorch/share/cmake;/usr/local/lib/cmake/protobuf" ..
+cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="$HOME/opt/libtorch/share/cmake;/usr/local/lib/cmake/protobuf" ..
 cmake --build . --parallel 4
 # Run the binary, AT LAST!
 HEXZ_LOCAL_MODEL_PATH=/tmp/scriptmodule.pt ./worker
@@ -89,6 +89,7 @@ HEXZ_LOCAL_MODEL_PATH=/tmp/scriptmodule.pt ./worker
 
 ```bash
 docker build . -f Dockerfile.ccworker --tag europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/ccworker:latest
+docker push europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/ccworker:latest
 ```
 
 ### VS Code

@@ -153,3 +153,18 @@ NextMoves              0.082s      88679  1086000.210
 ```
 
 Nice, they're essentially running equally fast.
+
+
+## 2023-11-03
+
+First results from Cloud Run, unoptimized and essentially unconfigured (w.r.t. CPU and RAM):
+
+2023-11-03 20:06:46.375 CET
+scope              total_time      count        ops/s
+NeuralMCTS::Run      299.430s      77601      259.162
+Predict              293.611s      62069      211.399
+FindLeaf               4.496s      77601    17260.590
+MaxPuctChild           3.651s     686922   188147.637
+Puct                   2.781s   11025607  3963939.303
+MakeMove               0.716s     699469   976867.984
+NextMoves              0.339s      93273   275477.205

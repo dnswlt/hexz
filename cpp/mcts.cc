@@ -18,22 +18,39 @@ namespace {
 std::mt19937 rng{std::random_device{}()};
 }
 
+float Node::uct_c = 5.0;
+
 Node::Node(Node* parent, int player, Move move)
     : parent_{parent},
       player_{player},
       move_{move},
       flat_idx_{move.typ * 11 * 10 + move.r * 10 + move.c} {}
 
-float Node::Puct() const {
+int Node::NumVisitedChildren() const noexcept {
+  int n = 0;
+  for (const auto& c : children_) {
+    if (c->visit_count_ > 0) {
+      n++;
+    }
+  }
+  return n;
+}
+
+std::string Node::Stats() const {
+  return absl::StrCat("nchildren:", children_.size(),
+                      " visited_children:", NumVisitedChildren(),
+                      " wins:", wins_);
+}
+
+float Node::Puct() const noexcept {
   Perfm::Scope ps(Perfm::Puct);
 
-  constexpr float uct_c = 5.0;  // Constant weight of the exploration term.
   float q = 0.0;
   if (visit_count_ > 0) {
     q = wins_ / visit_count_;
   }
   float pr = parent_->move_probs_[flat_idx_];
-  return q + uct_c * pr * std::sqrt(parent_->visit_count_) / (1 + visit_count_);
+  return q + Node::uct_c * pr * std::sqrt(parent_->visit_count_) / (1 + visit_count_);
 }
 
 Node* Node::MaxPuctChild() {
@@ -91,9 +108,8 @@ void Node::CreateChildren(int player, const std::vector<Move>& moves) {
 NeuralMCTS::NeuralMCTS(torch::jit::script::Module module, const Config& config)
     : module_{module},
       runs_per_move_{config.runs_per_move},
-      max_moves_per_game_{config.max_moves_per_game} {
-  module_.eval();
-}
+      max_moves_per_game_{config.max_moves_per_game},
+      runs_per_move_gradient_{config.runs_per_move_gradient} {}
 
 NeuralMCTS::Prediction NeuralMCTS::Predict(int player, const Board& board) {
   Perfm::Scope ps(Perfm::Predict);
@@ -150,8 +166,15 @@ bool NeuralMCTS::Run(Node& root, Board& board) {
   return true;
 }
 
+int NeuralMCTS::NumRuns(int move) const noexcept {
+  return std::max(
+      1, static_cast<int>(std::round(runs_per_move_ *
+                                     (1 + move * runs_per_move_gradient_))));
+}
+
 absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     Board& board, int max_runtime_seconds) {
+  module_.eval();
   std::vector<hexzpb::TrainingExample> examples;
   int64_t started_micros = UnixMicros();
   int n = 0;
@@ -173,8 +196,8 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     bool progress = true;
     // The first moves are the most important ones. Think twice as hard for
     // those.
-    int limit = n >= 6 ? runs_per_move_ : 2 * runs_per_move_;
-    for (int i = 0; i < limit && progress; i++) {
+    const int runs = NumRuns(n);
+    for (int i = 0; i < runs && progress; i++) {
       Board b(board);
       progress = Run(*root, b);
     }
@@ -183,6 +206,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       result = board.Result();
       break;
     }
+    std::string stats = root->Stats();
     std::unique_ptr<Node> best_child = root->MostVisitedChildAsRoot();
 
     // Add example.
@@ -201,11 +225,12 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
 
     if (n < 5 || n % 10 == 0) {
       ABSL_LOG(INFO) << "Move " << n << " after "
-                     << (float)(move_started - started_micros) / 1000000 << "s";
+                     << (float)(UnixMicros() - started_micros) / 1000000
+                     << "s. stats: " << stats;
     } else {
-        
       ABSL_DLOG(INFO) << "Move " << n << " after "
-                     << (float)(move_started - started_micros) / 1000000 << "s";
+                      << (float)(UnixMicros() - started_micros) / 1000000
+                      << "s. stats: " << stats;
     }
 
     board.MakeMove(best_child->Player(), best_child->GetMove());
