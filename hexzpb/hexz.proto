@@ -185,13 +185,15 @@ message TrainingExample {
     message Stats {
         // The move number in the game.
         int32 move = 1;
+        // The player whose turn it is to make the next move.
+        int32 turn = 2;
         // Time it took to generate this example (i.e., to generate the corresponding
         // neural MCTS move suggestion).
-        int64 duration_micros = 2;
+        int64 duration_micros = 3;
         // Number of valid moves
-        int32 valid_moves = 3;
+        int32 valid_moves = 4;
         // Times that the root node was visited.
-        int32 visit_count = 4;
+        int32 visit_count = 5;
     }
     Stats stats = 5;
 }

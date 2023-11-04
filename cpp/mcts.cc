@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <ostream>
+#include <sstream>
 #include <vector>
 
 #include "base.h"
@@ -14,15 +16,15 @@
 
 namespace hexz {
 
-namespace {
+namespace internal {
 std::mt19937 rng{std::random_device{}()};
 }
 
 float Node::uct_c = 5.0;
 
-Node::Node(Node* parent, int player, Move move)
+Node::Node(Node* parent, int turn, Move move)
     : parent_{parent},
-      player_{player},
+      turn_{turn},
       move_{move},
       flat_idx_{move.typ * 11 * 10 + move.r * 10 + move.c} {}
 
@@ -88,22 +90,48 @@ void Node::Backpropagate(float result) {
   Node* n = this;
   while (n != nullptr) {
     n->visit_count_++;
-    if (n->player() == 0 && result > 0) {
+    if (n->turn() == 0 && result > 0) {
       n->wins_ += result;
-    } else if (n->player() == 1 && result < 0) {
+    } else if (n->turn() == 1 && result < 0) {
       n->wins_ += -result;
     }
     n = n->parent_;
   }
 }
 
-void Node::CreateChildren(int player, const std::vector<Move>& moves) {
+void Node::CreateChildren(int turn, const std::vector<Move>& moves) {
   assert(children_.empty());
   children_.reserve(moves.size());
   for (int i = 0; i < moves.size(); i++) {
-    children_.emplace_back(std::make_unique<Node>(this, player, moves[i]));
+    children_.emplace_back(std::make_unique<Node>(this, turn, moves[i]));
   }
-  std::shuffle(children_.begin(), children_.end(), rng);
+}
+
+void Node::AppendDebugString(std::ostream& os, const std::string& indent) {
+  os << indent << "Node(\n";
+  os << indent << "  turn: " << turn_ << "\n";
+  os << indent << "  move: (" << move_.typ << ", " << move_.r << ", " << move_.c
+     << ", " << move_.value << ")\n";
+  os << indent << "  wins: " << wins_ << "\n";
+  os << indent << "  visit_count: " << visit_count_ << "\n";
+  if (parent_ != nullptr) {
+    os << indent << "  puct: " << Puct() << "\n";
+  }
+  if (!children_.empty()) {
+    os << indent << "  children: [\n";
+    for (const auto& c : children_) {
+      c->AppendDebugString(os, indent + "    ");
+      os << indent << ",\n";
+    }
+    os << indent << "  ]\n";
+  }
+  os << indent << ")";
+}
+
+std::string Node::DebugString() {
+  std::ostringstream os;
+  AppendDebugString(os, "");
+  return os.str();
 }
 
 TorchModel::Prediction TorchModel::Predict(int player, const Board& board) {
@@ -143,25 +171,27 @@ bool NeuralMCTS::Run(Node& root, Board& board) {
   {
     Perfm::Scope ps(Perfm::FindLeaf);
     while (!n->IsLeaf()) {
-      n = n->MaxPuctChild();
-      board.MakeMove(n->player(), n->move());
+      Node* child = n->MaxPuctChild();
+      board.MakeMove(n->turn(), child->move());
+      n = child;
     }
   }
   // Expand leaf node. Usually it's the opponent's turn.
-  int player = 1 - n->player();
-  auto moves = board.NextMoves(player);
+  int turn = 1 - n->turn();
+  auto moves = board.NextMoves(turn);
   if (moves.empty()) {
     // Opponent has no valid moves left. Try other player.
-    player = 1 - player;
-    moves = board.NextMoves(player);
+    turn = 1 - turn;
+    moves = board.NextMoves(turn);
   }
   if (moves.empty()) {
     // No player can make a move => game over.
     n->Backpropagate(board.Result());
     return n != &root;  // Return if we made any progress at all in this run.
   }
-  n->CreateChildren(player, moves);
-  auto pred = model_.Predict(player, board);
+  n->CreateChildren(turn, moves);
+  n->ShuffleChildren();  // Avoid selection bias.
+  auto pred = model_.Predict(n->turn(), board);
   n->SetMoveProbs(pred.move_probs);
   n->Backpropagate(pred.value);
   return true;
@@ -181,7 +211,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
   // Root's children have the player whose turn it actually is.
   // Every game starts with player 0, so root must use player 1.
   auto root =
-      std::make_unique<Node>(nullptr, /*player=*/1, Move{-1, -1, -1, -1.0});
+      std::make_unique<Node>(nullptr, /*turn=*/0, Move{-1, -1, -1, -1.0});
   float result = 0.0;
   bool game_over = false;
   const int64_t max_micros =
@@ -213,12 +243,13 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     example.set_unix_micros(move_ready);
     example.mutable_stats()->set_duration_micros(move_ready - move_started);
     example.mutable_stats()->set_move(n);
+    example.mutable_stats()->set_turn(root->turn());
     example.mutable_stats()->set_valid_moves(root->NumChildren());
     example.mutable_stats()->set_visit_count(root->visit_count());
     example.set_encoding(hexzpb::TrainingExample::PYTORCH);
     // The board in the example must be viewed from the perspective of the
-    // player whose turn it is, i.e. from best_child->Player().
-    auto enc_b = torch::pickle_save(board.Tensor(root->PlayerForChild()));
+    // player whose turn it is.
+    auto enc_b = torch::pickle_save(board.Tensor(root->turn()));
     example.mutable_board()->assign(enc_b.begin(), enc_b.end());
     auto enc_pr = torch::pickle_save(root->NormVisitCounts());
     example.mutable_move_probs()->assign(enc_pr.begin(), enc_pr.end());
@@ -235,9 +266,10 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
                       << "s. stats: " << stats;
     }
 
+    int turn = root->turn();
+    // NOTE: Must not access root after this step!
     std::unique_ptr<Node> best_child = root->MostVisitedChildAsRoot();
-
-    board.MakeMove(best_child->player(), best_child->move());
+    board.MakeMove(turn, best_child->move());
     root = std::move(best_child);
   }
   if (game_over) {

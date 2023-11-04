@@ -11,6 +11,16 @@
 #include "hexz.pb.h"
 
 namespace hexz {
+
+class NodePeer {
+ public:
+  explicit NodePeer(Node& node) : node_{node} {}
+  void set_visit_count(int n) { node_.visit_count_ = n; }
+
+ private:
+  Node& node_;
+};
+
 namespace {
 
 std::mt19937 rng{std::random_device{}()};
@@ -44,18 +54,59 @@ TEST(NodeTest, IsLeaf) {
 }
 
 TEST(NodeTest, MaxPuctChild) {
+  Node::uct_c = 1.0;
   Node n(nullptr, 0, Move{});
   std::vector<Move> moves{
       Move{0, 0, 0, 0},
+      Move{0, 1, 0, 0},
   };
-  n.CreateChildren(0, moves);
+  n.CreateChildren(1 - n.turn(), moves);
   auto pr = torch::ones({2, 11, 10});
   pr = pr / pr.sum();
   n.SetMoveProbs(pr);
+  auto& n_0 = *n.children()[0];
+  auto& n_1 = *n.children()[1];
+  // Mark victory for child n_0.
+  n_0.Backpropagate(-1.0);
   Node* c = n.MaxPuctChild();
   ASSERT_TRUE(c != nullptr);
+  //   EXPECT_EQ("FOO", n.DebugString());
+  EXPECT_EQ(c, &n_0);
   EXPECT_EQ(c->parent(), &n);
-  EXPECT_EQ(c->Puct(), 0);
+  // PUCT should be greater than 1, the win rate.
+  EXPECT_GT(c->Puct(), 1);
+}
+
+TEST(NodeTest, Backpropagate) {
+  using NP = NodePeer;
+  /*
+  root (turn=0)
+  - n_1 (turn=1)
+    - n_1_1 (turn=0)
+  - n_2 (player=1)
+
+  Then backpropagate from n_1_1 and expect root to get updated.
+  */
+  Node root(nullptr, 0, Move{});
+  std::vector<Move> root_moves{
+      Move{0, 0, 0, 0},
+      Move{1, 0, 0, 0},
+  };
+  root.CreateChildren(1 - root.turn(), root_moves);
+  auto& n_1 = *root.children()[0];
+  std::vector<Move> n_1_moves{
+      Move{1, 1, 0, 0},
+  };
+  n_1.CreateChildren(1 - n_1.turn(), n_1_moves);
+  auto& n_1_1 = *n_1.children()[0];
+  // Player 0 won.
+  n_1_1.Backpropagate(1.0);
+  EXPECT_EQ(root.visit_count(), 1);
+  EXPECT_EQ(n_1.visit_count(), 1);
+  EXPECT_EQ(n_1_1.visit_count(), 1);
+  EXPECT_EQ(root.wins(), 1.0);
+  EXPECT_EQ(n_1.wins(), 0.0);
+  EXPECT_EQ(n_1_1.wins(), 1.0);
 }
 
 TEST(MCTSTest, TensorAsVector) {
@@ -132,14 +183,19 @@ TEST(MCTSTest, PlayGame) {
 
   auto examples = mcts.PlayGame(b, /*max_runtime_seconds=*/0);
   ASSERT_TRUE(examples.ok());
-  ASSERT_GT(examples->size(), 0);
+  ASSERT_GE(examples->size(), 2);
   auto ex0 = (*examples)[0];
+  auto ex1 = (*examples)[1];
   EXPECT_EQ(ex0.encoding(), hexzpb::TrainingExample::PYTORCH);
   EXPECT_GT(ex0.unix_micros(), 0);
   EXPECT_GT(ex0.stats().duration_micros(), 0);
   EXPECT_EQ(ex0.stats().visit_count(), 10);
-  EXPECT_EQ(ex0.stats().valid_moves(), 85);  // Every game has 85 initial flag positions.
+  // Every game has 85 initial flag positions.
+  EXPECT_EQ(ex0.stats().valid_moves(), 85);
   EXPECT_EQ(ex0.stats().move(), 0);
+  EXPECT_EQ(ex1.stats().move(), 1);
+  EXPECT_EQ(ex0.stats().turn(), 0);
+  EXPECT_EQ(ex1.stats().turn(), 1);
   // Check board is a Tensor of the right shape.
   auto board_val = torch::pickle_load(
       std::vector<char>(ex0.board().begin(), ex0.board().end()));

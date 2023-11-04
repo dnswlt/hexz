@@ -5,6 +5,8 @@
 #include <torch/script.h>
 #include <torch/torch.h>
 
+#include <cassert>
+#include <ostream>
 #include <vector>
 
 #include "base.h"
@@ -14,15 +16,21 @@
 
 namespace hexz {
 
+namespace internal {
+extern std::mt19937 rng;
+}
+
 class Node {
  public:
-  Node(Node* parent, int player, Move move);
+  Node(Node* parent, int turn, Move move);
 
-  int player() const { return player_; }
+  // Simple getters.
+  int turn() const { return turn_; }
   const Move& move() const { return move_; }
-  // TODO: clean up this mismatch that a Node stores the player of the move that
-  // created it. It should store the move that comes next.
-  int PlayerForChild() const { return children_[0]->player_; }
+  int visit_count() const noexcept { return visit_count_; }
+  const Node* parent() const noexcept { return parent_; }
+  float wins() const noexcept { return wins_; }
+  std::vector<std::unique_ptr<Node>>& children() { return children_; }
 
   float Puct() const noexcept;
   Node* MaxPuctChild();
@@ -33,14 +41,17 @@ class Node {
   // The Node on which this method was called MUST NOT be used
   // afterwards!
   std::unique_ptr<Node> MostVisitedChildAsRoot();
-  
+
   void Backpropagate(float result);
 
   bool IsLeaf() const { return children_.empty(); }
 
   // Adds children representing the given moves to this node.
-  // Children will be shuffled randomly, to avoid selection bias.
-  void CreateChildren(int player, const std::vector<Move>& moves);
+  void CreateChildren(int turn, const std::vector<Move>& moves);
+  // Shuffles children randomly. This can be used to avoid selection bias.
+  void ShuffleChildren() {
+    std::shuffle(children_.begin(), children_.end(), internal::rng);
+  }
 
   // Returns the normalized visit counts (which sum to 1) as a (2, 11, 10)
   // tensor. This value should be used to update the move probs of the model.
@@ -65,8 +76,6 @@ class Node {
                            move_probs.data_ptr<float>() + move_probs.numel());
   }
 
-  int visit_count() const noexcept { return visit_count_; }
-  const Node* parent() const noexcept { return parent_; }
   // Returns the number of children that had a nonzero visit_count.
   int NumVisitedChildren() const noexcept;
   int NumChildren() const noexcept { return children_.size(); }
@@ -75,9 +84,14 @@ class Node {
   // Must only be modified at program startup.
   static float uct_c;
 
+  friend class NodePeer;  // For testing.
+
+    std::string DebugString();
  private:
+    void AppendDebugString(std::ostream& os, const std::string& indent);
+
   Node* parent_;
-  int player_;
+  int turn_;
   Move move_;
   int flat_idx_;
   float wins_ = 0.0;
