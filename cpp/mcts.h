@@ -71,14 +71,42 @@ class Node {
   std::vector<std::unique_ptr<Node>> children_;
 };
 
-class NeuralMCTS {
+// Interface class for a model than can make predictions for
+// move likelihoods and board evaluations.
+class Model {
+ public:
   struct Prediction {
     torch::Tensor move_probs;
     float value;
   };
+  virtual Prediction Predict(int player, const Board& board) = 0;
+  virtual ~Model() = default;
+};
+
+// Implementation of Model that uses an actual PyTorch ScriptModule.
+// This is the implementation that should be used everywhere outside of tests.
+class TorchModel : public Model {
+  using Prediction = Model::Prediction;
 
  public:
-  NeuralMCTS(torch::jit::script::Module module, const Config& config);
+  explicit TorchModel(torch::jit::Module module) : module_{module} {}
+  TorchModel(hexzpb::ModelKey key, torch::jit::Module module)
+      : key_{key}, module_{module}  {}
+  Prediction Predict(int player, const Board& board) override;
+
+  const hexzpb::ModelKey& Key() const { return key_; }
+  torch::jit::Module& Module() { return module_; }
+
+ private:
+  hexzpb::ModelKey key_;
+  torch::jit::Module module_;
+};
+
+class NeuralMCTS {
+ public:
+  // The model is not owned. Owners of the NeuralMCTS instance must ensure it
+  // outlives this instance.
+  NeuralMCTS(Model& model, const Config& config);
 
   absl::StatusOr<std::vector<hexzpb::TrainingExample>> PlayGame(
       Board& board, int max_runtime_seconds);
@@ -87,13 +115,13 @@ class NeuralMCTS {
 
  private:
   bool Run(Node& root, Board& board);
-  Prediction Predict(int player, const Board& board);
 
   int runs_per_move_;
   double runs_per_move_gradient_;
   int max_moves_per_game_;
 
-  torch::jit::script::Module module_;
+  // Not owned.
+  Model& model_;
 };
 
 }  // namespace hexz

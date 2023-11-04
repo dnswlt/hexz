@@ -23,16 +23,24 @@
 
 namespace hexz {
 
+namespace {
 std::string ModelId(const hexzpb::ModelKey& key) {
   return absl::StrCat(key.name(), ":", key.checkpoint());
 }
 
+bool SameKey(const hexzpb::ModelKey& lhs, const hexzpb::ModelKey& rhs) {
+  return lhs.name() == rhs.name() && lhs.checkpoint() == rhs.checkpoint();
+}
+
+}  // namespace
+
 void PlayGameLocally(const Config& config) {
-  torch::jit::script::Module model;
+  std::unique_ptr<TorchModel> model;
   try {
-    model = torch::jit::load(config.local_model_path);
-    model.to(torch::kCPU);
-    model.eval();
+    auto module = torch::jit::load(config.local_model_path);
+    module.to(torch::kCPU);
+    module.eval();
+    model = std::make_unique<TorchModel>(module);
   } catch (const c10::Error& e) {
     ABSL_LOG(ERROR) << "Failed to load model from " << config.local_model_path
                     << ": " << e.msg();
@@ -40,7 +48,7 @@ void PlayGameLocally(const Config& config) {
   }
   {
     Perfm::Scope ps(Perfm::PlayGameLocally);
-    NeuralMCTS mcts{model, config};
+    NeuralMCTS mcts{*model, config};
     Board b = Board::RandomBoard();
     if (auto result = mcts.PlayGame(b, /*max_runtime_seconds=*/0);
         !result.ok()) {
@@ -49,14 +57,25 @@ void PlayGameLocally(const Config& config) {
   }
 }
 
+absl::StatusOr<std::unique_ptr<TorchModel>> FetchLatestModel(RPCClient& rpc) {
+  auto km = rpc.FetchLatestModel();
+  if (!km.ok()) {
+    return km.status();
+  }
+  km->model.to(torch::kCPU);
+  km->model.eval();
+  return std::make_unique<TorchModel>(km->key, km->model);
+}
+
 void GenerateExamples(const Config& config) {
   const auto started_micros = UnixMicros();
   RPCClient rpc(config);
-  auto km = rpc.FetchLatestModel();
-  if (!km.ok()) {
-    ABSL_LOG(ERROR) << "FetchModule failed: " << km.status();
+  auto model_or = FetchLatestModel(rpc);
+  if (!model_or.ok()) {
+    ABSL_LOG(ERROR) << "FetchModule failed: " << model_or.status();
     return;
   }
+  std::unique_ptr<TorchModel> model = *std::move(model_or);
   int max_games =
       config.max_games > 0 ? config.max_games : std::numeric_limits<int>::max();
   for (int i = 0; i < max_games; i++) {
@@ -64,7 +83,7 @@ void GenerateExamples(const Config& config) {
     if (now >= started_micros + config.max_runtime_seconds * 1'000'000) {
       break;
     }
-    NeuralMCTS mcts(km->model, config);
+    NeuralMCTS mcts(*model, config);
     Board b = Board::RandomBoard();
     int max_runtime_seconds =
         config.max_runtime_seconds - (now - started_micros) / 1'000'000;
@@ -80,7 +99,7 @@ void GenerateExamples(const Config& config) {
       return;
     }
     const int n_examples = examples->size();
-    auto resp = rpc.SendExamples(km->key, *std::move(examples));
+    auto resp = rpc.SendExamples(model->Key(), *std::move(examples));
     if (!resp.ok()) {
       ABSL_LOG(ERROR) << "Failed to send examples: " << resp.status();
       return;
@@ -100,7 +119,8 @@ void GenerateExamples(const Config& config) {
       // before the model got updated twice.
       ABSL_LOG(ERROR)
           << "Server rejected out examples due to an old model. Sent: "
-          << ModelId(km->key) << ", want: " << ModelId(resp->latest_model());
+          << ModelId(model->Key())
+          << ", want: " << ModelId(resp->latest_model());
     }
     if (resp->status() != hexzpb::AddTrainingExamplesResponse::ACCEPTED) {
       ABSL_LOG(ERROR) << "Server did not like our examples: "
@@ -110,13 +130,13 @@ void GenerateExamples(const Config& config) {
       return;
     }
     // Check if we need to update to a new model.
-    if (resp->latest_model().name() != km->key.name() ||
-        resp->latest_model().checkpoint() != km->key.checkpoint()) {
-      km = rpc.FetchLatestModel();
-      if (!km.ok()) {
-        ABSL_LOG(ERROR) << "FetchModule failed: " << km.status();
+    if (!SameKey(model->Key(), resp->latest_model())) {
+      auto model_or = FetchLatestModel(rpc);
+      if (!model_or.ok()) {
+        ABSL_LOG(ERROR) << "FetchModule failed: " << model_or.status();
         return;
       }
+      model = *std::move(model_or);
     }
     ABSL_LOG(INFO) << "Successfully sent " << n_examples
                    << " examples to training server at "

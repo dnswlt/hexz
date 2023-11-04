@@ -15,34 +15,47 @@ namespace {
 
 std::mt19937 rng{std::random_device{}()};
 
+class FakeModel : public Model {
+ public:
+  using Prediction = Model::Prediction;
+  Prediction Predict(int player, const Board& board) override {
+    auto t = torch::ones({2, 11, 10});
+    t = t / t.sum();
+    return Prediction{
+        .move_probs = t,
+        .value = 0.0,
+    };
+  }
+};
+
 TEST(NodeTest, InitializedToZero) {
-    Node n(nullptr, 0, Move{});
-    EXPECT_EQ(n.visit_count(), 0);
+  Node n(nullptr, 0, Move{});
+  EXPECT_EQ(n.visit_count(), 0);
 }
 
 TEST(NodeTest, IsLeaf) {
-    Node n(nullptr, 0, Move{});
-    EXPECT_TRUE(n.IsLeaf());
-    std::vector<Move> moves{
-        Move{0, 0, 0, 0},
-    };
-    n.CreateChildren(0, moves);
-    EXPECT_FALSE(n.IsLeaf());
+  Node n(nullptr, 0, Move{});
+  EXPECT_TRUE(n.IsLeaf());
+  std::vector<Move> moves{
+      Move{0, 0, 0, 0},
+  };
+  n.CreateChildren(0, moves);
+  EXPECT_FALSE(n.IsLeaf());
 }
 
 TEST(NodeTest, MaxPuctChild) {
-    Node n(nullptr, 0, Move{});
-    std::vector<Move> moves{
-        Move{0, 0, 0, 0},
-    };
-    n.CreateChildren(0, moves);
-    auto pr = torch::ones({2, 11, 10});
-    pr = pr / pr.sum();
-    n.SetMoveProbs(pr);
-    Node* c = n.MaxPuctChild();
-    ASSERT_TRUE(c != nullptr);
-    EXPECT_EQ(c->parent(), &n);
-    EXPECT_EQ(c->Puct(), 0);
+  Node n(nullptr, 0, Move{});
+  std::vector<Move> moves{
+      Move{0, 0, 0, 0},
+  };
+  n.CreateChildren(0, moves);
+  auto pr = torch::ones({2, 11, 10});
+  pr = pr / pr.sum();
+  n.SetMoveProbs(pr);
+  Node* c = n.MaxPuctChild();
+  ASSERT_TRUE(c != nullptr);
+  EXPECT_EQ(c->parent(), &n);
+  EXPECT_EQ(c->Puct(), 0);
 }
 
 TEST(MCTSTest, TensorAsVector) {
@@ -95,8 +108,8 @@ TEST(MCTSTest, NumRuns) {
       .runs_per_move = 100,
       .runs_per_move_gradient = -0.01,
   };
-  torch::jit::Module dummy;
-  NeuralMCTS mcts(dummy, config);
+  FakeModel fake_model;
+  NeuralMCTS mcts(fake_model, config);
   EXPECT_EQ(mcts.NumRuns(0), 100);
   EXPECT_EQ(mcts.NumRuns(25), 75);
   EXPECT_EQ(mcts.NumRuns(50), 50);
@@ -107,12 +120,13 @@ TEST(MCTSTest, PlayGame) {
   // right shape to be used by NeuralMCTS.
   //
   // It can be generated with the regenerate.sh sidecar script.
-  auto model = torch::jit::load("testdata/scriptmodule.pt");
-  model.to(torch::kCPU);
-  model.eval();
+  auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
+  scriptmodule.to(torch::kCPU);
+  scriptmodule.eval();
   Config config{
       .runs_per_move = 10,
   };
+  TorchModel model(scriptmodule);
   NeuralMCTS mcts(model, config);
   auto b = Board::RandomBoard();
 

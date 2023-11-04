@@ -50,7 +50,8 @@ float Node::Puct() const noexcept {
     q = wins_ / visit_count_;
   }
   float pr = parent_->move_probs_[flat_idx_];
-  return q + Node::uct_c * pr * std::sqrt(parent_->visit_count_) / (1 + visit_count_);
+  return q + Node::uct_c * pr * std::sqrt(parent_->visit_count_) /
+                 (1 + visit_count_);
 }
 
 Node* Node::MaxPuctChild() {
@@ -105,13 +106,7 @@ void Node::CreateChildren(int player, const std::vector<Move>& moves) {
   std::shuffle(children_.begin(), children_.end(), rng);
 }
 
-NeuralMCTS::NeuralMCTS(torch::jit::script::Module module, const Config& config)
-    : module_{module},
-      runs_per_move_{config.runs_per_move},
-      max_moves_per_game_{config.max_moves_per_game},
-      runs_per_move_gradient_{config.runs_per_move_gradient} {}
-
-NeuralMCTS::Prediction NeuralMCTS::Predict(int player, const Board& board) {
+TorchModel::Prediction TorchModel::Predict(int player, const Board& board) {
   Perfm::Scope ps(Perfm::Predict);
   torch::NoGradGuard no_grad;
   auto input = board.Tensor(player).unsqueeze(0);
@@ -128,11 +123,17 @@ NeuralMCTS::Prediction NeuralMCTS::Predict(int player, const Board& board) {
   const auto dim = logits.sizes();
   assert(dim.size() == 2 && dim[0] == 1 && dim[1] == 2 * 11 * 10);
   const auto value = output_tuple->elements()[1].toTensor().item<float>();
-  return NeuralMCTS::Prediction{
+  return Prediction{
       .move_probs = logits.reshape({2, 11, 10}).exp(),
       .value = value,
   };
 }
+
+NeuralMCTS::NeuralMCTS(Model& model, const Config& config)
+    : model_{model},
+      runs_per_move_{config.runs_per_move},
+      max_moves_per_game_{config.max_moves_per_game},
+      runs_per_move_gradient_{config.runs_per_move_gradient} {}
 
 bool NeuralMCTS::Run(Node& root, Board& board) {
   Perfm::Scope ps(Perfm::NeuralMCTS_Run);
@@ -160,7 +161,7 @@ bool NeuralMCTS::Run(Node& root, Board& board) {
     return n != &root;  // Return if we made any progress at all in this run.
   }
   n->CreateChildren(player, moves);
-  auto pred = Predict(player, board);
+  auto pred = model_.Predict(player, board);
   n->SetMoveProbs(pred.move_probs);
   n->Backpropagate(pred.value);
   return true;
@@ -174,7 +175,6 @@ int NeuralMCTS::NumRuns(int move) const noexcept {
 
 absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     Board& board, int max_runtime_seconds) {
-  module_.eval();
   std::vector<hexzpb::TrainingExample> examples;
   int64_t started_micros = UnixMicros();
   int n = 0;
