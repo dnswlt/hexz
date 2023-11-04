@@ -161,10 +161,6 @@ message AddTrainingExamplesResponse {
 message TrainingExample {
     // Timestamp at which this example was generated.
     int64 unix_micros = 1;
-    // Time it took to generate this example (i.e., to generate the corresponding
-    // neural MCTS move suggestion).
-    int64 duration_micros = 5;
-
     // Encoding indicates how the bytes fields were encoded.
     // In Python workers, we use numpy (np.save), while in C++ we use
     // PyTorch (torch::pickle_save), since numpy is not available.
@@ -185,4 +181,17 @@ message TrainingExample {
     bytes move_probs = 3;
     // The outcome of the game, from the perspective of player 0.
     float result = 4;
+
+    message Stats {
+        // The move number in the game.
+        int32 move = 1;
+        // Time it took to generate this example (i.e., to generate the corresponding
+        // neural MCTS move suggestion).
+        int64 duration_micros = 2;
+        // Number of valid moves
+        int32 valid_moves = 3;
+        // Times that the root node was visited.
+        int32 visit_count = 4;
+    }
+    Stats stats = 5;
 }

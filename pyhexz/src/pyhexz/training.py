@@ -236,14 +236,15 @@ class TrainingTask(threading.Thread):
         for ex in req.examples:
             # Update timing stats.
             self.timing_stats.count += 1
+            duration_micros = ex.stats.duration_micros
             self.timing_stats.min_duration_micros = min(
-                self.timing_stats.min_duration_micros, ex.duration_micros
+                self.timing_stats.min_duration_micros, duration_micros
             )
             self.timing_stats.max_duration_micros = max(
-                self.timing_stats.max_duration_micros, ex.duration_micros
+                self.timing_stats.max_duration_micros, duration_micros
             )
-            self.timing_stats.sum_duration_micros += ex.duration_micros
-            self.timing_stats.sum_duration_sq += (ex.duration_micros / 1e6) ** 2
+            self.timing_stats.sum_duration_micros += duration_micros
+            self.timing_stats.sum_duration_sq += (duration_micros / 1e6) ** 2
             # Extract example data.
             if ex.encoding == hexz_pb2.TrainingExample.PYTORCH:
                 board = torch.load(io.BytesIO(ex.board)).numpy()

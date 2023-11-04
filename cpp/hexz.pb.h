@@ -107,6 +107,9 @@ extern ResourceInfoDefaultTypeInternal _ResourceInfo_default_instance_;
 class TrainingExample;
 struct TrainingExampleDefaultTypeInternal;
 extern TrainingExampleDefaultTypeInternal _TrainingExample_default_instance_;
+class TrainingExample_Stats;
+struct TrainingExample_StatsDefaultTypeInternal;
+extern TrainingExample_StatsDefaultTypeInternal _TrainingExample_Stats_default_instance_;
 }  // namespace hexzpb
 namespace google {
 namespace protobuf {
@@ -3579,6 +3582,200 @@ class AddTrainingExamplesResponse final :
   friend struct ::TableStruct_hexz_2eproto;
 };// -------------------------------------------------------------------
 
+class TrainingExample_Stats final :
+    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:hexzpb.TrainingExample.Stats) */ {
+ public:
+  inline TrainingExample_Stats() : TrainingExample_Stats(nullptr) {}
+  ~TrainingExample_Stats() override;
+  template<typename = void>
+  explicit PROTOBUF_CONSTEXPR TrainingExample_Stats(::google::protobuf::internal::ConstantInitialized);
+
+  TrainingExample_Stats(const TrainingExample_Stats& from);
+  TrainingExample_Stats(TrainingExample_Stats&& from) noexcept
+    : TrainingExample_Stats() {
+    *this = ::std::move(from);
+  }
+
+  inline TrainingExample_Stats& operator=(const TrainingExample_Stats& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline TrainingExample_Stats& operator=(TrainingExample_Stats&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const TrainingExample_Stats& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const TrainingExample_Stats* internal_default_instance() {
+    return reinterpret_cast<const TrainingExample_Stats*>(
+               &_TrainingExample_Stats_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    16;
+
+  friend void swap(TrainingExample_Stats& a, TrainingExample_Stats& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(TrainingExample_Stats* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(TrainingExample_Stats* other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  TrainingExample_Stats* New(::google::protobuf::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<TrainingExample_Stats>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const TrainingExample_Stats& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom( const TrainingExample_Stats& from) {
+    TrainingExample_Stats::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  ::size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::google::protobuf::internal::ParseContext* ctx) final;
+  ::uint8_t* _InternalSerialize(
+      ::uint8_t* target, ::google::protobuf::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::google::protobuf::Arena* arena);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(TrainingExample_Stats* other);
+
+  private:
+  friend class ::google::protobuf::internal::AnyMetadata;
+  static ::absl::string_view FullMessageName() {
+    return "hexzpb.TrainingExample.Stats";
+  }
+  protected:
+  explicit TrainingExample_Stats(::google::protobuf::Arena* arena);
+  public:
+
+  static const ClassData _class_data_;
+  const ::google::protobuf::Message::ClassData*GetClassData() const final;
+
+  ::google::protobuf::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kDurationMicrosFieldNumber = 2,
+    kMoveFieldNumber = 1,
+    kValidMovesFieldNumber = 3,
+    kVisitCountFieldNumber = 4,
+  };
+  // int64 duration_micros = 2;
+  void clear_duration_micros() ;
+  ::int64_t duration_micros() const;
+  void set_duration_micros(::int64_t value);
+
+  private:
+  ::int64_t _internal_duration_micros() const;
+  void _internal_set_duration_micros(::int64_t value);
+
+  public:
+  // int32 move = 1;
+  void clear_move() ;
+  ::int32_t move() const;
+  void set_move(::int32_t value);
+
+  private:
+  ::int32_t _internal_move() const;
+  void _internal_set_move(::int32_t value);
+
+  public:
+  // int32 valid_moves = 3;
+  void clear_valid_moves() ;
+  ::int32_t valid_moves() const;
+  void set_valid_moves(::int32_t value);
+
+  private:
+  ::int32_t _internal_valid_moves() const;
+  void _internal_set_valid_moves(::int32_t value);
+
+  public:
+  // int32 visit_count = 4;
+  void clear_visit_count() ;
+  ::int32_t visit_count() const;
+  void set_visit_count(::int32_t value);
+
+  private:
+  ::int32_t _internal_visit_count() const;
+  void _internal_set_visit_count(::int32_t value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:hexzpb.TrainingExample.Stats)
+ private:
+  class _Internal;
+
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<2, 4, 0, 0, 2> _table_;
+  template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::int64_t duration_micros_;
+    ::int32_t move_;
+    ::int32_t valid_moves_;
+    ::int32_t visit_count_;
+    mutable ::google::protobuf::internal::CachedSize _cached_size_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_hexz_2eproto;
+};// -------------------------------------------------------------------
+
 class TrainingExample final :
     public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:hexzpb.TrainingExample) */ {
  public:
@@ -3635,7 +3832,7 @@ class TrainingExample final :
                &_TrainingExample_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    16;
+    17;
 
   friend void swap(TrainingExample& a, TrainingExample& b) {
     a.Swap(&b);
@@ -3704,6 +3901,8 @@ class TrainingExample final :
 
   // nested types ----------------------------------------------------
 
+  typedef TrainingExample_Stats Stats;
+
   using Encoding = TrainingExample_Encoding;
   static constexpr Encoding NUMPY = TrainingExample_Encoding_NUMPY;
   static constexpr Encoding PYTORCH = TrainingExample_Encoding_PYTORCH;
@@ -3729,8 +3928,8 @@ class TrainingExample final :
   enum : int {
     kBoardFieldNumber = 2,
     kMoveProbsFieldNumber = 3,
+    kStatsFieldNumber = 5,
     kUnixMicrosFieldNumber = 1,
-    kDurationMicrosFieldNumber = 5,
     kResultFieldNumber = 4,
     kEncodingFieldNumber = 6,
   };
@@ -3766,6 +3965,21 @@ class TrainingExample final :
   std::string* _internal_mutable_move_probs();
 
   public:
+  // .hexzpb.TrainingExample.Stats stats = 5;
+  bool has_stats() const;
+  void clear_stats() ;
+  const ::hexzpb::TrainingExample_Stats& stats() const;
+  PROTOBUF_NODISCARD ::hexzpb::TrainingExample_Stats* release_stats();
+  ::hexzpb::TrainingExample_Stats* mutable_stats();
+  void set_allocated_stats(::hexzpb::TrainingExample_Stats* value);
+  void unsafe_arena_set_allocated_stats(::hexzpb::TrainingExample_Stats* value);
+  ::hexzpb::TrainingExample_Stats* unsafe_arena_release_stats();
+
+  private:
+  const ::hexzpb::TrainingExample_Stats& _internal_stats() const;
+  ::hexzpb::TrainingExample_Stats* _internal_mutable_stats();
+
+  public:
   // int64 unix_micros = 1;
   void clear_unix_micros() ;
   ::int64_t unix_micros() const;
@@ -3774,16 +3988,6 @@ class TrainingExample final :
   private:
   ::int64_t _internal_unix_micros() const;
   void _internal_set_unix_micros(::int64_t value);
-
-  public:
-  // int64 duration_micros = 5;
-  void clear_duration_micros() ;
-  ::int64_t duration_micros() const;
-  void set_duration_micros(::int64_t value);
-
-  private:
-  ::int64_t _internal_duration_micros() const;
-  void _internal_set_duration_micros(::int64_t value);
 
   public:
   // float result = 4;
@@ -3811,18 +4015,19 @@ class TrainingExample final :
   class _Internal;
 
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<3, 6, 0, 0, 2> _table_;
+  static const ::google::protobuf::internal::TcParseTable<3, 6, 1, 0, 2> _table_;
   template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
   struct Impl_ {
+    ::google::protobuf::internal::HasBits<1> _has_bits_;
+    mutable ::google::protobuf::internal::CachedSize _cached_size_;
     ::google::protobuf::internal::ArenaStringPtr board_;
     ::google::protobuf::internal::ArenaStringPtr move_probs_;
+    ::hexzpb::TrainingExample_Stats* stats_;
     ::int64_t unix_micros_;
-    ::int64_t duration_micros_;
     float result_;
     int encoding_;
-    mutable ::google::protobuf::internal::CachedSize _cached_size_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
   union { Impl_ _impl_; };
@@ -6564,6 +6769,98 @@ inline void AddTrainingExamplesResponse::set_allocated_error_message(std::string
 
 // -------------------------------------------------------------------
 
+// TrainingExample_Stats
+
+// int32 move = 1;
+inline void TrainingExample_Stats::clear_move() {
+  _impl_.move_ = 0;
+}
+inline ::int32_t TrainingExample_Stats::move() const {
+  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.Stats.move)
+  return _internal_move();
+}
+inline void TrainingExample_Stats::set_move(::int32_t value) {
+  _internal_set_move(value);
+  // @@protoc_insertion_point(field_set:hexzpb.TrainingExample.Stats.move)
+}
+inline ::int32_t TrainingExample_Stats::_internal_move() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.move_;
+}
+inline void TrainingExample_Stats::_internal_set_move(::int32_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.move_ = value;
+}
+
+// int64 duration_micros = 2;
+inline void TrainingExample_Stats::clear_duration_micros() {
+  _impl_.duration_micros_ = ::int64_t{0};
+}
+inline ::int64_t TrainingExample_Stats::duration_micros() const {
+  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.Stats.duration_micros)
+  return _internal_duration_micros();
+}
+inline void TrainingExample_Stats::set_duration_micros(::int64_t value) {
+  _internal_set_duration_micros(value);
+  // @@protoc_insertion_point(field_set:hexzpb.TrainingExample.Stats.duration_micros)
+}
+inline ::int64_t TrainingExample_Stats::_internal_duration_micros() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.duration_micros_;
+}
+inline void TrainingExample_Stats::_internal_set_duration_micros(::int64_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.duration_micros_ = value;
+}
+
+// int32 valid_moves = 3;
+inline void TrainingExample_Stats::clear_valid_moves() {
+  _impl_.valid_moves_ = 0;
+}
+inline ::int32_t TrainingExample_Stats::valid_moves() const {
+  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.Stats.valid_moves)
+  return _internal_valid_moves();
+}
+inline void TrainingExample_Stats::set_valid_moves(::int32_t value) {
+  _internal_set_valid_moves(value);
+  // @@protoc_insertion_point(field_set:hexzpb.TrainingExample.Stats.valid_moves)
+}
+inline ::int32_t TrainingExample_Stats::_internal_valid_moves() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.valid_moves_;
+}
+inline void TrainingExample_Stats::_internal_set_valid_moves(::int32_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.valid_moves_ = value;
+}
+
+// int32 visit_count = 4;
+inline void TrainingExample_Stats::clear_visit_count() {
+  _impl_.visit_count_ = 0;
+}
+inline ::int32_t TrainingExample_Stats::visit_count() const {
+  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.Stats.visit_count)
+  return _internal_visit_count();
+}
+inline void TrainingExample_Stats::set_visit_count(::int32_t value) {
+  _internal_set_visit_count(value);
+  // @@protoc_insertion_point(field_set:hexzpb.TrainingExample.Stats.visit_count)
+}
+inline ::int32_t TrainingExample_Stats::_internal_visit_count() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.visit_count_;
+}
+inline void TrainingExample_Stats::_internal_set_visit_count(::int32_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.visit_count_ = value;
+}
+
+// -------------------------------------------------------------------
+
 // TrainingExample
 
 // int64 unix_micros = 1;
@@ -6586,28 +6883,6 @@ inline void TrainingExample::_internal_set_unix_micros(::int64_t value) {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   ;
   _impl_.unix_micros_ = value;
-}
-
-// int64 duration_micros = 5;
-inline void TrainingExample::clear_duration_micros() {
-  _impl_.duration_micros_ = ::int64_t{0};
-}
-inline ::int64_t TrainingExample::duration_micros() const {
-  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.duration_micros)
-  return _internal_duration_micros();
-}
-inline void TrainingExample::set_duration_micros(::int64_t value) {
-  _internal_set_duration_micros(value);
-  // @@protoc_insertion_point(field_set:hexzpb.TrainingExample.duration_micros)
-}
-inline ::int64_t TrainingExample::_internal_duration_micros() const {
-  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
-  return _impl_.duration_micros_;
-}
-inline void TrainingExample::_internal_set_duration_micros(::int64_t value) {
-  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  ;
-  _impl_.duration_micros_ = value;
 }
 
 // .hexzpb.TrainingExample.Encoding encoding = 6;
@@ -6754,6 +7029,102 @@ inline void TrainingExample::_internal_set_result(float value) {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   ;
   _impl_.result_ = value;
+}
+
+// .hexzpb.TrainingExample.Stats stats = 5;
+inline bool TrainingExample::has_stats() const {
+  bool value = (_impl_._has_bits_[0] & 0x00000001u) != 0;
+  PROTOBUF_ASSUME(!value || _impl_.stats_ != nullptr);
+  return value;
+}
+inline void TrainingExample::clear_stats() {
+  if (_impl_.stats_ != nullptr) _impl_.stats_->Clear();
+  _impl_._has_bits_[0] &= ~0x00000001u;
+}
+inline const ::hexzpb::TrainingExample_Stats& TrainingExample::_internal_stats() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  const ::hexzpb::TrainingExample_Stats* p = _impl_.stats_;
+  return p != nullptr ? *p : reinterpret_cast<const ::hexzpb::TrainingExample_Stats&>(::hexzpb::_TrainingExample_Stats_default_instance_);
+}
+inline const ::hexzpb::TrainingExample_Stats& TrainingExample::stats() const {
+  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.stats)
+  return _internal_stats();
+}
+inline void TrainingExample::unsafe_arena_set_allocated_stats(::hexzpb::TrainingExample_Stats* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  if (GetArenaForAllocation() == nullptr) {
+    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.stats_);
+  }
+  _impl_.stats_ = reinterpret_cast<::hexzpb::TrainingExample_Stats*>(value);
+  if (value != nullptr) {
+    _impl_._has_bits_[0] |= 0x00000001u;
+  } else {
+    _impl_._has_bits_[0] &= ~0x00000001u;
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:hexzpb.TrainingExample.stats)
+}
+inline ::hexzpb::TrainingExample_Stats* TrainingExample::release_stats() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+
+  _impl_._has_bits_[0] &= ~0x00000001u;
+  ::hexzpb::TrainingExample_Stats* released = _impl_.stats_;
+  _impl_.stats_ = nullptr;
+#ifdef PROTOBUF_FORCE_COPY_IN_RELEASE
+  auto* old = reinterpret_cast<::google::protobuf::MessageLite*>(released);
+  released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+  if (GetArenaForAllocation() == nullptr) {
+    delete old;
+  }
+#else   // PROTOBUF_FORCE_COPY_IN_RELEASE
+  if (GetArenaForAllocation() != nullptr) {
+    released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+  }
+#endif  // !PROTOBUF_FORCE_COPY_IN_RELEASE
+  return released;
+}
+inline ::hexzpb::TrainingExample_Stats* TrainingExample::unsafe_arena_release_stats() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:hexzpb.TrainingExample.stats)
+
+  _impl_._has_bits_[0] &= ~0x00000001u;
+  ::hexzpb::TrainingExample_Stats* temp = _impl_.stats_;
+  _impl_.stats_ = nullptr;
+  return temp;
+}
+inline ::hexzpb::TrainingExample_Stats* TrainingExample::_internal_mutable_stats() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_._has_bits_[0] |= 0x00000001u;
+  if (_impl_.stats_ == nullptr) {
+    auto* p = CreateMaybeMessage<::hexzpb::TrainingExample_Stats>(GetArenaForAllocation());
+    _impl_.stats_ = reinterpret_cast<::hexzpb::TrainingExample_Stats*>(p);
+  }
+  return _impl_.stats_;
+}
+inline ::hexzpb::TrainingExample_Stats* TrainingExample::mutable_stats() {
+  ::hexzpb::TrainingExample_Stats* _msg = _internal_mutable_stats();
+  // @@protoc_insertion_point(field_mutable:hexzpb.TrainingExample.stats)
+  return _msg;
+}
+inline void TrainingExample::set_allocated_stats(::hexzpb::TrainingExample_Stats* value) {
+  ::google::protobuf::Arena* message_arena = GetArenaForAllocation();
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  if (message_arena == nullptr) {
+    delete reinterpret_cast<::hexzpb::TrainingExample_Stats*>(_impl_.stats_);
+  }
+
+  if (value != nullptr) {
+    ::google::protobuf::Arena* submessage_arena =
+        ::google::protobuf::Arena::InternalGetOwningArena(reinterpret_cast<::hexzpb::TrainingExample_Stats*>(value));
+    if (message_arena != submessage_arena) {
+      value = ::google::protobuf::internal::GetOwnedMessage(message_arena, value, submessage_arena);
+    }
+    _impl_._has_bits_[0] |= 0x00000001u;
+  } else {
+    _impl_._has_bits_[0] &= ~0x00000001u;
+  }
+
+  _impl_.stats_ = reinterpret_cast<::hexzpb::TrainingExample_Stats*>(value);
+  // @@protoc_insertion_point(field_set_allocated:hexzpb.TrainingExample.stats)
 }
 
 #ifdef __GNUC__

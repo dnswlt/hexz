@@ -136,7 +136,10 @@ TEST(MCTSTest, PlayGame) {
   auto ex0 = (*examples)[0];
   EXPECT_EQ(ex0.encoding(), hexzpb::TrainingExample::PYTORCH);
   EXPECT_GT(ex0.unix_micros(), 0);
-  EXPECT_GT(ex0.duration_micros(), 0);
+  EXPECT_GT(ex0.stats().duration_micros(), 0);
+  EXPECT_EQ(ex0.stats().visit_count(), 10);
+  EXPECT_EQ(ex0.stats().valid_moves(), 85);  // Every game has 85 initial flag positions.
+  EXPECT_EQ(ex0.stats().move(), 0);
   // Check board is a Tensor of the right shape.
   auto board_val = torch::pickle_load(
       std::vector<char>(ex0.board().begin(), ex0.board().end()));

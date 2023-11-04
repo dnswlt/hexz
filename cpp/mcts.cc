@@ -88,9 +88,9 @@ void Node::Backpropagate(float result) {
   Node* n = this;
   while (n != nullptr) {
     n->visit_count_++;
-    if (n->Player() == 0 && result > 0) {
+    if (n->player() == 0 && result > 0) {
       n->wins_ += result;
-    } else if (n->Player() == 1 && result < 0) {
+    } else if (n->player() == 1 && result < 0) {
       n->wins_ += -result;
     }
     n = n->parent_;
@@ -144,11 +144,11 @@ bool NeuralMCTS::Run(Node& root, Board& board) {
     Perfm::Scope ps(Perfm::FindLeaf);
     while (!n->IsLeaf()) {
       n = n->MaxPuctChild();
-      board.MakeMove(n->Player(), n->GetMove());
+      board.MakeMove(n->player(), n->move());
     }
   }
   // Expand leaf node. Usually it's the opponent's turn.
-  int player = 1 - n->Player();
+  int player = 1 - n->player();
   auto moves = board.NextMoves(player);
   if (moves.empty()) {
     // Opponent has no valid moves left. Try other player.
@@ -206,23 +206,25 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       result = board.Result();
       break;
     }
-    std::string stats = root->Stats();
-    std::unique_ptr<Node> best_child = root->MostVisitedChildAsRoot();
 
     // Add example.
     hexzpb::TrainingExample example;
     int64_t move_ready = UnixMicros();
     example.set_unix_micros(move_ready);
-    example.set_duration_micros(move_ready - move_started);
+    example.mutable_stats()->set_duration_micros(move_ready - move_started);
+    example.mutable_stats()->set_move(n);
+    example.mutable_stats()->set_valid_moves(root->NumChildren());
+    example.mutable_stats()->set_visit_count(root->visit_count());
     example.set_encoding(hexzpb::TrainingExample::PYTORCH);
     // The board in the example must be viewed from the perspective of the
     // player whose turn it is, i.e. from best_child->Player().
-    auto enc_b = torch::pickle_save(board.Tensor(best_child->Player()));
+    auto enc_b = torch::pickle_save(board.Tensor(root->PlayerForChild()));
     example.mutable_board()->assign(enc_b.begin(), enc_b.end());
-    auto enc_pr = torch::pickle_save(root->MoveProbs());
+    auto enc_pr = torch::pickle_save(root->NormVisitCounts());
     example.mutable_move_probs()->assign(enc_pr.begin(), enc_pr.end());
     examples.push_back(example);
 
+    std::string stats = root->Stats();
     if (n < 5 || n % 10 == 0) {
       ABSL_LOG(INFO) << "Move " << n << " after "
                      << (float)(UnixMicros() - started_micros) / 1000000
@@ -233,7 +235,9 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
                       << "s. stats: " << stats;
     }
 
-    board.MakeMove(best_child->Player(), best_child->GetMove());
+    std::unique_ptr<Node> best_child = root->MostVisitedChildAsRoot();
+
+    board.MakeMove(best_child->player(), best_child->move());
     root = std::move(best_child);
   }
   if (game_over) {

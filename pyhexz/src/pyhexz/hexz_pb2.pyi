@@ -219,23 +219,34 @@ class AddTrainingExamplesResponse(_message.Message):
     def __init__(self, status: _Optional[_Union[AddTrainingExamplesResponse.Status, str]] = ..., latest_model: _Optional[_Union[ModelKey, _Mapping]] = ..., error_message: _Optional[str] = ...) -> None: ...
 
 class TrainingExample(_message.Message):
-    __slots__ = ["unix_micros", "duration_micros", "encoding", "board", "move_probs", "result"]
+    __slots__ = ["unix_micros", "encoding", "board", "move_probs", "result", "stats"]
     class Encoding(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
         __slots__ = []
         NUMPY: _ClassVar[TrainingExample.Encoding]
         PYTORCH: _ClassVar[TrainingExample.Encoding]
     NUMPY: TrainingExample.Encoding
     PYTORCH: TrainingExample.Encoding
+    class Stats(_message.Message):
+        __slots__ = ["move", "duration_micros", "valid_moves", "visit_count"]
+        MOVE_FIELD_NUMBER: _ClassVar[int]
+        DURATION_MICROS_FIELD_NUMBER: _ClassVar[int]
+        VALID_MOVES_FIELD_NUMBER: _ClassVar[int]
+        VISIT_COUNT_FIELD_NUMBER: _ClassVar[int]
+        move: int
+        duration_micros: int
+        valid_moves: int
+        visit_count: int
+        def __init__(self, move: _Optional[int] = ..., duration_micros: _Optional[int] = ..., valid_moves: _Optional[int] = ..., visit_count: _Optional[int] = ...) -> None: ...
     UNIX_MICROS_FIELD_NUMBER: _ClassVar[int]
-    DURATION_MICROS_FIELD_NUMBER: _ClassVar[int]
     ENCODING_FIELD_NUMBER: _ClassVar[int]
     BOARD_FIELD_NUMBER: _ClassVar[int]
     MOVE_PROBS_FIELD_NUMBER: _ClassVar[int]
     RESULT_FIELD_NUMBER: _ClassVar[int]
+    STATS_FIELD_NUMBER: _ClassVar[int]
     unix_micros: int
-    duration_micros: int
     encoding: TrainingExample.Encoding
     board: bytes
     move_probs: bytes
     result: float
-    def __init__(self, unix_micros: _Optional[int] = ..., duration_micros: _Optional[int] = ..., encoding: _Optional[_Union[TrainingExample.Encoding, str]] = ..., board: _Optional[bytes] = ..., move_probs: _Optional[bytes] = ..., result: _Optional[float] = ...) -> None: ...
+    stats: TrainingExample.Stats
+    def __init__(self, unix_micros: _Optional[int] = ..., encoding: _Optional[_Union[TrainingExample.Encoding, str]] = ..., board: _Optional[bytes] = ..., move_probs: _Optional[bytes] = ..., result: _Optional[float] = ..., stats: _Optional[_Union[TrainingExample.Stats, _Mapping]] = ...) -> None: ...

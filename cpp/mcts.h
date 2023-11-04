@@ -18,8 +18,11 @@ class Node {
  public:
   Node(Node* parent, int player, Move move);
 
-  int Player() const { return player_; }
-  const Move& GetMove() const { return move_; }
+  int player() const { return player_; }
+  const Move& move() const { return move_; }
+  // TODO: clean up this mismatch that a Node stores the player of the move that
+  // created it. It should store the move that comes next.
+  int PlayerForChild() const { return children_[0]->player_; }
 
   float Puct() const noexcept;
   Node* MaxPuctChild();
@@ -30,7 +33,7 @@ class Node {
   // The Node on which this method was called MUST NOT be used
   // afterwards!
   std::unique_ptr<Node> MostVisitedChildAsRoot();
-
+  
   void Backpropagate(float result);
 
   bool IsLeaf() const { return children_.empty(); }
@@ -39,10 +42,21 @@ class Node {
   // Children will be shuffled randomly, to avoid selection bias.
   void CreateChildren(int player, const std::vector<Move>& moves);
 
-  torch::Tensor MoveProbs() {
-    assert(move_probs_.size() == 2 * 11 * 10);
-    return torch::from_blob(move_probs_.data(), {2, 11, 10});
+  // Returns the normalized visit counts (which sum to 1) as a (2, 11, 10)
+  // tensor. This value should be used to update the move probs of the model.
+  torch::Tensor NormVisitCounts() {
+    auto t = torch::zeros({2, 11, 10});
+    auto t_acc = t.accessor<float, 3>();
+    for (const auto& c : children_) {
+      const auto& m = c->move_;
+      t_acc[m.typ][m.r][m.c] = static_cast<float>(c->visit_count_);
+    }
+    t /= t.sum();
+    return t;
   }
+
+  // Sets the initial move probabilities ("policy") obtained from the model
+  // prediction.
   void SetMoveProbs(torch::Tensor move_probs) {
     assert(move_probs.numel() == 2 * 11 * 10);
     assert(std::abs(move_probs.sum().item<float>() - 1.0) < 1e-3);
@@ -55,6 +69,7 @@ class Node {
   const Node* parent() const noexcept { return parent_; }
   // Returns the number of children that had a nonzero visit_count.
   int NumVisitedChildren() const noexcept;
+  int NumChildren() const noexcept { return children_.size(); }
   std::string Stats() const;
   // Weight of the exploration term.
   // Must only be modified at program startup.
@@ -91,7 +106,7 @@ class TorchModel : public Model {
  public:
   explicit TorchModel(torch::jit::Module module) : module_{module} {}
   TorchModel(hexzpb::ModelKey key, torch::jit::Module module)
-      : key_{key}, module_{module}  {}
+      : key_{key}, module_{module} {}
   Prediction Predict(int player, const Board& board) override;
 
   const hexzpb::ModelKey& Key() const { return key_; }
