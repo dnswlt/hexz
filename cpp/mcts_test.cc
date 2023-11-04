@@ -166,6 +166,31 @@ TEST(MCTSTest, NumRuns) {
   EXPECT_EQ(mcts.NumRuns(50), 50);
 }
 
+TEST(MCTSTest, FlagsAreNotNegative) {
+  // At some point the player for which moves were computed
+  // and the player for which a move was made were mixed up.
+  // This led to negative flag values. This test tries to capture
+  // that the problem does not reoccur.
+  Config config{
+      .runs_per_move = 10,
+      .runs_per_move_gradient = 0.0,
+  };
+  FakeModel fake_model;
+  NeuralMCTS mcts(fake_model, config);
+  Board b = Board::RandomBoard();
+  auto root = std::make_unique<Node>(nullptr, 0, Move{-1, -1, -1, -1});
+  for (int i = 0; i < 50; i++) {
+    mcts.Run(*root, b);
+    ASSERT_GE(b.Flags(0), 0);
+    ASSERT_GE(b.Flags(1), 0);
+    int turn = root->turn();
+    root = root->MostVisitedChildAsRoot();
+    ASSERT_TRUE(b.Flags(turn) > 0 || root->move().typ != 0)
+        << "Failed in move " << i;
+    b.MakeMove(turn, root->move());
+  }
+}
+
 TEST(MCTSTest, PlayGame) {
   // The file "testdata/scriptmodule.pt" is expected to be a ScriptModule of the
   // right shape to be used by NeuralMCTS.
@@ -194,8 +219,8 @@ TEST(MCTSTest, PlayGame) {
   EXPECT_EQ(ex0.stats().valid_moves(), 85);
   EXPECT_EQ(ex0.stats().move(), 0);
   EXPECT_EQ(ex1.stats().move(), 1);
-  EXPECT_EQ(ex0.stats().turn(), 0);
-  EXPECT_EQ(ex1.stats().turn(), 1);
+  EXPECT_EQ(ex0.turn(), 0);
+  EXPECT_EQ(ex1.turn(), 1);
   // Check board is a Tensor of the right shape.
   auto board_val = torch::pickle_load(
       std::vector<char>(ex0.board().begin(), ex0.board().end()));

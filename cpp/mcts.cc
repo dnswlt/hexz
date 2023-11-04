@@ -56,7 +56,7 @@ float Node::Puct() const noexcept {
                  (1 + visit_count_);
 }
 
-Node* Node::MaxPuctChild() {
+Node* Node::MaxPuctChild() const {
   Perfm::Scope ps(Perfm::MaxPuctChild);
   if (children_.empty()) {
     return nullptr;
@@ -100,14 +100,16 @@ void Node::Backpropagate(float result) {
 }
 
 void Node::CreateChildren(int turn, const std::vector<Move>& moves) {
-  assert(children_.empty());
+  ABSL_DCHECK(children_.empty())
+      << "Must not add children if they already exist.";
   children_.reserve(moves.size());
   for (int i = 0; i < moves.size(); i++) {
     children_.emplace_back(std::make_unique<Node>(this, turn, moves[i]));
   }
 }
 
-void Node::AppendDebugString(std::ostream& os, const std::string& indent) {
+void Node::AppendDebugString(std::ostream& os,
+                             const std::string& indent) const {
   os << indent << "Node(\n";
   os << indent << "  turn: " << turn_ << "\n";
   os << indent << "  move: (" << move_.typ << ", " << move_.r << ", " << move_.c
@@ -128,7 +130,7 @@ void Node::AppendDebugString(std::ostream& os, const std::string& indent) {
   os << indent << ")";
 }
 
-std::string Node::DebugString() {
+std::string Node::DebugString() const {
   std::ostringstream os;
   AppendDebugString(os, "");
   return os.str();
@@ -176,12 +178,13 @@ bool NeuralMCTS::Run(Node& root, Board& board) {
       n = child;
     }
   }
-  // Expand leaf node. Usually it's the opponent's turn.
-  int turn = 1 - n->turn();
+  // Expand leaf node. Usually it's the turn as indicated by the node.
+  int turn = n->turn();
   auto moves = board.NextMoves(turn);
   if (moves.empty()) {
-    // Opponent has no valid moves left. Try other player.
+    // Player has no valid moves left. Try opponent.
     turn = 1 - turn;
+    n->SetTurn(turn);
     moves = board.NextMoves(turn);
   }
   if (moves.empty()) {
@@ -193,7 +196,9 @@ bool NeuralMCTS::Run(Node& root, Board& board) {
   n->ShuffleChildren();  // Avoid selection bias.
   auto pred = model_.Predict(n->turn(), board);
   n->SetMoveProbs(pred.move_probs);
-  n->Backpropagate(pred.value);
+  // Backpropagate the model prediction. Need to reorient it s.t. 1 means player
+  // 0 won.
+  n->Backpropagate(n->turn() == 0 ? pred.value : -pred.value);
   return true;
 }
 
@@ -232,8 +237,10 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       progress = Run(*root, b);
     }
     if (root->IsLeaf()) {
-      game_over = true;
       result = board.Result();
+      ABSL_LOG(INFO) << "Game over. Final score: " << board.Score()
+                     << ". Result: " << result;
+      game_over = true;
       break;
     }
 
@@ -241,9 +248,9 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     hexzpb::TrainingExample example;
     int64_t move_ready = UnixMicros();
     example.set_unix_micros(move_ready);
+    example.set_turn(root->turn());
     example.mutable_stats()->set_duration_micros(move_ready - move_started);
     example.mutable_stats()->set_move(n);
-    example.mutable_stats()->set_turn(root->turn());
     example.mutable_stats()->set_valid_moves(root->NumChildren());
     example.mutable_stats()->set_visit_count(root->visit_count());
     example.set_encoding(hexzpb::TrainingExample::PYTORCH);
@@ -257,11 +264,13 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
 
     std::string stats = root->Stats();
     if (n < 5 || n % 10 == 0) {
-      ABSL_LOG(INFO) << "Move " << n << " after "
+      ABSL_LOG(INFO) << "Move " << n << " (turn: " << root->turn() << ") ("
+                     << board.DebugString() << ") after "
                      << (float)(UnixMicros() - started_micros) / 1000000
                      << "s. stats: " << stats;
     } else {
-      ABSL_DLOG(INFO) << "Move " << n << " after "
+      ABSL_DLOG(INFO) << "Move " << n << " (turn: " << root->turn() << ") ("
+                      << board.DebugString() << ") after "
                       << (float)(UnixMicros() - started_micros) / 1000000
                       << "s. stats: " << stats;
     }
@@ -274,7 +283,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
   }
   if (game_over) {
     for (auto& ex : examples) {
-      ex.set_result(result);
+      ex.set_result(ex.turn() == 0 ? result : -result);
     }
   }
   return examples;

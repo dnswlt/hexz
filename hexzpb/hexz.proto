@@ -161,6 +161,9 @@ message AddTrainingExamplesResponse {
 message TrainingExample {
     // Timestamp at which this example was generated.
     int64 unix_micros = 1;
+    // The player whose turn it was (the current player).
+    int32 turn = 7;
+
     // Encoding indicates how the bytes fields were encoded.
     // In Python workers, we use numpy (np.save), while in C++ we use
     // PyTorch (torch::pickle_save), since numpy is not available.
@@ -171,22 +174,23 @@ message TrainingExample {
     Encoding encoding = 6;
 
     // Training inputs.
-    // Numpy array containing the (9, 11, 10) Board.
-    // Serialized to bytes using np.save.
+    //
+    // Numpy array containing the (9, 11, 10) Board from the view of the current player.
+    // Serialized to bytes using np.save or torch::pickle_save.
     bytes board = 2;
 
     // Training labels.
+    //
     // Numpy array containing the (2, 11, 10) move likelihoods.
-    // Serialized to bytes using np.save.
+    // Serialized to bytes using np.save or torch::pickle_save.
     bytes move_probs = 3;
-    // The outcome of the game, from the perspective of player 0.
+    // The outcome of the game, from the perspective of the current player:
+    // -1: lost, 0: draw, 1: won
     float result = 4;
 
     message Stats {
         // The move number in the game.
         int32 move = 1;
-        // The player whose turn it is to make the next move.
-        int32 turn = 2;
         // Time it took to generate this example (i.e., to generate the corresponding
         // neural MCTS move suggestion).
         int64 duration_micros = 3;

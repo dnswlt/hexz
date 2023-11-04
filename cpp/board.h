@@ -1,5 +1,7 @@
 #ifndef __HEXZ_BOARD_H__
 #define __HEXZ_BOARD_H__
+
+#include <absl/strings/str_cat.h>
 #include <torch/torch.h>
 
 #include <random>
@@ -13,6 +15,9 @@ struct Move {
   int r;
   int c;
   float value;
+  std::string DebugString() const {
+    return absl::StrCat("Move(", typ, ", ", r, ", ", c, ", ", value, ")");
+  }
 };
 
 // Torch representation of a hexz board.
@@ -50,6 +55,8 @@ class Board {
 
   void MakeMove(int player, const Move& move);
   std::vector<Move> NextMoves(int player) const;
+
+  std::string DebugString() const;
 
  private:
   Board();

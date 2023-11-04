@@ -1,10 +1,12 @@
 #include "board.h"
 
+#include <absl/log/absl_check.h>
 #include <torch/torch.h>
 
 #include <cstdlib>
 #include <iterator>
 #include <random>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 
@@ -66,6 +68,10 @@ const std::vector<Idx>& NeighborsOf(const Idx& k) {
   static const std::unordered_map<Idx, std::vector<Idx>>* map =
       InitializeNeighborsMap();
   return (*map).at(k);
+}
+
+Board::Board() : nflags_{0, 0} {
+  b_ = torch::zeros({9, 11, 10}, torch::dtype(torch::kFloat32));
 }
 
 // Torch representation of a hexz board.
@@ -172,6 +178,9 @@ void Board::MakeMove(int player, const Move& move) {
   b_acc[7][move.r][move.c] = 0;
   float next_val = 1;
   if (played_flag) {
+    ABSL_DCHECK(nflags_[player] > 0)
+        << "Move " << move.DebugString() << " by " << player
+        << " without flags left: " << DebugString();
     nflags_[player]--;
   } else {
     next_val = move.value + 1;
@@ -217,7 +226,7 @@ std::vector<Move> Board::NextMoves(int player) const {
     int s = r % 2;
     for (int c = 0; c < 10 - s; c++) {
       if (flag && b_acc[2 + player * 4][r][c] == 0) {
-        moves.push_back(Move{0, r, c, 1.0});
+        moves.push_back(Move{0, r, c, 0.0});
       }
       float next_val = b_acc[3 + player * 4][r][c];
       if (next_val > 0) {
@@ -228,8 +237,13 @@ std::vector<Move> Board::NextMoves(int player) const {
   return moves;
 }
 
-Board::Board() : nflags_{0, 0} {
-  b_ = torch::zeros({9, 11, 10}, torch::dtype(torch::kFloat32));
+std::string Board::DebugString() const {
+  std::ostringstream os;
+  os << "Board(" <<                                            //
+      "flags:(" << nflags_[0] << ", " << nflags_[1] << ")" <<  //
+      " score:" << Score() <<                                  //
+      ")";
+  return os.str();
 }
 
 std::mt19937 Board::rng_{std::random_device{}()};

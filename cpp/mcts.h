@@ -33,7 +33,7 @@ class Node {
   std::vector<std::unique_ptr<Node>>& children() { return children_; }
 
   float Puct() const noexcept;
-  Node* MaxPuctChild();
+  Node* MaxPuctChild() const;
   // Returns a pointer to the child with the greated visit count,
   // marks it as a root node (by setting its parent_ to nullptr),
   // and clears the vector of child nodes of *this* Node.
@@ -42,6 +42,11 @@ class Node {
   // afterwards!
   std::unique_ptr<Node> MostVisitedChildAsRoot();
 
+  // Backpropagate propagates the given result to this Node and all parents.
+  // The given result is interpreted from the perspective of player 0.
+  // A value of 1 always means that player 0 won. 
+  // This is particularly relevant when feeding in model predictions,
+  // which are usually from the perspective of the current player.
   void Backpropagate(float result);
 
   bool IsLeaf() const { return children_.empty(); }
@@ -86,9 +91,10 @@ class Node {
 
   friend class NodePeer;  // For testing.
 
-    std::string DebugString();
+  std::string DebugString() const;
+
  private:
-    void AppendDebugString(std::ostream& os, const std::string& indent);
+  void AppendDebugString(std::ostream& os, const std::string& indent) const;
 
   Node* parent_;
   int turn_;
@@ -141,9 +147,9 @@ class NeuralMCTS {
       Board& board, int max_runtime_seconds);
 
   int NumRuns(int move) const noexcept;
+  bool Run(Node& root, Board& board);
 
  private:
-  bool Run(Node& root, Board& board);
 
   int runs_per_move_;
   double runs_per_move_gradient_;

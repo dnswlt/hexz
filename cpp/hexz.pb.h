@@ -3711,9 +3711,8 @@ class TrainingExample_Stats final :
 
   enum : int {
     kMoveFieldNumber = 1,
-    kTurnFieldNumber = 2,
-    kDurationMicrosFieldNumber = 3,
     kValidMovesFieldNumber = 4,
+    kDurationMicrosFieldNumber = 3,
     kVisitCountFieldNumber = 5,
   };
   // int32 move = 1;
@@ -3726,14 +3725,14 @@ class TrainingExample_Stats final :
   void _internal_set_move(::int32_t value);
 
   public:
-  // int32 turn = 2;
-  void clear_turn() ;
-  ::int32_t turn() const;
-  void set_turn(::int32_t value);
+  // int32 valid_moves = 4;
+  void clear_valid_moves() ;
+  ::int32_t valid_moves() const;
+  void set_valid_moves(::int32_t value);
 
   private:
-  ::int32_t _internal_turn() const;
-  void _internal_set_turn(::int32_t value);
+  ::int32_t _internal_valid_moves() const;
+  void _internal_set_valid_moves(::int32_t value);
 
   public:
   // int64 duration_micros = 3;
@@ -3744,16 +3743,6 @@ class TrainingExample_Stats final :
   private:
   ::int64_t _internal_duration_micros() const;
   void _internal_set_duration_micros(::int64_t value);
-
-  public:
-  // int32 valid_moves = 4;
-  void clear_valid_moves() ;
-  ::int32_t valid_moves() const;
-  void set_valid_moves(::int32_t value);
-
-  private:
-  ::int32_t _internal_valid_moves() const;
-  void _internal_set_valid_moves(::int32_t value);
 
   public:
   // int32 visit_count = 5;
@@ -3771,15 +3760,14 @@ class TrainingExample_Stats final :
   class _Internal;
 
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<3, 5, 0, 0, 2> _table_;
+  static const ::google::protobuf::internal::TcParseTable<3, 4, 0, 0, 2> _table_;
   template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
   struct Impl_ {
     ::int32_t move_;
-    ::int32_t turn_;
-    ::int64_t duration_micros_;
     ::int32_t valid_moves_;
+    ::int64_t duration_micros_;
     ::int32_t visit_count_;
     mutable ::google::protobuf::internal::CachedSize _cached_size_;
     PROTOBUF_TSAN_DECLARE_MEMBER
@@ -3944,6 +3932,7 @@ class TrainingExample final :
     kUnixMicrosFieldNumber = 1,
     kResultFieldNumber = 4,
     kEncodingFieldNumber = 6,
+    kTurnFieldNumber = 7,
   };
   // bytes board = 2;
   void clear_board() ;
@@ -4022,12 +4011,22 @@ class TrainingExample final :
   void _internal_set_encoding(::hexzpb::TrainingExample_Encoding value);
 
   public:
+  // int32 turn = 7;
+  void clear_turn() ;
+  ::int32_t turn() const;
+  void set_turn(::int32_t value);
+
+  private:
+  ::int32_t _internal_turn() const;
+  void _internal_set_turn(::int32_t value);
+
+  public:
   // @@protoc_insertion_point(class_scope:hexzpb.TrainingExample)
  private:
   class _Internal;
 
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<3, 6, 1, 0, 2> _table_;
+  static const ::google::protobuf::internal::TcParseTable<3, 7, 1, 0, 2> _table_;
   template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
@@ -4040,6 +4039,7 @@ class TrainingExample final :
     ::int64_t unix_micros_;
     float result_;
     int encoding_;
+    ::int32_t turn_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
   union { Impl_ _impl_; };
@@ -6805,28 +6805,6 @@ inline void TrainingExample_Stats::_internal_set_move(::int32_t value) {
   _impl_.move_ = value;
 }
 
-// int32 turn = 2;
-inline void TrainingExample_Stats::clear_turn() {
-  _impl_.turn_ = 0;
-}
-inline ::int32_t TrainingExample_Stats::turn() const {
-  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.Stats.turn)
-  return _internal_turn();
-}
-inline void TrainingExample_Stats::set_turn(::int32_t value) {
-  _internal_set_turn(value);
-  // @@protoc_insertion_point(field_set:hexzpb.TrainingExample.Stats.turn)
-}
-inline ::int32_t TrainingExample_Stats::_internal_turn() const {
-  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
-  return _impl_.turn_;
-}
-inline void TrainingExample_Stats::_internal_set_turn(::int32_t value) {
-  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  ;
-  _impl_.turn_ = value;
-}
-
 // int64 duration_micros = 3;
 inline void TrainingExample_Stats::clear_duration_micros() {
   _impl_.duration_micros_ = ::int64_t{0};
@@ -6917,6 +6895,28 @@ inline void TrainingExample::_internal_set_unix_micros(::int64_t value) {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   ;
   _impl_.unix_micros_ = value;
+}
+
+// int32 turn = 7;
+inline void TrainingExample::clear_turn() {
+  _impl_.turn_ = 0;
+}
+inline ::int32_t TrainingExample::turn() const {
+  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.turn)
+  return _internal_turn();
+}
+inline void TrainingExample::set_turn(::int32_t value) {
+  _internal_set_turn(value);
+  // @@protoc_insertion_point(field_set:hexzpb.TrainingExample.turn)
+}
+inline ::int32_t TrainingExample::_internal_turn() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.turn_;
+}
+inline void TrainingExample::_internal_set_turn(::int32_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.turn_ = value;
 }
 
 // .hexzpb.TrainingExample.Encoding encoding = 6;
