@@ -7,6 +7,10 @@
 
 namespace hexz {
 
+namespace internal {
+thread_local std::mt19937 rng{std::random_device{}()};
+}  // namespace internal
+
 std::string Config::String() const {
   return absl::StrCat(
       "Config(",
@@ -31,7 +35,8 @@ Config Config::FromEnv() {
       .training_server_url = GetEnv("HEXZ_TRAINING_SERVER_URL"),
       .local_model_path = GetEnv("HEXZ_LOCAL_MODEL_PATH"),
       .runs_per_move = GetEnvAsInt("HEXZ_RUNS_PER_MOVE", 800),
-      .runs_per_move_gradient = GetEnvAsDouble("HEXZ_RUNS_PER_MOVE_GRADIENT", -0.01),
+      .runs_per_move_gradient =
+          GetEnvAsDouble("HEXZ_RUNS_PER_MOVE_GRADIENT", -0.01),
       .max_moves_per_game = GetEnvAsInt("HEXZ_MAX_MOVES_PER_GAME", 200),
       .max_runtime_seconds = GetEnvAsInt("HEXZ_MAX_RUNTIME_SECONDS", 60),
       .max_games = GetEnvAsInt("HEXZ_MAX_GAMES", -1),

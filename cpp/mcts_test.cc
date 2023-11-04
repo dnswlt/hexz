@@ -12,15 +12,6 @@
 
 namespace hexz {
 
-class NodePeer {
- public:
-  explicit NodePeer(Node& node) : node_{node} {}
-  void set_visit_count(int n) { node_.visit_count_ = n; }
-
- private:
-  Node& node_;
-};
-
 namespace {
 
 std::mt19937 rng{std::random_device{}()};
@@ -78,7 +69,6 @@ TEST(NodeTest, MaxPuctChild) {
 }
 
 TEST(NodeTest, Backpropagate) {
-  using NP = NodePeer;
   /*
   root (turn=0)
   - n_1 (turn=1)

@@ -10,37 +10,14 @@
 #include <string>
 #include <unordered_map>
 
+#include "base.h"
 #include "perfm.h"
 
 namespace hexz {
 
-// Hashable indexes into the hexz board.
-struct Idx {
-  int r;
-  int c;
-  bool operator==(const Idx& other) const {
-    return r == other.r && c == other.c;
-  }
-  bool IsValid() const noexcept {
-    return r >= 0 && r < 11 && c >= 0 && c < 10 - r % 2;
-  }
-};
+using internal::Idx;
 
-}  // namespace hexz
-
-namespace std {
-template <>
-struct hash<hexz::Idx> {
-  size_t operator()(const hexz::Idx& k) const noexcept {
-    size_t h1 = hash<int>{}(k.r);
-    size_t h2 = hash<int>{}(k.c);
-    return h1 ^ (h2 << 1);
-  }
-};
-}  // namespace std
-
-namespace hexz {
-
+namespace internal {
 // InitializeNeighborsMap returns a map that yields the valid neighbor cell
 // indices for all valid indices of a hexz board.
 std::unordered_map<Idx, std::vector<Idx>>* InitializeNeighborsMap() {
@@ -70,8 +47,17 @@ const std::vector<Idx>& NeighborsOf(const Idx& k) {
   return (*map).at(k);
 }
 
+}  // namespace internal
+
 Board::Board() : nflags_{0, 0} {
   b_ = torch::zeros({9, 11, 10}, torch::dtype(torch::kFloat32));
+}
+
+// Copy c'tor.
+Board::Board(const Board& other) {
+  b_ = other.b_.clone();
+  nflags_[0] = other.nflags_[0];
+  nflags_[1] = other.nflags_[1];
 }
 
 // Torch representation of a hexz board.
@@ -107,8 +93,8 @@ Board Board::RandomBoard() {
   std::uniform_int_distribution<> rnd_row(0, 10);
   std::uniform_int_distribution<> rnd_col(0, 9);
   for (int n_stones = 0; n_stones < 15;) {
-    int r = rnd_row(rng_);
-    int c = rnd_col(rng_);
+    int r = rnd_row(internal::rng);
+    int c = rnd_col(internal::rng);
     if (b.b_.index({2, r, c}).item<float>() != 0) {
       continue;  // Already occupied.
     }
@@ -118,8 +104,8 @@ Board Board::RandomBoard() {
   }
   // 5 randomly placed grass cells.
   for (int n_grass = 0; n_grass < 5;) {
-    int r = rnd_row(rng_);
-    int c = rnd_col(rng_);
+    int r = rnd_row(internal::rng);
+    int c = rnd_col(internal::rng);
     if (b.b_.index({2, r, c}).item<float>() != 0) {
       continue;  // Already occupied.
     }
@@ -130,13 +116,6 @@ Board Board::RandomBoard() {
   }
 
   return b;
-}
-
-// Copy c'tor.
-Board::Board(const Board& other) {
-  b_ = other.b_.clone();
-  nflags_[0] = other.nflags_[0];
-  nflags_[1] = other.nflags_[1];
 }
 
 torch::Tensor Board::Tensor(int player) const {
@@ -245,7 +224,5 @@ std::string Board::DebugString() const {
       ")";
   return os.str();
 }
-
-std::mt19937 Board::rng_{std::random_device{}()};
 
 }  // namespace hexz

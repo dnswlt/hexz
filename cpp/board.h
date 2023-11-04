@@ -4,9 +4,40 @@
 #include <absl/strings/str_cat.h>
 #include <torch/torch.h>
 
-#include <random>
 #include <utility>
 #include <vector>
+
+namespace hexz {
+
+namespace internal {
+
+// Hashable indexes into the hexz board.
+struct Idx {
+  int r;
+  int c;
+  bool operator==(const Idx& other) const {
+    return r == other.r && c == other.c;
+  }
+  bool IsValid() const noexcept {
+    return r >= 0 && r < 11 && c >= 0 && c < 10 - r % 2;
+  }
+};
+
+const std::vector<Idx>& NeighborsOf(const Idx& k);
+
+}  // namespace internal
+}  // namespace hexz
+
+namespace std {
+template <>
+struct hash<hexz::internal::Idx> {
+  size_t operator()(const hexz::internal::Idx& k) const noexcept {
+    size_t h1 = hash<int>{}(k.r);
+    size_t h2 = hash<int>{}(k.c);
+    return h1 ^ (h2 << 1);
+  }
+};
+}  // namespace std
 
 namespace hexz {
 
@@ -41,6 +72,15 @@ struct Move {
 // 1-5 set.
 class Board {
  public:
+  enum Channel {
+    kFlag = 0,
+    kValue = 1,
+    kBlocked = 2,
+    kNextValue = 3,
+    kGrass = 8
+  };
+
+  Board();
   static Board RandomBoard();
 
   // Copy c'tor.
@@ -58,10 +98,24 @@ class Board {
 
   std::string DebugString() const;
 
- private:
-  Board();
+  // CellValue returns the board's value in cell (r, c) and channel ch.
+  // This method can be used to access any cell in any channel of the board.
+  // It is not optimized for performance. Get a PyTorch accessor in that case.
+  float CellValue(int player, Channel ch, int r, int c) {
+    int ch_idx = static_cast<int>(ch == kGrass ? ch : ch + 4 * player);
+    return b_.index({ch_idx, r, c}).item<float>();
+  }
+  // These methods can be used to create specific board setups, e.g. for
+  // testing. They place the rock or grass unconditionally on the given field,
+  // without any checks or propagation. Should only be used on an otherwise
+  // empty board.
+  void SetCellValue(int player, Channel ch, int r, int c, float value) {
+    int ch_idx = static_cast<int>(ch == kGrass ? ch : ch + 4 * player);
+    b_.index_put_({ch_idx, r, c}, value);
+  }
+  void SetRemainingFlags(int player, int n_flags) { nflags_[player] = n_flags; }
 
-  static std::mt19937 rng_;
+ private:
   torch::Tensor b_;
   int nflags_[2];
 };

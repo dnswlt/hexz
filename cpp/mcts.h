@@ -16,10 +16,6 @@
 
 namespace hexz {
 
-namespace internal {
-extern std::mt19937 rng;
-}
-
 class Node {
  public:
   Node(Node* parent, int turn, Move move);
@@ -31,6 +27,8 @@ class Node {
   const Node* parent() const noexcept { return parent_; }
   float wins() const noexcept { return wins_; }
   std::vector<std::unique_ptr<Node>>& children() { return children_; }
+  // Update the turn.
+  void SetTurn(int turn) { turn_ = turn; }
 
   float Puct() const noexcept;
   Node* MaxPuctChild() const;
@@ -44,7 +42,7 @@ class Node {
 
   // Backpropagate propagates the given result to this Node and all parents.
   // The given result is interpreted from the perspective of player 0.
-  // A value of 1 always means that player 0 won. 
+  // A value of 1 always means that player 0 won.
   // This is particularly relevant when feeding in model predictions,
   // which are usually from the perspective of the current player.
   void Backpropagate(float result);
@@ -88,8 +86,6 @@ class Node {
   // Weight of the exploration term.
   // Must only be modified at program startup.
   static float uct_c;
-
-  friend class NodePeer;  // For testing.
 
   std::string DebugString() const;
 
@@ -150,7 +146,6 @@ class NeuralMCTS {
   bool Run(Node& root, Board& board);
 
  private:
-
   int runs_per_move_;
   double runs_per_move_gradient_;
   int max_moves_per_game_;

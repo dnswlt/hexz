@@ -16,10 +16,6 @@
 
 namespace hexz {
 
-namespace internal {
-std::mt19937 rng{std::random_device{}()};
-}
-
 float Node::uct_c = 5.0;
 
 Node::Node(Node* parent, int turn, Move move)
@@ -182,7 +178,7 @@ bool NeuralMCTS::Run(Node& root, Board& board) {
   int turn = n->turn();
   auto moves = board.NextMoves(turn);
   if (moves.empty()) {
-    // Player has no valid moves left. Try opponent.
+    // Player has no valid moves left. Try if opponent can proceed.
     turn = 1 - turn;
     n->SetTurn(turn);
     moves = board.NextMoves(turn);
@@ -192,7 +188,9 @@ bool NeuralMCTS::Run(Node& root, Board& board) {
     n->Backpropagate(board.Result());
     return n != &root;  // Return if we made any progress at all in this run.
   }
-  n->CreateChildren(turn, moves);
+  // Initially we assume that it's the opponent's turn. If that turns out to be false,
+  // the turn gets updated when trying to find next moves (see above).
+  n->CreateChildren(1 - turn, moves);
   n->ShuffleChildren();  // Avoid selection bias.
   auto pred = model_.Predict(n->turn(), board);
   n->SetMoveProbs(pred.move_probs);

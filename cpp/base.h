@@ -1,6 +1,7 @@
 #ifndef __HEXZ_CONFIG_H__
 #define __HEXZ_CONFIG_H__
 
+#include <random>
 #include <string>
 
 namespace hexz {
@@ -40,6 +41,10 @@ int GetEnvAsInt(const std::string& name, int default_value);
 double GetEnvAsDouble(const std::string& name, double default_value);
 
 int64_t UnixMicros();
+
+namespace internal {
+extern thread_local std::mt19937 rng;
+}  // namespace internal
 
 }  // namespace hexz
 #endif  // __HEXZ_CONFIG_H__
