@@ -168,3 +168,16 @@ MaxPuctChild           3.651s     686922   188147.637
 Puct                   2.781s   11025607  3963939.303
 MakeMove               0.716s     699469   976867.984
 NextMoves              0.339s      93273   275477.205
+
+## 2023-11-04
+
+With 2 CPU per worker we're indeed twice as fast:
+
+scope              total_time      count        ops/s
+NeuralMCTS::Run      299.116s     146273      489.018
+Predict              295.952s     140748      475.578
+FindLeaf               2.110s     146273    69332.292
+MaxPuctChild           1.640s     416367   253867.305
+Puct                   1.217s    8186561  6729533.664
+MakeMove               0.409s     438087  1071685.203
+NextMoves              0.241s     153626   636929.772

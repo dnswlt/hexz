@@ -188,8 +188,8 @@ bool NeuralMCTS::Run(Node& root, Board& board) {
     n->Backpropagate(board.Result());
     return n != &root;  // Return if we made any progress at all in this run.
   }
-  // Initially we assume that it's the opponent's turn. If that turns out to be false,
-  // the turn gets updated when trying to find next moves (see above).
+  // Initially we assume that it's the opponent's turn. If that turns out to be
+  // false, the turn gets updated when trying to find next moves (see above).
   n->CreateChildren(1 - turn, moves);
   n->ShuffleChildren();  // Avoid selection bias.
   auto pred = model_.Predict(n->turn(), board);
@@ -218,8 +218,10 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
   float result = 0.0;
   bool game_over = false;
   const int64_t max_micros =
-      max_runtime_seconds > 0 ? started_micros + max_runtime_seconds * 1'000'000
-                              : std::numeric_limits<int64_t>::max();
+      max_runtime_seconds > 0
+          ? started_micros +
+                static_cast<int64_t>(max_runtime_seconds) * 1'000'000
+          : std::numeric_limits<int64_t>::max();
   for (; n < max_moves_per_game_; n++) {
     int64_t move_started = UnixMicros();
     if (move_started > max_micros) {

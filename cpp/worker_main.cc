@@ -80,12 +80,16 @@ void GenerateExamples(const Config& config) {
       config.max_games > 0 ? config.max_games : std::numeric_limits<int>::max();
   for (int i = 0; i < max_games; i++) {
     auto now = UnixMicros();
-    if (now >= started_micros + config.max_runtime_seconds * 1'000'000) {
+    if (now >=
+        started_micros +
+            static_cast<int64_t>(config.max_runtime_seconds) * 1'000'000) {
+      ABSL_LOG(INFO) << "Time is up, aborting. " << now << " "
+                     << config.max_runtime_seconds * 1'000'000;
       break;
     }
     NeuralMCTS mcts(*model, config);
     Board b = Board::RandomBoard();
-    int max_runtime_seconds =
+    int64_t max_runtime_seconds =
         config.max_runtime_seconds - (now - started_micros) / 1'000'000;
 
     auto examples = mcts.PlayGame(b, max_runtime_seconds);
