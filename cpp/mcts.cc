@@ -41,8 +41,6 @@ std::string Node::Stats() const {
 }
 
 float Node::Puct() const noexcept {
-  Perfm::Scope ps(Perfm::Puct);
-
   float q = 0.0;
   if (visit_count_ > 0) {
     q = wins_ / visit_count_;
