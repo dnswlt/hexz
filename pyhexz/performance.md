@@ -181,3 +181,7 @@ MaxPuctChild           1.640s     416367   253867.305
 Puct                   1.217s    8186561  6729533.664
 MakeMove               0.409s     438087  1071685.203
 NextMoves              0.241s     153626   636929.772
+
+The ml-server also does a decent job:
+
+[2023-11-04 23:39:02,598] INFO in training: Finished training batch of size 1024 for 7 epochs in 20.4s.

@@ -256,10 +256,13 @@ def create_app():
                 "reply_q": reply_q,
             }
         )
-        data = reply_q.get(timeout=5)
-        if data is None:
-            return "", 404
-        return data, {"Content-Type": "application/octet-stream"}
+        r = reply_q.get(timeout=5)
+        if r.get("error") is not None:
+            return r["error"], 404
+        return r["data"], {
+            "Content-Type": "application/octet-stream",
+            "X-Model-Key": json_format.MessageToJson(r["model_key"], indent=None),
+        }
 
     # For debugging bad requests:
     # @app.errorhandler(400)
