@@ -6,6 +6,7 @@
 #include <torch/script.h>
 #include <torch/torch.h>
 
+#include <sstream>
 #include <vector>
 
 #include "base.h"

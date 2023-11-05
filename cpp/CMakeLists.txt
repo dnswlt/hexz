@@ -55,13 +55,19 @@ message(CMAKE_FIND_PACKAGE_REDIRECTS_DIR="${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}")
 
 # include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
+#
+# Libraries and main binary
+#
+
 add_library(hexzpb hexz.pb.h hexz.pb.cc)
 target_link_libraries(hexzpb PUBLIC protobuf::libprotobuf)
 
 add_library(mcts base.cc board.cc mcts.cc perfm.cc rpc.cc)
 target_link_libraries(mcts PUBLIC absl::statusor absl::strings absl::log cpr::cpr hexzpb "${TORCH_LIBRARIES}")
 
-# Add the executable
+add_library(hexz_pyapi pyapi.cc)
+target_link_libraries(hexz_pyapi PUBLIC absl::strings absl::log hexzpb mcts)
+
 add_executable(worker worker_main.cc)
 target_link_libraries(worker PRIVATE mcts)
 

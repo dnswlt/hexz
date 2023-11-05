@@ -25,6 +25,17 @@ Now compile the Cython modules:
 python3 setup.py build_ext --build-lib=src
 ```
 
+Test the C++ bindings for the MoveSuggester by running:
+
+```bash
+cd src
+# macos version. For Linux, use LD_LIBRARY_PATH
+DYLD_LIBRARY_PATH=$HOME/git/github.com/dnswlt/hexz/cpp/build python3 -c '
+from pyhexz.cclib import CppMoveSuggester
+m = CppMoveSuggester()
+print(m.suggest_move(b"FOO"))'
+```
+
 ### pytest
 
 Just run `pytest` without any arguments. The `pytest.ini` file tells pytest where to find stuff.

@@ -130,6 +130,25 @@ message MCTSExample {
     repeated MoveStats move_stats = 4;
 }
 
+//
+// API for communication with remove CPU players.
+//
+
+message SuggestMoveRequest {
+    // Maximum time the engine is allowed to think, in milliseconds.
+	int64 max_think_time_ms = 1;
+	// Game engine state from which to start thinking.
+	GameEngineState game_engine_state = 2;
+}
+
+message SuggestMoveResponse {
+	GameEngineMove move = 1;
+}
+
+//
+// API for communication between workers and training server.
+//
+
 message ModelKey {
     string name = 1;
     int32 checkpoint = 2;

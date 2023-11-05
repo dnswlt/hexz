@@ -3,8 +3,8 @@ package hexz
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -100,13 +100,9 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz
 	if err != nil {
 		return nil, err
 	}
-	geState, err := proto.Marshal(st)
-	if err != nil {
-		return nil, err
-	}
-	data, err := json.Marshal(&SuggestMoveRequest{
-		MaxThinkTime:    cpu.maxThinkTime,
-		GameEngineState: geState,
+	data, err := proto.Marshal(&pb.SuggestMoveRequest{
+		MaxThinkTimeMs:  cpu.maxThinkTime.Milliseconds(),
+		GameEngineState: st,
 	})
 	if err != nil {
 		return nil, err
@@ -119,7 +115,7 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-protobuf")
 	if requestDeadline, ok := ctx.Deadline(); ok && cpu.propagateRPCDeadline {
 		// Propagate deadline to the server. It will use this to limit the time it spends thinking.
 		req.Header.Set(HttpHeaderXRequestDeadline, requestDeadline.Format(time.RFC3339Nano))
@@ -132,30 +128,26 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz
 		return nil, fmt.Errorf("unexpected status code: %s", resp.Status)
 	}
 	defer resp.Body.Close()
-	var respData SuggestMoveResponse
-	dec := json.NewDecoder(resp.Body)
-	if err := dec.Decode(&respData); err != nil {
-		return nil, err
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
 	}
-	// infoLog.Printf("RemoteCPUPlayer suggested move %v", respData.Move)
+	var response pb.SuggestMoveResponse
+	if err := proto.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	var geMove GameEngineMove
+	geMove.DecodeProto(response.Move)
 	return ControlEventMove{
-		PlayerId:    cpu.playerId,
-		MoveRequest: respData.Move,
-		MCTSStats:   respData.Stats,
+		PlayerId: cpu.playerId,
+		MoveRequest: &MoveRequest{
+			Move: geMove.Move,
+			Row:  geMove.Row,
+			Col:  geMove.Col,
+			Type: geMove.CellType,
+		},
+		// TODO: add MCTSStats to protocol
 	}, nil
-}
-
-// API for remote CPU player.
-
-type SuggestMoveRequest struct {
-	MaxThinkTime time.Duration `json:"maxThinkTime"`
-	// Game engine state, as a marshalled pb.GameEngineState.
-	GameEngineState []byte `json:"gameEngineState"`
-}
-
-type SuggestMoveResponse struct {
-	Move  *MoveRequest `json:"move"`
-	Stats *MCTSStats   `json:"stats"`
 }
 
 type CPUPlayerServer struct {
@@ -177,28 +169,25 @@ func NewCPUPlayerServer(config *CPUPlayerServerConfig) *CPUPlayerServer {
 }
 
 func (s *CPUPlayerServer) handleSuggestMove(w http.ResponseWriter, r *http.Request) {
-	var req SuggestMoveRequest
-	dec := json.NewDecoder(r.Body)
-	err := dec.Decode(&req)
+	var req pb.SuggestMoveRequest
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		http.Error(w, "cannot read request", http.StatusInternalServerError)
+		return
+	}
+	if err := proto.Unmarshal(body, &req); err != nil {
+		http.Error(w, "invalid SuggestMoveRequest", http.StatusBadRequest)
 		return
 	}
 	if req.GameEngineState == nil {
 		http.Error(w, "missing game engine", http.StatusBadRequest)
 		return
 	}
-	// Reconstruct game engine from encoded state.
-	state := &pb.GameEngineState{}
-	if err := proto.Unmarshal(req.GameEngineState, state); err != nil {
-		http.Error(w, "invalid game engine state", http.StatusBadRequest)
-		return
-	}
 	var ge *GameEngineFlagz
-	switch state.State.(type) {
+	switch req.GameEngineState.State.(type) {
 	case *pb.GameEngineState_Flagz:
 		ge = NewGameEngineFlagz()
-		if err := ge.Decode(state); err != nil {
+		if err := ge.Decode(req.GameEngineState); err != nil {
 			http.Error(w, "invalid game engine state", http.StatusBadRequest)
 			return
 		}
@@ -207,7 +196,7 @@ func (s *CPUPlayerServer) handleSuggestMove(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	mcts := NewMCTS()
-	thinkTime := req.MaxThinkTime
+	thinkTime := time.Duration(req.MaxThinkTimeMs) * time.Millisecond
 	if s.config.CpuThinkTime > 0 && thinkTime > s.config.CpuThinkTime {
 		thinkTime = s.config.CpuThinkTime
 	}
@@ -218,19 +207,18 @@ func (s *CPUPlayerServer) handleSuggestMove(w http.ResponseWriter, r *http.Reque
 			thinkTime = timeLeft
 		}
 	}
-	mv, stats := mcts.SuggestMove(ge, thinkTime)
+	mv, _ := mcts.SuggestMove(ge, thinkTime)
 
-	w.Header().Set("Content-Type", "application/json")
-	enc := json.NewEncoder(w)
-	err = enc.Encode(&SuggestMoveResponse{
-		Move: &MoveRequest{
-			Move: mv.Move,
-			Row:  mv.Row,
-			Col:  mv.Col,
-			Type: mv.CellType,
-		},
-		Stats: stats,
+	w.Header().Set("Content-Type", "application/x-protobuf")
+	data, err := proto.Marshal(&pb.SuggestMoveResponse{
+		Move: mv.Proto(),
+		// TODO: add Stats back
 	})
+	if err != nil {
+		http.Error(w, "failed to marshal response", http.StatusInternalServerError)
+		return
+	}
+	w.Write(data)
 	if err != nil {
 		errorLog.Printf("failed to encode response: %s", err)
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)

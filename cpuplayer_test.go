@@ -3,7 +3,6 @@ package hexz
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	pb "github.com/dnswlt/hexz/hexzpb"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -155,10 +155,7 @@ func TestRemoteCPUPlayerInvalidRequestData(t *testing.T) {
 }
 
 func TestRemoteCPUPlayerIncompleteRequestData(t *testing.T) {
-	// This test shows that we should not send a whole GameEngine across the wire.
-	// We should instead have a proper Encode/Decode API that game engines should implement.
-	// t.Skip("Deactivated b/c the handler currently crashes when given invalid inputs.")
-	// Test that the handler defensively checks its inputs and does not crash on incomplete data.
+	// Tests that the handler defensively checks its inputs and does not crash on incomplete data.
 	s := NewCPUPlayerServer(&CPUPlayerServerConfig{})
 	w := httptest.NewRecorder()
 	ge := NewGameEngineFlagz()
@@ -166,12 +163,14 @@ func TestRemoteCPUPlayerIncompleteRequestData(t *testing.T) {
 		{Type: cellFlag, Owner: 1},
 	} // Make board invalid.
 	state, _ := ge.Encode()
-	data, _ := proto.Marshal(state)
-	requestData, _ := json.Marshal(&SuggestMoveRequest{
-		MaxThinkTime:    10 * time.Millisecond,
-		GameEngineState: data,
+	req, err := proto.Marshal(&pb.SuggestMoveRequest{
+		MaxThinkTimeMs:  10,
+		GameEngineState: state,
 	})
-	r := httptest.NewRequest(http.MethodPost, CpuSuggestMoveURLPath, bytes.NewReader(requestData))
+	if err != nil {
+		t.Fatal("marshal SuggestMoveRequest: ", err)
+	}
+	r := httptest.NewRequest(http.MethodPost, CpuSuggestMoveURLPath, bytes.NewReader(req))
 	s.handleSuggestMove(w, r)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected status code 400, got %d", w.Code)

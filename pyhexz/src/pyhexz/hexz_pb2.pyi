@@ -180,6 +180,20 @@ class MCTSExample(_message.Message):
     move_stats: _containers.RepeatedCompositeFieldContainer[MCTSExample.MoveStats]
     def __init__(self, game_id: _Optional[str] = ..., board: _Optional[_Union[Board, _Mapping]] = ..., result: _Optional[_Iterable[int]] = ..., move_stats: _Optional[_Iterable[_Union[MCTSExample.MoveStats, _Mapping]]] = ...) -> None: ...
 
+class SuggestMoveRequest(_message.Message):
+    __slots__ = ["max_think_time_ms", "game_engine_state"]
+    MAX_THINK_TIME_MS_FIELD_NUMBER: _ClassVar[int]
+    GAME_ENGINE_STATE_FIELD_NUMBER: _ClassVar[int]
+    max_think_time_ms: int
+    game_engine_state: GameEngineState
+    def __init__(self, max_think_time_ms: _Optional[int] = ..., game_engine_state: _Optional[_Union[GameEngineState, _Mapping]] = ...) -> None: ...
+
+class SuggestMoveResponse(_message.Message):
+    __slots__ = ["move"]
+    MOVE_FIELD_NUMBER: _ClassVar[int]
+    move: GameEngineMove
+    def __init__(self, move: _Optional[_Union[GameEngineMove, _Mapping]] = ...) -> None: ...
+
 class ModelKey(_message.Message):
     __slots__ = ["name", "checkpoint"]
     NAME_FIELD_NUMBER: _ClassVar[int]

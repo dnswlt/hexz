@@ -10,12 +10,6 @@ import (
 )
 
 func main() {
-	// ge := hexz.NewGameEngineFlagz(rand.NewSource(0))
-	// json.NewEncoder(os.Stdout).Encode(&hexz.SuggestMoveRequest{
-	// 	MaxThinkTime: 10 * time.Millisecond,
-	// 	GameEngine:   ge,
-	// })
-
 	cfg := &hexz.CPUPlayerServerConfig{}
 
 	flag.StringVar(&cfg.Addr, "addr", "localhost:8085", "Address on which to listen")

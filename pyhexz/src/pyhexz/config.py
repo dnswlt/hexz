@@ -1,4 +1,3 @@
-
 # Configuration used by the training server.
 import collections
 import os
@@ -7,7 +6,7 @@ import typing
 
 def _from_env(cls):
     """Returns a config in which each field is optionally overridden by its corresponding
-        environment variable HEXZ_FIELD_NAME.
+    environment variable HEXZ_FIELD_NAME.
     """
     envvars = {}
     for f in cls._fields:
@@ -46,6 +45,14 @@ class WorkerConfig(typing.NamedTuple):
     runs_per_move: int = 800
     # Timeout for http requests, in seconds.
     http_client_timeout: float = 1.0
+
+    @classmethod
+    def from_env(cls):
+        return _from_env(cls)
+
+
+class CPUEngineConfig(typing.NamedTuple):
+    local_model_path: str
 
     @classmethod
     def from_env(cls):

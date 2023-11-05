@@ -10,6 +10,3 @@ __all__ = [
 
 
 __version__ = "0.1.0"
-
-from pyhexz import svg as svg
-from pyhexz.hexz import NeuralMCTS

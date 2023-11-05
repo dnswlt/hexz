@@ -11,6 +11,17 @@ setup(
     ext_modules=cythonize(
         [
             Extension("pyhexz.hexc", ["src/pyhexz/hexc.py"]),
+            # Building the pyhexz.cclib extension assumes that
+            # the C++ libraries in ../cpp were already built.
+            Extension(
+                "pyhexz.ccapi",
+                ["src/pyhexz/ccapi.pyx"],
+                libraries=["hexz_pyapi"],
+                library_dirs=["../cpp/build"],
+                include_dirs=["../cpp"],
+                language="c++",
+                extra_compile_args=["-std=c++17"],
+            ),
         ],
         language_level="3",
     ),
