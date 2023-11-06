@@ -1,6 +1,7 @@
 #ifndef __HEXZ_PYLIB_H__
 #define __HEXZ_PYLIB_H__
 
+#include <memory>
 #include <string>
 
 namespace hexz {

@@ -51,6 +51,14 @@ HEXZ_BATCH_SIZE=1024 HEXZ_MODEL_NAME=test HEXZ_MODEL_REPO_BASE_DIR=/tmp/models \
   gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.server:create_app()'
 ```
 
+To only run the CPU player engine:
+
+```bash
+DYLD_LIBRARY_PATH=$HOME/git/github.com/dnswlt/hexz/cpp/build \
+  HEXZ_LOCAL_LIBRARY_PATH=$HOME/git/github.com/dnswlt/hexz-models/models/flagz/seth/checkpoints/60/scriptmodule.pt \
+  gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.cpuserver:create_app()'
+```
+
 ### Generating examples with a worker
 
 With a Flask training server up and running, run the following command to generate examples in
