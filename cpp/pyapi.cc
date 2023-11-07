@@ -69,7 +69,9 @@ std::string MoveSuggester::impl::SuggestMove(const std::string& request) {
         absl::StrCat("invalid turn: ", pb_board.turn()));
   }
   int64_t t_started = UnixMicros();
+  ABSL_DLOG(INFO) << "BEFORE SUGGEST";
   auto node = mcts.SuggestMove(turn, *board, req.max_think_time_ms());
+  ABSL_DLOG(INFO) << "AFTER SUGGEST";
   if (!node.ok()) {
     throw std::runtime_error(
         absl::StrCat("SuggestMove: ", board.status().ToString()));
@@ -79,18 +81,21 @@ std::string MoveSuggester::impl::SuggestMove(const std::string& request) {
   hexzpb::SuggestMoveResponse resp;
   const auto& cs = (*node)->children();
   int most_visited_idx = 0;
+  auto& stats = *resp.mutable_move_stats();
   for (int i = 0; i < cs.size(); i++) {
+      ABSL_DLOG(INFO) << "LOOP ITER " << i;
     const auto& c = cs[i];
     if (c->visit_count() > cs[most_visited_idx]->visit_count()) {
       most_visited_idx = i;
     }
-    auto& stats = *resp.add_move_stats();
-    stats.set_row(c->move().r);
-    stats.set_col(c->move().c);
-    stats.set_type(c->move().typ == 0 ? hexzpb::Field::FLAG
+    auto& move = *stats.add_moves();
+    move.set_row(c->move().r);
+    move.set_col(c->move().c);
+    move.set_type(c->move().typ == 0 ? hexzpb::Field::FLAG
                                       : hexzpb::Field::NORMAL);
-    stats.set_visits(c->visit_count());
+    move.set_evaluation(float(c->visit_count()) / (*node)->visit_count());
   }
+      ABSL_DLOG(INFO) << "AFTER LOOP ";
   const auto& best_move = cs[most_visited_idx]->move();
   ABSL_DLOG(INFO) << "SuggestMove: computed move suggestion "
                   << best_move.DebugString() << " in "

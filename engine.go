@@ -146,7 +146,6 @@ func (f *Field) isAvail(playerNum int) bool {
 	return f.NextVal[playerNum-1] > 0
 }
 
-// Public fields since moves are serialized (in tests only, for now).
 type GameEngineMove struct {
 	PlayerNum int
 	Move      int

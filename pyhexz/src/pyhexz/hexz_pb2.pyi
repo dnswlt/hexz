@@ -189,24 +189,29 @@ class SuggestMoveRequest(_message.Message):
     def __init__(self, max_think_time_ms: _Optional[int] = ..., game_engine_state: _Optional[_Union[GameEngineState, _Mapping]] = ...) -> None: ...
 
 class SuggestMoveStats(_message.Message):
-    __slots__ = ["row", "col", "type", "visits"]
-    ROW_FIELD_NUMBER: _ClassVar[int]
-    COL_FIELD_NUMBER: _ClassVar[int]
-    TYPE_FIELD_NUMBER: _ClassVar[int]
-    VISITS_FIELD_NUMBER: _ClassVar[int]
-    row: int
-    col: int
-    type: Field.CellType
-    visits: int
-    def __init__(self, row: _Optional[int] = ..., col: _Optional[int] = ..., type: _Optional[_Union[Field.CellType, str]] = ..., visits: _Optional[int] = ...) -> None: ...
+    __slots__ = ["moves"]
+    class MoveEval(_message.Message):
+        __slots__ = ["row", "col", "type", "evaluation"]
+        ROW_FIELD_NUMBER: _ClassVar[int]
+        COL_FIELD_NUMBER: _ClassVar[int]
+        TYPE_FIELD_NUMBER: _ClassVar[int]
+        EVALUATION_FIELD_NUMBER: _ClassVar[int]
+        row: int
+        col: int
+        type: Field.CellType
+        evaluation: float
+        def __init__(self, row: _Optional[int] = ..., col: _Optional[int] = ..., type: _Optional[_Union[Field.CellType, str]] = ..., evaluation: _Optional[float] = ...) -> None: ...
+    MOVES_FIELD_NUMBER: _ClassVar[int]
+    moves: _containers.RepeatedCompositeFieldContainer[SuggestMoveStats.MoveEval]
+    def __init__(self, moves: _Optional[_Iterable[_Union[SuggestMoveStats.MoveEval, _Mapping]]] = ...) -> None: ...
 
 class SuggestMoveResponse(_message.Message):
     __slots__ = ["move", "move_stats"]
     MOVE_FIELD_NUMBER: _ClassVar[int]
     MOVE_STATS_FIELD_NUMBER: _ClassVar[int]
     move: GameEngineMove
-    move_stats: _containers.RepeatedCompositeFieldContainer[SuggestMoveStats]
-    def __init__(self, move: _Optional[_Union[GameEngineMove, _Mapping]] = ..., move_stats: _Optional[_Iterable[_Union[SuggestMoveStats, _Mapping]]] = ...) -> None: ...
+    move_stats: SuggestMoveStats
+    def __init__(self, move: _Optional[_Union[GameEngineMove, _Mapping]] = ..., move_stats: _Optional[_Union[SuggestMoveStats, _Mapping]] = ...) -> None: ...
 
 class ModelKey(_message.Message):
     __slots__ = ["name", "checkpoint"]

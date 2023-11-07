@@ -309,8 +309,6 @@ absl::StatusOr<std::unique_ptr<Node>> NeuralMCTS::SuggestMove(
     // the opponent can make a valid move.
     return absl::InvalidArgumentError("Player has no valid moves left.");
   }
-
-  std::unique_ptr<Node> best_child = root->MostVisitedChildAsRoot();
   return root;
 }
 

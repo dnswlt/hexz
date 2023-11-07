@@ -31,21 +31,11 @@ func TestRemoteCPUPlayer(t *testing.T) {
 	// Allow enough time to let the RPC succeed.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	ev, err := cpu.SuggestMove(ctx, ge)
+	mv, _, err := cpu.SuggestMove(ctx, ge)
 	if err != nil {
 		t.Fatal("failed to get move suggestion: ", err)
 	}
-	mv, ok := ev.(ControlEventMove)
-	if !ok {
-		t.Fatalf("unexpected event type: %T", ev)
-	}
-	if !ge.MakeMove(GameEngineMove{
-		PlayerNum: ge.Board().Turn,
-		Move:      mv.MoveRequest.Move,
-		Row:       mv.MoveRequest.Row,
-		Col:       mv.MoveRequest.Col,
-		CellType:  mv.MoveRequest.Type,
-	}) {
+	if !ge.MakeMove(*mv) {
 		t.Fatal("failed to make move")
 	}
 }
@@ -71,7 +61,7 @@ func TestRemoteCPUPlayerDeadlineExceeded(t *testing.T) {
 	// Very short deadline of 10ms. The RPC should fail with a timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), rpcDeadline)
 	defer cancel()
-	_, err := cpu.SuggestMove(ctx, ge)
+	_, _, err := cpu.SuggestMove(ctx, ge)
 	if err == nil {
 		t.Error("expected a deadline error, but request succeeded")
 	}
@@ -103,7 +93,7 @@ func TestRemoteCPUPlayerDeadlineExceededWithPropagation(t *testing.T) {
 	// Very short deadline of 10ms. The RPC should fail with a timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), rpcDeadline)
 	defer cancel()
-	_, err := cpu.SuggestMove(ctx, ge)
+	_, _, err := cpu.SuggestMove(ctx, ge)
 	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		t.Error("unexpected error: ", err)
 	}
@@ -134,7 +124,7 @@ func TestRemoteCPUPlayerWrongURLPath(t *testing.T) {
 
 	var cpu CPUPlayer = NewRemoteCPUPlayer("cpuPlayerId", testServer.URL+"/wrongpath", cpuThinkTime)
 	ge := NewGameEngineFlagz()
-	_, err := cpu.SuggestMove(context.Background(), ge)
+	_, _, err := cpu.SuggestMove(context.Background(), ge)
 	if err == nil {
 		t.Error("request for wrong path succeeded")
 	} else if !strings.Contains(err.Error(), "404") {

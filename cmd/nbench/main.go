@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/dnswlt/hexz"
+	pb "github.com/dnswlt/hexz/hexzpb"
 )
 
 var (
@@ -25,38 +26,27 @@ var (
 
 func playGame() error {
 	ge := hexz.NewGameEngineFlagz()
-	mcts := hexz.NewMCTS()
-	remote := hexz.NewRemoteCPUPlayer(hexz.PlayerId("P2"), *remoteURL, *remoteThinkTime)
+	cpuPlayers := []hexz.CPUPlayer{
+		hexz.NewLocalCPUPlayer("P1", *thinkTime),
+		hexz.NewRemoteCPUPlayer(hexz.PlayerId("P2"), *remoteURL, *remoteThinkTime),
+	}
 	nMoves := 0
 	boards := []*hexz.Board{}
+	stats := []*pb.SuggestMoveStats{}
 	for !ge.IsDone() {
-		if ge.B.Turn == 1 {
-			mv, _ := mcts.SuggestMove(ge, *thinkTime)
-			fmt.Printf("P1 suggested move %s\n", mv.String())
-			if !ge.MakeMove(mv) {
-				return fmt.Errorf("make move for P1: %v", mv)
-			}
-		} else {
-			// P2's turn
-			mv, err := remote.SuggestMove(context.Background(), ge)
-			if err != nil {
-				return fmt.Errorf("remote SuggestMove: %v", err)
-			}
-			req := mv.(hexz.ControlEventMove).MoveRequest
-			fmt.Printf("P2 suggested move %v\n", req)
-			if err := ge.MakeMoveError(hexz.GameEngineMove{
-				PlayerNum: 2,
-				Move:      req.Move,
-				Row:       req.Row,
-				Col:       req.Col,
-				CellType:  req.Type,
-			}); err != nil {
-				return fmt.Errorf("make move for P2: %v %w", req, err)
-			}
+		turn := ge.B.Turn
+		mv, mvStats, err := cpuPlayers[turn-1].SuggestMove(context.Background(), ge)
+		if err != nil {
+			return fmt.Errorf("remote SuggestMove: %v", err)
+		}
+		fmt.Printf("P%d suggested move %v\n", turn, mv.String())
+		if err := ge.MakeMoveError(*mv); err != nil {
+			return fmt.Errorf("make move for P%d: %s %w", turn, mv.String(), err)
 		}
 		log.Printf("Score after %d moves: %v", nMoves, ge.B.Score)
 		nMoves++
 		boards = append(boards, ge.B.Copy())
+		stats = append(stats, mvStats)
 		if *svgOutputFile != "" {
 			hexz.ExportSVG(*svgOutputFile, boards, nil)
 		}

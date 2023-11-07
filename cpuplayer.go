@@ -14,7 +14,7 @@ import (
 )
 
 type CPUPlayer interface {
-	SuggestMove(ctx context.Context, ge *GameEngineFlagz) (ControlEvent, error)
+	SuggestMove(ctx context.Context, ge *GameEngineFlagz) (*GameEngineMove, *pb.SuggestMoveStats, error)
 	MaxThinkTime() time.Duration
 }
 
@@ -42,7 +42,7 @@ func (cpu *LocalCPUPlayer) MaxThinkTime() time.Duration {
 // Calculates a suggested move (using MCTS) and sends a ControlEventMove to respCh.
 // This method should be called in a separate goroutine.
 // The GameEngineFlagz ge will not be modified.
-func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz) (ControlEvent, error) {
+func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz) (*GameEngineMove, *pb.SuggestMoveStats, error) {
 	t := cpu.thinkTime
 	if t > cpu.maxThinkTime {
 		t = cpu.maxThinkTime
@@ -56,16 +56,24 @@ func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz)
 	} else {
 		cpu.thinkTime = cpu.maxThinkTime // use full time allowed.
 	}
-	return ControlEventMove{
-		PlayerId:  cpu.playerId,
-		MCTSStats: stats,
-		MoveRequest: &MoveRequest{
-			Move: mv.Move,
-			Row:  mv.Row,
-			Col:  mv.Col,
-			Type: mv.CellType,
-		},
-	}, nil
+	moveEvals := make([]*pb.SuggestMoveStats_MoveEval, len(stats.Moves))
+	for i, m := range stats.Moves {
+		moveEvals[i] = &pb.SuggestMoveStats_MoveEval{
+			Row:        int32(m.Row),
+			Col:        int32(m.Col),
+			Type:       pb.Field_CellType(m.CellType),
+			Evaluation: float32(m.Iterations) / float32(stats.Iterations),
+		}
+	}
+	return &GameEngineMove{
+			PlayerNum: ge.B.Turn,
+			Move:      mv.Move,
+			Row:       mv.Row,
+			Col:       mv.Col,
+			CellType:  mv.CellType,
+		}, &pb.SuggestMoveStats{
+			Moves: moveEvals,
+		}, nil
 }
 
 type RemoteCPUPlayer struct {
@@ -95,25 +103,25 @@ const (
 	HttpHeaderXRequestDeadline = "X-Request-Deadline"
 )
 
-func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz) (ControlEvent, error) {
+func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz) (*GameEngineMove, *pb.SuggestMoveStats, error) {
 	st, err := ge.Encode()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	data, err := proto.Marshal(&pb.SuggestMoveRequest{
 		MaxThinkTimeMs:  cpu.maxThinkTime.Milliseconds(),
 		GameEngineState: st,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	remoteURL, err := url.JoinPath(cpu.baseURL, CpuSuggestMoveURLPath)
 	if err != nil {
-		return nil, fmt.Errorf("cannot build valid URL from %s and %s: %w", cpu.baseURL, CpuSuggestMoveURLPath, err)
+		return nil, nil, fmt.Errorf("cannot build valid URL from %s and %s: %w", cpu.baseURL, CpuSuggestMoveURLPath, err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, remoteURL, bytes.NewReader(data))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	if requestDeadline, ok := ctx.Deadline(); ok && cpu.propagateRPCDeadline {
@@ -122,32 +130,23 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %s", resp.Status)
+		return nil, nil, fmt.Errorf("unexpected status code: %s", resp.Status)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read response body: %w", err)
+		return nil, nil, fmt.Errorf("read response body: %w", err)
 	}
 	var response pb.SuggestMoveResponse
 	if err := proto.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
+		return nil, nil, fmt.Errorf("unmarshal response: %w", err)
 	}
 	var geMove GameEngineMove
 	geMove.DecodeProto(response.Move)
-	return ControlEventMove{
-		PlayerId: cpu.playerId,
-		MoveRequest: &MoveRequest{
-			Move: geMove.Move,
-			Row:  geMove.Row,
-			Col:  geMove.Col,
-			Type: geMove.CellType,
-		},
-		// TODO: add MCTSStats to protocol
-	}, nil
+	return &geMove, response.MoveStats, nil
 }
 
 type CPUPlayerServer struct {

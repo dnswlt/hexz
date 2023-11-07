@@ -142,15 +142,19 @@ message SuggestMoveRequest {
 }
 
 message SuggestMoveStats {
-    int32 row = 1;
-    int32 col = 2;
-    Field.CellType type = 3;
-    int32 visits = 4;
+    message MoveEval {
+        int32 row = 1;
+        int32 col = 2;
+        Field.CellType type = 3;
+        // Should be between [0..1] and indicate the likelihood of choosing this move.
+        float evaluation = 4;     
+    }
+    repeated MoveEval moves = 1;
 }
 
 message SuggestMoveResponse {
 	GameEngineMove move = 1;
-    repeated SuggestMoveStats move_stats = 2;
+    SuggestMoveStats move_stats = 2;
 }
 
 //
