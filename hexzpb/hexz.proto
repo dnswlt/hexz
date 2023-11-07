@@ -141,8 +141,16 @@ message SuggestMoveRequest {
 	GameEngineState game_engine_state = 2;
 }
 
+message SuggestMoveStats {
+    int32 row = 1;
+    int32 col = 2;
+    Field.CellType type = 3;
+    int32 visits = 4;
+}
+
 message SuggestMoveResponse {
 	GameEngineMove move = 1;
+    repeated SuggestMoveStats move_stats = 2;
 }
 
 //

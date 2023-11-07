@@ -110,6 +110,9 @@ extern SuggestMoveRequestDefaultTypeInternal _SuggestMoveRequest_default_instanc
 class SuggestMoveResponse;
 struct SuggestMoveResponseDefaultTypeInternal;
 extern SuggestMoveResponseDefaultTypeInternal _SuggestMoveResponse_default_instance_;
+class SuggestMoveStats;
+struct SuggestMoveStatsDefaultTypeInternal;
+extern SuggestMoveStatsDefaultTypeInternal _SuggestMoveStats_default_instance_;
 class TrainingExample;
 struct TrainingExampleDefaultTypeInternal;
 extern TrainingExampleDefaultTypeInternal _TrainingExample_default_instance_;
@@ -3187,6 +3190,200 @@ class SuggestMoveRequest final :
   friend struct ::TableStruct_hexz_2eproto;
 };// -------------------------------------------------------------------
 
+class SuggestMoveStats final :
+    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:hexzpb.SuggestMoveStats) */ {
+ public:
+  inline SuggestMoveStats() : SuggestMoveStats(nullptr) {}
+  ~SuggestMoveStats() override;
+  template<typename = void>
+  explicit PROTOBUF_CONSTEXPR SuggestMoveStats(::google::protobuf::internal::ConstantInitialized);
+
+  SuggestMoveStats(const SuggestMoveStats& from);
+  SuggestMoveStats(SuggestMoveStats&& from) noexcept
+    : SuggestMoveStats() {
+    *this = ::std::move(from);
+  }
+
+  inline SuggestMoveStats& operator=(const SuggestMoveStats& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline SuggestMoveStats& operator=(SuggestMoveStats&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const SuggestMoveStats& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const SuggestMoveStats* internal_default_instance() {
+    return reinterpret_cast<const SuggestMoveStats*>(
+               &_SuggestMoveStats_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    14;
+
+  friend void swap(SuggestMoveStats& a, SuggestMoveStats& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(SuggestMoveStats* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(SuggestMoveStats* other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  SuggestMoveStats* New(::google::protobuf::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<SuggestMoveStats>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const SuggestMoveStats& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom( const SuggestMoveStats& from) {
+    SuggestMoveStats::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  ::size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::google::protobuf::internal::ParseContext* ctx) final;
+  ::uint8_t* _InternalSerialize(
+      ::uint8_t* target, ::google::protobuf::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::google::protobuf::Arena* arena);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(SuggestMoveStats* other);
+
+  private:
+  friend class ::google::protobuf::internal::AnyMetadata;
+  static ::absl::string_view FullMessageName() {
+    return "hexzpb.SuggestMoveStats";
+  }
+  protected:
+  explicit SuggestMoveStats(::google::protobuf::Arena* arena);
+  public:
+
+  static const ClassData _class_data_;
+  const ::google::protobuf::Message::ClassData*GetClassData() const final;
+
+  ::google::protobuf::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kRowFieldNumber = 1,
+    kColFieldNumber = 2,
+    kTypeFieldNumber = 3,
+    kVisitsFieldNumber = 4,
+  };
+  // int32 row = 1;
+  void clear_row() ;
+  ::int32_t row() const;
+  void set_row(::int32_t value);
+
+  private:
+  ::int32_t _internal_row() const;
+  void _internal_set_row(::int32_t value);
+
+  public:
+  // int32 col = 2;
+  void clear_col() ;
+  ::int32_t col() const;
+  void set_col(::int32_t value);
+
+  private:
+  ::int32_t _internal_col() const;
+  void _internal_set_col(::int32_t value);
+
+  public:
+  // .hexzpb.Field.CellType type = 3;
+  void clear_type() ;
+  ::hexzpb::Field_CellType type() const;
+  void set_type(::hexzpb::Field_CellType value);
+
+  private:
+  ::hexzpb::Field_CellType _internal_type() const;
+  void _internal_set_type(::hexzpb::Field_CellType value);
+
+  public:
+  // int32 visits = 4;
+  void clear_visits() ;
+  ::int32_t visits() const;
+  void set_visits(::int32_t value);
+
+  private:
+  ::int32_t _internal_visits() const;
+  void _internal_set_visits(::int32_t value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:hexzpb.SuggestMoveStats)
+ private:
+  class _Internal;
+
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<2, 4, 0, 0, 2> _table_;
+  template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::int32_t row_;
+    ::int32_t col_;
+    int type_;
+    ::int32_t visits_;
+    mutable ::google::protobuf::internal::CachedSize _cached_size_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_hexz_2eproto;
+};// -------------------------------------------------------------------
+
 class SuggestMoveResponse final :
     public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:hexzpb.SuggestMoveResponse) */ {
  public:
@@ -3243,7 +3440,7 @@ class SuggestMoveResponse final :
                &_SuggestMoveResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    14;
+    15;
 
   friend void swap(SuggestMoveResponse& a, SuggestMoveResponse& b) {
     a.Swap(&b);
@@ -3315,8 +3512,27 @@ class SuggestMoveResponse final :
   // accessors -------------------------------------------------------
 
   enum : int {
+    kMoveStatsFieldNumber = 2,
     kMoveFieldNumber = 1,
   };
+  // repeated .hexzpb.SuggestMoveStats move_stats = 2;
+  int move_stats_size() const;
+  private:
+  int _internal_move_stats_size() const;
+
+  public:
+  void clear_move_stats() ;
+  ::hexzpb::SuggestMoveStats* mutable_move_stats(int index);
+  ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats >*
+      mutable_move_stats();
+  private:
+  const ::google::protobuf::RepeatedPtrField<::hexzpb::SuggestMoveStats>& _internal_move_stats() const;
+  ::google::protobuf::RepeatedPtrField<::hexzpb::SuggestMoveStats>* _internal_mutable_move_stats();
+  public:
+  const ::hexzpb::SuggestMoveStats& move_stats(int index) const;
+  ::hexzpb::SuggestMoveStats* add_move_stats();
+  const ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats >&
+      move_stats() const;
   // .hexzpb.GameEngineMove move = 1;
   bool has_move() const;
   void clear_move() ;
@@ -3337,13 +3553,14 @@ class SuggestMoveResponse final :
   class _Internal;
 
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<0, 1, 1, 0, 2> _table_;
+  static const ::google::protobuf::internal::TcParseTable<1, 2, 2, 0, 2> _table_;
   template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
   struct Impl_ {
     ::google::protobuf::internal::HasBits<1> _has_bits_;
     mutable ::google::protobuf::internal::CachedSize _cached_size_;
+    ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats > move_stats_;
     ::hexzpb::GameEngineMove* move_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -3407,7 +3624,7 @@ class ModelKey final :
                &_ModelKey_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    15;
+    16;
 
   friend void swap(ModelKey& a, ModelKey& b) {
     a.Swap(&b);
@@ -3583,7 +3800,7 @@ class AddTrainingExamplesRequest final :
                &_AddTrainingExamplesRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    16;
+    17;
 
   friend void swap(AddTrainingExamplesRequest& a, AddTrainingExamplesRequest& b) {
     a.Swap(&b);
@@ -3767,7 +3984,7 @@ class AddTrainingExamplesResponse final :
                &_AddTrainingExamplesResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    17;
+    18;
 
   friend void swap(AddTrainingExamplesResponse& a, AddTrainingExamplesResponse& b) {
     a.Swap(&b);
@@ -3984,7 +4201,7 @@ class TrainingExample_Stats final :
                &_TrainingExample_Stats_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    18;
+    19;
 
   friend void swap(TrainingExample_Stats& a, TrainingExample_Stats& b) {
     a.Swap(&b);
@@ -4178,7 +4395,7 @@ class TrainingExample final :
                &_TrainingExample_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    19;
+    20;
 
   friend void swap(TrainingExample& a, TrainingExample& b) {
     a.Swap(&b);
@@ -6853,6 +7070,98 @@ inline void SuggestMoveRequest::set_allocated_game_engine_state(::hexzpb::GameEn
 
 // -------------------------------------------------------------------
 
+// SuggestMoveStats
+
+// int32 row = 1;
+inline void SuggestMoveStats::clear_row() {
+  _impl_.row_ = 0;
+}
+inline ::int32_t SuggestMoveStats::row() const {
+  // @@protoc_insertion_point(field_get:hexzpb.SuggestMoveStats.row)
+  return _internal_row();
+}
+inline void SuggestMoveStats::set_row(::int32_t value) {
+  _internal_set_row(value);
+  // @@protoc_insertion_point(field_set:hexzpb.SuggestMoveStats.row)
+}
+inline ::int32_t SuggestMoveStats::_internal_row() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.row_;
+}
+inline void SuggestMoveStats::_internal_set_row(::int32_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.row_ = value;
+}
+
+// int32 col = 2;
+inline void SuggestMoveStats::clear_col() {
+  _impl_.col_ = 0;
+}
+inline ::int32_t SuggestMoveStats::col() const {
+  // @@protoc_insertion_point(field_get:hexzpb.SuggestMoveStats.col)
+  return _internal_col();
+}
+inline void SuggestMoveStats::set_col(::int32_t value) {
+  _internal_set_col(value);
+  // @@protoc_insertion_point(field_set:hexzpb.SuggestMoveStats.col)
+}
+inline ::int32_t SuggestMoveStats::_internal_col() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.col_;
+}
+inline void SuggestMoveStats::_internal_set_col(::int32_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.col_ = value;
+}
+
+// .hexzpb.Field.CellType type = 3;
+inline void SuggestMoveStats::clear_type() {
+  _impl_.type_ = 0;
+}
+inline ::hexzpb::Field_CellType SuggestMoveStats::type() const {
+  // @@protoc_insertion_point(field_get:hexzpb.SuggestMoveStats.type)
+  return _internal_type();
+}
+inline void SuggestMoveStats::set_type(::hexzpb::Field_CellType value) {
+  _internal_set_type(value);
+  // @@protoc_insertion_point(field_set:hexzpb.SuggestMoveStats.type)
+}
+inline ::hexzpb::Field_CellType SuggestMoveStats::_internal_type() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return static_cast<::hexzpb::Field_CellType>(_impl_.type_);
+}
+inline void SuggestMoveStats::_internal_set_type(::hexzpb::Field_CellType value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.type_ = value;
+}
+
+// int32 visits = 4;
+inline void SuggestMoveStats::clear_visits() {
+  _impl_.visits_ = 0;
+}
+inline ::int32_t SuggestMoveStats::visits() const {
+  // @@protoc_insertion_point(field_get:hexzpb.SuggestMoveStats.visits)
+  return _internal_visits();
+}
+inline void SuggestMoveStats::set_visits(::int32_t value) {
+  _internal_set_visits(value);
+  // @@protoc_insertion_point(field_set:hexzpb.SuggestMoveStats.visits)
+}
+inline ::int32_t SuggestMoveStats::_internal_visits() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.visits_;
+}
+inline void SuggestMoveStats::_internal_set_visits(::int32_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.visits_ = value;
+}
+
+// -------------------------------------------------------------------
+
 // SuggestMoveResponse
 
 // .hexzpb.GameEngineMove move = 1;
@@ -6949,6 +7258,52 @@ inline void SuggestMoveResponse::set_allocated_move(::hexzpb::GameEngineMove* va
 
   _impl_.move_ = reinterpret_cast<::hexzpb::GameEngineMove*>(value);
   // @@protoc_insertion_point(field_set_allocated:hexzpb.SuggestMoveResponse.move)
+}
+
+// repeated .hexzpb.SuggestMoveStats move_stats = 2;
+inline int SuggestMoveResponse::_internal_move_stats_size() const {
+  return _internal_move_stats().size();
+}
+inline int SuggestMoveResponse::move_stats_size() const {
+  return _internal_move_stats_size();
+}
+inline void SuggestMoveResponse::clear_move_stats() {
+  _internal_mutable_move_stats()->Clear();
+}
+inline ::hexzpb::SuggestMoveStats* SuggestMoveResponse::mutable_move_stats(int index) {
+  // @@protoc_insertion_point(field_mutable:hexzpb.SuggestMoveResponse.move_stats)
+  return _internal_mutable_move_stats()->Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats >*
+SuggestMoveResponse::mutable_move_stats() {
+  // @@protoc_insertion_point(field_mutable_list:hexzpb.SuggestMoveResponse.move_stats)
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  return _internal_mutable_move_stats();
+}
+inline const ::hexzpb::SuggestMoveStats& SuggestMoveResponse::move_stats(int index) const {
+  // @@protoc_insertion_point(field_get:hexzpb.SuggestMoveResponse.move_stats)
+    return _internal_move_stats().Get(index);
+}
+inline ::hexzpb::SuggestMoveStats* SuggestMoveResponse::add_move_stats() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ::hexzpb::SuggestMoveStats* _add = _internal_mutable_move_stats()->Add();
+  // @@protoc_insertion_point(field_add:hexzpb.SuggestMoveResponse.move_stats)
+  return _add;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats >&
+SuggestMoveResponse::move_stats() const {
+  // @@protoc_insertion_point(field_list:hexzpb.SuggestMoveResponse.move_stats)
+  return _internal_move_stats();
+}
+inline const ::google::protobuf::RepeatedPtrField<::hexzpb::SuggestMoveStats>&
+SuggestMoveResponse::_internal_move_stats() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.move_stats_;
+}
+inline ::google::protobuf::RepeatedPtrField<::hexzpb::SuggestMoveStats>*
+SuggestMoveResponse::_internal_mutable_move_stats() {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return &_impl_.move_stats_;
 }
 
 // -------------------------------------------------------------------

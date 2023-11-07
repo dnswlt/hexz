@@ -1,5 +1,6 @@
 #include "board.h"
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -12,12 +13,27 @@ namespace {
 
 using internal::Idx;
 using internal::NeighborsOf;
+using testing::UnorderedElementsAre;
 
 Board EmptyBoard(int n_flags) {
   Board b;
   b.SetRemainingFlags(0, n_flags);
   b.SetRemainingFlags(1, n_flags);
   return b;
+}
+
+TEST(BoardTest, NeighborsOf) {
+  EXPECT_THAT(NeighborsOf(Idx{0, 0}),
+              UnorderedElementsAre(Idx{0, 1}, Idx{1, 0}));
+  EXPECT_THAT(NeighborsOf(Idx{0, 4}),
+              UnorderedElementsAre(Idx{0, 3}, Idx{0, 5}, Idx{1, 3}, Idx{1, 4}));
+  EXPECT_THAT(NeighborsOf(Idx{0, 9}),
+              UnorderedElementsAre(Idx{0, 8}, Idx{1, 8}));
+  EXPECT_THAT(NeighborsOf(Idx{4, 0}),
+              UnorderedElementsAre(Idx{4, 1}, Idx{3, 0}, Idx{5, 0}));
+  EXPECT_THAT(NeighborsOf(Idx{4, 4}),
+              UnorderedElementsAre(Idx{3, 3}, Idx{3, 4}, Idx{5, 3}, Idx{5, 4},
+                                   Idx{4, 3}, Idx{4, 5}));
 }
 
 TEST(BoardTest, PlayFullGame) {

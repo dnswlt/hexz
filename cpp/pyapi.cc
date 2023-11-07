@@ -69,22 +69,39 @@ std::string MoveSuggester::impl::SuggestMove(const std::string& request) {
         absl::StrCat("invalid turn: ", pb_board.turn()));
   }
   int64_t t_started = UnixMicros();
-  auto suggested_move = mcts.SuggestMove(turn, *board, req.max_think_time_ms());
-  if (!suggested_move.ok()) {
+  auto node = mcts.SuggestMove(turn, *board, req.max_think_time_ms());
+  if (!node.ok()) {
     throw std::runtime_error(
         absl::StrCat("SuggestMove: ", board.status().ToString()));
   }
-  ABSL_DLOG(INFO) << "SuggestMove: computed move suggestion "
-                  << suggested_move->DebugString() << " in "
-                  << (UnixMicros() - t_started) / 1000 << "ms";
+  ABSL_CHECK(!(*node)->IsLeaf())
+      << "SuggestMove must not return OK if there are no valid moves.";
   hexzpb::SuggestMoveResponse resp;
+  const auto& cs = (*node)->children();
+  int most_visited_idx = 0;
+  for (int i = 0; i < cs.size(); i++) {
+    const auto& c = cs[i];
+    if (c->visit_count() > cs[most_visited_idx]->visit_count()) {
+      most_visited_idx = i;
+    }
+    auto& stats = *resp.add_move_stats();
+    stats.set_row(c->move().r);
+    stats.set_col(c->move().c);
+    stats.set_type(c->move().typ == 0 ? hexzpb::Field::FLAG
+                                      : hexzpb::Field::NORMAL);
+    stats.set_visits(c->visit_count());
+  }
+  const auto& best_move = cs[most_visited_idx]->move();
+  ABSL_DLOG(INFO) << "SuggestMove: computed move suggestion "
+                  << best_move.DebugString() << " in "
+                  << (UnixMicros() - t_started) / 1000 << "ms";
   auto& move = *resp.mutable_move();
   move.set_player_num(pb_board.turn());
   move.set_move(pb_board.move());
-  move.set_cell_type(suggested_move->typ == 0 ? hexzpb::Field::FLAG
-                                              : hexzpb::Field::NORMAL);
-  move.set_row(suggested_move->r);
-  move.set_col(suggested_move->c);
+  move.set_cell_type(best_move.typ == 0 ? hexzpb::Field::FLAG
+                                        : hexzpb::Field::NORMAL);
+  move.set_row(best_move.r);
+  move.set_col(best_move.c);
   return resp.SerializeAsString();
 }
 

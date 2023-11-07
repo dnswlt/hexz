@@ -141,7 +141,6 @@ class NeuralMCTS {
     double runs_per_move_gradient = 0.0;
     int max_moves_per_game = 200;
   };
-
   // The model is not owned. Owners of the NeuralMCTS instance must ensure it
   // outlives this instance.
   NeuralMCTS(Model& model, const Params& params);
@@ -159,7 +158,8 @@ class NeuralMCTS {
 
   // SuggestMove returns the best move suggestion that the NeuralMCTS algorithm
   // comes up with in think_time_millis milliseconds.
-  absl::StatusOr<Move> SuggestMove(int player, const Board& board, int think_time_millis);
+  absl::StatusOr<std::unique_ptr<Node>> SuggestMove(
+      int player, const Board& board, int think_time_millis);
 
  private:
   int runs_per_move_;

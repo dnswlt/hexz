@@ -67,6 +67,8 @@ Node* Node::MaxPuctChild() const {
   return children_[best_i].get();
 }
 
+
+
 std::unique_ptr<Node> Node::MostVisitedChildAsRoot() {
   assert(!children_.empty());
   int best_i = 0;
@@ -287,8 +289,8 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
   return examples;
 }
 
-absl::StatusOr<Move> NeuralMCTS::SuggestMove(int player, const Board& board,
-                                             int think_time_millis) {
+absl::StatusOr<std::unique_ptr<Node>> NeuralMCTS::SuggestMove(
+    int player, const Board& board, int think_time_millis) {
   int64_t started_micros = UnixMicros();
   auto root =
       std::make_unique<Node>(nullptr, /*turn=*/player, Move{-1, -1, -1, -1.0});
@@ -307,8 +309,9 @@ absl::StatusOr<Move> NeuralMCTS::SuggestMove(int player, const Board& board,
     // the opponent can make a valid move.
     return absl::InvalidArgumentError("Player has no valid moves left.");
   }
+
   std::unique_ptr<Node> best_child = root->MostVisitedChildAsRoot();
-  return best_child->move();
+  return root;
 }
 
 }  // namespace hexz

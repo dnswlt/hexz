@@ -312,10 +312,30 @@ struct SuggestMoveRequestDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 SuggestMoveRequestDefaultTypeInternal _SuggestMoveRequest_default_instance_;
         template <typename>
+PROTOBUF_CONSTEXPR SuggestMoveStats::SuggestMoveStats(::_pbi::ConstantInitialized)
+    : _impl_{
+      /*decltype(_impl_.row_)*/ 0,
+      /*decltype(_impl_.col_)*/ 0,
+      /*decltype(_impl_.type_)*/ 0,
+      /*decltype(_impl_.visits_)*/ 0,
+      /*decltype(_impl_._cached_size_)*/ {},
+    } {}
+struct SuggestMoveStatsDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR SuggestMoveStatsDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~SuggestMoveStatsDefaultTypeInternal() {}
+  union {
+    SuggestMoveStats _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 SuggestMoveStatsDefaultTypeInternal _SuggestMoveStats_default_instance_;
+        template <typename>
 PROTOBUF_CONSTEXPR SuggestMoveResponse::SuggestMoveResponse(::_pbi::ConstantInitialized)
     : _impl_{
       /*decltype(_impl_._has_bits_)*/ {},
       /*decltype(_impl_._cached_size_)*/ {},
+      /*decltype(_impl_.move_stats_)*/ {},
       /*decltype(_impl_.move_)*/ nullptr,
     } {}
 struct SuggestMoveResponseDefaultTypeInternal {
@@ -437,7 +457,7 @@ struct TrainingExampleDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 TrainingExampleDefaultTypeInternal _TrainingExample_default_instance_;
 }  // namespace hexzpb
-static ::_pb::Metadata file_level_metadata_hexz_2eproto[20];
+static ::_pb::Metadata file_level_metadata_hexz_2eproto[21];
 static const ::_pb::EnumDescriptor* file_level_enum_descriptors_hexz_2eproto[4];
 static constexpr const ::_pb::ServiceDescriptor**
     file_level_service_descriptors_hexz_2eproto = nullptr;
@@ -631,6 +651,18 @@ const ::uint32_t TableStruct_hexz_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(
     PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveRequest, _impl_.game_engine_state_),
     ~0u,
     0,
+    ~0u,  // no _has_bits_
+    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats, _internal_metadata_),
+    ~0u,  // no _extensions_
+    ~0u,  // no _oneof_case_
+    ~0u,  // no _weak_field_map_
+    ~0u,  // no _inlined_string_donated_
+    ~0u,  // no _split_
+    ~0u,  // no sizeof(Split)
+    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats, _impl_.row_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats, _impl_.col_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats, _impl_.type_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats, _impl_.visits_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveResponse, _impl_._has_bits_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveResponse, _internal_metadata_),
     ~0u,  // no _extensions_
@@ -640,7 +672,9 @@ const ::uint32_t TableStruct_hexz_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(
     ~0u,  // no _split_
     ~0u,  // no sizeof(Split)
     PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveResponse, _impl_.move_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveResponse, _impl_.move_stats_),
     0,
+    ~0u,
     ~0u,  // no _has_bits_
     PROTOBUF_FIELD_OFFSET(::hexzpb::ModelKey, _internal_metadata_),
     ~0u,  // no _extensions_
@@ -729,12 +763,13 @@ static const ::_pbi::MigrationSchema
         {146, 157, -1, sizeof(::hexzpb::MCTSExample_MoveStats)},
         {160, 172, -1, sizeof(::hexzpb::MCTSExample)},
         {176, 186, -1, sizeof(::hexzpb::SuggestMoveRequest)},
-        {188, 197, -1, sizeof(::hexzpb::SuggestMoveResponse)},
-        {198, -1, -1, sizeof(::hexzpb::ModelKey)},
-        {208, 218, -1, sizeof(::hexzpb::AddTrainingExamplesRequest)},
-        {220, 231, -1, sizeof(::hexzpb::AddTrainingExamplesResponse)},
-        {234, -1, -1, sizeof(::hexzpb::TrainingExample_Stats)},
-        {246, 261, -1, sizeof(::hexzpb::TrainingExample)},
+        {188, -1, -1, sizeof(::hexzpb::SuggestMoveStats)},
+        {200, 210, -1, sizeof(::hexzpb::SuggestMoveResponse)},
+        {212, -1, -1, sizeof(::hexzpb::ModelKey)},
+        {222, 232, -1, sizeof(::hexzpb::AddTrainingExamplesRequest)},
+        {234, 245, -1, sizeof(::hexzpb::AddTrainingExamplesResponse)},
+        {248, -1, -1, sizeof(::hexzpb::TrainingExample_Stats)},
+        {260, 275, -1, sizeof(::hexzpb::TrainingExample)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -752,6 +787,7 @@ static const ::_pb::Message* const file_default_instances[] = {
     &::hexzpb::_MCTSExample_MoveStats_default_instance_._instance,
     &::hexzpb::_MCTSExample_default_instance_._instance,
     &::hexzpb::_SuggestMoveRequest_default_instance_._instance,
+    &::hexzpb::_SuggestMoveStats_default_instance_._instance,
     &::hexzpb::_SuggestMoveResponse_default_instance_._instance,
     &::hexzpb::_ModelKey_default_instance_._instance,
     &::hexzpb::_AddTrainingExamplesRequest_default_instance_._instance,
@@ -804,29 +840,32 @@ const char descriptor_table_protodef_hexz_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
     ".GameEngineMove\022\016\n\006visits\030\002 \001(\005\022\020\n\010win_r"
     "ate\030\003 \001(\002\"c\n\022SuggestMoveRequest\022\031\n\021max_t"
     "hink_time_ms\030\001 \001(\003\0222\n\021game_engine_state\030"
-    "\002 \001(\0132\027.hexzpb.GameEngineState\";\n\023Sugges"
-    "tMoveResponse\022$\n\004move\030\001 \001(\0132\026.hexzpb.Gam"
-    "eEngineMove\",\n\010ModelKey\022\014\n\004name\030\001 \001(\t\022\022\n"
-    "\ncheckpoint\030\002 \001(\005\"l\n\032AddTrainingExamples"
-    "Request\022#\n\tmodel_key\030\001 \001(\0132\020.hexzpb.Mode"
-    "lKey\022)\n\010examples\030\002 \003(\0132\027.hexzpb.Training"
-    "Example\"\220\002\n\033AddTrainingExamplesResponse\022"
-    ":\n\006status\030\001 \001(\0162*.hexzpb.AddTrainingExam"
-    "plesResponse.Status\022&\n\014latest_model\030\002 \001("
-    "\0132\020.hexzpb.ModelKey\022\025\n\rerror_message\030\003 \001"
-    "(\t\"v\n\006Status\022\026\n\022STATUS_UNSPECIFIED\020\000\022\014\n\010"
-    "ACCEPTED\020\001\022\030\n\024REJECTED_WRONG_MODEL\020\002\022\030\n\024"
-    "REJECTED_AT_CAPACITY\020\003\022\022\n\016REJECTED_OTHER"
-    "\020\004\"\307\002\n\017TrainingExample\022\023\n\013unix_micros\030\001 "
-    "\001(\003\022\014\n\004turn\030\007 \001(\005\0222\n\010encoding\030\006 \001(\0162 .he"
-    "xzpb.TrainingExample.Encoding\022\r\n\005board\030\002"
-    " \001(\014\022\022\n\nmove_probs\030\003 \001(\014\022\016\n\006result\030\004 \001(\002"
-    "\022,\n\005stats\030\005 \001(\0132\035.hexzpb.TrainingExample"
-    ".Stats\032X\n\005Stats\022\014\n\004move\030\001 \001(\005\022\027\n\017duratio"
-    "n_micros\030\003 \001(\003\022\023\n\013valid_moves\030\004 \001(\005\022\023\n\013v"
-    "isit_count\030\005 \001(\005\"\"\n\010Encoding\022\t\n\005NUMPY\020\000\022"
-    "\013\n\007PYTORCH\020\001B\037Z\035github.com/dnswlt/hexz/h"
-    "exzpbb\006proto3"
+    "\002 \001(\0132\027.hexzpb.GameEngineState\"b\n\020Sugges"
+    "tMoveStats\022\013\n\003row\030\001 \001(\005\022\013\n\003col\030\002 \001(\005\022$\n\004"
+    "type\030\003 \001(\0162\026.hexzpb.Field.CellType\022\016\n\006vi"
+    "sits\030\004 \001(\005\"i\n\023SuggestMoveResponse\022$\n\004mov"
+    "e\030\001 \001(\0132\026.hexzpb.GameEngineMove\022,\n\nmove_"
+    "stats\030\002 \003(\0132\030.hexzpb.SuggestMoveStats\",\n"
+    "\010ModelKey\022\014\n\004name\030\001 \001(\t\022\022\n\ncheckpoint\030\002 "
+    "\001(\005\"l\n\032AddTrainingExamplesRequest\022#\n\tmod"
+    "el_key\030\001 \001(\0132\020.hexzpb.ModelKey\022)\n\010exampl"
+    "es\030\002 \003(\0132\027.hexzpb.TrainingExample\"\220\002\n\033Ad"
+    "dTrainingExamplesResponse\022:\n\006status\030\001 \001("
+    "\0162*.hexzpb.AddTrainingExamplesResponse.S"
+    "tatus\022&\n\014latest_model\030\002 \001(\0132\020.hexzpb.Mod"
+    "elKey\022\025\n\rerror_message\030\003 \001(\t\"v\n\006Status\022\026"
+    "\n\022STATUS_UNSPECIFIED\020\000\022\014\n\010ACCEPTED\020\001\022\030\n\024"
+    "REJECTED_WRONG_MODEL\020\002\022\030\n\024REJECTED_AT_CA"
+    "PACITY\020\003\022\022\n\016REJECTED_OTHER\020\004\"\307\002\n\017Trainin"
+    "gExample\022\023\n\013unix_micros\030\001 \001(\003\022\014\n\004turn\030\007 "
+    "\001(\005\0222\n\010encoding\030\006 \001(\0162 .hexzpb.TrainingE"
+    "xample.Encoding\022\r\n\005board\030\002 \001(\014\022\022\n\nmove_p"
+    "robs\030\003 \001(\014\022\016\n\006result\030\004 \001(\002\022,\n\005stats\030\005 \001("
+    "\0132\035.hexzpb.TrainingExample.Stats\032X\n\005Stat"
+    "s\022\014\n\004move\030\001 \001(\005\022\027\n\017duration_micros\030\003 \001(\003"
+    "\022\023\n\013valid_moves\030\004 \001(\005\022\023\n\013visit_count\030\005 \001"
+    "(\005\"\"\n\010Encoding\022\t\n\005NUMPY\020\000\022\013\n\007PYTORCH\020\001B\037"
+    "Z\035github.com/dnswlt/hexz/hexzpbb\006proto3"
 };
 static const ::_pbi::DescriptorTable* const descriptor_table_hexz_2eproto_deps[1] =
     {
@@ -836,13 +875,13 @@ static ::absl::once_flag descriptor_table_hexz_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_hexz_2eproto = {
     false,
     false,
-    2653,
+    2799,
     descriptor_table_protodef_hexz_2eproto,
     "hexz.proto",
     &descriptor_table_hexz_2eproto_once,
     descriptor_table_hexz_2eproto_deps,
     1,
-    20,
+    21,
     schemas,
     file_default_instances,
     TableStruct_hexz_2eproto::offsets,
@@ -4908,6 +4947,248 @@ void SuggestMoveRequest::InternalSwap(SuggestMoveRequest* other) {
 }
 // ===================================================================
 
+class SuggestMoveStats::_Internal {
+ public:
+};
+
+SuggestMoveStats::SuggestMoveStats(::google::protobuf::Arena* arena)
+    : ::google::protobuf::Message(arena) {
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:hexzpb.SuggestMoveStats)
+}
+SuggestMoveStats::SuggestMoveStats(const SuggestMoveStats& from)
+    : ::google::protobuf::Message(), _impl_(from._impl_) {
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+  // @@protoc_insertion_point(copy_constructor:hexzpb.SuggestMoveStats)
+}
+inline void SuggestMoveStats::SharedCtor(::_pb::Arena* arena) {
+  (void)arena;
+  new (&_impl_) Impl_{
+      decltype(_impl_.row_){0},
+      decltype(_impl_.col_){0},
+      decltype(_impl_.type_){0},
+      decltype(_impl_.visits_){0},
+      /*decltype(_impl_._cached_size_)*/ {},
+  };
+}
+SuggestMoveStats::~SuggestMoveStats() {
+  // @@protoc_insertion_point(destructor:hexzpb.SuggestMoveStats)
+  _internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  SharedDtor();
+}
+inline void SuggestMoveStats::SharedDtor() {
+  ABSL_DCHECK(GetArenaForAllocation() == nullptr);
+}
+void SuggestMoveStats::SetCachedSize(int size) const {
+  _impl_._cached_size_.Set(size);
+}
+
+PROTOBUF_NOINLINE void SuggestMoveStats::Clear() {
+// @@protoc_insertion_point(message_clear_start:hexzpb.SuggestMoveStats)
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  ::memset(&_impl_.row_, 0, static_cast<::size_t>(
+      reinterpret_cast<char*>(&_impl_.visits_) -
+      reinterpret_cast<char*>(&_impl_.row_)) + sizeof(_impl_.visits_));
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+const char* SuggestMoveStats::_InternalParse(
+    const char* ptr, ::_pbi::ParseContext* ctx) {
+  ptr = ::_pbi::TcParser::ParseLoop(this, ptr, ctx, &_table_.header);
+  return ptr;
+}
+
+
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
+const ::_pbi::TcParseTable<2, 4, 0, 0, 2> SuggestMoveStats::_table_ = {
+  {
+    0,  // no _has_bits_
+    0, // no _extensions_
+    4, 24,  // max_field_number, fast_idx_mask
+    offsetof(decltype(_table_), field_lookup_table),
+    4294967280,  // skipmap
+    offsetof(decltype(_table_), field_entries),
+    4,  // num_field_entries
+    0,  // num_aux_entries
+    offsetof(decltype(_table_), field_names),  // no aux_entries
+    &_SuggestMoveStats_default_instance_._instance,
+    ::_pbi::TcParser::GenericFallback,  // fallback
+  }, {{
+    // int32 visits = 4;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(SuggestMoveStats, _impl_.visits_), 63>(),
+     {32, 63, 0, PROTOBUF_FIELD_OFFSET(SuggestMoveStats, _impl_.visits_)}},
+    // int32 row = 1;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(SuggestMoveStats, _impl_.row_), 63>(),
+     {8, 63, 0, PROTOBUF_FIELD_OFFSET(SuggestMoveStats, _impl_.row_)}},
+    // int32 col = 2;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(SuggestMoveStats, _impl_.col_), 63>(),
+     {16, 63, 0, PROTOBUF_FIELD_OFFSET(SuggestMoveStats, _impl_.col_)}},
+    // .hexzpb.Field.CellType type = 3;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(SuggestMoveStats, _impl_.type_), 63>(),
+     {24, 63, 0, PROTOBUF_FIELD_OFFSET(SuggestMoveStats, _impl_.type_)}},
+  }}, {{
+    65535, 65535
+  }}, {{
+    // int32 row = 1;
+    {PROTOBUF_FIELD_OFFSET(SuggestMoveStats, _impl_.row_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
+    // int32 col = 2;
+    {PROTOBUF_FIELD_OFFSET(SuggestMoveStats, _impl_.col_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
+    // .hexzpb.Field.CellType type = 3;
+    {PROTOBUF_FIELD_OFFSET(SuggestMoveStats, _impl_.type_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kOpenEnum)},
+    // int32 visits = 4;
+    {PROTOBUF_FIELD_OFFSET(SuggestMoveStats, _impl_.visits_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
+  }},
+  // no aux_entries
+  {{
+  }},
+};
+
+::uint8_t* SuggestMoveStats::_InternalSerialize(
+    ::uint8_t* target,
+    ::google::protobuf::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:hexzpb.SuggestMoveStats)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  // int32 row = 1;
+  if (this->_internal_row() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::
+        WriteInt32ToArrayWithField<1>(
+            stream, this->_internal_row(), target);
+  }
+
+  // int32 col = 2;
+  if (this->_internal_col() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::
+        WriteInt32ToArrayWithField<2>(
+            stream, this->_internal_col(), target);
+  }
+
+  // .hexzpb.Field.CellType type = 3;
+  if (this->_internal_type() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteEnumToArray(
+        3, this->_internal_type(), target);
+  }
+
+  // int32 visits = 4;
+  if (this->_internal_visits() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::
+        WriteInt32ToArrayWithField<4>(
+            stream, this->_internal_visits(), target);
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:hexzpb.SuggestMoveStats)
+  return target;
+}
+
+::size_t SuggestMoveStats::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:hexzpb.SuggestMoveStats)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // int32 row = 1;
+  if (this->_internal_row() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+        this->_internal_row());
+  }
+
+  // int32 col = 2;
+  if (this->_internal_col() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+        this->_internal_col());
+  }
+
+  // .hexzpb.Field.CellType type = 3;
+  if (this->_internal_type() != 0) {
+    total_size += 1 +
+                  ::_pbi::WireFormatLite::EnumSize(this->_internal_type());
+  }
+
+  // int32 visits = 4;
+  if (this->_internal_visits() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+        this->_internal_visits());
+  }
+
+  return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
+}
+
+const ::google::protobuf::Message::ClassData SuggestMoveStats::_class_data_ = {
+    ::google::protobuf::Message::CopyWithSourceCheck,
+    SuggestMoveStats::MergeImpl
+};
+const ::google::protobuf::Message::ClassData*SuggestMoveStats::GetClassData() const { return &_class_data_; }
+
+
+void SuggestMoveStats::MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg) {
+  auto* const _this = static_cast<SuggestMoveStats*>(&to_msg);
+  auto& from = static_cast<const SuggestMoveStats&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:hexzpb.SuggestMoveStats)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from._internal_row() != 0) {
+    _this->_internal_set_row(from._internal_row());
+  }
+  if (from._internal_col() != 0) {
+    _this->_internal_set_col(from._internal_col());
+  }
+  if (from._internal_type() != 0) {
+    _this->_internal_set_type(from._internal_type());
+  }
+  if (from._internal_visits() != 0) {
+    _this->_internal_set_visits(from._internal_visits());
+  }
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void SuggestMoveStats::CopyFrom(const SuggestMoveStats& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:hexzpb.SuggestMoveStats)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+PROTOBUF_NOINLINE bool SuggestMoveStats::IsInitialized() const {
+  return true;
+}
+
+void SuggestMoveStats::InternalSwap(SuggestMoveStats* other) {
+  using std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  ::google::protobuf::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(SuggestMoveStats, _impl_.visits_)
+      + sizeof(SuggestMoveStats::_impl_.visits_)
+      - PROTOBUF_FIELD_OFFSET(SuggestMoveStats, _impl_.row_)>(
+          reinterpret_cast<char*>(&_impl_.row_),
+          reinterpret_cast<char*>(&other->_impl_.row_));
+}
+
+::google::protobuf::Metadata SuggestMoveStats::GetMetadata() const {
+  return ::_pbi::AssignDescriptors(
+      &descriptor_table_hexz_2eproto_getter, &descriptor_table_hexz_2eproto_once,
+      file_level_metadata_hexz_2eproto[14]);
+}
+// ===================================================================
+
 class SuggestMoveResponse::_Internal {
  public:
   using HasBits = decltype(std::declval<SuggestMoveResponse>()._impl_._has_bits_);
@@ -4933,6 +5214,7 @@ SuggestMoveResponse::SuggestMoveResponse(const SuggestMoveResponse& from) : ::go
   new (&_impl_) Impl_{
       decltype(_impl_._has_bits_){from._impl_._has_bits_},
       /*decltype(_impl_._cached_size_)*/ {},
+      decltype(_impl_.move_stats_){from._impl_.move_stats_},
       decltype(_impl_.move_){nullptr},
   };
   _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
@@ -4948,6 +5230,7 @@ inline void SuggestMoveResponse::SharedCtor(::_pb::Arena* arena) {
   new (&_impl_) Impl_{
       decltype(_impl_._has_bits_){},
       /*decltype(_impl_._cached_size_)*/ {},
+      decltype(_impl_.move_stats_){arena},
       decltype(_impl_.move_){nullptr},
   };
 }
@@ -4958,6 +5241,7 @@ SuggestMoveResponse::~SuggestMoveResponse() {
 }
 inline void SuggestMoveResponse::SharedDtor() {
   ABSL_DCHECK(GetArenaForAllocation() == nullptr);
+  _impl_.move_stats_.~RepeatedPtrField();
   if (this != internal_default_instance()) delete _impl_.move_;
 }
 void SuggestMoveResponse::SetCachedSize(int size) const {
@@ -4970,6 +5254,7 @@ PROTOBUF_NOINLINE void SuggestMoveResponse::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  _internal_mutable_move_stats()->Clear();
   cached_has_bits = _impl_._has_bits_[0];
   if (cached_has_bits & 0x00000001u) {
     ABSL_DCHECK(_impl_.move_ != nullptr);
@@ -4987,20 +5272,23 @@ const char* SuggestMoveResponse::_InternalParse(
 
 
 PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
-const ::_pbi::TcParseTable<0, 1, 1, 0, 2> SuggestMoveResponse::_table_ = {
+const ::_pbi::TcParseTable<1, 2, 2, 0, 2> SuggestMoveResponse::_table_ = {
   {
     PROTOBUF_FIELD_OFFSET(SuggestMoveResponse, _impl_._has_bits_),
     0, // no _extensions_
-    1, 0,  // max_field_number, fast_idx_mask
+    2, 8,  // max_field_number, fast_idx_mask
     offsetof(decltype(_table_), field_lookup_table),
-    4294967294,  // skipmap
+    4294967292,  // skipmap
     offsetof(decltype(_table_), field_entries),
-    1,  // num_field_entries
-    1,  // num_aux_entries
+    2,  // num_field_entries
+    2,  // num_aux_entries
     offsetof(decltype(_table_), aux_entries),
     &_SuggestMoveResponse_default_instance_._instance,
     ::_pbi::TcParser::GenericFallback,  // fallback
   }, {{
+    // repeated .hexzpb.SuggestMoveStats move_stats = 2;
+    {::_pbi::TcParser::FastMtR1,
+     {18, 63, 1, PROTOBUF_FIELD_OFFSET(SuggestMoveResponse, _impl_.move_stats_)}},
     // .hexzpb.GameEngineMove move = 1;
     {::_pbi::TcParser::FastMtS1,
      {10, 0, 0, PROTOBUF_FIELD_OFFSET(SuggestMoveResponse, _impl_.move_)}},
@@ -5010,8 +5298,12 @@ const ::_pbi::TcParseTable<0, 1, 1, 0, 2> SuggestMoveResponse::_table_ = {
     // .hexzpb.GameEngineMove move = 1;
     {PROTOBUF_FIELD_OFFSET(SuggestMoveResponse, _impl_.move_), _Internal::kHasBitsOffset + 0, 0,
     (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
+    // repeated .hexzpb.SuggestMoveStats move_stats = 2;
+    {PROTOBUF_FIELD_OFFSET(SuggestMoveResponse, _impl_.move_stats_), -1, 1,
+    (0 | ::_fl::kFcRepeated | ::_fl::kMessage | ::_fl::kTvTable)},
   }}, {{
     {::_pbi::TcParser::GetTable<::hexzpb::GameEngineMove>()},
+    {::_pbi::TcParser::GetTable<::hexzpb::SuggestMoveStats>()},
   }}, {{
   }},
 };
@@ -5031,6 +5323,14 @@ const ::_pbi::TcParseTable<0, 1, 1, 0, 2> SuggestMoveResponse::_table_ = {
         _Internal::move(this).GetCachedSize(), target, stream);
   }
 
+  // repeated .hexzpb.SuggestMoveStats move_stats = 2;
+  for (unsigned i = 0,
+      n = static_cast<unsigned>(this->_internal_move_stats_size()); i < n; i++) {
+    const auto& repfield = this->_internal_move_stats().Get(i);
+    target = ::google::protobuf::internal::WireFormatLite::
+        InternalWriteMessage(2, repfield, repfield.GetCachedSize(), target, stream);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target =
         ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
@@ -5048,6 +5348,12 @@ const ::_pbi::TcParseTable<0, 1, 1, 0, 2> SuggestMoveResponse::_table_ = {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  // repeated .hexzpb.SuggestMoveStats move_stats = 2;
+  total_size += 1UL * this->_internal_move_stats_size();
+  for (const auto& msg : this->_internal_move_stats()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormatLite::MessageSize(msg);
+  }
   // .hexzpb.GameEngineMove move = 1;
   cached_has_bits = _impl_._has_bits_[0];
   if (cached_has_bits & 0x00000001u) {
@@ -5074,6 +5380,7 @@ void SuggestMoveResponse::MergeImpl(::google::protobuf::Message& to_msg, const :
   ::uint32_t cached_has_bits = 0;
   (void) cached_has_bits;
 
+  _this->_internal_mutable_move_stats()->MergeFrom(from._internal_move_stats());
   if ((from._impl_._has_bits_[0] & 0x00000001u) != 0) {
     _this->_internal_mutable_move()->::hexzpb::GameEngineMove::MergeFrom(
         from._internal_move());
@@ -5096,13 +5403,14 @@ void SuggestMoveResponse::InternalSwap(SuggestMoveResponse* other) {
   using std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  _impl_.move_stats_.InternalSwap(&other->_impl_.move_stats_);
   swap(_impl_.move_, other->_impl_.move_);
 }
 
 ::google::protobuf::Metadata SuggestMoveResponse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_hexz_2eproto_getter, &descriptor_table_hexz_2eproto_once,
-      file_level_metadata_hexz_2eproto[14]);
+      file_level_metadata_hexz_2eproto[15]);
 }
 // ===================================================================
 
@@ -5320,7 +5628,7 @@ void ModelKey::InternalSwap(ModelKey* other) {
 ::google::protobuf::Metadata ModelKey::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_hexz_2eproto_getter, &descriptor_table_hexz_2eproto_once,
-      file_level_metadata_hexz_2eproto[15]);
+      file_level_metadata_hexz_2eproto[16]);
 }
 // ===================================================================
 
@@ -5545,7 +5853,7 @@ void AddTrainingExamplesRequest::InternalSwap(AddTrainingExamplesRequest* other)
 ::google::protobuf::Metadata AddTrainingExamplesRequest::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_hexz_2eproto_getter, &descriptor_table_hexz_2eproto_once,
-      file_level_metadata_hexz_2eproto[16]);
+      file_level_metadata_hexz_2eproto[17]);
 }
 // ===================================================================
 
@@ -5820,7 +6128,7 @@ void AddTrainingExamplesResponse::InternalSwap(AddTrainingExamplesResponse* othe
 ::google::protobuf::Metadata AddTrainingExamplesResponse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_hexz_2eproto_getter, &descriptor_table_hexz_2eproto_once,
-      file_level_metadata_hexz_2eproto[17]);
+      file_level_metadata_hexz_2eproto[18]);
 }
 // ===================================================================
 
@@ -6066,7 +6374,7 @@ void TrainingExample_Stats::InternalSwap(TrainingExample_Stats* other) {
 ::google::protobuf::Metadata TrainingExample_Stats::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_hexz_2eproto_getter, &descriptor_table_hexz_2eproto_once,
-      file_level_metadata_hexz_2eproto[18]);
+      file_level_metadata_hexz_2eproto[19]);
 }
 // ===================================================================
 
@@ -6464,7 +6772,7 @@ void TrainingExample::InternalSwap(TrainingExample* other) {
 ::google::protobuf::Metadata TrainingExample::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_hexz_2eproto_getter, &descriptor_table_hexz_2eproto_once,
-      file_level_metadata_hexz_2eproto[19]);
+      file_level_metadata_hexz_2eproto[20]);
 }
 // @@protoc_insertion_point(namespace_scope)
 }  // namespace hexzpb
