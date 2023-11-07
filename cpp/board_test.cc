@@ -51,14 +51,55 @@ TEST(BoardTest, PlayFullGame) {
   EXPECT_LT(b.Flags(1), 3);
 }
 
-TEST(BoardTest, MakeMoveSetsNextValue) {
+TEST(BoardTest, MakeMoveFlag) {
+  // Making a move should update all channels appropriately.
   int player = 0;
   Board b;
   b.SetRemainingFlags(player, 1);
-  b.MakeMove(player, Move{0, 0, 0, 0});
-  for (const auto& n : NeighborsOf(Idx{0, 0})) {
+  int r = 4;
+  int c = 4;
+  b.MakeMove(player, Move{0, r, c, 1});
+  // Flag should be set.
+  EXPECT_EQ(b.CellValue(player, Board::kFlag, r, c), 1);
+  EXPECT_EQ(b.CellValue(1 - player, Board::kFlag, r, c), 0);
+  // Cell should not have a value, since it's a flag.
+  EXPECT_EQ(b.CellValue(player, Board::kValue, r, c), 0);
+  EXPECT_EQ(b.CellValue(1 - player, Board::kValue, r, c), 0);
+  // Cell should be blocked for both players.
+  EXPECT_EQ(b.CellValue(player, Board::kBlocked, r, c), 1);
+  EXPECT_EQ(b.CellValue(1 - player, Board::kBlocked, r, c), 1);
+  // All neighbors should have next value.
+  for (const auto& n : NeighborsOf(Idx{r, c})) {
     EXPECT_EQ(b.CellValue(player, Board::kNextValue, n.r, n.c), 1);
+    EXPECT_EQ(b.CellValue(1 - player, Board::kNextValue, n.r, n.c), 0);
   }
+}
+
+TEST(BoardTest, MakeMoveNormal) {
+  // Making a move should update all channels appropriately.
+  int player = 1;
+  Board b;
+  b.SetRemainingFlags(player, 1);
+  int r = 4;
+  int c = 4;
+  b.MakeMove(player, Move{0, r, c - 1, 1});
+  b.MakeMove(player, Move{1, r, c, 1});
+  // Cell should not have a value, since it's a flag.
+  EXPECT_EQ(b.CellValue(player, Board::kValue, r, c), 1);
+  EXPECT_EQ(b.CellValue(1 - player, Board::kValue, r, c), 0);
+  // Cell should be blocked for both players.
+  EXPECT_EQ(b.CellValue(player, Board::kBlocked, r, c), 1);
+  EXPECT_EQ(b.CellValue(1 - player, Board::kBlocked, r, c), 1);
+  // Flag
+  ASSERT_EQ(b.CellValue(player, Board::kFlag, r, c - 1), 1);
+  EXPECT_EQ(b.CellValue(player, Board::kNextValue, r, c - 1), 0);
+  EXPECT_EQ(b.CellValue(1 - player, Board::kNextValue, r, c - 1), 0);
+  // Neighbors that don't also touch the flag.
+  EXPECT_EQ(b.CellValue(player, Board::kNextValue, r, c + 1), 2);
+  EXPECT_EQ(b.CellValue(1 - player, Board::kNextValue, r, c + 1), 0);
+  // Neighbors touching the flag.
+  EXPECT_EQ(b.CellValue(player, Board::kNextValue, r - 1, c - 1), 1);
+  EXPECT_EQ(b.CellValue(1 - player, Board::kNextValue, r - 1, c - 1), 0);
 }
 
 TEST(BoardTest, NoValidNextMoves) {
@@ -74,6 +115,12 @@ TEST(BoardTest, NoValidNextMoves) {
 
   EXPECT_TRUE(b.NextMoves(player).empty());
   EXPECT_FALSE(b.NextMoves(1 - player).empty());
+}
+
+TEST(BoardTest, MakeMove) {
+  int player = 0;
+  Board b;
+  b.SetCellValue(player, Board::kGrass, 3, 3, 1);
 }
 
 TEST(BoardTest, GrassPropagation) {
@@ -157,7 +204,7 @@ TEST(BoardTest, FromProtoInvalid) {
   }
 }
 
-TEST(BoardTest, FromProtoValidFieldTypes) {
+TEST(BoardTest, FromProtoValid) {
   auto pb = EmptyProtoBoard(/*n_flags=*/1);
   auto& f0 = *pb.mutable_flat_fields(0);
   f0.set_owner(1);
@@ -177,7 +224,27 @@ TEST(BoardTest, FromProtoValidFieldTypes) {
   f5.set_type(hexzpb::Field::GRASS);
   f5.set_value(5);
   const auto b = Board::FromProto(pb);
-  EXPECT_TRUE(b.ok());
+  ASSERT_TRUE(b.ok());
+  // f0
+  EXPECT_EQ(b->CellValue(0, Board::kValue, 0, 0), 3.0);
+  EXPECT_EQ(b->CellValue(1, Board::kValue, 0, 0), 0.0);
+  EXPECT_EQ(b->CellValue(0, Board::kBlocked, 0, 0), 1.0);
+  EXPECT_EQ(b->CellValue(1, Board::kBlocked, 0, 0), 1.0);
+  // f1
+  EXPECT_EQ(b->CellValue(1, Board::kValue, 0, 1), 1.0);
+  // f2
+  EXPECT_EQ(b->CellValue(0, Board::kNextValue, 0, 2), 2.0);
+  EXPECT_EQ(b->CellValue(1, Board::kNextValue, 0, 2), 3.0);
+  // f3
+  EXPECT_EQ(b->CellValue(0, Board::kBlocked, 0, 3), 1.0);
+  EXPECT_EQ(b->CellValue(1, Board::kBlocked, 0, 3), 1.0);
+  // f4
+  EXPECT_EQ(b->CellValue(0, Board::kFlag, 0, 4), 0.0);
+  EXPECT_EQ(b->CellValue(1, Board::kFlag, 0, 4), 1.0);
+  // f5
+  EXPECT_EQ(b->CellValue(1, Board::kGrass, 0, 5), 5.0);
+  EXPECT_EQ(b->CellValue(0, Board::kBlocked, 0, 5), 1.0);
+  EXPECT_EQ(b->CellValue(1, Board::kBlocked, 0, 5), 1.0);
 }
 
 TEST(TorchTest, TensorIsRef) {

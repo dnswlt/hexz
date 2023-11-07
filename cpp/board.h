@@ -45,7 +45,7 @@ struct hash<hexz::internal::Idx> {
 namespace hexz {
 
 struct Move {
-  int typ;
+  int typ;  // 0 for FLAG, 1 for NORMAL
   int r;
   int c;
   float value;
@@ -105,7 +105,7 @@ class Board {
   // CellValue returns the board's value in cell (r, c) and channel ch.
   // This method can be used to access any cell in any channel of the board.
   // It is not optimized for performance. Get a PyTorch accessor in that case.
-  float CellValue(int player, Channel ch, int r, int c) {
+  float CellValue(int player, Channel ch, int r, int c) const {
     int ch_idx = static_cast<int>(ch == kGrass ? ch : ch + 4 * player);
     return b_.index({ch_idx, r, c}).item<float>();
   }

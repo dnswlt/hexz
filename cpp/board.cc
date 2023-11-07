@@ -14,6 +14,16 @@
 #include "base.h"
 #include "perfm.h"
 
+// Accessor macros for the different channels.
+#define I_FLAG(p) (0 + 4 * p)
+#define I_VALUE(p) (1 + 4 * p)
+#define I_BLOCKED(p) (2 + 4 * p)
+#define I_NEXTVAL(p) (3 + 4 * p)
+#define I_GRASS 8
+
+#define MOVE_TYPE_FLAG 0
+#define MOVE_TYPE_NORMAL 1
+
 namespace hexz {
 
 using internal::Idx;
@@ -87,8 +97,8 @@ Board Board::RandomBoard() {
   // Even rows have 10 cells, odd rows only 9, so mark the last cell in odd
   // rows as blocked for P1+P2.
   for (int i = 1; i <= 9; i += 2) {
-    b.b_.index_put_({2, i, 9}, 1);
-    b.b_.index_put_({6, i, 9}, 1);
+    b.b_.index_put_({I_BLOCKED(0), i, 9}, 1);
+    b.b_.index_put_({I_BLOCKED(1), i, 9}, 1);
   }
   // 15 randomly placed stones.
   std::uniform_int_distribution<> rnd_row(0, 10);
@@ -96,23 +106,23 @@ Board Board::RandomBoard() {
   for (int n_stones = 0; n_stones < 15;) {
     int r = rnd_row(internal::rng);
     int c = rnd_col(internal::rng);
-    if (b.b_.index({2, r, c}).item<float>() != 0) {
+    if (b.b_.index({I_BLOCKED(0), r, c}).item<float>() != 0) {
       continue;  // Already occupied.
     }
-    b.b_.index_put_({2, r, c}, 1);
-    b.b_.index_put_({6, r, c}, 1);
+    b.b_.index_put_({I_BLOCKED(0), r, c}, 1);
+    b.b_.index_put_({I_BLOCKED(1), r, c}, 1);
     n_stones++;
   }
   // 5 randomly placed grass cells.
   for (int n_grass = 0; n_grass < 5;) {
     int r = rnd_row(internal::rng);
     int c = rnd_col(internal::rng);
-    if (b.b_.index({2, r, c}).item<float>() != 0) {
+    if (b.b_.index({I_BLOCKED(0), r, c}).item<float>() != 0) {
       continue;  // Already occupied.
     }
-    b.b_.index_put_({8, r, c}, n_grass + 1);
-    b.b_.index_put_({2, r, c}, 1);
-    b.b_.index_put_({6, r, c}, 1);
+    b.b_.index_put_({I_GRASS, r, c}, n_grass + 1);
+    b.b_.index_put_({I_BLOCKED(0), r, c}, 1);
+    b.b_.index_put_({I_BLOCKED(1), r, c}, 1);
     n_grass++;
   }
 
@@ -147,37 +157,37 @@ absl::StatusOr<Board> Board::FromProto(const hexzpb::Board& board) {
     switch (f.type()) {
       case hexzpb::Field::NORMAL:
         if (f.value() > 0) {
-          a[1 + 4 * p][r][c] = f.value();
-          a[2][r][c] = 1;
-          a[6][r][c] = 1;
+          a[I_VALUE(p)][r][c] = f.value();
+          a[I_BLOCKED(0)][r][c] = 1;
+          a[I_BLOCKED(1)][r][c] = 1;
           break;
         }
         if (f.next_val_size() > 0 && f.next_val(0) > 0) {
-          a[3][r][c] = f.next_val(0);
+          a[I_NEXTVAL(0)][r][c] = f.next_val(0);
         }
         if (f.next_val_size() > 1 && f.next_val(1) > 0) {
-          a[7][r][c] = f.next_val(1);
+          a[I_NEXTVAL(1)][r][c] = f.next_val(1);
         }
         if ((f.blocked() & 1) > 0) {
-          a[2][r][c] = 1;
+          a[I_BLOCKED(0)][r][c] = 1;
         }
         if ((f.blocked() & 2) > 0) {
-          a[6][r][c] = 1;
+          a[I_BLOCKED(1)][r][c] = 1;
         }
         break;
       case hexzpb::Field::FLAG:
-        a[4 * p][r][c] = 1;
-        a[2][r][c] = 1;
-        a[6][r][c] = 1;
+        a[I_FLAG(p)][r][c] = 1;
+        a[I_BLOCKED(0)][r][c] = 1;
+        a[I_BLOCKED(1)][r][c] = 1;
         break;
       case hexzpb::Field::GRASS:
-        a[8][r][c] = f.value();
-        a[2][r][c] = 1;
-        a[6][r][c] = 1;
+        a[I_GRASS][r][c] = f.value();
+        a[I_BLOCKED(0)][r][c] = 1;
+        a[I_BLOCKED(1)][r][c] = 1;
         break;
       case hexzpb::Field::ROCK:
-        a[2][r][c] = 1;
-        a[6][r][c] = 1;
+        a[I_BLOCKED(0)][r][c] = 1;
+        a[I_BLOCKED(1)][r][c] = 1;
         break;
       default:
         return absl::InvalidArgumentError(
@@ -202,7 +212,8 @@ torch::Tensor Board::Tensor(int player) const {
 }
 
 std::pair<float, float> Board::Score() const {
-  return {b_.index({1}).sum().item<float>(), b_.index({5}).sum().item<float>()};
+  return {b_.index({I_VALUE(0)}).sum().item<float>(),
+          b_.index({I_VALUE(1)}).sum().item<float>()};
 }
 
 float Board::Result() const {
@@ -221,21 +232,26 @@ int Board::Flags(int player) const { return nflags_[player]; }
 void Board::MakeMove(int player, const Move& move) {
   Perfm::Scope ps(Perfm::MakeMove);
   auto b_acc = b_.accessor<float, 3>();
-  ABSL_DCHECK_EQ(b_acc[2 + player * 4][move.r][move.c], 0)
+  ABSL_DCHECK_EQ(b_acc[I_BLOCKED(player)][move.r][move.c], 0)
       << "MakeMove on blocked field";
-  ABSL_DCHECK(move.typ == 0 ||
-              move.typ == 1 &&
-                  b_acc[3 + player * 4][move.r][move.c] == move.value)
+  ABSL_DCHECK(move.typ == MOVE_TYPE_FLAG ||
+              move.typ == MOVE_TYPE_NORMAL &&
+                  b_acc[I_NEXTVAL(player)][move.r][move.c] == move.value)
       << "MakeMove: wrong value: move: " << move.DebugString()
       << "board: " << DebugString();
-  b_acc[move.typ + player * 4][move.r][move.c] = move.value;
-  bool played_flag = move.typ == 0;
+  if (move.typ == MOVE_TYPE_FLAG) {
+    b_acc[I_FLAG(player)][move.r][move.c] = move.value;
+  } else {
+    // NORMAL move.
+    b_acc[I_VALUE(player)][move.r][move.c] = move.value;
+  }
+  bool played_flag = move.typ == MOVE_TYPE_FLAG;
   // Occupy cell for both players
-  b_acc[2][move.r][move.c] = 1;
-  b_acc[6][move.r][move.c] = 1;
+  b_acc[I_BLOCKED(0)][move.r][move.c] = 1;
+  b_acc[I_BLOCKED(1)][move.r][move.c] = 1;
   // Zero next value.
-  b_acc[3][move.r][move.c] = 0;
-  b_acc[7][move.r][move.c] = 0;
+  b_acc[I_NEXTVAL(0)][move.r][move.c] = 0;
+  b_acc[I_NEXTVAL(1)][move.r][move.c] = 0;
   float next_val = 1;
   if (played_flag) {
     ABSL_DCHECK(nflags_[player] > 0)
@@ -245,33 +261,35 @@ void Board::MakeMove(int player, const Move& move) {
   } else {
     next_val = move.value + 1;
   }
+  // Update neighboring cells.
   for (const auto& nb : NeighborsOf(Idx{move.r, move.c})) {
     if (next_val <= 5) {
-      if (b_acc[2 + player * 4][nb.r][nb.c] == 0) {
+      if (b_acc[I_BLOCKED(player)][nb.r][nb.c] == 0) {
         // Neighbor cell is not blocked.
-        if (b_acc[3 + player * 4][nb.r][nb.c] == 0) {
+        if (b_acc[I_NEXTVAL(player)][nb.r][nb.c] == 0) {
           // Neighbor cell did not have a next value yet.
-          b_acc[3 + player * 4][nb.r][nb.c] = next_val;
-        } else if (b_acc[3 + player * 4][nb.r][nb.c] > next_val) {
+          b_acc[I_NEXTVAL(player)][nb.r][nb.c] = next_val;
+        } else if (b_acc[I_NEXTVAL(player)][nb.r][nb.c] > next_val) {
           // Neighbor cell's value was larger: decrease.
-          b_acc[3 + player * 4][nb.r][nb.c] = next_val;
+          b_acc[I_NEXTVAL(player)][nb.r][nb.c] = next_val;
         }
       }
     } else {
       // Played a 5: block neighboring cells and clear next value.
-      b_acc[2 + player * 4][nb.r][nb.c] = 1;
-      b_acc[3 + player * 4][nb.r][nb.c] = 0;
+      b_acc[I_BLOCKED(player)][nb.r][nb.c] = 1;
+      b_acc[I_NEXTVAL(player)][nb.r][nb.c] = 0;
     }
   }
   if (!played_flag) {
-    // Occupy grass fields
+    // Occupy neighboring grass fields.
     for (const auto& nb : NeighborsOf(Idx{move.r, move.c})) {
-      float grass_val = b_acc[8][nb.r][nb.c];
-      if (grass_val > 0 && grass_val <= b_acc[1 + player * 4][move.r][move.c]) {
+      float grass_val = b_acc[I_GRASS][nb.r][nb.c];
+      if (grass_val > 0 &&
+          grass_val <= b_acc[I_VALUE(player)][move.r][move.c]) {
         // Occupy grass cell: remove grass value and add it as player's value.
-        b_acc[8][nb.r][nb.c] = 0;
-        b_acc[2 + player * 4][nb.r][nb.c] = 0;
-        b_acc[3 + player * 4][nb.r][nb.c] = grass_val;
+        b_acc[I_GRASS][nb.r][nb.c] = 0;
+        b_acc[I_BLOCKED(player)][nb.r][nb.c] = 0;
+        b_acc[I_NEXTVAL(player)][nb.r][nb.c] = grass_val;
         MakeMove(player, Move{1, nb.r, nb.c, grass_val});
       }
     }
@@ -287,12 +305,12 @@ std::vector<Move> Board::NextMoves(int player) const {
   for (int r = 0; r < 11; r++) {
     int cols = 10 - r % 2;
     for (int c = 0; c < cols; c++) {
-      if (flag && b_acc[2 + player * 4][r][c] == 0) {
-        moves.push_back(Move{0, r, c, 0.0});
+      if (flag && b_acc[I_BLOCKED(player)][r][c] == 0) {
+        moves.push_back(Move{MOVE_TYPE_FLAG, r, c, 1.0});
       }
-      float next_val = b_acc[3 + player * 4][r][c];
+      float next_val = b_acc[I_NEXTVAL(player)][r][c];
       if (next_val > 0) {
-        moves.push_back(Move{1, r, c, next_val});
+        moves.push_back(Move{MOVE_TYPE_NORMAL, r, c, next_val});
       }
     }
   }
