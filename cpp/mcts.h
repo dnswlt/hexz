@@ -135,15 +135,31 @@ class TorchModel : public Model {
 
 class NeuralMCTS {
  public:
+  // C'tor parameters to construct a NeuralMCTS.
+  struct Params {
+    int runs_per_move = 800;
+    double runs_per_move_gradient = 0.0;
+    int max_moves_per_game = 200;
+  };
+
   // The model is not owned. Owners of the NeuralMCTS instance must ensure it
   // outlives this instance.
-  NeuralMCTS(Model& model, const Config& config);
+  NeuralMCTS(Model& model, const Params& params);
 
   absl::StatusOr<std::vector<hexzpb::TrainingExample>> PlayGame(
       Board& board, int max_runtime_seconds);
 
+  // Returns the number of times Run should be called for the given move number.
+  // This is only relevant for the "decay" of Run calls in a full PlayGame
+  // cycle.
   int NumRuns(int move) const noexcept;
-  bool Run(Node& root, Board& board);
+
+  // Executes a single run of the MCTS algorithm, starting at root.
+  bool Run(Node& root, const Board& board);
+
+  // SuggestMove returns the best move suggestion that the NeuralMCTS algorithm
+  // comes up with in think_time_millis milliseconds.
+  absl::StatusOr<Move> SuggestMove(int player, const Board& board, int think_time_millis);
 
  private:
   int runs_per_move_;

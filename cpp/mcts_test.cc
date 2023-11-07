@@ -145,28 +145,28 @@ TEST(MCTSTest, TorchPickleSave) {
 }
 
 TEST(MCTSTest, NumRuns) {
-  Config config{
+  NeuralMCTS::Params params{
       .runs_per_move = 100,
       .runs_per_move_gradient = -0.01,
   };
   FakeModel fake_model;
-  NeuralMCTS mcts(fake_model, config);
+  NeuralMCTS mcts(fake_model, params);
   EXPECT_EQ(mcts.NumRuns(0), 100);
   EXPECT_EQ(mcts.NumRuns(25), 75);
   EXPECT_EQ(mcts.NumRuns(50), 50);
 }
 
-TEST(MCTSTest, FlagsAreNotNegative) {
+TEST(MCTSTest, RemainingFlagsAreNotNegative) {
   // At some point the player for which moves were computed
   // and the player for which a move was made were mixed up.
   // This led to negative flag values. This test tries to capture
   // that the problem does not reoccur.
-  Config config{
+  NeuralMCTS::Params params{
       .runs_per_move = 10,
       .runs_per_move_gradient = 0.0,
   };
   FakeModel fake_model;
-  NeuralMCTS mcts(fake_model, config);
+  NeuralMCTS mcts(fake_model, params);
   Board b = Board::RandomBoard();
   auto root = std::make_unique<Node>(nullptr, 0, Move{-1, -1, -1, -1});
   for (int i = 0; i < 50; i++) {
@@ -189,11 +189,11 @@ TEST(MCTSTest, PlayGame) {
   auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
   scriptmodule.to(torch::kCPU);
   scriptmodule.eval();
-  Config config{
+  NeuralMCTS::Params params{
       .runs_per_move = 10,
   };
   TorchModel model(scriptmodule);
-  NeuralMCTS mcts(model, config);
+  NeuralMCTS mcts(model, params);
   auto b = Board::RandomBoard();
 
   auto examples = mcts.PlayGame(b, /*max_runtime_seconds=*/0);

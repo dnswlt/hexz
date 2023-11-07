@@ -27,7 +27,7 @@ python3 setup.py build_ext --build-lib=src
 
 Test the C++ bindings for the MoveSuggester by running:
 
-```bash
+```bashrem
 cd src
 # macos version. For Linux, use LD_LIBRARY_PATH
 DYLD_LIBRARY_PATH=$HOME/git/github.com/dnswlt/hexz/cpp/build python3 -c '
@@ -55,7 +55,7 @@ To only run the CPU player engine:
 
 ```bash
 DYLD_LIBRARY_PATH=$HOME/git/github.com/dnswlt/hexz/cpp/build \
-  HEXZ_LOCAL_LIBRARY_PATH=$HOME/git/github.com/dnswlt/hexz-models/models/flagz/seth/checkpoints/60/scriptmodule.pt \
+  HEXZ_LOCAL_MODEL_PATH=$HOME/git/github.com/dnswlt/hexz-models/models/flagz/seth/checkpoints/60/scriptmodule.pt \
   gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.cpuserver:create_app()'
 ```
 

@@ -2,10 +2,13 @@
 #define __HEXZ_BOARD_H__
 
 #include <absl/strings/str_cat.h>
+#include <absl/status/statusor.h>
 #include <torch/torch.h>
 
 #include <utility>
 #include <vector>
+
+#include "hexz.pb.h"
 
 namespace hexz {
 
@@ -82,6 +85,7 @@ class Board {
 
   Board();
   static Board RandomBoard();
+  static absl::StatusOr<Board> FromProto(const hexzpb::Board& board);
 
   // Copy c'tor.
   Board(const Board& other);

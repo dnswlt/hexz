@@ -1,6 +1,7 @@
 #include "board.h"
 
 #include <absl/log/absl_check.h>
+#include <absl/status/statusor.h>
 #include <torch/torch.h>
 
 #include <cstdlib>
@@ -118,6 +119,79 @@ Board Board::RandomBoard() {
   return b;
 }
 
+absl::StatusOr<Board> Board::FromProto(const hexzpb::Board& board) {
+  const int iFlag = static_cast<int>(hexzpb::Field::FLAG);
+  if (board.resources_size() != 2 ||
+      board.resources(0).num_pieces_size() <= iFlag ||
+      board.resources(1).num_pieces_size() <= iFlag) {
+    return absl::InvalidArgumentError("Invalid resources.num_pieces shape");
+  }
+  Board b;
+  b.nflags_[0] = board.resources(0).num_pieces(iFlag);
+  b.nflags_[1] = board.resources(1).num_pieces(iFlag);
+  auto a = b.b_.accessor<float, 3>();
+  int r = 0;
+  int c = 0;
+  if (board.flat_fields_size() != 105) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("Expecintg board with exactly 105 fields, got: ",
+                     board.flat_fields_size()));
+  }
+  for (const auto& f : board.flat_fields()) {
+    if (f.owner() < 0 || f.owner() > 2) {
+      // Owner is 1-based.
+      return absl::InvalidArgumentError(
+          absl::StrCat("Invalid owner: ", f.owner()));
+    }
+    int p = f.owner() - 1;
+    switch (f.type()) {
+      case hexzpb::Field::NORMAL:
+        if (f.value() > 0) {
+          a[1 + 4 * p][r][c] = f.value();
+          a[2][r][c] = 1;
+          a[6][r][c] = 1;
+          break;
+        }
+        if (f.next_val_size() > 0 && f.next_val(0) > 0) {
+          a[3][r][c] = f.next_val(0);
+        }
+        if (f.next_val_size() > 1 && f.next_val(1) > 0) {
+          a[7][r][c] = f.next_val(1);
+        }
+        if ((f.blocked() & 1) > 0) {
+          a[2][r][c] = 1;
+        }
+        if ((f.blocked() & 2) > 0) {
+          a[6][r][c] = 1;
+        }
+        break;
+      case hexzpb::Field::FLAG:
+        a[4 * p][r][c] = 1;
+        a[2][r][c] = 1;
+        a[6][r][c] = 1;
+        break;
+      case hexzpb::Field::GRASS:
+        a[8][r][c] = f.value();
+        a[2][r][c] = 1;
+        a[6][r][c] = 1;
+        break;
+      case hexzpb::Field::ROCK:
+        a[2][r][c] = 1;
+        a[6][r][c] = 1;
+        break;
+      default:
+        return absl::InvalidArgumentError(
+            absl::StrCat("Board has invalid field of type ", f.type()));
+    }
+    c++;
+    if (c == 10 - r % 2) {
+      c = 0;
+      r += 1;
+    }
+  }
+  return b;
+}
+
 torch::Tensor Board::Tensor(int player) const {
   if (player == 0) {
     return b_;
@@ -147,6 +221,13 @@ int Board::Flags(int player) const { return nflags_[player]; }
 void Board::MakeMove(int player, const Move& move) {
   Perfm::Scope ps(Perfm::MakeMove);
   auto b_acc = b_.accessor<float, 3>();
+  ABSL_DCHECK_EQ(b_acc[2 + player * 4][move.r][move.c], 0)
+      << "MakeMove on blocked field";
+  ABSL_DCHECK(move.typ == 0 ||
+              move.typ == 1 &&
+                  b_acc[3 + player * 4][move.r][move.c] == move.value)
+      << "MakeMove: wrong value: move: " << move.DebugString()
+      << "board: " << DebugString();
   b_acc[move.typ + player * 4][move.r][move.c] = move.value;
   bool played_flag = move.typ == 0;
   // Occupy cell for both players
@@ -187,8 +268,10 @@ void Board::MakeMove(int player, const Move& move) {
     for (const auto& nb : NeighborsOf(Idx{move.r, move.c})) {
       float grass_val = b_acc[8][nb.r][nb.c];
       if (grass_val > 0 && grass_val <= b_acc[1 + player * 4][move.r][move.c]) {
-        // Occupy grass cell: remove grass value and add it to player's value.
+        // Occupy grass cell: remove grass value and add it as player's value.
         b_acc[8][nb.r][nb.c] = 0;
+        b_acc[2 + player * 4][nb.r][nb.c] = 0;
+        b_acc[3 + player * 4][nb.r][nb.c] = grass_val;
         MakeMove(player, Move{1, nb.r, nb.c, grass_val});
       }
     }
@@ -202,8 +285,8 @@ std::vector<Move> Board::NextMoves(int player) const {
   bool flag = nflags_[player] > 0;
   // Flag in any unoccupied cell.
   for (int r = 0; r < 11; r++) {
-    int s = r % 2;
-    for (int c = 0; c < 10 - s; c++) {
+    int cols = 10 - r % 2;
+    for (int c = 0; c < cols; c++) {
       if (flag && b_acc[2 + player * 4][r][c] == 0) {
         moves.push_back(Move{0, r, c, 0.0});
       }
@@ -218,10 +301,44 @@ std::vector<Move> Board::NextMoves(int player) const {
 
 std::string Board::DebugString() const {
   std::ostringstream os;
-  os << "Board(" <<                                            //
-      "flags:(" << nflags_[0] << ", " << nflags_[1] << ")" <<  //
-      " score:" << Score() <<                                  //
-      ")";
+  os << "Board(\n";
+  os << "  flags:(" << nflags_[0] << ", " << nflags_[1] << ")\n";
+  os << "  score:" << Score() << "\n";
+  os << "  fields: [\n";
+  auto b_acc = b_.accessor<float, 3>();
+  for (int r = 0; r < 11; r++) {
+    int cols = 10 - r % 2;
+    for (int c = 0; c < cols; c++) {
+      // Output row/col indices and values of all 9 channels
+      // Example row: (0, 1): 0 0 1 0 0 1 1 1 0
+      os << "    (" << r << ", " << c << "): ";
+      for (int i = 0; i < 9; i++) {
+        int iv = static_cast<int>(b_acc[i][r][c]);
+        if (i > 0) {
+          os << "|";
+        }
+        os << iv;
+      }
+      if (b_acc[2][r][c] > 0 || b_acc[6][r][c] > 0) {
+        os << "|b";
+      }
+      if (b_acc[0][r][c] > 0 || b_acc[4][r][c] > 0) {
+        os << "|f";
+      }
+      if (b_acc[1][r][c] > 0 || b_acc[5][r][c] > 0) {
+        os << "|v";
+      }
+      if (b_acc[3][r][c] > 0 || b_acc[7][r][c] > 0) {
+        os << "|n";
+      }
+      if (b_acc[8][r][c] > 0) {
+        os << "|g";
+      }
+      os << "\n";
+    }
+  }
+  os << "  ]\n";
+  os << ")";
   return os.str();
 }
 

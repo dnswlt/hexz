@@ -153,13 +153,14 @@ TorchModel::Prediction TorchModel::Predict(int player, const Board& board) {
   };
 }
 
-NeuralMCTS::NeuralMCTS(Model& model, const Config& config)
+NeuralMCTS::NeuralMCTS(Model& model, const Params& params)
     : model_{model},
-      runs_per_move_{config.runs_per_move},
-      max_moves_per_game_{config.max_moves_per_game},
-      runs_per_move_gradient_{config.runs_per_move_gradient} {}
+      runs_per_move_{params.runs_per_move},
+      max_moves_per_game_{params.max_moves_per_game},
+      runs_per_move_gradient_{params.runs_per_move_gradient} {}
 
-bool NeuralMCTS::Run(Node& root, Board& board) {
+bool NeuralMCTS::Run(Node& root, const Board& b) {
+  Board board(b);
   Perfm::Scope ps(Perfm::NeuralMCTS_Run);
   Node* n = &root;
   // Move to leaf node.
@@ -231,8 +232,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     // those.
     const int runs = NumRuns(n);
     for (int i = 0; i < runs && progress; i++) {
-      Board b(board);
-      progress = Run(*root, b);
+      progress = Run(*root, board);
     }
     if (root->IsLeaf()) {
       result = board.Result();
@@ -285,6 +285,30 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     }
   }
   return examples;
+}
+
+absl::StatusOr<Move> NeuralMCTS::SuggestMove(int player, const Board& board,
+                                             int think_time_millis) {
+  int64_t started_micros = UnixMicros();
+  auto root =
+      std::make_unique<Node>(nullptr, /*turn=*/player, Move{-1, -1, -1, -1.0});
+  const int64_t max_micros =
+      started_micros + static_cast<int64_t>(think_time_millis) * 1000;
+  for (int n = 0; n < runs_per_move_; n++) {
+    if (UnixMicros() > max_micros) {
+      break;
+    }
+    if (!Run(*root, board)) {
+      break;
+    }
+  }
+  if (root->IsLeaf() || root->turn() != player) {
+    // Run may flip the turn of the root node if it finds that only
+    // the opponent can make a valid move.
+    return absl::InvalidArgumentError("Player has no valid moves left.");
+  }
+  std::unique_ptr<Node> best_child = root->MostVisitedChildAsRoot();
+  return best_child->move();
 }
 
 }  // namespace hexz

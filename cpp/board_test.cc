@@ -14,10 +14,10 @@ using internal::Idx;
 using internal::NeighborsOf;
 
 Board EmptyBoard(int n_flags) {
-    Board b;
-    b.SetRemainingFlags(0, n_flags);
-    b.SetRemainingFlags(1, n_flags);
-    return b;
+  Board b;
+  b.SetRemainingFlags(0, n_flags);
+  b.SetRemainingFlags(1, n_flags);
+  return b;
 }
 
 TEST(BoardTest, PlayFullGame) {
@@ -38,6 +38,7 @@ TEST(BoardTest, PlayFullGame) {
     }
     std::shuffle(moves.begin(), moves.end(), internal::rng);
     b.MakeMove(player, moves[0]);
+    player = 1 - player;
     n_moves++;
   }
   EXPECT_GT(n_moves, 0);
@@ -82,6 +83,8 @@ TEST(BoardTest, GrassPropagation) {
   Board b;
   b.SetCellValue(player, Board::kGrass, 3, 3, 1);
   b.SetCellValue(player, Board::kGrass, 3, 4, 2);
+  // Ensure it's OK to make a move on (3, 5) by setting next value:
+  b.SetCellValue(player, Board::kNextValue, 3, 5, 2);
   b.MakeMove(player, Move{1, 3, 5, 2});
 
   EXPECT_EQ(b.CellValue(player, Board::kNextValue, 3, 2), 2);
@@ -104,6 +107,77 @@ TEST(BoardTest, Score) {
   b.MakeMove(p1, Move{0, 7, 4, 0});
   b.MakeMove(p0, Move{1, 3, 5, 2});
   EXPECT_EQ(b.Score(), std::make_pair(3.0f, 0.0f));
+}
+
+hexzpb::Board EmptyProtoBoard(int n_flags) {
+  hexzpb::Board pb;
+  // Add resources
+  const int iFlag = static_cast<int>(hexzpb::Field::FLAG);
+  auto* r1 = pb.add_resources();
+  auto* r2 = pb.add_resources();
+  for (int i = 0; i <= iFlag; i++) {
+    r1->add_num_pieces(i == iFlag ? n_flags : 0);
+    r2->add_num_pieces(i == iFlag ? n_flags : 0);
+  }
+  // Add empty fields
+  for (int i = 0; i < 105; i++) {
+    auto& f = *pb.add_flat_fields();
+    f.set_type(hexzpb::Field::NORMAL);
+  }
+  return pb;
+}
+
+TEST(BoardTest, FromProtoValidEmpty) {
+  auto pb = EmptyProtoBoard(/*n_flags=*/0);
+  const auto b = Board::FromProto(pb);
+  EXPECT_TRUE(b.ok()) << b.status();
+}
+
+TEST(BoardTest, FromProtoInvalid) {
+  {
+    // Missing resources.
+    hexzpb::Board pb = EmptyProtoBoard(0);
+    pb.clear_resources();
+    const auto b = Board::FromProto(pb);
+    ASSERT_FALSE(b.ok());
+  }
+  {
+    // Wrong number of fields.
+    hexzpb::Board pb = EmptyProtoBoard(0);
+    pb.add_flat_fields();
+    const auto b = Board::FromProto(pb);
+    ASSERT_FALSE(b.ok());
+  }
+  {
+    // Invalid owner.
+    hexzpb::Board pb = EmptyProtoBoard(0);
+    pb.mutable_flat_fields(0)->set_owner(3);
+    const auto b = Board::FromProto(pb);
+    ASSERT_FALSE(b.ok());
+  }
+}
+
+TEST(BoardTest, FromProtoValidFieldTypes) {
+  auto pb = EmptyProtoBoard(/*n_flags=*/1);
+  auto& f0 = *pb.mutable_flat_fields(0);
+  f0.set_owner(1);
+  f0.set_value(3);
+  auto& f1 = *pb.mutable_flat_fields(1);
+  f1.set_owner(2);
+  f1.set_value(1);
+  auto& f2 = *pb.mutable_flat_fields(2);
+  f2.add_next_val(2);
+  f2.add_next_val(3);
+  auto& f3 = *pb.mutable_flat_fields(3);
+  f3.set_type(hexzpb::Field::ROCK);
+  auto& f4 = *pb.mutable_flat_fields(4);
+  f4.set_type(hexzpb::Field::FLAG);
+  f4.set_owner(2);
+  auto& f5 = *pb.mutable_flat_fields(5);
+  f5.set_type(hexzpb::Field::GRASS);
+  f5.set_value(5);
+  const auto b = Board::FromProto(pb);
+  EXPECT_TRUE(b.ok());
 }
 
 TEST(TorchTest, TensorIsRef) {

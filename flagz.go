@@ -157,33 +157,32 @@ func (g *GameEngineFlagz) updateNeighborCells(r, c int) {
 	}
 }
 
-func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
+func (g *GameEngineFlagz) MakeMoveError(m GameEngineMove) error {
 	b := g.B
 	turn := b.Turn
 	pIdx := turn - 1
 	if b.State != Running {
-		return false
+		return fmt.Errorf("board is not in state Running: %s", b.State)
 	}
 	if m.PlayerNum != turn || m.Move != b.Move {
 		// Only allow moves by players whose turn it is.
-		return false
+		return fmt.Errorf("invalid (player number, move): want (%d, %d), got (%d, %d)", turn, b.Move, m.PlayerNum, m.Move)
 	}
 	if !b.valid(idx{m.Row, m.Col}) {
 		// Invalid move request.
-		return false
+		return fmt.Errorf("invalid (row, col): (%d, %d)", m.Row, m.Col)
 	}
 	f := &b.Fields[m.Row][m.Col]
 	if f.occupied() {
-		return false
+		return fmt.Errorf("field (%d, %d) is already occupied", m.Row, m.Col)
 	}
 	if b.Resources[pIdx].NumPieces[m.CellType] == 0 {
-		// No pieces left of requested type
-		return false
+		return fmt.Errorf("no pieces left of requested type %v", m.CellType)
 	}
 	if m.CellType == cellNormal {
 		val := f.NextVal[pIdx]
 		if val <= 0 {
-			return false
+			return fmt.Errorf("next value of field (%d, %d) is less than or equal to zero", m.Row, m.Col)
 		}
 		f.Owner = turn
 		f.Type = cellNormal
@@ -216,13 +215,18 @@ func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
 		g.updateNeighborCells(m.Row, m.Col)
 	} else {
 		// Invalid piece. Should be caught by resource check already, so never reached.
-		return false
+		return fmt.Errorf("invalid piece: %v", m.CellType)
 	}
 	b.Turn = 3 - b.Turn // Usually it's the other player's turn. If not, recomputeState will fix that.
 	b.Move++
 	g.recomputeState()
 	// g.Moves = append(g.Moves, m)
-	return true
+	return nil
+}
+
+func (g *GameEngineFlagz) MakeMove(m GameEngineMove) bool {
+	err := g.MakeMoveError(m)
+	return err == nil
 }
 
 func (g *GameEngineFlagz) Board() *Board { return g.B }
