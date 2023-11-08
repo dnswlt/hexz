@@ -19,7 +19,7 @@ func TestExportSVG(t *testing.T) {
 			t.Fatal("Cannot make move")
 		}
 	}
-	if err := ExportSVG(path.Join(dir, "test_svg.html"), []*Board{flagz.B}, nil, []string{"Test SVG"}); err != nil {
+	if err := ExportSVG(path.Join(dir, "test_svg.html"), []*Board{flagz.B}, []string{"Test SVG"}); err != nil {
 		t.Fatal(err)
 	}
 }

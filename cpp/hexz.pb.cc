@@ -312,24 +312,41 @@ struct SuggestMoveRequestDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 SuggestMoveRequestDefaultTypeInternal _SuggestMoveRequest_default_instance_;
         template <typename>
-PROTOBUF_CONSTEXPR SuggestMoveStats_MoveEval::SuggestMoveStats_MoveEval(::_pbi::ConstantInitialized)
+PROTOBUF_CONSTEXPR SuggestMoveStats_Score::SuggestMoveStats_Score(::_pbi::ConstantInitialized)
     : _impl_{
-      /*decltype(_impl_.row_)*/ 0,
-      /*decltype(_impl_.col_)*/ 0,
-      /*decltype(_impl_.type_)*/ 0,
-      /*decltype(_impl_.evaluation_)*/ 0,
+      /*decltype(_impl_.kind_)*/ 0,
+      /*decltype(_impl_.score_)*/ 0,
       /*decltype(_impl_._cached_size_)*/ {},
     } {}
-struct SuggestMoveStats_MoveEvalDefaultTypeInternal {
-  PROTOBUF_CONSTEXPR SuggestMoveStats_MoveEvalDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
-  ~SuggestMoveStats_MoveEvalDefaultTypeInternal() {}
+struct SuggestMoveStats_ScoreDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR SuggestMoveStats_ScoreDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~SuggestMoveStats_ScoreDefaultTypeInternal() {}
   union {
-    SuggestMoveStats_MoveEval _instance;
+    SuggestMoveStats_Score _instance;
   };
 };
 
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
-    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 SuggestMoveStats_MoveEvalDefaultTypeInternal _SuggestMoveStats_MoveEval_default_instance_;
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 SuggestMoveStats_ScoreDefaultTypeInternal _SuggestMoveStats_Score_default_instance_;
+        template <typename>
+PROTOBUF_CONSTEXPR SuggestMoveStats_ScoredMove::SuggestMoveStats_ScoredMove(::_pbi::ConstantInitialized)
+    : _impl_{
+      /*decltype(_impl_.scores_)*/ {},
+      /*decltype(_impl_.row_)*/ 0,
+      /*decltype(_impl_.col_)*/ 0,
+      /*decltype(_impl_.type_)*/ 0,
+      /*decltype(_impl_._cached_size_)*/ {},
+    } {}
+struct SuggestMoveStats_ScoredMoveDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR SuggestMoveStats_ScoredMoveDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~SuggestMoveStats_ScoredMoveDefaultTypeInternal() {}
+  union {
+    SuggestMoveStats_ScoredMove _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 SuggestMoveStats_ScoredMoveDefaultTypeInternal _SuggestMoveStats_ScoredMove_default_instance_;
         template <typename>
 PROTOBUF_CONSTEXPR SuggestMoveStats::SuggestMoveStats(::_pbi::ConstantInitialized)
     : _impl_{
@@ -473,8 +490,8 @@ struct TrainingExampleDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 TrainingExampleDefaultTypeInternal _TrainingExample_default_instance_;
 }  // namespace hexzpb
-static ::_pb::Metadata file_level_metadata_hexz_2eproto[22];
-static const ::_pb::EnumDescriptor* file_level_enum_descriptors_hexz_2eproto[4];
+static ::_pb::Metadata file_level_metadata_hexz_2eproto[23];
+static const ::_pb::EnumDescriptor* file_level_enum_descriptors_hexz_2eproto[5];
 static constexpr const ::_pb::ServiceDescriptor**
     file_level_service_descriptors_hexz_2eproto = nullptr;
 const ::uint32_t TableStruct_hexz_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(
@@ -668,17 +685,27 @@ const ::uint32_t TableStruct_hexz_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(
     ~0u,
     0,
     ~0u,  // no _has_bits_
-    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats_MoveEval, _internal_metadata_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats_Score, _internal_metadata_),
     ~0u,  // no _extensions_
     ~0u,  // no _oneof_case_
     ~0u,  // no _weak_field_map_
     ~0u,  // no _inlined_string_donated_
     ~0u,  // no _split_
     ~0u,  // no sizeof(Split)
-    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats_MoveEval, _impl_.row_),
-    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats_MoveEval, _impl_.col_),
-    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats_MoveEval, _impl_.type_),
-    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats_MoveEval, _impl_.evaluation_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats_Score, _impl_.kind_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats_Score, _impl_.score_),
+    ~0u,  // no _has_bits_
+    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats_ScoredMove, _internal_metadata_),
+    ~0u,  // no _extensions_
+    ~0u,  // no _oneof_case_
+    ~0u,  // no _weak_field_map_
+    ~0u,  // no _inlined_string_donated_
+    ~0u,  // no _split_
+    ~0u,  // no sizeof(Split)
+    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats_ScoredMove, _impl_.row_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats_ScoredMove, _impl_.col_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats_ScoredMove, _impl_.type_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats_ScoredMove, _impl_.scores_),
     ~0u,  // no _has_bits_
     PROTOBUF_FIELD_OFFSET(::hexzpb::SuggestMoveStats, _internal_metadata_),
     ~0u,  // no _extensions_
@@ -788,14 +815,15 @@ static const ::_pbi::MigrationSchema
         {146, 157, -1, sizeof(::hexzpb::MCTSExample_MoveStats)},
         {160, 172, -1, sizeof(::hexzpb::MCTSExample)},
         {176, 186, -1, sizeof(::hexzpb::SuggestMoveRequest)},
-        {188, -1, -1, sizeof(::hexzpb::SuggestMoveStats_MoveEval)},
-        {200, -1, -1, sizeof(::hexzpb::SuggestMoveStats)},
-        {209, 219, -1, sizeof(::hexzpb::SuggestMoveResponse)},
-        {221, -1, -1, sizeof(::hexzpb::ModelKey)},
-        {231, 241, -1, sizeof(::hexzpb::AddTrainingExamplesRequest)},
-        {243, 254, -1, sizeof(::hexzpb::AddTrainingExamplesResponse)},
-        {257, -1, -1, sizeof(::hexzpb::TrainingExample_Stats)},
-        {269, 284, -1, sizeof(::hexzpb::TrainingExample)},
+        {188, -1, -1, sizeof(::hexzpb::SuggestMoveStats_Score)},
+        {198, -1, -1, sizeof(::hexzpb::SuggestMoveStats_ScoredMove)},
+        {210, -1, -1, sizeof(::hexzpb::SuggestMoveStats)},
+        {219, 229, -1, sizeof(::hexzpb::SuggestMoveResponse)},
+        {231, -1, -1, sizeof(::hexzpb::ModelKey)},
+        {241, 251, -1, sizeof(::hexzpb::AddTrainingExamplesRequest)},
+        {253, 264, -1, sizeof(::hexzpb::AddTrainingExamplesResponse)},
+        {267, -1, -1, sizeof(::hexzpb::TrainingExample_Stats)},
+        {279, 294, -1, sizeof(::hexzpb::TrainingExample)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -813,7 +841,8 @@ static const ::_pb::Message* const file_default_instances[] = {
     &::hexzpb::_MCTSExample_MoveStats_default_instance_._instance,
     &::hexzpb::_MCTSExample_default_instance_._instance,
     &::hexzpb::_SuggestMoveRequest_default_instance_._instance,
-    &::hexzpb::_SuggestMoveStats_MoveEval_default_instance_._instance,
+    &::hexzpb::_SuggestMoveStats_Score_default_instance_._instance,
+    &::hexzpb::_SuggestMoveStats_ScoredMove_default_instance_._instance,
     &::hexzpb::_SuggestMoveStats_default_instance_._instance,
     &::hexzpb::_SuggestMoveResponse_default_instance_._instance,
     &::hexzpb::_ModelKey_default_instance_._instance,
@@ -867,34 +896,38 @@ const char descriptor_table_protodef_hexz_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
     ".GameEngineMove\022\016\n\006visits\030\002 \001(\005\022\020\n\010win_r"
     "ate\030\003 \001(\002\"c\n\022SuggestMoveRequest\022\031\n\021max_t"
     "hink_time_ms\030\001 \001(\003\0222\n\021game_engine_state\030"
-    "\002 \001(\0132\027.hexzpb.GameEngineState\"\244\001\n\020Sugge"
-    "stMoveStats\0220\n\005moves\030\001 \003(\0132!.hexzpb.Sugg"
-    "estMoveStats.MoveEval\032^\n\010MoveEval\022\013\n\003row"
-    "\030\001 \001(\005\022\013\n\003col\030\002 \001(\005\022$\n\004type\030\003 \001(\0162\026.hexz"
-    "pb.Field.CellType\022\022\n\nevaluation\030\004 \001(\002\"i\n"
-    "\023SuggestMoveResponse\022$\n\004move\030\001 \001(\0132\026.hex"
-    "zpb.GameEngineMove\022,\n\nmove_stats\030\002 \001(\0132\030"
-    ".hexzpb.SuggestMoveStats\",\n\010ModelKey\022\014\n\004"
-    "name\030\001 \001(\t\022\022\n\ncheckpoint\030\002 \001(\005\"l\n\032AddTra"
-    "iningExamplesRequest\022#\n\tmodel_key\030\001 \001(\0132"
-    "\020.hexzpb.ModelKey\022)\n\010examples\030\002 \003(\0132\027.he"
-    "xzpb.TrainingExample\"\220\002\n\033AddTrainingExam"
-    "plesResponse\022:\n\006status\030\001 \001(\0162*.hexzpb.Ad"
-    "dTrainingExamplesResponse.Status\022&\n\014late"
-    "st_model\030\002 \001(\0132\020.hexzpb.ModelKey\022\025\n\rerro"
-    "r_message\030\003 \001(\t\"v\n\006Status\022\026\n\022STATUS_UNSP"
-    "ECIFIED\020\000\022\014\n\010ACCEPTED\020\001\022\030\n\024REJECTED_WRON"
-    "G_MODEL\020\002\022\030\n\024REJECTED_AT_CAPACITY\020\003\022\022\n\016R"
-    "EJECTED_OTHER\020\004\"\307\002\n\017TrainingExample\022\023\n\013u"
-    "nix_micros\030\001 \001(\003\022\014\n\004turn\030\007 \001(\005\0222\n\010encodi"
-    "ng\030\006 \001(\0162 .hexzpb.TrainingExample.Encodi"
-    "ng\022\r\n\005board\030\002 \001(\014\022\022\n\nmove_probs\030\003 \001(\014\022\016\n"
-    "\006result\030\004 \001(\002\022,\n\005stats\030\005 \001(\0132\035.hexzpb.Tr"
-    "ainingExample.Stats\032X\n\005Stats\022\014\n\004move\030\001 \001"
-    "(\005\022\027\n\017duration_micros\030\003 \001(\003\022\023\n\013valid_mov"
-    "es\030\004 \001(\005\022\023\n\013visit_count\030\005 \001(\005\"\"\n\010Encodin"
-    "g\022\t\n\005NUMPY\020\000\022\013\n\007PYTORCH\020\001B\037Z\035github.com/"
-    "dnswlt/hexz/hexzpbb\006proto3"
+    "\002 \001(\0132\027.hexzpb.GameEngineState\"\266\002\n\020Sugge"
+    "stMoveStats\0222\n\005moves\030\001 \003(\0132#.hexzpb.Sugg"
+    "estMoveStats.ScoredMove\032H\n\005Score\0220\n\004kind"
+    "\030\001 \001(\0162\".hexzpb.SuggestMoveStats.ScoreKi"
+    "nd\022\r\n\005score\030\002 \001(\002\032|\n\nScoredMove\022\013\n\003row\030\001"
+    " \001(\005\022\013\n\003col\030\002 \001(\005\022$\n\004type\030\003 \001(\0162\026.hexzpb"
+    ".Field.CellType\022.\n\006scores\030\004 \003(\0132\036.hexzpb"
+    ".SuggestMoveStats.Score\"&\n\tScoreKind\022\t\n\005"
+    "FINAL\020\000\022\016\n\nMCTS_PRIOR\020\001\"i\n\023SuggestMoveRe"
+    "sponse\022$\n\004move\030\001 \001(\0132\026.hexzpb.GameEngine"
+    "Move\022,\n\nmove_stats\030\002 \001(\0132\030.hexzpb.Sugges"
+    "tMoveStats\",\n\010ModelKey\022\014\n\004name\030\001 \001(\t\022\022\n\n"
+    "checkpoint\030\002 \001(\005\"l\n\032AddTrainingExamplesR"
+    "equest\022#\n\tmodel_key\030\001 \001(\0132\020.hexzpb.Model"
+    "Key\022)\n\010examples\030\002 \003(\0132\027.hexzpb.TrainingE"
+    "xample\"\220\002\n\033AddTrainingExamplesResponse\022:"
+    "\n\006status\030\001 \001(\0162*.hexzpb.AddTrainingExamp"
+    "lesResponse.Status\022&\n\014latest_model\030\002 \001(\013"
+    "2\020.hexzpb.ModelKey\022\025\n\rerror_message\030\003 \001("
+    "\t\"v\n\006Status\022\026\n\022STATUS_UNSPECIFIED\020\000\022\014\n\010A"
+    "CCEPTED\020\001\022\030\n\024REJECTED_WRONG_MODEL\020\002\022\030\n\024R"
+    "EJECTED_AT_CAPACITY\020\003\022\022\n\016REJECTED_OTHER\020"
+    "\004\"\307\002\n\017TrainingExample\022\023\n\013unix_micros\030\001 \001"
+    "(\003\022\014\n\004turn\030\007 \001(\005\0222\n\010encoding\030\006 \001(\0162 .hex"
+    "zpb.TrainingExample.Encoding\022\r\n\005board\030\002 "
+    "\001(\014\022\022\n\nmove_probs\030\003 \001(\014\022\016\n\006result\030\004 \001(\002\022"
+    ",\n\005stats\030\005 \001(\0132\035.hexzpb.TrainingExample."
+    "Stats\032X\n\005Stats\022\014\n\004move\030\001 \001(\005\022\027\n\017duration"
+    "_micros\030\003 \001(\003\022\023\n\013valid_moves\030\004 \001(\005\022\023\n\013vi"
+    "sit_count\030\005 \001(\005\"\"\n\010Encoding\022\t\n\005NUMPY\020\000\022\013"
+    "\n\007PYTORCH\020\001B\037Z\035github.com/dnswlt/hexz/he"
+    "xzpbb\006proto3"
 };
 static const ::_pbi::DescriptorTable* const descriptor_table_hexz_2eproto_deps[1] =
     {
@@ -904,13 +937,13 @@ static ::absl::once_flag descriptor_table_hexz_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_hexz_2eproto = {
     false,
     false,
-    2866,
+    3012,
     descriptor_table_protodef_hexz_2eproto,
     "hexz.proto",
     &descriptor_table_hexz_2eproto_once,
     descriptor_table_hexz_2eproto_deps,
     1,
-    22,
+    23,
     schemas,
     file_default_instances,
     TableStruct_hexz_2eproto::offsets,
@@ -999,9 +1032,33 @@ constexpr int Field::CellType_ARRAYSIZE;
 
 #endif  // (__cplusplus < 201703) &&
         // (!defined(_MSC_VER) || (_MSC_VER >= 1900 && _MSC_VER < 1912))
-const ::google::protobuf::EnumDescriptor* AddTrainingExamplesResponse_Status_descriptor() {
+const ::google::protobuf::EnumDescriptor* SuggestMoveStats_ScoreKind_descriptor() {
   ::google::protobuf::internal::AssignDescriptors(&descriptor_table_hexz_2eproto);
   return file_level_enum_descriptors_hexz_2eproto[2];
+}
+bool SuggestMoveStats_ScoreKind_IsValid(int value) {
+  switch (value) {
+    case 0:
+    case 1:
+      return true;
+    default:
+      return false;
+  }
+}
+#if (__cplusplus < 201703) && \
+  (!defined(_MSC_VER) || (_MSC_VER >= 1900 && _MSC_VER < 1912))
+
+constexpr SuggestMoveStats_ScoreKind SuggestMoveStats::FINAL;
+constexpr SuggestMoveStats_ScoreKind SuggestMoveStats::MCTS_PRIOR;
+constexpr SuggestMoveStats_ScoreKind SuggestMoveStats::ScoreKind_MIN;
+constexpr SuggestMoveStats_ScoreKind SuggestMoveStats::ScoreKind_MAX;
+constexpr int SuggestMoveStats::ScoreKind_ARRAYSIZE;
+
+#endif  // (__cplusplus < 201703) &&
+        // (!defined(_MSC_VER) || (_MSC_VER >= 1900 && _MSC_VER < 1912))
+const ::google::protobuf::EnumDescriptor* AddTrainingExamplesResponse_Status_descriptor() {
+  ::google::protobuf::internal::AssignDescriptors(&descriptor_table_hexz_2eproto);
+  return file_level_enum_descriptors_hexz_2eproto[3];
 }
 bool AddTrainingExamplesResponse_Status_IsValid(int value) {
   switch (value) {
@@ -1031,7 +1088,7 @@ constexpr int AddTrainingExamplesResponse::Status_ARRAYSIZE;
         // (!defined(_MSC_VER) || (_MSC_VER >= 1900 && _MSC_VER < 1912))
 const ::google::protobuf::EnumDescriptor* TrainingExample_Encoding_descriptor() {
   ::google::protobuf::internal::AssignDescriptors(&descriptor_table_hexz_2eproto);
-  return file_level_enum_descriptors_hexz_2eproto[3];
+  return file_level_enum_descriptors_hexz_2eproto[4];
 }
 bool TrainingExample_Encoding_IsValid(int value) {
   switch (value) {
@@ -4976,56 +5033,54 @@ void SuggestMoveRequest::InternalSwap(SuggestMoveRequest* other) {
 }
 // ===================================================================
 
-class SuggestMoveStats_MoveEval::_Internal {
+class SuggestMoveStats_Score::_Internal {
  public:
 };
 
-SuggestMoveStats_MoveEval::SuggestMoveStats_MoveEval(::google::protobuf::Arena* arena)
+SuggestMoveStats_Score::SuggestMoveStats_Score(::google::protobuf::Arena* arena)
     : ::google::protobuf::Message(arena) {
   SharedCtor(arena);
-  // @@protoc_insertion_point(arena_constructor:hexzpb.SuggestMoveStats.MoveEval)
+  // @@protoc_insertion_point(arena_constructor:hexzpb.SuggestMoveStats.Score)
 }
-SuggestMoveStats_MoveEval::SuggestMoveStats_MoveEval(const SuggestMoveStats_MoveEval& from)
+SuggestMoveStats_Score::SuggestMoveStats_Score(const SuggestMoveStats_Score& from)
     : ::google::protobuf::Message(), _impl_(from._impl_) {
   _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
       from._internal_metadata_);
-  // @@protoc_insertion_point(copy_constructor:hexzpb.SuggestMoveStats.MoveEval)
+  // @@protoc_insertion_point(copy_constructor:hexzpb.SuggestMoveStats.Score)
 }
-inline void SuggestMoveStats_MoveEval::SharedCtor(::_pb::Arena* arena) {
+inline void SuggestMoveStats_Score::SharedCtor(::_pb::Arena* arena) {
   (void)arena;
   new (&_impl_) Impl_{
-      decltype(_impl_.row_){0},
-      decltype(_impl_.col_){0},
-      decltype(_impl_.type_){0},
-      decltype(_impl_.evaluation_){0},
+      decltype(_impl_.kind_){0},
+      decltype(_impl_.score_){0},
       /*decltype(_impl_._cached_size_)*/ {},
   };
 }
-SuggestMoveStats_MoveEval::~SuggestMoveStats_MoveEval() {
-  // @@protoc_insertion_point(destructor:hexzpb.SuggestMoveStats.MoveEval)
+SuggestMoveStats_Score::~SuggestMoveStats_Score() {
+  // @@protoc_insertion_point(destructor:hexzpb.SuggestMoveStats.Score)
   _internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
   SharedDtor();
 }
-inline void SuggestMoveStats_MoveEval::SharedDtor() {
+inline void SuggestMoveStats_Score::SharedDtor() {
   ABSL_DCHECK(GetArenaForAllocation() == nullptr);
 }
-void SuggestMoveStats_MoveEval::SetCachedSize(int size) const {
+void SuggestMoveStats_Score::SetCachedSize(int size) const {
   _impl_._cached_size_.Set(size);
 }
 
-PROTOBUF_NOINLINE void SuggestMoveStats_MoveEval::Clear() {
-// @@protoc_insertion_point(message_clear_start:hexzpb.SuggestMoveStats.MoveEval)
+PROTOBUF_NOINLINE void SuggestMoveStats_Score::Clear() {
+// @@protoc_insertion_point(message_clear_start:hexzpb.SuggestMoveStats.Score)
   ::uint32_t cached_has_bits = 0;
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  ::memset(&_impl_.row_, 0, static_cast<::size_t>(
-      reinterpret_cast<char*>(&_impl_.evaluation_) -
-      reinterpret_cast<char*>(&_impl_.row_)) + sizeof(_impl_.evaluation_));
+  ::memset(&_impl_.kind_, 0, static_cast<::size_t>(
+      reinterpret_cast<char*>(&_impl_.score_) -
+      reinterpret_cast<char*>(&_impl_.kind_)) + sizeof(_impl_.score_));
   _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
 }
 
-const char* SuggestMoveStats_MoveEval::_InternalParse(
+const char* SuggestMoveStats_Score::_InternalParse(
     const char* ptr, ::_pbi::ParseContext* ctx) {
   ptr = ::_pbi::TcParser::ParseLoop(this, ptr, ctx, &_table_.header);
   return ptr;
@@ -5033,7 +5088,233 @@ const char* SuggestMoveStats_MoveEval::_InternalParse(
 
 
 PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
-const ::_pbi::TcParseTable<2, 4, 0, 0, 2> SuggestMoveStats_MoveEval::_table_ = {
+const ::_pbi::TcParseTable<1, 2, 0, 0, 2> SuggestMoveStats_Score::_table_ = {
+  {
+    0,  // no _has_bits_
+    0, // no _extensions_
+    2, 8,  // max_field_number, fast_idx_mask
+    offsetof(decltype(_table_), field_lookup_table),
+    4294967292,  // skipmap
+    offsetof(decltype(_table_), field_entries),
+    2,  // num_field_entries
+    0,  // num_aux_entries
+    offsetof(decltype(_table_), field_names),  // no aux_entries
+    &_SuggestMoveStats_Score_default_instance_._instance,
+    ::_pbi::TcParser::GenericFallback,  // fallback
+  }, {{
+    // float score = 2;
+    {::_pbi::TcParser::FastF32S1,
+     {21, 63, 0, PROTOBUF_FIELD_OFFSET(SuggestMoveStats_Score, _impl_.score_)}},
+    // .hexzpb.SuggestMoveStats.ScoreKind kind = 1;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(SuggestMoveStats_Score, _impl_.kind_), 63>(),
+     {8, 63, 0, PROTOBUF_FIELD_OFFSET(SuggestMoveStats_Score, _impl_.kind_)}},
+  }}, {{
+    65535, 65535
+  }}, {{
+    // .hexzpb.SuggestMoveStats.ScoreKind kind = 1;
+    {PROTOBUF_FIELD_OFFSET(SuggestMoveStats_Score, _impl_.kind_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kOpenEnum)},
+    // float score = 2;
+    {PROTOBUF_FIELD_OFFSET(SuggestMoveStats_Score, _impl_.score_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kFloat)},
+  }},
+  // no aux_entries
+  {{
+  }},
+};
+
+::uint8_t* SuggestMoveStats_Score::_InternalSerialize(
+    ::uint8_t* target,
+    ::google::protobuf::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:hexzpb.SuggestMoveStats.Score)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  // .hexzpb.SuggestMoveStats.ScoreKind kind = 1;
+  if (this->_internal_kind() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteEnumToArray(
+        1, this->_internal_kind(), target);
+  }
+
+  // float score = 2;
+  static_assert(sizeof(::uint32_t) == sizeof(float),
+                "Code assumes ::uint32_t and float are the same size.");
+  float tmp_score = this->_internal_score();
+  ::uint32_t raw_score;
+  memcpy(&raw_score, &tmp_score, sizeof(tmp_score));
+  if (raw_score != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteFloatToArray(
+        2, this->_internal_score(), target);
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:hexzpb.SuggestMoveStats.Score)
+  return target;
+}
+
+::size_t SuggestMoveStats_Score::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:hexzpb.SuggestMoveStats.Score)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // .hexzpb.SuggestMoveStats.ScoreKind kind = 1;
+  if (this->_internal_kind() != 0) {
+    total_size += 1 +
+                  ::_pbi::WireFormatLite::EnumSize(this->_internal_kind());
+  }
+
+  // float score = 2;
+  static_assert(sizeof(::uint32_t) == sizeof(float),
+                "Code assumes ::uint32_t and float are the same size.");
+  float tmp_score = this->_internal_score();
+  ::uint32_t raw_score;
+  memcpy(&raw_score, &tmp_score, sizeof(tmp_score));
+  if (raw_score != 0) {
+    total_size += 5;
+  }
+
+  return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
+}
+
+const ::google::protobuf::Message::ClassData SuggestMoveStats_Score::_class_data_ = {
+    ::google::protobuf::Message::CopyWithSourceCheck,
+    SuggestMoveStats_Score::MergeImpl
+};
+const ::google::protobuf::Message::ClassData*SuggestMoveStats_Score::GetClassData() const { return &_class_data_; }
+
+
+void SuggestMoveStats_Score::MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg) {
+  auto* const _this = static_cast<SuggestMoveStats_Score*>(&to_msg);
+  auto& from = static_cast<const SuggestMoveStats_Score&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:hexzpb.SuggestMoveStats.Score)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from._internal_kind() != 0) {
+    _this->_internal_set_kind(from._internal_kind());
+  }
+  static_assert(sizeof(::uint32_t) == sizeof(float),
+                "Code assumes ::uint32_t and float are the same size.");
+  float tmp_score = from._internal_score();
+  ::uint32_t raw_score;
+  memcpy(&raw_score, &tmp_score, sizeof(tmp_score));
+  if (raw_score != 0) {
+    _this->_internal_set_score(from._internal_score());
+  }
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void SuggestMoveStats_Score::CopyFrom(const SuggestMoveStats_Score& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:hexzpb.SuggestMoveStats.Score)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+PROTOBUF_NOINLINE bool SuggestMoveStats_Score::IsInitialized() const {
+  return true;
+}
+
+void SuggestMoveStats_Score::InternalSwap(SuggestMoveStats_Score* other) {
+  using std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  ::google::protobuf::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(SuggestMoveStats_Score, _impl_.score_)
+      + sizeof(SuggestMoveStats_Score::_impl_.score_)
+      - PROTOBUF_FIELD_OFFSET(SuggestMoveStats_Score, _impl_.kind_)>(
+          reinterpret_cast<char*>(&_impl_.kind_),
+          reinterpret_cast<char*>(&other->_impl_.kind_));
+}
+
+::google::protobuf::Metadata SuggestMoveStats_Score::GetMetadata() const {
+  return ::_pbi::AssignDescriptors(
+      &descriptor_table_hexz_2eproto_getter, &descriptor_table_hexz_2eproto_once,
+      file_level_metadata_hexz_2eproto[14]);
+}
+// ===================================================================
+
+class SuggestMoveStats_ScoredMove::_Internal {
+ public:
+};
+
+SuggestMoveStats_ScoredMove::SuggestMoveStats_ScoredMove(::google::protobuf::Arena* arena)
+    : ::google::protobuf::Message(arena) {
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:hexzpb.SuggestMoveStats.ScoredMove)
+}
+SuggestMoveStats_ScoredMove::SuggestMoveStats_ScoredMove(const SuggestMoveStats_ScoredMove& from) : ::google::protobuf::Message() {
+  SuggestMoveStats_ScoredMove* const _this = this;
+  (void)_this;
+  new (&_impl_) Impl_{
+      decltype(_impl_.scores_){from._impl_.scores_},
+      decltype(_impl_.row_){},
+      decltype(_impl_.col_){},
+      decltype(_impl_.type_){},
+      /*decltype(_impl_._cached_size_)*/ {},
+  };
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+  ::memcpy(&_impl_.row_, &from._impl_.row_,
+    static_cast<::size_t>(reinterpret_cast<char*>(&_impl_.type_) -
+    reinterpret_cast<char*>(&_impl_.row_)) + sizeof(_impl_.type_));
+
+  // @@protoc_insertion_point(copy_constructor:hexzpb.SuggestMoveStats.ScoredMove)
+}
+inline void SuggestMoveStats_ScoredMove::SharedCtor(::_pb::Arena* arena) {
+  (void)arena;
+  new (&_impl_) Impl_{
+      decltype(_impl_.scores_){arena},
+      decltype(_impl_.row_){0},
+      decltype(_impl_.col_){0},
+      decltype(_impl_.type_){0},
+      /*decltype(_impl_._cached_size_)*/ {},
+  };
+}
+SuggestMoveStats_ScoredMove::~SuggestMoveStats_ScoredMove() {
+  // @@protoc_insertion_point(destructor:hexzpb.SuggestMoveStats.ScoredMove)
+  _internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  SharedDtor();
+}
+inline void SuggestMoveStats_ScoredMove::SharedDtor() {
+  ABSL_DCHECK(GetArenaForAllocation() == nullptr);
+  _impl_.scores_.~RepeatedPtrField();
+}
+void SuggestMoveStats_ScoredMove::SetCachedSize(int size) const {
+  _impl_._cached_size_.Set(size);
+}
+
+PROTOBUF_NOINLINE void SuggestMoveStats_ScoredMove::Clear() {
+// @@protoc_insertion_point(message_clear_start:hexzpb.SuggestMoveStats.ScoredMove)
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  _internal_mutable_scores()->Clear();
+  ::memset(&_impl_.row_, 0, static_cast<::size_t>(
+      reinterpret_cast<char*>(&_impl_.type_) -
+      reinterpret_cast<char*>(&_impl_.row_)) + sizeof(_impl_.type_));
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+const char* SuggestMoveStats_ScoredMove::_InternalParse(
+    const char* ptr, ::_pbi::ParseContext* ctx) {
+  ptr = ::_pbi::TcParser::ParseLoop(this, ptr, ctx, &_table_.header);
+  return ptr;
+}
+
+
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
+const ::_pbi::TcParseTable<2, 4, 1, 0, 2> SuggestMoveStats_ScoredMove::_table_ = {
   {
     0,  // no _has_bits_
     0, // no _extensions_
@@ -5042,48 +5323,48 @@ const ::_pbi::TcParseTable<2, 4, 0, 0, 2> SuggestMoveStats_MoveEval::_table_ = {
     4294967280,  // skipmap
     offsetof(decltype(_table_), field_entries),
     4,  // num_field_entries
-    0,  // num_aux_entries
-    offsetof(decltype(_table_), field_names),  // no aux_entries
-    &_SuggestMoveStats_MoveEval_default_instance_._instance,
+    1,  // num_aux_entries
+    offsetof(decltype(_table_), aux_entries),
+    &_SuggestMoveStats_ScoredMove_default_instance_._instance,
     ::_pbi::TcParser::GenericFallback,  // fallback
   }, {{
-    // float evaluation = 4;
-    {::_pbi::TcParser::FastF32S1,
-     {37, 63, 0, PROTOBUF_FIELD_OFFSET(SuggestMoveStats_MoveEval, _impl_.evaluation_)}},
+    // repeated .hexzpb.SuggestMoveStats.Score scores = 4;
+    {::_pbi::TcParser::FastMtR1,
+     {34, 63, 0, PROTOBUF_FIELD_OFFSET(SuggestMoveStats_ScoredMove, _impl_.scores_)}},
     // int32 row = 1;
-    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(SuggestMoveStats_MoveEval, _impl_.row_), 63>(),
-     {8, 63, 0, PROTOBUF_FIELD_OFFSET(SuggestMoveStats_MoveEval, _impl_.row_)}},
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(SuggestMoveStats_ScoredMove, _impl_.row_), 63>(),
+     {8, 63, 0, PROTOBUF_FIELD_OFFSET(SuggestMoveStats_ScoredMove, _impl_.row_)}},
     // int32 col = 2;
-    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(SuggestMoveStats_MoveEval, _impl_.col_), 63>(),
-     {16, 63, 0, PROTOBUF_FIELD_OFFSET(SuggestMoveStats_MoveEval, _impl_.col_)}},
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(SuggestMoveStats_ScoredMove, _impl_.col_), 63>(),
+     {16, 63, 0, PROTOBUF_FIELD_OFFSET(SuggestMoveStats_ScoredMove, _impl_.col_)}},
     // .hexzpb.Field.CellType type = 3;
-    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(SuggestMoveStats_MoveEval, _impl_.type_), 63>(),
-     {24, 63, 0, PROTOBUF_FIELD_OFFSET(SuggestMoveStats_MoveEval, _impl_.type_)}},
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(SuggestMoveStats_ScoredMove, _impl_.type_), 63>(),
+     {24, 63, 0, PROTOBUF_FIELD_OFFSET(SuggestMoveStats_ScoredMove, _impl_.type_)}},
   }}, {{
     65535, 65535
   }}, {{
     // int32 row = 1;
-    {PROTOBUF_FIELD_OFFSET(SuggestMoveStats_MoveEval, _impl_.row_), 0, 0,
+    {PROTOBUF_FIELD_OFFSET(SuggestMoveStats_ScoredMove, _impl_.row_), 0, 0,
     (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
     // int32 col = 2;
-    {PROTOBUF_FIELD_OFFSET(SuggestMoveStats_MoveEval, _impl_.col_), 0, 0,
+    {PROTOBUF_FIELD_OFFSET(SuggestMoveStats_ScoredMove, _impl_.col_), 0, 0,
     (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
     // .hexzpb.Field.CellType type = 3;
-    {PROTOBUF_FIELD_OFFSET(SuggestMoveStats_MoveEval, _impl_.type_), 0, 0,
+    {PROTOBUF_FIELD_OFFSET(SuggestMoveStats_ScoredMove, _impl_.type_), 0, 0,
     (0 | ::_fl::kFcSingular | ::_fl::kOpenEnum)},
-    // float evaluation = 4;
-    {PROTOBUF_FIELD_OFFSET(SuggestMoveStats_MoveEval, _impl_.evaluation_), 0, 0,
-    (0 | ::_fl::kFcSingular | ::_fl::kFloat)},
-  }},
-  // no aux_entries
-  {{
+    // repeated .hexzpb.SuggestMoveStats.Score scores = 4;
+    {PROTOBUF_FIELD_OFFSET(SuggestMoveStats_ScoredMove, _impl_.scores_), 0, 0,
+    (0 | ::_fl::kFcRepeated | ::_fl::kMessage | ::_fl::kTvTable)},
+  }}, {{
+    {::_pbi::TcParser::GetTable<::hexzpb::SuggestMoveStats_Score>()},
+  }}, {{
   }},
 };
 
-::uint8_t* SuggestMoveStats_MoveEval::_InternalSerialize(
+::uint8_t* SuggestMoveStats_ScoredMove::_InternalSerialize(
     ::uint8_t* target,
     ::google::protobuf::io::EpsCopyOutputStream* stream) const {
-  // @@protoc_insertion_point(serialize_to_array_start:hexzpb.SuggestMoveStats.MoveEval)
+  // @@protoc_insertion_point(serialize_to_array_start:hexzpb.SuggestMoveStats.ScoredMove)
   ::uint32_t cached_has_bits = 0;
   (void)cached_has_bits;
 
@@ -5108,16 +5389,12 @@ const ::_pbi::TcParseTable<2, 4, 0, 0, 2> SuggestMoveStats_MoveEval::_table_ = {
         3, this->_internal_type(), target);
   }
 
-  // float evaluation = 4;
-  static_assert(sizeof(::uint32_t) == sizeof(float),
-                "Code assumes ::uint32_t and float are the same size.");
-  float tmp_evaluation = this->_internal_evaluation();
-  ::uint32_t raw_evaluation;
-  memcpy(&raw_evaluation, &tmp_evaluation, sizeof(tmp_evaluation));
-  if (raw_evaluation != 0) {
-    target = stream->EnsureSpace(target);
-    target = ::_pbi::WireFormatLite::WriteFloatToArray(
-        4, this->_internal_evaluation(), target);
+  // repeated .hexzpb.SuggestMoveStats.Score scores = 4;
+  for (unsigned i = 0,
+      n = static_cast<unsigned>(this->_internal_scores_size()); i < n; i++) {
+    const auto& repfield = this->_internal_scores().Get(i);
+    target = ::google::protobuf::internal::WireFormatLite::
+        InternalWriteMessage(4, repfield, repfield.GetCachedSize(), target, stream);
   }
 
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
@@ -5125,18 +5402,24 @@ const ::_pbi::TcParseTable<2, 4, 0, 0, 2> SuggestMoveStats_MoveEval::_table_ = {
         ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
             _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
   }
-  // @@protoc_insertion_point(serialize_to_array_end:hexzpb.SuggestMoveStats.MoveEval)
+  // @@protoc_insertion_point(serialize_to_array_end:hexzpb.SuggestMoveStats.ScoredMove)
   return target;
 }
 
-::size_t SuggestMoveStats_MoveEval::ByteSizeLong() const {
-// @@protoc_insertion_point(message_byte_size_start:hexzpb.SuggestMoveStats.MoveEval)
+::size_t SuggestMoveStats_ScoredMove::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:hexzpb.SuggestMoveStats.ScoredMove)
   ::size_t total_size = 0;
 
   ::uint32_t cached_has_bits = 0;
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  // repeated .hexzpb.SuggestMoveStats.Score scores = 4;
+  total_size += 1UL * this->_internal_scores_size();
+  for (const auto& msg : this->_internal_scores()) {
+    total_size +=
+      ::google::protobuf::internal::WireFormatLite::MessageSize(msg);
+  }
   // int32 row = 1;
   if (this->_internal_row() != 0) {
     total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
@@ -5155,34 +5438,25 @@ const ::_pbi::TcParseTable<2, 4, 0, 0, 2> SuggestMoveStats_MoveEval::_table_ = {
                   ::_pbi::WireFormatLite::EnumSize(this->_internal_type());
   }
 
-  // float evaluation = 4;
-  static_assert(sizeof(::uint32_t) == sizeof(float),
-                "Code assumes ::uint32_t and float are the same size.");
-  float tmp_evaluation = this->_internal_evaluation();
-  ::uint32_t raw_evaluation;
-  memcpy(&raw_evaluation, &tmp_evaluation, sizeof(tmp_evaluation));
-  if (raw_evaluation != 0) {
-    total_size += 5;
-  }
-
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
 }
 
-const ::google::protobuf::Message::ClassData SuggestMoveStats_MoveEval::_class_data_ = {
+const ::google::protobuf::Message::ClassData SuggestMoveStats_ScoredMove::_class_data_ = {
     ::google::protobuf::Message::CopyWithSourceCheck,
-    SuggestMoveStats_MoveEval::MergeImpl
+    SuggestMoveStats_ScoredMove::MergeImpl
 };
-const ::google::protobuf::Message::ClassData*SuggestMoveStats_MoveEval::GetClassData() const { return &_class_data_; }
+const ::google::protobuf::Message::ClassData*SuggestMoveStats_ScoredMove::GetClassData() const { return &_class_data_; }
 
 
-void SuggestMoveStats_MoveEval::MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg) {
-  auto* const _this = static_cast<SuggestMoveStats_MoveEval*>(&to_msg);
-  auto& from = static_cast<const SuggestMoveStats_MoveEval&>(from_msg);
-  // @@protoc_insertion_point(class_specific_merge_from_start:hexzpb.SuggestMoveStats.MoveEval)
+void SuggestMoveStats_ScoredMove::MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg) {
+  auto* const _this = static_cast<SuggestMoveStats_ScoredMove*>(&to_msg);
+  auto& from = static_cast<const SuggestMoveStats_ScoredMove&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:hexzpb.SuggestMoveStats.ScoredMove)
   ABSL_DCHECK_NE(&from, _this);
   ::uint32_t cached_has_bits = 0;
   (void) cached_has_bits;
 
+  _this->_internal_mutable_scores()->MergeFrom(from._internal_scores());
   if (from._internal_row() != 0) {
     _this->_internal_set_row(from._internal_row());
   }
@@ -5192,43 +5466,36 @@ void SuggestMoveStats_MoveEval::MergeImpl(::google::protobuf::Message& to_msg, c
   if (from._internal_type() != 0) {
     _this->_internal_set_type(from._internal_type());
   }
-  static_assert(sizeof(::uint32_t) == sizeof(float),
-                "Code assumes ::uint32_t and float are the same size.");
-  float tmp_evaluation = from._internal_evaluation();
-  ::uint32_t raw_evaluation;
-  memcpy(&raw_evaluation, &tmp_evaluation, sizeof(tmp_evaluation));
-  if (raw_evaluation != 0) {
-    _this->_internal_set_evaluation(from._internal_evaluation());
-  }
   _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
 }
 
-void SuggestMoveStats_MoveEval::CopyFrom(const SuggestMoveStats_MoveEval& from) {
-// @@protoc_insertion_point(class_specific_copy_from_start:hexzpb.SuggestMoveStats.MoveEval)
+void SuggestMoveStats_ScoredMove::CopyFrom(const SuggestMoveStats_ScoredMove& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:hexzpb.SuggestMoveStats.ScoredMove)
   if (&from == this) return;
   Clear();
   MergeFrom(from);
 }
 
-PROTOBUF_NOINLINE bool SuggestMoveStats_MoveEval::IsInitialized() const {
+PROTOBUF_NOINLINE bool SuggestMoveStats_ScoredMove::IsInitialized() const {
   return true;
 }
 
-void SuggestMoveStats_MoveEval::InternalSwap(SuggestMoveStats_MoveEval* other) {
+void SuggestMoveStats_ScoredMove::InternalSwap(SuggestMoveStats_ScoredMove* other) {
   using std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  _impl_.scores_.InternalSwap(&other->_impl_.scores_);
   ::google::protobuf::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(SuggestMoveStats_MoveEval, _impl_.evaluation_)
-      + sizeof(SuggestMoveStats_MoveEval::_impl_.evaluation_)
-      - PROTOBUF_FIELD_OFFSET(SuggestMoveStats_MoveEval, _impl_.row_)>(
+      PROTOBUF_FIELD_OFFSET(SuggestMoveStats_ScoredMove, _impl_.type_)
+      + sizeof(SuggestMoveStats_ScoredMove::_impl_.type_)
+      - PROTOBUF_FIELD_OFFSET(SuggestMoveStats_ScoredMove, _impl_.row_)>(
           reinterpret_cast<char*>(&_impl_.row_),
           reinterpret_cast<char*>(&other->_impl_.row_));
 }
 
-::google::protobuf::Metadata SuggestMoveStats_MoveEval::GetMetadata() const {
+::google::protobuf::Metadata SuggestMoveStats_ScoredMove::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_hexz_2eproto_getter, &descriptor_table_hexz_2eproto_once,
-      file_level_metadata_hexz_2eproto[14]);
+      file_level_metadata_hexz_2eproto[15]);
 }
 // ===================================================================
 
@@ -5305,17 +5572,17 @@ const ::_pbi::TcParseTable<0, 1, 1, 0, 2> SuggestMoveStats::_table_ = {
     &_SuggestMoveStats_default_instance_._instance,
     ::_pbi::TcParser::GenericFallback,  // fallback
   }, {{
-    // repeated .hexzpb.SuggestMoveStats.MoveEval moves = 1;
+    // repeated .hexzpb.SuggestMoveStats.ScoredMove moves = 1;
     {::_pbi::TcParser::FastMtR1,
      {10, 63, 0, PROTOBUF_FIELD_OFFSET(SuggestMoveStats, _impl_.moves_)}},
   }}, {{
     65535, 65535
   }}, {{
-    // repeated .hexzpb.SuggestMoveStats.MoveEval moves = 1;
+    // repeated .hexzpb.SuggestMoveStats.ScoredMove moves = 1;
     {PROTOBUF_FIELD_OFFSET(SuggestMoveStats, _impl_.moves_), 0, 0,
     (0 | ::_fl::kFcRepeated | ::_fl::kMessage | ::_fl::kTvTable)},
   }}, {{
-    {::_pbi::TcParser::GetTable<::hexzpb::SuggestMoveStats_MoveEval>()},
+    {::_pbi::TcParser::GetTable<::hexzpb::SuggestMoveStats_ScoredMove>()},
   }}, {{
   }},
 };
@@ -5327,7 +5594,7 @@ const ::_pbi::TcParseTable<0, 1, 1, 0, 2> SuggestMoveStats::_table_ = {
   ::uint32_t cached_has_bits = 0;
   (void)cached_has_bits;
 
-  // repeated .hexzpb.SuggestMoveStats.MoveEval moves = 1;
+  // repeated .hexzpb.SuggestMoveStats.ScoredMove moves = 1;
   for (unsigned i = 0,
       n = static_cast<unsigned>(this->_internal_moves_size()); i < n; i++) {
     const auto& repfield = this->_internal_moves().Get(i);
@@ -5352,7 +5619,7 @@ const ::_pbi::TcParseTable<0, 1, 1, 0, 2> SuggestMoveStats::_table_ = {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  // repeated .hexzpb.SuggestMoveStats.MoveEval moves = 1;
+  // repeated .hexzpb.SuggestMoveStats.ScoredMove moves = 1;
   total_size += 1UL * this->_internal_moves_size();
   for (const auto& msg : this->_internal_moves()) {
     total_size +=
@@ -5400,7 +5667,7 @@ void SuggestMoveStats::InternalSwap(SuggestMoveStats* other) {
 ::google::protobuf::Metadata SuggestMoveStats::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_hexz_2eproto_getter, &descriptor_table_hexz_2eproto_once,
-      file_level_metadata_hexz_2eproto[15]);
+      file_level_metadata_hexz_2eproto[16]);
 }
 // ===================================================================
 
@@ -5652,7 +5919,7 @@ void SuggestMoveResponse::InternalSwap(SuggestMoveResponse* other) {
 ::google::protobuf::Metadata SuggestMoveResponse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_hexz_2eproto_getter, &descriptor_table_hexz_2eproto_once,
-      file_level_metadata_hexz_2eproto[16]);
+      file_level_metadata_hexz_2eproto[17]);
 }
 // ===================================================================
 
@@ -5870,7 +6137,7 @@ void ModelKey::InternalSwap(ModelKey* other) {
 ::google::protobuf::Metadata ModelKey::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_hexz_2eproto_getter, &descriptor_table_hexz_2eproto_once,
-      file_level_metadata_hexz_2eproto[17]);
+      file_level_metadata_hexz_2eproto[18]);
 }
 // ===================================================================
 
@@ -6095,7 +6362,7 @@ void AddTrainingExamplesRequest::InternalSwap(AddTrainingExamplesRequest* other)
 ::google::protobuf::Metadata AddTrainingExamplesRequest::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_hexz_2eproto_getter, &descriptor_table_hexz_2eproto_once,
-      file_level_metadata_hexz_2eproto[18]);
+      file_level_metadata_hexz_2eproto[19]);
 }
 // ===================================================================
 
@@ -6370,7 +6637,7 @@ void AddTrainingExamplesResponse::InternalSwap(AddTrainingExamplesResponse* othe
 ::google::protobuf::Metadata AddTrainingExamplesResponse::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_hexz_2eproto_getter, &descriptor_table_hexz_2eproto_once,
-      file_level_metadata_hexz_2eproto[19]);
+      file_level_metadata_hexz_2eproto[20]);
 }
 // ===================================================================
 
@@ -6616,7 +6883,7 @@ void TrainingExample_Stats::InternalSwap(TrainingExample_Stats* other) {
 ::google::protobuf::Metadata TrainingExample_Stats::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_hexz_2eproto_getter, &descriptor_table_hexz_2eproto_once,
-      file_level_metadata_hexz_2eproto[20]);
+      file_level_metadata_hexz_2eproto[21]);
 }
 // ===================================================================
 
@@ -7014,7 +7281,7 @@ void TrainingExample::InternalSwap(TrainingExample* other) {
 ::google::protobuf::Metadata TrainingExample::GetMetadata() const {
   return ::_pbi::AssignDescriptors(
       &descriptor_table_hexz_2eproto_getter, &descriptor_table_hexz_2eproto_once,
-      file_level_metadata_hexz_2eproto[21]);
+      file_level_metadata_hexz_2eproto[22]);
 }
 // @@protoc_insertion_point(namespace_scope)
 }  // namespace hexzpb

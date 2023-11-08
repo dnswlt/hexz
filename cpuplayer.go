@@ -56,13 +56,15 @@ func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz)
 	} else {
 		cpu.thinkTime = cpu.maxThinkTime // use full time allowed.
 	}
-	moveEvals := make([]*pb.SuggestMoveStats_MoveEval, len(stats.Moves))
+	moveEvals := make([]*pb.SuggestMoveStats_ScoredMove, len(stats.Moves))
 	for i, m := range stats.Moves {
-		moveEvals[i] = &pb.SuggestMoveStats_MoveEval{
-			Row:        int32(m.Row),
-			Col:        int32(m.Col),
-			Type:       pb.Field_CellType(m.CellType),
-			Evaluation: float32(m.Iterations) / float32(stats.Iterations),
+		moveEvals[i] = &pb.SuggestMoveStats_ScoredMove{
+			Row:  int32(m.Row),
+			Col:  int32(m.Col),
+			Type: pb.Field_CellType(m.CellType),
+			Scores: []*pb.SuggestMoveStats_Score{
+				{Kind: pb.SuggestMoveStats_FINAL, Score: float32(m.Iterations) / float32(stats.Iterations)},
+			},
 		}
 	}
 	return &GameEngineMove{

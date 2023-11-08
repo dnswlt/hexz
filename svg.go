@@ -96,10 +96,23 @@ func hexPolySVG(sideLength float64, f *Field, r, c int, es *cellEvalScores) stri
 	return fmt.Sprintf(`<g transform="%s">%s</g>`, transform, strings.Join(elems, ""))
 }
 
+func moveScoreForKind(s *pb.SuggestMoveStats_ScoredMove, scoreKind pb.SuggestMoveStats_ScoreKind) (float32, bool) {
+	for _, s := range s.Scores {
+		if s.Kind == scoreKind {
+			return s.Score, true
+		}
+	}
+	return 0.0, false
+}
+
+func ExportSVG(file string, boards []*Board, captions []string) error {
+	return ExportSVGWithScores(file, boards, nil, pb.SuggestMoveStats_FINAL, captions)
+}
+
 // ExportSVG writes a HTML document to file that contains SVG renderings of the given boards.
 // stats contains optional evaluation statistics (typically from MCTS),
 // captions contains optional captions of the boards.
-func ExportSVG(file string, boards []*Board, stats []*pb.SuggestMoveStats, captions []string) error {
+func ExportSVGWithScores(file string, boards []*Board, stats []*pb.SuggestMoveStats, scoreKind pb.SuggestMoveStats_ScoreKind, captions []string) error {
 	const sideLength = 30.0
 	width := 10 * math.Sqrt(3) * sideLength
 	height := 17 * sideLength
@@ -128,20 +141,24 @@ func ExportSVG(file string, boards []*Board, stats []*pb.SuggestMoveStats, capti
 		evalMap := make(map[idx]*cellEvalScores)
 		if i < len(stats) && stats[i] != nil {
 			for _, m := range stats[i].Moves {
+				score, found := moveScoreForKind(m, scoreKind)
+				if !found {
+					continue // This cell has no move score information of the requested kind.
+				}
 				eval, ok := evalMap[idx{int(m.Row), int(m.Col)}]
 				if !ok {
 					eval = &cellEvalScores{}
 				}
 				switch m.Type {
 				case pb.Field_NORMAL:
-					eval.normal = m.Evaluation
+					eval.normal = score
 				case pb.Field_FLAG:
-					eval.flag = m.Evaluation
+					eval.flag = score
 				}
 				evalMap[idx{int(m.Row), int(m.Col)}] = eval
 			}
 		}
-		fmt.Fprintf(&sb, "<h2>Board %d</h2>\n", i)
+		fmt.Fprintf(&sb, "<h2>Board %d</h2>\n", i+1)
 		infos := []string{
 			fmt.Sprintf("Move: %d", board.Move),
 			fmt.Sprintf("Turn: %d", board.Turn),

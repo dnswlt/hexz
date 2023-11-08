@@ -40,6 +40,11 @@ std::string Node::Stats() const {
                       " wins:", wins_);
 }
 
+float Node::Prior() const {
+  ABSL_DCHECK(parent_ != nullptr) << "Prior: must not be called on root node";
+  return parent_->move_probs_[flat_idx_];
+}
+
 float Node::Puct() const noexcept {
   float q = 0.0;
   if (visit_count_ > 0) {
@@ -67,7 +72,24 @@ Node* Node::MaxPuctChild() const {
   return children_[best_i].get();
 }
 
+void Node::SetMoveProbs(torch::Tensor move_probs) {
+  assert(move_probs.numel() == 2 * 11 * 10);
+  assert(std::abs(move_probs.sum().item<float>() - 1.0) < 1e-3);
+  move_probs_ =
+      std::vector<float>(move_probs.data_ptr<float>(),
+                         move_probs.data_ptr<float>() + move_probs.numel());
+}
 
+torch::Tensor Node::NormVisitCounts() const {
+  auto t = torch::zeros({2, 11, 10});
+  auto t_acc = t.accessor<float, 3>();
+  for (const auto& c : children_) {
+    const auto& m = c->move_;
+    t_acc[m.typ][m.r][m.c] = static_cast<float>(c->visit_count_);
+  }
+  t /= t.sum();
+  return t;
+}
 
 std::unique_ptr<Node> Node::MostVisitedChildAsRoot() {
   assert(!children_.empty());

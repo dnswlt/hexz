@@ -142,14 +142,27 @@ message SuggestMoveRequest {
 }
 
 message SuggestMoveStats {
-    message MoveEval {
+    // EvalKind indicates the kind of evaluation that the given value represents.
+    enum ScoreKind {
+        // The final evaluation score that was used decide which move to make.
+        FINAL = 0;
+        // The prior probabilities of a (neural) MCTS search (a.k.a. move_probs).
+        MCTS_PRIOR = 1;
+    }
+    message Score {
+        ScoreKind kind = 1;
+        float score = 2;
+    }
+    message ScoredMove {
         int32 row = 1;
         int32 col = 2;
         Field.CellType type = 3;
         // Should be between [0..1] and indicate the likelihood of choosing this move.
-        float evaluation = 4;     
+        repeated Score scores = 4;     
     }
-    repeated MoveEval moves = 1;
+    // All scores that the agent generated. If not empty, the first element
+    // in the sequence MUST be the FINAL score.
+    repeated ScoredMove moves = 1;
 }
 
 message SuggestMoveResponse {

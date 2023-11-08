@@ -190,20 +190,33 @@ class SuggestMoveRequest(_message.Message):
 
 class SuggestMoveStats(_message.Message):
     __slots__ = ["moves"]
-    class MoveEval(_message.Message):
-        __slots__ = ["row", "col", "type", "evaluation"]
+    class ScoreKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+        __slots__ = []
+        FINAL: _ClassVar[SuggestMoveStats.ScoreKind]
+        MCTS_PRIOR: _ClassVar[SuggestMoveStats.ScoreKind]
+    FINAL: SuggestMoveStats.ScoreKind
+    MCTS_PRIOR: SuggestMoveStats.ScoreKind
+    class Score(_message.Message):
+        __slots__ = ["kind", "score"]
+        KIND_FIELD_NUMBER: _ClassVar[int]
+        SCORE_FIELD_NUMBER: _ClassVar[int]
+        kind: SuggestMoveStats.ScoreKind
+        score: float
+        def __init__(self, kind: _Optional[_Union[SuggestMoveStats.ScoreKind, str]] = ..., score: _Optional[float] = ...) -> None: ...
+    class ScoredMove(_message.Message):
+        __slots__ = ["row", "col", "type", "scores"]
         ROW_FIELD_NUMBER: _ClassVar[int]
         COL_FIELD_NUMBER: _ClassVar[int]
         TYPE_FIELD_NUMBER: _ClassVar[int]
-        EVALUATION_FIELD_NUMBER: _ClassVar[int]
+        SCORES_FIELD_NUMBER: _ClassVar[int]
         row: int
         col: int
         type: Field.CellType
-        evaluation: float
-        def __init__(self, row: _Optional[int] = ..., col: _Optional[int] = ..., type: _Optional[_Union[Field.CellType, str]] = ..., evaluation: _Optional[float] = ...) -> None: ...
+        scores: _containers.RepeatedCompositeFieldContainer[SuggestMoveStats.Score]
+        def __init__(self, row: _Optional[int] = ..., col: _Optional[int] = ..., type: _Optional[_Union[Field.CellType, str]] = ..., scores: _Optional[_Iterable[_Union[SuggestMoveStats.Score, _Mapping]]] = ...) -> None: ...
     MOVES_FIELD_NUMBER: _ClassVar[int]
-    moves: _containers.RepeatedCompositeFieldContainer[SuggestMoveStats.MoveEval]
-    def __init__(self, moves: _Optional[_Iterable[_Union[SuggestMoveStats.MoveEval, _Mapping]]] = ...) -> None: ...
+    moves: _containers.RepeatedCompositeFieldContainer[SuggestMoveStats.ScoredMove]
+    def __init__(self, moves: _Optional[_Iterable[_Union[SuggestMoveStats.ScoredMove, _Mapping]]] = ...) -> None: ...
 
 class SuggestMoveResponse(_message.Message):
     __slots__ = ["move", "move_stats"]

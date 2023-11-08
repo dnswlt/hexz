@@ -113,9 +113,12 @@ extern SuggestMoveResponseDefaultTypeInternal _SuggestMoveResponse_default_insta
 class SuggestMoveStats;
 struct SuggestMoveStatsDefaultTypeInternal;
 extern SuggestMoveStatsDefaultTypeInternal _SuggestMoveStats_default_instance_;
-class SuggestMoveStats_MoveEval;
-struct SuggestMoveStats_MoveEvalDefaultTypeInternal;
-extern SuggestMoveStats_MoveEvalDefaultTypeInternal _SuggestMoveStats_MoveEval_default_instance_;
+class SuggestMoveStats_Score;
+struct SuggestMoveStats_ScoreDefaultTypeInternal;
+extern SuggestMoveStats_ScoreDefaultTypeInternal _SuggestMoveStats_Score_default_instance_;
+class SuggestMoveStats_ScoredMove;
+struct SuggestMoveStats_ScoredMoveDefaultTypeInternal;
+extern SuggestMoveStats_ScoredMoveDefaultTypeInternal _SuggestMoveStats_ScoredMove_default_instance_;
 class TrainingExample;
 struct TrainingExampleDefaultTypeInternal;
 extern TrainingExampleDefaultTypeInternal _TrainingExample_default_instance_;
@@ -199,6 +202,38 @@ inline const std::string& Field_CellType_Name(Field_CellType value) {
 inline bool Field_CellType_Parse(absl::string_view name, Field_CellType* value) {
   return ::google::protobuf::internal::ParseNamedEnum<Field_CellType>(
       Field_CellType_descriptor(), name, value);
+}
+enum SuggestMoveStats_ScoreKind : int {
+  SuggestMoveStats_ScoreKind_FINAL = 0,
+  SuggestMoveStats_ScoreKind_MCTS_PRIOR = 1,
+  SuggestMoveStats_ScoreKind_SuggestMoveStats_ScoreKind_INT_MIN_SENTINEL_DO_NOT_USE_ =
+      std::numeric_limits<::int32_t>::min(),
+  SuggestMoveStats_ScoreKind_SuggestMoveStats_ScoreKind_INT_MAX_SENTINEL_DO_NOT_USE_ =
+      std::numeric_limits<::int32_t>::max(),
+};
+
+bool SuggestMoveStats_ScoreKind_IsValid(int value);
+constexpr SuggestMoveStats_ScoreKind SuggestMoveStats_ScoreKind_ScoreKind_MIN = static_cast<SuggestMoveStats_ScoreKind>(0);
+constexpr SuggestMoveStats_ScoreKind SuggestMoveStats_ScoreKind_ScoreKind_MAX = static_cast<SuggestMoveStats_ScoreKind>(1);
+constexpr int SuggestMoveStats_ScoreKind_ScoreKind_ARRAYSIZE = 1 + 1;
+const ::google::protobuf::EnumDescriptor*
+SuggestMoveStats_ScoreKind_descriptor();
+template <typename T>
+const std::string& SuggestMoveStats_ScoreKind_Name(T value) {
+  static_assert(std::is_same<T, SuggestMoveStats_ScoreKind>::value ||
+                    std::is_integral<T>::value,
+                "Incorrect type passed to ScoreKind_Name().");
+  return SuggestMoveStats_ScoreKind_Name(static_cast<SuggestMoveStats_ScoreKind>(value));
+}
+template <>
+inline const std::string& SuggestMoveStats_ScoreKind_Name(SuggestMoveStats_ScoreKind value) {
+  return ::google::protobuf::internal::NameOfDenseEnum<SuggestMoveStats_ScoreKind_descriptor,
+                                                 0, 1>(
+      static_cast<int>(value));
+}
+inline bool SuggestMoveStats_ScoreKind_Parse(absl::string_view name, SuggestMoveStats_ScoreKind* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<SuggestMoveStats_ScoreKind>(
+      SuggestMoveStats_ScoreKind_descriptor(), name, value);
 }
 enum AddTrainingExamplesResponse_Status : int {
   AddTrainingExamplesResponse_Status_STATUS_UNSPECIFIED = 0,
@@ -3193,25 +3228,25 @@ class SuggestMoveRequest final :
   friend struct ::TableStruct_hexz_2eproto;
 };// -------------------------------------------------------------------
 
-class SuggestMoveStats_MoveEval final :
-    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:hexzpb.SuggestMoveStats.MoveEval) */ {
+class SuggestMoveStats_Score final :
+    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:hexzpb.SuggestMoveStats.Score) */ {
  public:
-  inline SuggestMoveStats_MoveEval() : SuggestMoveStats_MoveEval(nullptr) {}
-  ~SuggestMoveStats_MoveEval() override;
+  inline SuggestMoveStats_Score() : SuggestMoveStats_Score(nullptr) {}
+  ~SuggestMoveStats_Score() override;
   template<typename = void>
-  explicit PROTOBUF_CONSTEXPR SuggestMoveStats_MoveEval(::google::protobuf::internal::ConstantInitialized);
+  explicit PROTOBUF_CONSTEXPR SuggestMoveStats_Score(::google::protobuf::internal::ConstantInitialized);
 
-  SuggestMoveStats_MoveEval(const SuggestMoveStats_MoveEval& from);
-  SuggestMoveStats_MoveEval(SuggestMoveStats_MoveEval&& from) noexcept
-    : SuggestMoveStats_MoveEval() {
+  SuggestMoveStats_Score(const SuggestMoveStats_Score& from);
+  SuggestMoveStats_Score(SuggestMoveStats_Score&& from) noexcept
+    : SuggestMoveStats_Score() {
     *this = ::std::move(from);
   }
 
-  inline SuggestMoveStats_MoveEval& operator=(const SuggestMoveStats_MoveEval& from) {
+  inline SuggestMoveStats_Score& operator=(const SuggestMoveStats_Score& from) {
     CopyFrom(from);
     return *this;
   }
-  inline SuggestMoveStats_MoveEval& operator=(SuggestMoveStats_MoveEval&& from) noexcept {
+  inline SuggestMoveStats_Score& operator=(SuggestMoveStats_Score&& from) noexcept {
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()
   #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
@@ -3241,20 +3276,20 @@ class SuggestMoveStats_MoveEval final :
   static const ::google::protobuf::Reflection* GetReflection() {
     return default_instance().GetMetadata().reflection;
   }
-  static const SuggestMoveStats_MoveEval& default_instance() {
+  static const SuggestMoveStats_Score& default_instance() {
     return *internal_default_instance();
   }
-  static inline const SuggestMoveStats_MoveEval* internal_default_instance() {
-    return reinterpret_cast<const SuggestMoveStats_MoveEval*>(
-               &_SuggestMoveStats_MoveEval_default_instance_);
+  static inline const SuggestMoveStats_Score* internal_default_instance() {
+    return reinterpret_cast<const SuggestMoveStats_Score*>(
+               &_SuggestMoveStats_Score_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
     14;
 
-  friend void swap(SuggestMoveStats_MoveEval& a, SuggestMoveStats_MoveEval& b) {
+  friend void swap(SuggestMoveStats_Score& a, SuggestMoveStats_Score& b) {
     a.Swap(&b);
   }
-  inline void Swap(SuggestMoveStats_MoveEval* other) {
+  inline void Swap(SuggestMoveStats_Score* other) {
     if (other == this) return;
   #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
     if (GetOwningArena() != nullptr &&
@@ -3267,7 +3302,7 @@ class SuggestMoveStats_MoveEval final :
       ::google::protobuf::internal::GenericSwap(this, other);
     }
   }
-  void UnsafeArenaSwap(SuggestMoveStats_MoveEval* other) {
+  void UnsafeArenaSwap(SuggestMoveStats_Score* other) {
     if (other == this) return;
     ABSL_DCHECK(GetOwningArena() == other->GetOwningArena());
     InternalSwap(other);
@@ -3275,14 +3310,14 @@ class SuggestMoveStats_MoveEval final :
 
   // implements Message ----------------------------------------------
 
-  SuggestMoveStats_MoveEval* New(::google::protobuf::Arena* arena = nullptr) const final {
-    return CreateMaybeMessage<SuggestMoveStats_MoveEval>(arena);
+  SuggestMoveStats_Score* New(::google::protobuf::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<SuggestMoveStats_Score>(arena);
   }
   using ::google::protobuf::Message::CopyFrom;
-  void CopyFrom(const SuggestMoveStats_MoveEval& from);
+  void CopyFrom(const SuggestMoveStats_Score& from);
   using ::google::protobuf::Message::MergeFrom;
-  void MergeFrom( const SuggestMoveStats_MoveEval& from) {
-    SuggestMoveStats_MoveEval::MergeImpl(*this, from);
+  void MergeFrom( const SuggestMoveStats_Score& from) {
+    SuggestMoveStats_Score::MergeImpl(*this, from);
   }
   private:
   static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
@@ -3300,15 +3335,15 @@ class SuggestMoveStats_MoveEval final :
   void SharedCtor(::google::protobuf::Arena* arena);
   void SharedDtor();
   void SetCachedSize(int size) const final;
-  void InternalSwap(SuggestMoveStats_MoveEval* other);
+  void InternalSwap(SuggestMoveStats_Score* other);
 
   private:
   friend class ::google::protobuf::internal::AnyMetadata;
   static ::absl::string_view FullMessageName() {
-    return "hexzpb.SuggestMoveStats.MoveEval";
+    return "hexzpb.SuggestMoveStats.Score";
   }
   protected:
-  explicit SuggestMoveStats_MoveEval(::google::protobuf::Arena* arena);
+  explicit SuggestMoveStats_Score(::google::protobuf::Arena* arena);
   public:
 
   static const ClassData _class_data_;
@@ -3321,11 +3356,199 @@ class SuggestMoveStats_MoveEval final :
   // accessors -------------------------------------------------------
 
   enum : int {
+    kKindFieldNumber = 1,
+    kScoreFieldNumber = 2,
+  };
+  // .hexzpb.SuggestMoveStats.ScoreKind kind = 1;
+  void clear_kind() ;
+  ::hexzpb::SuggestMoveStats_ScoreKind kind() const;
+  void set_kind(::hexzpb::SuggestMoveStats_ScoreKind value);
+
+  private:
+  ::hexzpb::SuggestMoveStats_ScoreKind _internal_kind() const;
+  void _internal_set_kind(::hexzpb::SuggestMoveStats_ScoreKind value);
+
+  public:
+  // float score = 2;
+  void clear_score() ;
+  float score() const;
+  void set_score(float value);
+
+  private:
+  float _internal_score() const;
+  void _internal_set_score(float value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:hexzpb.SuggestMoveStats.Score)
+ private:
+  class _Internal;
+
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<1, 2, 0, 0, 2> _table_;
+  template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    int kind_;
+    float score_;
+    mutable ::google::protobuf::internal::CachedSize _cached_size_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_hexz_2eproto;
+};// -------------------------------------------------------------------
+
+class SuggestMoveStats_ScoredMove final :
+    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:hexzpb.SuggestMoveStats.ScoredMove) */ {
+ public:
+  inline SuggestMoveStats_ScoredMove() : SuggestMoveStats_ScoredMove(nullptr) {}
+  ~SuggestMoveStats_ScoredMove() override;
+  template<typename = void>
+  explicit PROTOBUF_CONSTEXPR SuggestMoveStats_ScoredMove(::google::protobuf::internal::ConstantInitialized);
+
+  SuggestMoveStats_ScoredMove(const SuggestMoveStats_ScoredMove& from);
+  SuggestMoveStats_ScoredMove(SuggestMoveStats_ScoredMove&& from) noexcept
+    : SuggestMoveStats_ScoredMove() {
+    *this = ::std::move(from);
+  }
+
+  inline SuggestMoveStats_ScoredMove& operator=(const SuggestMoveStats_ScoredMove& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline SuggestMoveStats_ScoredMove& operator=(SuggestMoveStats_ScoredMove&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const SuggestMoveStats_ScoredMove& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const SuggestMoveStats_ScoredMove* internal_default_instance() {
+    return reinterpret_cast<const SuggestMoveStats_ScoredMove*>(
+               &_SuggestMoveStats_ScoredMove_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    15;
+
+  friend void swap(SuggestMoveStats_ScoredMove& a, SuggestMoveStats_ScoredMove& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(SuggestMoveStats_ScoredMove* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(SuggestMoveStats_ScoredMove* other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  SuggestMoveStats_ScoredMove* New(::google::protobuf::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<SuggestMoveStats_ScoredMove>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const SuggestMoveStats_ScoredMove& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom( const SuggestMoveStats_ScoredMove& from) {
+    SuggestMoveStats_ScoredMove::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  ::size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::google::protobuf::internal::ParseContext* ctx) final;
+  ::uint8_t* _InternalSerialize(
+      ::uint8_t* target, ::google::protobuf::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::google::protobuf::Arena* arena);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(SuggestMoveStats_ScoredMove* other);
+
+  private:
+  friend class ::google::protobuf::internal::AnyMetadata;
+  static ::absl::string_view FullMessageName() {
+    return "hexzpb.SuggestMoveStats.ScoredMove";
+  }
+  protected:
+  explicit SuggestMoveStats_ScoredMove(::google::protobuf::Arena* arena);
+  public:
+
+  static const ClassData _class_data_;
+  const ::google::protobuf::Message::ClassData*GetClassData() const final;
+
+  ::google::protobuf::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kScoresFieldNumber = 4,
     kRowFieldNumber = 1,
     kColFieldNumber = 2,
     kTypeFieldNumber = 3,
-    kEvaluationFieldNumber = 4,
   };
+  // repeated .hexzpb.SuggestMoveStats.Score scores = 4;
+  int scores_size() const;
+  private:
+  int _internal_scores_size() const;
+
+  public:
+  void clear_scores() ;
+  ::hexzpb::SuggestMoveStats_Score* mutable_scores(int index);
+  ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats_Score >*
+      mutable_scores();
+  private:
+  const ::google::protobuf::RepeatedPtrField<::hexzpb::SuggestMoveStats_Score>& _internal_scores() const;
+  ::google::protobuf::RepeatedPtrField<::hexzpb::SuggestMoveStats_Score>* _internal_mutable_scores();
+  public:
+  const ::hexzpb::SuggestMoveStats_Score& scores(int index) const;
+  ::hexzpb::SuggestMoveStats_Score* add_scores();
+  const ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats_Score >&
+      scores() const;
   // int32 row = 1;
   void clear_row() ;
   ::int32_t row() const;
@@ -3356,30 +3579,20 @@ class SuggestMoveStats_MoveEval final :
   void _internal_set_type(::hexzpb::Field_CellType value);
 
   public:
-  // float evaluation = 4;
-  void clear_evaluation() ;
-  float evaluation() const;
-  void set_evaluation(float value);
-
-  private:
-  float _internal_evaluation() const;
-  void _internal_set_evaluation(float value);
-
-  public:
-  // @@protoc_insertion_point(class_scope:hexzpb.SuggestMoveStats.MoveEval)
+  // @@protoc_insertion_point(class_scope:hexzpb.SuggestMoveStats.ScoredMove)
  private:
   class _Internal;
 
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<2, 4, 0, 0, 2> _table_;
+  static const ::google::protobuf::internal::TcParseTable<2, 4, 1, 0, 2> _table_;
   template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
   struct Impl_ {
+    ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats_Score > scores_;
     ::int32_t row_;
     ::int32_t col_;
     int type_;
-    float evaluation_;
     mutable ::google::protobuf::internal::CachedSize _cached_size_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -3443,7 +3656,7 @@ class SuggestMoveStats final :
                &_SuggestMoveStats_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    15;
+    16;
 
   friend void swap(SuggestMoveStats& a, SuggestMoveStats& b) {
     a.Swap(&b);
@@ -3512,30 +3725,51 @@ class SuggestMoveStats final :
 
   // nested types ----------------------------------------------------
 
-  typedef SuggestMoveStats_MoveEval MoveEval;
+  typedef SuggestMoveStats_Score Score;
+  typedef SuggestMoveStats_ScoredMove ScoredMove;
+
+  using ScoreKind = SuggestMoveStats_ScoreKind;
+  static constexpr ScoreKind FINAL = SuggestMoveStats_ScoreKind_FINAL;
+  static constexpr ScoreKind MCTS_PRIOR = SuggestMoveStats_ScoreKind_MCTS_PRIOR;
+  static inline bool ScoreKind_IsValid(int value) {
+    return SuggestMoveStats_ScoreKind_IsValid(value);
+  }
+  static constexpr ScoreKind ScoreKind_MIN = SuggestMoveStats_ScoreKind_ScoreKind_MIN;
+  static constexpr ScoreKind ScoreKind_MAX = SuggestMoveStats_ScoreKind_ScoreKind_MAX;
+  static constexpr int ScoreKind_ARRAYSIZE = SuggestMoveStats_ScoreKind_ScoreKind_ARRAYSIZE;
+  static inline const ::google::protobuf::EnumDescriptor* ScoreKind_descriptor() {
+    return SuggestMoveStats_ScoreKind_descriptor();
+  }
+  template <typename T>
+  static inline const std::string& ScoreKind_Name(T value) {
+    return SuggestMoveStats_ScoreKind_Name(value);
+  }
+  static inline bool ScoreKind_Parse(absl::string_view name, ScoreKind* value) {
+    return SuggestMoveStats_ScoreKind_Parse(name, value);
+  }
 
   // accessors -------------------------------------------------------
 
   enum : int {
     kMovesFieldNumber = 1,
   };
-  // repeated .hexzpb.SuggestMoveStats.MoveEval moves = 1;
+  // repeated .hexzpb.SuggestMoveStats.ScoredMove moves = 1;
   int moves_size() const;
   private:
   int _internal_moves_size() const;
 
   public:
   void clear_moves() ;
-  ::hexzpb::SuggestMoveStats_MoveEval* mutable_moves(int index);
-  ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats_MoveEval >*
+  ::hexzpb::SuggestMoveStats_ScoredMove* mutable_moves(int index);
+  ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats_ScoredMove >*
       mutable_moves();
   private:
-  const ::google::protobuf::RepeatedPtrField<::hexzpb::SuggestMoveStats_MoveEval>& _internal_moves() const;
-  ::google::protobuf::RepeatedPtrField<::hexzpb::SuggestMoveStats_MoveEval>* _internal_mutable_moves();
+  const ::google::protobuf::RepeatedPtrField<::hexzpb::SuggestMoveStats_ScoredMove>& _internal_moves() const;
+  ::google::protobuf::RepeatedPtrField<::hexzpb::SuggestMoveStats_ScoredMove>* _internal_mutable_moves();
   public:
-  const ::hexzpb::SuggestMoveStats_MoveEval& moves(int index) const;
-  ::hexzpb::SuggestMoveStats_MoveEval* add_moves();
-  const ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats_MoveEval >&
+  const ::hexzpb::SuggestMoveStats_ScoredMove& moves(int index) const;
+  ::hexzpb::SuggestMoveStats_ScoredMove* add_moves();
+  const ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats_ScoredMove >&
       moves() const;
   // @@protoc_insertion_point(class_scope:hexzpb.SuggestMoveStats)
  private:
@@ -3547,7 +3781,7 @@ class SuggestMoveStats final :
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
   struct Impl_ {
-    ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats_MoveEval > moves_;
+    ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats_ScoredMove > moves_;
     mutable ::google::protobuf::internal::CachedSize _cached_size_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -3611,7 +3845,7 @@ class SuggestMoveResponse final :
                &_SuggestMoveResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    16;
+    17;
 
   friend void swap(SuggestMoveResponse& a, SuggestMoveResponse& b) {
     a.Swap(&b);
@@ -3792,7 +4026,7 @@ class ModelKey final :
                &_ModelKey_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    17;
+    18;
 
   friend void swap(ModelKey& a, ModelKey& b) {
     a.Swap(&b);
@@ -3968,7 +4202,7 @@ class AddTrainingExamplesRequest final :
                &_AddTrainingExamplesRequest_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    18;
+    19;
 
   friend void swap(AddTrainingExamplesRequest& a, AddTrainingExamplesRequest& b) {
     a.Swap(&b);
@@ -4152,7 +4386,7 @@ class AddTrainingExamplesResponse final :
                &_AddTrainingExamplesResponse_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    19;
+    20;
 
   friend void swap(AddTrainingExamplesResponse& a, AddTrainingExamplesResponse& b) {
     a.Swap(&b);
@@ -4369,7 +4603,7 @@ class TrainingExample_Stats final :
                &_TrainingExample_Stats_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    20;
+    21;
 
   friend void swap(TrainingExample_Stats& a, TrainingExample_Stats& b) {
     a.Swap(&b);
@@ -4563,7 +4797,7 @@ class TrainingExample final :
                &_TrainingExample_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    21;
+    22;
 
   friend void swap(TrainingExample& a, TrainingExample& b) {
     a.Swap(&b);
@@ -7238,101 +7472,173 @@ inline void SuggestMoveRequest::set_allocated_game_engine_state(::hexzpb::GameEn
 
 // -------------------------------------------------------------------
 
-// SuggestMoveStats_MoveEval
+// SuggestMoveStats_Score
+
+// .hexzpb.SuggestMoveStats.ScoreKind kind = 1;
+inline void SuggestMoveStats_Score::clear_kind() {
+  _impl_.kind_ = 0;
+}
+inline ::hexzpb::SuggestMoveStats_ScoreKind SuggestMoveStats_Score::kind() const {
+  // @@protoc_insertion_point(field_get:hexzpb.SuggestMoveStats.Score.kind)
+  return _internal_kind();
+}
+inline void SuggestMoveStats_Score::set_kind(::hexzpb::SuggestMoveStats_ScoreKind value) {
+  _internal_set_kind(value);
+  // @@protoc_insertion_point(field_set:hexzpb.SuggestMoveStats.Score.kind)
+}
+inline ::hexzpb::SuggestMoveStats_ScoreKind SuggestMoveStats_Score::_internal_kind() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return static_cast<::hexzpb::SuggestMoveStats_ScoreKind>(_impl_.kind_);
+}
+inline void SuggestMoveStats_Score::_internal_set_kind(::hexzpb::SuggestMoveStats_ScoreKind value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.kind_ = value;
+}
+
+// float score = 2;
+inline void SuggestMoveStats_Score::clear_score() {
+  _impl_.score_ = 0;
+}
+inline float SuggestMoveStats_Score::score() const {
+  // @@protoc_insertion_point(field_get:hexzpb.SuggestMoveStats.Score.score)
+  return _internal_score();
+}
+inline void SuggestMoveStats_Score::set_score(float value) {
+  _internal_set_score(value);
+  // @@protoc_insertion_point(field_set:hexzpb.SuggestMoveStats.Score.score)
+}
+inline float SuggestMoveStats_Score::_internal_score() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.score_;
+}
+inline void SuggestMoveStats_Score::_internal_set_score(float value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.score_ = value;
+}
+
+// -------------------------------------------------------------------
+
+// SuggestMoveStats_ScoredMove
 
 // int32 row = 1;
-inline void SuggestMoveStats_MoveEval::clear_row() {
+inline void SuggestMoveStats_ScoredMove::clear_row() {
   _impl_.row_ = 0;
 }
-inline ::int32_t SuggestMoveStats_MoveEval::row() const {
-  // @@protoc_insertion_point(field_get:hexzpb.SuggestMoveStats.MoveEval.row)
+inline ::int32_t SuggestMoveStats_ScoredMove::row() const {
+  // @@protoc_insertion_point(field_get:hexzpb.SuggestMoveStats.ScoredMove.row)
   return _internal_row();
 }
-inline void SuggestMoveStats_MoveEval::set_row(::int32_t value) {
+inline void SuggestMoveStats_ScoredMove::set_row(::int32_t value) {
   _internal_set_row(value);
-  // @@protoc_insertion_point(field_set:hexzpb.SuggestMoveStats.MoveEval.row)
+  // @@protoc_insertion_point(field_set:hexzpb.SuggestMoveStats.ScoredMove.row)
 }
-inline ::int32_t SuggestMoveStats_MoveEval::_internal_row() const {
+inline ::int32_t SuggestMoveStats_ScoredMove::_internal_row() const {
   PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
   return _impl_.row_;
 }
-inline void SuggestMoveStats_MoveEval::_internal_set_row(::int32_t value) {
+inline void SuggestMoveStats_ScoredMove::_internal_set_row(::int32_t value) {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   ;
   _impl_.row_ = value;
 }
 
 // int32 col = 2;
-inline void SuggestMoveStats_MoveEval::clear_col() {
+inline void SuggestMoveStats_ScoredMove::clear_col() {
   _impl_.col_ = 0;
 }
-inline ::int32_t SuggestMoveStats_MoveEval::col() const {
-  // @@protoc_insertion_point(field_get:hexzpb.SuggestMoveStats.MoveEval.col)
+inline ::int32_t SuggestMoveStats_ScoredMove::col() const {
+  // @@protoc_insertion_point(field_get:hexzpb.SuggestMoveStats.ScoredMove.col)
   return _internal_col();
 }
-inline void SuggestMoveStats_MoveEval::set_col(::int32_t value) {
+inline void SuggestMoveStats_ScoredMove::set_col(::int32_t value) {
   _internal_set_col(value);
-  // @@protoc_insertion_point(field_set:hexzpb.SuggestMoveStats.MoveEval.col)
+  // @@protoc_insertion_point(field_set:hexzpb.SuggestMoveStats.ScoredMove.col)
 }
-inline ::int32_t SuggestMoveStats_MoveEval::_internal_col() const {
+inline ::int32_t SuggestMoveStats_ScoredMove::_internal_col() const {
   PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
   return _impl_.col_;
 }
-inline void SuggestMoveStats_MoveEval::_internal_set_col(::int32_t value) {
+inline void SuggestMoveStats_ScoredMove::_internal_set_col(::int32_t value) {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   ;
   _impl_.col_ = value;
 }
 
 // .hexzpb.Field.CellType type = 3;
-inline void SuggestMoveStats_MoveEval::clear_type() {
+inline void SuggestMoveStats_ScoredMove::clear_type() {
   _impl_.type_ = 0;
 }
-inline ::hexzpb::Field_CellType SuggestMoveStats_MoveEval::type() const {
-  // @@protoc_insertion_point(field_get:hexzpb.SuggestMoveStats.MoveEval.type)
+inline ::hexzpb::Field_CellType SuggestMoveStats_ScoredMove::type() const {
+  // @@protoc_insertion_point(field_get:hexzpb.SuggestMoveStats.ScoredMove.type)
   return _internal_type();
 }
-inline void SuggestMoveStats_MoveEval::set_type(::hexzpb::Field_CellType value) {
+inline void SuggestMoveStats_ScoredMove::set_type(::hexzpb::Field_CellType value) {
   _internal_set_type(value);
-  // @@protoc_insertion_point(field_set:hexzpb.SuggestMoveStats.MoveEval.type)
+  // @@protoc_insertion_point(field_set:hexzpb.SuggestMoveStats.ScoredMove.type)
 }
-inline ::hexzpb::Field_CellType SuggestMoveStats_MoveEval::_internal_type() const {
+inline ::hexzpb::Field_CellType SuggestMoveStats_ScoredMove::_internal_type() const {
   PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
   return static_cast<::hexzpb::Field_CellType>(_impl_.type_);
 }
-inline void SuggestMoveStats_MoveEval::_internal_set_type(::hexzpb::Field_CellType value) {
+inline void SuggestMoveStats_ScoredMove::_internal_set_type(::hexzpb::Field_CellType value) {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   ;
   _impl_.type_ = value;
 }
 
-// float evaluation = 4;
-inline void SuggestMoveStats_MoveEval::clear_evaluation() {
-  _impl_.evaluation_ = 0;
+// repeated .hexzpb.SuggestMoveStats.Score scores = 4;
+inline int SuggestMoveStats_ScoredMove::_internal_scores_size() const {
+  return _internal_scores().size();
 }
-inline float SuggestMoveStats_MoveEval::evaluation() const {
-  // @@protoc_insertion_point(field_get:hexzpb.SuggestMoveStats.MoveEval.evaluation)
-  return _internal_evaluation();
+inline int SuggestMoveStats_ScoredMove::scores_size() const {
+  return _internal_scores_size();
 }
-inline void SuggestMoveStats_MoveEval::set_evaluation(float value) {
-  _internal_set_evaluation(value);
-  // @@protoc_insertion_point(field_set:hexzpb.SuggestMoveStats.MoveEval.evaluation)
+inline void SuggestMoveStats_ScoredMove::clear_scores() {
+  _internal_mutable_scores()->Clear();
 }
-inline float SuggestMoveStats_MoveEval::_internal_evaluation() const {
-  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
-  return _impl_.evaluation_;
+inline ::hexzpb::SuggestMoveStats_Score* SuggestMoveStats_ScoredMove::mutable_scores(int index) {
+  // @@protoc_insertion_point(field_mutable:hexzpb.SuggestMoveStats.ScoredMove.scores)
+  return _internal_mutable_scores()->Mutable(index);
 }
-inline void SuggestMoveStats_MoveEval::_internal_set_evaluation(float value) {
+inline ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats_Score >*
+SuggestMoveStats_ScoredMove::mutable_scores() {
+  // @@protoc_insertion_point(field_mutable_list:hexzpb.SuggestMoveStats.ScoredMove.scores)
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  ;
-  _impl_.evaluation_ = value;
+  return _internal_mutable_scores();
+}
+inline const ::hexzpb::SuggestMoveStats_Score& SuggestMoveStats_ScoredMove::scores(int index) const {
+  // @@protoc_insertion_point(field_get:hexzpb.SuggestMoveStats.ScoredMove.scores)
+    return _internal_scores().Get(index);
+}
+inline ::hexzpb::SuggestMoveStats_Score* SuggestMoveStats_ScoredMove::add_scores() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ::hexzpb::SuggestMoveStats_Score* _add = _internal_mutable_scores()->Add();
+  // @@protoc_insertion_point(field_add:hexzpb.SuggestMoveStats.ScoredMove.scores)
+  return _add;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats_Score >&
+SuggestMoveStats_ScoredMove::scores() const {
+  // @@protoc_insertion_point(field_list:hexzpb.SuggestMoveStats.ScoredMove.scores)
+  return _internal_scores();
+}
+inline const ::google::protobuf::RepeatedPtrField<::hexzpb::SuggestMoveStats_Score>&
+SuggestMoveStats_ScoredMove::_internal_scores() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.scores_;
+}
+inline ::google::protobuf::RepeatedPtrField<::hexzpb::SuggestMoveStats_Score>*
+SuggestMoveStats_ScoredMove::_internal_mutable_scores() {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return &_impl_.scores_;
 }
 
 // -------------------------------------------------------------------
 
 // SuggestMoveStats
 
-// repeated .hexzpb.SuggestMoveStats.MoveEval moves = 1;
+// repeated .hexzpb.SuggestMoveStats.ScoredMove moves = 1;
 inline int SuggestMoveStats::_internal_moves_size() const {
   return _internal_moves().size();
 }
@@ -7342,37 +7648,37 @@ inline int SuggestMoveStats::moves_size() const {
 inline void SuggestMoveStats::clear_moves() {
   _internal_mutable_moves()->Clear();
 }
-inline ::hexzpb::SuggestMoveStats_MoveEval* SuggestMoveStats::mutable_moves(int index) {
+inline ::hexzpb::SuggestMoveStats_ScoredMove* SuggestMoveStats::mutable_moves(int index) {
   // @@protoc_insertion_point(field_mutable:hexzpb.SuggestMoveStats.moves)
   return _internal_mutable_moves()->Mutable(index);
 }
-inline ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats_MoveEval >*
+inline ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats_ScoredMove >*
 SuggestMoveStats::mutable_moves() {
   // @@protoc_insertion_point(field_mutable_list:hexzpb.SuggestMoveStats.moves)
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   return _internal_mutable_moves();
 }
-inline const ::hexzpb::SuggestMoveStats_MoveEval& SuggestMoveStats::moves(int index) const {
+inline const ::hexzpb::SuggestMoveStats_ScoredMove& SuggestMoveStats::moves(int index) const {
   // @@protoc_insertion_point(field_get:hexzpb.SuggestMoveStats.moves)
     return _internal_moves().Get(index);
 }
-inline ::hexzpb::SuggestMoveStats_MoveEval* SuggestMoveStats::add_moves() {
+inline ::hexzpb::SuggestMoveStats_ScoredMove* SuggestMoveStats::add_moves() {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  ::hexzpb::SuggestMoveStats_MoveEval* _add = _internal_mutable_moves()->Add();
+  ::hexzpb::SuggestMoveStats_ScoredMove* _add = _internal_mutable_moves()->Add();
   // @@protoc_insertion_point(field_add:hexzpb.SuggestMoveStats.moves)
   return _add;
 }
-inline const ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats_MoveEval >&
+inline const ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats_ScoredMove >&
 SuggestMoveStats::moves() const {
   // @@protoc_insertion_point(field_list:hexzpb.SuggestMoveStats.moves)
   return _internal_moves();
 }
-inline const ::google::protobuf::RepeatedPtrField<::hexzpb::SuggestMoveStats_MoveEval>&
+inline const ::google::protobuf::RepeatedPtrField<::hexzpb::SuggestMoveStats_ScoredMove>&
 SuggestMoveStats::_internal_moves() const {
   PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
   return _impl_.moves_;
 }
-inline ::google::protobuf::RepeatedPtrField<::hexzpb::SuggestMoveStats_MoveEval>*
+inline ::google::protobuf::RepeatedPtrField<::hexzpb::SuggestMoveStats_ScoredMove>*
 SuggestMoveStats::_internal_mutable_moves() {
   PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
   return &_impl_.moves_;
@@ -8374,6 +8680,12 @@ struct is_proto_enum<::hexzpb::Field_CellType> : std::true_type {};
 template <>
 inline const EnumDescriptor* GetEnumDescriptor<::hexzpb::Field_CellType>() {
   return ::hexzpb::Field_CellType_descriptor();
+}
+template <>
+struct is_proto_enum<::hexzpb::SuggestMoveStats_ScoreKind> : std::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor<::hexzpb::SuggestMoveStats_ScoreKind>() {
+  return ::hexzpb::SuggestMoveStats_ScoreKind_descriptor();
 }
 template <>
 struct is_proto_enum<::hexzpb::AddTrainingExamplesResponse_Status> : std::true_type {};

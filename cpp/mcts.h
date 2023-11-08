@@ -29,6 +29,7 @@ class Node {
   std::vector<std::unique_ptr<Node>>& children() { return children_; }
   // Update the turn.
   void SetTurn(int turn) { turn_ = turn; }
+  float Prior() const;
 
   float Puct() const noexcept;
   Node* MaxPuctChild() const;
@@ -58,26 +59,11 @@ class Node {
 
   // Returns the normalized visit counts (which sum to 1) as a (2, 11, 10)
   // tensor. This value should be used to update the move probs of the model.
-  torch::Tensor NormVisitCounts() {
-    auto t = torch::zeros({2, 11, 10});
-    auto t_acc = t.accessor<float, 3>();
-    for (const auto& c : children_) {
-      const auto& m = c->move_;
-      t_acc[m.typ][m.r][m.c] = static_cast<float>(c->visit_count_);
-    }
-    t /= t.sum();
-    return t;
-  }
+  torch::Tensor NormVisitCounts() const;
 
   // Sets the initial move probabilities ("policy") obtained from the model
   // prediction.
-  void SetMoveProbs(torch::Tensor move_probs) {
-    assert(move_probs.numel() == 2 * 11 * 10);
-    assert(std::abs(move_probs.sum().item<float>() - 1.0) < 1e-3);
-    move_probs_ =
-        std::vector<float>(move_probs.data_ptr<float>(),
-                           move_probs.data_ptr<float>() + move_probs.numel());
-  }
+  void SetMoveProbs(torch::Tensor move_probs);
 
   // Returns the number of children that had a nonzero visit_count.
   int NumVisitedChildren() const noexcept;
@@ -158,8 +144,9 @@ class NeuralMCTS {
 
   // SuggestMove returns the best move suggestion that the NeuralMCTS algorithm
   // comes up with in think_time_millis milliseconds.
-  absl::StatusOr<std::unique_ptr<Node>> SuggestMove(
-      int player, const Board& board, int think_time_millis);
+  absl::StatusOr<std::unique_ptr<Node>> SuggestMove(int player,
+                                                    const Board& board,
+                                                    int think_time_millis);
 
  private:
   int runs_per_move_;
