@@ -9,6 +9,7 @@ import (
 
 	unsafe "unsafe"
 
+	pb "github.com/dnswlt/hexz/hexzpb"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
@@ -72,6 +73,7 @@ func TestMCTSLosingBoardWithHighQ(t *testing.T) {
 					mcts.WinningBoard,
 					mcts.LosingBoard,
 				},
+				[]*pb.SuggestMoveStats{},
 				[]string{
 					"Current board",
 					"Winning board",

@@ -17,18 +17,26 @@ import (
 )
 
 var (
-	remoteURL = flag.String("remote-url", "http://localhost:9094", "URL of the opponent player.")
-	// maxIterations = flag.Int("max-iterations", -1, "Number of iterations each player is allowed to make per move. -1 for unlimited.")
-	thinkTime       = flag.Duration("think-time", 1*time.Second, "Maximum thinking time per move.")
-	remoteThinkTime = flag.Duration("remote-think-time", 3*time.Second, "Maximum thinking time per move for remote player.")
-	svgOutputFile   = flag.String("svg-file", "/tmp/nbench.html", "File to which SVG output is written.")
+	player1URL    = flag.String("p1-url", "", "URL for player 1 (empty for the built-in CPU layer).")
+	player2URL    = flag.String("p2-url", "http://localhost:8080", "URL for player 2 (empty for the built-in CPU layer).")
+	p1ThinkTime   = flag.Duration("p1-think-time", 1*time.Second, "Maximum thinking time per move.")
+	p2ThinkTime   = flag.Duration("p2-think-time", 1*time.Second, "Maximum thinking time per move for remote player.")
+	svgOutputFile = flag.String("svg-file", "/tmp/nbench.html", "File to which SVG output is written.")
 )
+
+func makePlayer(id string, url string, thinkTime time.Duration) hexz.CPUPlayer {
+	if url == "" {
+		return hexz.NewLocalCPUPlayer(hexz.PlayerId(id), thinkTime)
+	} else {
+		return hexz.NewRemoteCPUPlayer(hexz.PlayerId(id), url, thinkTime)
+	}
+}
 
 func playGame() error {
 	ge := hexz.NewGameEngineFlagz()
 	cpuPlayers := []hexz.CPUPlayer{
-		hexz.NewLocalCPUPlayer("P1", *thinkTime),
-		hexz.NewRemoteCPUPlayer(hexz.PlayerId("P2"), *remoteURL, *remoteThinkTime),
+		makePlayer("P1", *player1URL, *p1ThinkTime),
+		makePlayer("P2", *player2URL, *p2ThinkTime),
 	}
 	nMoves := 0
 	boards := []*hexz.Board{}
@@ -48,7 +56,8 @@ func playGame() error {
 		boards = append(boards, ge.B.Copy())
 		stats = append(stats, mvStats)
 		if *svgOutputFile != "" {
-			hexz.ExportSVG(*svgOutputFile, boards, nil)
+			// Update SVG after every move, so we can follow along as the game proceeds.
+			hexz.ExportSVG(*svgOutputFile, boards, stats, nil)
 		}
 	}
 	fmt.Printf("Game ended after %d moves. Winner: %d. Final result: %v", nMoves, ge.Winner(), ge.B.Score)
