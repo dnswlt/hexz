@@ -11,7 +11,7 @@ import queue
 import time
 import typing
 
-from pyhexz.board import Board
+from pyhexz.hexc import CBoard
 from pyhexz.config import TrainingConfig
 from pyhexz.errors import HexzError
 from pyhexz.hexz import HexzNeuralNetwork, NeuralMCTS
@@ -35,13 +35,13 @@ def suggest_move(
         state: the game state, including the player whose turn it is, and the board.
         think_time: thinking time in seconds.
     """
-    board = Board.from_numpy(sconv.convert_board(state.flagz.board))
+    board = CBoard.from_numpy(sconv.convert_board(state.flagz.board))
     try:
         board.validate()
     except ValueError as e:
         return str(e), 400
     turn = state.flagz.board.turn - 1  # Go impl uses (1, 2), we use (0, 1).
-    print(f"Board info: flags:{board.nflags}, turn:{turn}")
+    print(f"Board info: flags:({board.flags(0)},{board.flags(0)}), turn:{turn}")
     mcts = NeuralMCTS(
         board, model, game_id=time.strftime("CPU-%Y%m%d-%H%M%S"), turn=turn
     )

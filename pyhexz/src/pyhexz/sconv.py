@@ -7,14 +7,14 @@ import os.path
 import sys
 import zipfile
 
-from pyhexz.board import Board
+from pyhexz.hexc import CBoard
 from pyhexz.hexz import Example
 from pyhexz import hexz_pb2
 from pyhexz import svg
 
 
 def convert_board(proto_board: hexz_pb2.Board, dtype=np.float32) -> np.ndarray:
-    board = np.zeros((9, 11, 10), dtype=dtype)
+    board = np.zeros((11, 11, 10), dtype=dtype)
     # Mark invalid cells as blocked
     board[2, [1, 3, 5, 7, 9], 9] = 1
     board[6, [1, 3, 5, 7, 9], 9] = 1
@@ -62,7 +62,7 @@ def convert_board(proto_board: hexz_pb2.Board, dtype=np.float32) -> np.ndarray:
 def convert(e: hexz_pb2.MCTSExample, validate=True, dtype=np.float32) -> Example:
     board = convert_board(e.board, dtype=dtype)
     if validate:
-        Board.from_numpy(board).validate()
+        CBoard.from_numpy(board).validate()
     move_probs = np.zeros((2, 11, 10), dtype=dtype)
     for s in e.move_stats:
         move_probs[int(s.move.cell_type == 0), s.move.row, s.move.col] = s.visits
@@ -112,7 +112,7 @@ def convert_to_html(args) -> None:
                     examples.append(convert(e))
             svg.export(
                 outpath,
-                boards=[Board.from_numpy(e.board) for e in examples],
+                boards=[CBoard.from_numpy(e.board) for e in examples],
                 captions=[e.game_id for e in examples],
                 move_probs=[e.move_probs for e in examples]
                 if args.draw_probs

@@ -252,7 +252,7 @@ class TrainingTask(threading.Thread):
             else:
                 board = np.load(io.BytesIO(ex.board))
                 pr = np.load(io.BytesIO(ex.move_probs))
-            if board.shape != (9, 11, 10):
+            if board.shape != (11, 11, 10):
                 self.logger.error(
                     f"Received board with wrong shape: {board.shape}. Ignored."
                 )

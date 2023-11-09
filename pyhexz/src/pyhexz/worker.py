@@ -9,7 +9,7 @@ import time
 import torch
 from pyhexz import hexz_pb2
 
-from pyhexz.board import CBoard
+from pyhexz.hexc import CBoard
 from pyhexz.config import WorkerConfig
 from pyhexz.errors import HexzError
 from pyhexz.hexz import HexzNeuralNetwork, NeuralMCTS
@@ -63,7 +63,7 @@ class SelfPlayWorker:
         # Compile the model into a ScriptModule. This had a mild positive impact on performance,
         # even when running in PyTorch (as opposed to libtorch/C++).
         model = torch.jit.script(model)
-        # model = torch.jit.trace(model, torch.rand(1, 9, 11, 10))
+        # model = torch.jit.trace(model, torch.rand(1, 11, 11, 10))
         return model_key, model
 
     def generate_examples(self) -> None:
@@ -89,50 +89,42 @@ class SelfPlayWorker:
                 req.examples.append(
                     hexz_pb2.TrainingExample(
                         unix_micros=time.time_ns() // 1000,
-                        duration_micros=ex.duration_micros,
                         board=np_tobytes(ex.board),
                         move_probs=np_tobytes(ex.move_probs),
                         result=ex.result,
+                        stats=hexz_pb2.TrainingExample.Stats(
+                            duration_micros=ex.duration_micros,
+                        ),
                     )
                 )
             data = req.SerializeToString()
-            for i in range(100):
-                # Try to POST our examples to the training server in an exponential backoff loop.
-                http_resp = requests.post(
-                    config.training_server_url + "/examples", data=data
+            # Try to POST our examples to the training server in an exponential backoff loop.
+            http_resp = requests.post(
+                config.training_server_url + "/examples", data=data
+            )
+            if not http_resp.ok:
+                raise HexzError(
+                    f"Failed to send examples to server: {http_resp.status_code}"
                 )
-                if not http_resp.ok:
-                    raise HexzError(
-                        f"Failed to send examples to server: {http_resp.status_code}"
-                    )
-                try:
-                    resp = hexz_pb2.AddTrainingExamplesResponse.FromString(
-                        http_resp.content
-                    )
-                except DecodeError as e:
-                    raise HexzError(
-                        f"Server replied with invalid AddTrainingExamplesResponse: {e}"
-                    )
-                if (
-                    resp.status
-                    != hexz_pb2.AddTrainingExamplesResponse.REJECTED_TRAINING
-                ):
-                    break
-                # Server is training. Back off exponentially (with 10% jitter) and try again later.
-                backoff_secs = (1.5**i) * np.random.uniform(0.90, 1.10)
-                self.logger.info(
-                    f"Server is training. Backing off for {backoff_secs:.2f}s (#{i})"
+            try:
+                resp = hexz_pb2.AddTrainingExamplesResponse.FromString(
+                    http_resp.content
                 )
-                time.sleep(backoff_secs)
+            except DecodeError as e:
+                raise HexzError(
+                    f"Server replied with invalid AddTrainingExamplesResponse: {e}"
+                )
             if resp.status == hexz_pb2.AddTrainingExamplesResponse.REJECTED_WRONG_MODEL:
                 # Load newer model
                 model_key, model = self.fetch_model(resp.latest_model)
                 self.logger.info(
                     f"Using new model {model_key.name}:{model_key.checkpoint}"
                 )
-            elif resp.status != hexz_pb2.AddTrainingExamplesResponse.ACCEPTED:
+                continue
+            if resp.status != hexz_pb2.AddTrainingExamplesResponse.ACCEPTED:
                 raise HexzError(
-                    f"Unexpected return code from training server: {hexz_pb2.AddTrainingExamplesResponse.Status.Name(resp.status)}"
+                    f"Server did not accept our examples: ",
+                    hexz_pb2.AddTrainingExamplesResponse.Status.Name(resp.status),
                 )
         tm.print_perf_stats()
 

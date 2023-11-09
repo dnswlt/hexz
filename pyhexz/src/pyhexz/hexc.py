@@ -4,8 +4,8 @@ from cython.cimports.libc.math import sqrt
 import numpy as np
 from typing import Optional
 
-from pyhexz.board import CBoard
-
+from pyhexz.board import Board
+from pyhexz.timing import timing
 
 _RNG = np.random.default_rng()
 
@@ -168,6 +168,25 @@ def c_neighbors_map() -> (
 _C_NEIGHBORS = c_neighbors_map()
 
 
+class CBoard(Board):
+    """Subclass of Board that uses fast C implementations where available.
+
+    A CBoard currently only works with np.float32 dtype.
+    """
+
+    @timing
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, dtype=np.float32, **kwargs)
+
+    @timing
+    def make_move(self, player: int, move):
+        c_make_move(self, player, move)
+
+    @timing
+    def occupy_grass(self, player, r, c):
+        c_occupy_grass(self, player, r, c)
+
+
 @cython.cfunc
 def c_occupy_grass(
     board: CBoard, player: cython.int, r: cython.size_t, c: cython.size_t
@@ -185,10 +204,10 @@ def c_occupy_grass(
     for i in range(len(nx)):
         x = nx[i]
         y = ny[i]
-        grass_val = b[8, x, y]
-        if grass_val > 0 and grass_val <= b[1 + player * 4, r, c]:
+        grass_val = b[10, x, y]
+        if grass_val > 0 and grass_val <= b[1 + player * 5, r, c]:
             # Occupy: first remove grass
-            b[8, x, y] = 0
+            b[10, x, y] = 0
             # the rest is exactly like playing a move.
             c_make_move(board, player, (1, r, c, grass_val))
 
@@ -205,7 +224,7 @@ def c_make_move(board: CBoard, player: int, move: tuple[int, int, int, float]):
     with moves returned from `next_moves`.
     """
     b: cython.float[:, :, :] = board.b
-    p4: cython.size_t = player * 4
+    p5: cython.size_t = player * 5
     typ: cython.size_t = move[0]
     r: cython.size_t = move[1]
     c: cython.size_t = move[2]
@@ -217,36 +236,36 @@ def c_make_move(board: CBoard, player: int, move: tuple[int, int, int, float]):
     nx: cython.long[:]
     ny: cython.long[:]
 
-    b[typ + p4, r, c] = val
+    b[typ + p5, r, c] = val
     played_flag = typ == 0
     # Block played cell for both players.
     b[2, r, c] = 1
-    b[6, r, c] = 1
+    b[7, r, c] = 1
     # Set next value to 0 for occupied cell.
     b[3, r, c] = 0
-    b[7, r, c] = 0
+    b[8, r, c] = 0
     # Block neighboring cells if a 5 was played.
     nx, ny = _C_NEIGHBORS[(r, c)]
     # Update next value of neighboring cells. If we played a flag, the next value is 1.
     if played_flag:
         next_val = 1
-        board.nflags[player] -= 1
+        board.b[4 + p5] -= 1
     else:
         next_val = val + 1
     if next_val <= 5:
         for nr, nc in zip(nx, ny):
-            if b[2 + p4, nr, nc] == 0:
+            if b[2 + p5, nr, nc] == 0:
                 if next_val > 5:
-                    b[3 + p4, nr, nc] = 0
-                if b[3 + p4, nr, nc] == 0:
-                    b[3 + p4, nr, nc] = next_val
-                elif b[3 + p4, nr, nc] > next_val:
-                    b[3 + p4, nr, nc] = next_val
+                    b[3 + p5, nr, nc] = 0
+                if b[3 + p5, nr, nc] == 0:
+                    b[3 + p5, nr, nc] = next_val
+                elif b[3 + p5, nr, nc] > next_val:
+                    b[3 + p5, nr, nc] = next_val
     else:
         for i in range(len(nx)):
             # Played a 5: block neighboring cells and clear next value.
-            b[2 + p4, nx[i], ny[i]] = 1
-            b[3 + p4, nx[i], ny[i]] = 0  # Clear next value.
+            b[2 + p5, nx[i], ny[i]] = 1
+            b[3 + p5, nx[i], ny[i]] = 0  # Clear next value.
     if not played_flag:
         c_occupy_grass(board, player, r, c)
 

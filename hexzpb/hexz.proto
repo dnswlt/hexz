@@ -219,7 +219,7 @@ message TrainingExample {
 
     // Training inputs.
     //
-    // Numpy array containing the (9, 11, 10) Board from the view of the current player.
+    // Numpy array containing the (11, 11, 10) Board from the view of the current player.
     // Serialized to bytes using np.save or torch::pickle_save.
     bytes board = 2;
 

@@ -1520,7 +1520,7 @@ type TrainingExample struct {
 	Encoding TrainingExample_Encoding `protobuf:"varint,6,opt,name=encoding,proto3,enum=hexzpb.TrainingExample_Encoding" json:"encoding,omitempty"`
 	// Training inputs.
 	//
-	// Numpy array containing the (9, 11, 10) Board from the view of the current player.
+	// Numpy array containing the (11, 11, 10) Board from the view of the current player.
 	// Serialized to bytes using np.save or torch::pickle_save.
 	Board []byte `protobuf:"bytes,2,opt,name=board,proto3" json:"board,omitempty"`
 	// Training labels.

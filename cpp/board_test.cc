@@ -36,6 +36,20 @@ TEST(BoardTest, NeighborsOf) {
                                    Idx{4, 3}, Idx{4, 5}));
 }
 
+TEST(BoardTest, EnumValues) {
+  // If we change the dimensions of the board, we should adjust the public enum
+  // values.
+  Board b;
+  auto t = b.Tensor(0);
+  EXPECT_EQ(t.sizes(), b.Tensor(1).sizes());
+  auto s = t.sizes();
+  // kGrass is the last enum value (adjust as necessary).
+  EXPECT_EQ(s[0] - 1, Board::Channel::kGrass);
+  // We expect boards to be 11x10:
+  EXPECT_EQ(s[1], 11);
+  EXPECT_EQ(s[2], 10);
+}
+
 TEST(BoardTest, PlayFullGame) {
   Board b = Board::RandomBoard();
   ASSERT_EQ(b.Flags(0), 3);
@@ -278,6 +292,18 @@ TEST(TorchTest, TensorAccessorWrites) {
   auto t_acc = t.accessor<float, 2>();
   t_acc[1][1] = 101;
   EXPECT_EQ(t.index({1, 1}).item<float>(), 101);
+}
+
+TEST(TorchTest, Broadcast) {
+    // We use this broadcasting for the kRemainingFlags channels,
+    // make sure it works as we expect.
+    auto t = torch::ones({11, 11, 10});
+    t.index_put_({Board::Channel::kRemainingFlags}, 0);
+    // Look at an arbitrary index in the middle:
+    EXPECT_EQ(t.index({Board::Channel::kValue, 4, 7}).item<float>(), 1);
+    EXPECT_EQ(t.index({Board::Channel::kRemainingFlags, 4, 7}).item<float>(), 0);
+    // Check that all are set:
+    EXPECT_TRUE(torch::all(t.index({Board::Channel::kRemainingFlags}) == 0).item<bool>());
 }
 
 }  // namespace

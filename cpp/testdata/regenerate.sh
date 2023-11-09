@@ -3,14 +3,14 @@
 #
 # Should be run in a conda (or other) environment that has
 # torch and other deps installed.
-set -eux
+set -e
 
-dir="$(dirname $0)"
-pushd "$dir/../../pyhexz/src"
+dir="$(realpath $(dirname $0))"
+pushd "$dir/../../pyhexz/src" >/dev/null
 python3 -m pyhexz.run --mode=export --model="$dir/scriptmodule.pt" --force
 
-popd
-pushd "$dir"
+popd >/dev/null
+pushd "$dir" >/dev/null
 python3 -c '
 import torch
 t = torch.tensor([[1, 2], [3, 4]], dtype=torch.float32)

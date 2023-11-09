@@ -2,6 +2,8 @@
 
 #include <absl/log/absl_check.h>
 #include <absl/status/statusor.h>
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
 #include <torch/torch.h>
 
 #include <cstdlib>
@@ -14,12 +16,15 @@
 #include "base.h"
 #include "perfm.h"
 
+#define CHANNELS_PER_PLAYER 5
+
 // Accessor macros for the different channels.
-#define I_FLAG(p) (0 + 4 * p)
-#define I_VALUE(p) (1 + 4 * p)
-#define I_BLOCKED(p) (2 + 4 * p)
-#define I_NEXTVAL(p) (3 + 4 * p)
-#define I_GRASS 8
+#define I_FLAG(p) (0 + CHANNELS_PER_PLAYER * p)
+#define I_VALUE(p) (1 + CHANNELS_PER_PLAYER * p)
+#define I_BLOCKED(p) (2 + CHANNELS_PER_PLAYER * p)
+#define I_NEXTVAL(p) (3 + CHANNELS_PER_PLAYER * p)
+#define I_NFLAGS(p) (4 + CHANNELS_PER_PLAYER * p)
+#define I_GRASS 10
 
 #define MOVE_TYPE_FLAG 0
 #define MOVE_TYPE_NORMAL 1
@@ -60,40 +65,17 @@ const std::vector<Idx>& NeighborsOf(const Idx& k) {
 
 }  // namespace internal
 
-Board::Board() : nflags_{0, 0} {
-  b_ = torch::zeros({9, 11, 10}, torch::dtype(torch::kFloat32));
+Board::Board() {
+  b_ = torch::zeros({11, 11, 10}, torch::dtype(torch::kFloat32));
 }
 
 // Copy c'tor.
-Board::Board(const Board& other) {
-  b_ = other.b_.clone();
-  nflags_[0] = other.nflags_[0];
-  nflags_[1] = other.nflags_[1];
-}
+Board::Board(const Board& other) { b_ = other.b_.clone(); }
 
-// Torch representation of a hexz board.
-// A board is represented by an (9, 11, 10) tensor. Each 11x10 channel is
-// a one-hot encoding of the presence of specific type of piece/obstacle/etc.
-// The channels are:
-//
-// * 0: flags by P0
-// * 1: cell value 1-5 for P0
-// * 2: cells blocked for P0 (any occupied cell or a cell next to a 5)
-// * 3: next value for P0
-// * 4: flags by P1
-// * 5: cell value 1-5 for P1
-// * 6: cells blocked for P1
-// * 7: next value for P1
-// * 8: grass cells with value 1-5
-//
-// An action is specified by a (2, 11, 10) numpy array. The first 11x10 channel
-// represents a flag move, the second one represents a regular cell move. A
-// flag move must have a single 1 set, a normal move must have a single value
-// 1-5 set.
 Board Board::RandomBoard() {
   Board b;
-  b.nflags_[0] = 3;
-  b.nflags_[1] = 3;
+  b.b_.index_put_({I_NFLAGS(0)}, 3.0f);
+  b.b_.index_put_({I_NFLAGS(1)}, 3.0f);
   // Even rows have 10 cells, odd rows only 9, so mark the last cell in odd
   // rows as blocked for P1+P2.
   for (int i = 1; i <= 9; i += 2) {
@@ -137,8 +119,10 @@ absl::StatusOr<Board> Board::FromProto(const hexzpb::Board& board) {
     return absl::InvalidArgumentError("Invalid resources.num_pieces shape");
   }
   Board b;
-  b.nflags_[0] = board.resources(0).num_pieces(iFlag);
-  b.nflags_[1] = board.resources(1).num_pieces(iFlag);
+  b.b_.index_put_({I_NFLAGS(0)},
+                  static_cast<float>(board.resources(0).num_pieces(iFlag)));
+  b.b_.index_put_({I_NFLAGS(1)},
+                  static_cast<float>(board.resources(1).num_pieces(iFlag)));
   auto a = b.b_.accessor<float, 3>();
   int r = 0;
   int c = 0;
@@ -208,7 +192,7 @@ torch::Tensor Board::Tensor(int player) const {
   }
   // Swap channels for player 0 and player 1. Leave grass unchanged.
   // index_select returns a new Tensor that uses its own storage.
-  return b_.index_select(0, torch::tensor({4, 5, 6, 7, 0, 1, 2, 3, 8}));
+  return b_.index_select(0, torch::tensor({5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 10}));
 }
 
 std::pair<float, float> Board::Score() const {
@@ -227,7 +211,10 @@ float Board::Result() const {
   return 0.0;
 }
 
-int Board::Flags(int player) const { return nflags_[player]; }
+int Board::Flags(int player) const {
+  // The whole NFLAGS channel has identical numbers. Just pick (0, 0).
+  return b_.index({I_NFLAGS(player), 0, 0}).item<float>();
+}
 
 void Board::MakeMove(int player, const Move& move) {
   Perfm::Scope ps(Perfm::MakeMove);
@@ -254,10 +241,11 @@ void Board::MakeMove(int player, const Move& move) {
   b_acc[I_NEXTVAL(1)][move.r][move.c] = 0;
   float next_val = 1;
   if (played_flag) {
-    ABSL_DCHECK(nflags_[player] > 0)
+    ABSL_DCHECK(Flags(player) > 0)
         << "Move " << move.DebugString() << " by " << player
         << " without flags left: " << DebugString();
-    nflags_[player]--;
+    // Decrement number of flags.
+    b_.index_put_({I_NFLAGS(player)}, static_cast<float>(Flags(player) - 1));
   } else {
     next_val = move.value + 1;
   }
@@ -290,7 +278,7 @@ void Board::MakeMove(int player, const Move& move) {
         b_acc[I_GRASS][nb.r][nb.c] = 0;
         b_acc[I_BLOCKED(player)][nb.r][nb.c] = 0;
         b_acc[I_NEXTVAL(player)][nb.r][nb.c] = grass_val;
-        MakeMove(player, Move{1, nb.r, nb.c, grass_val});
+        MakeMove(player, Move{MOVE_TYPE_NORMAL, nb.r, nb.c, grass_val});
       }
     }
   }
@@ -300,7 +288,7 @@ std::vector<Move> Board::NextMoves(int player) const {
   Perfm::Scope ps(Perfm::NextMoves);
   std::vector<Move> moves;
   auto b_acc = b_.accessor<float, 3>();
-  bool flag = nflags_[player] > 0;
+  bool flag = Flags(player) > 0;
   // Flag in any unoccupied cell.
   for (int r = 0; r < 11; r++) {
     int cols = 10 - r % 2;
@@ -317,39 +305,61 @@ std::vector<Move> Board::NextMoves(int player) const {
   return moves;
 }
 
+float Board::CellValue(int player, Channel ch, int r, int c) const {
+  int ch_idx =
+      static_cast<int>(ch == kGrass ? ch : ch + CHANNELS_PER_PLAYER * player);
+  return b_.index({ch_idx, r, c}).item<float>();
+}
+
+void Board::SetCellValue(int player, Channel ch, int r, int c, float value) {
+  int ch_idx =
+      static_cast<int>(ch == kGrass ? ch : ch + CHANNELS_PER_PLAYER * player);
+  b_.index_put_({ch_idx, r, c}, value);
+}
+
+void Board::SetRemainingFlags(int player, int n_flags) {
+  b_.index_put_({I_NFLAGS(player)}, static_cast<float>(n_flags));
+}
+
+std::string Board::ShortDebugString() const {
+  auto score = Score();
+  return absl::StrFormat("Board(flags: (%d, %d) score: (%.0f, %.0f)", Flags(0),
+                         Flags(1), score.first, score.second);
+}
+
 std::string Board::DebugString() const {
   std::ostringstream os;
   os << "Board(\n";
-  os << "  flags:(" << nflags_[0] << ", " << nflags_[1] << ")\n";
+  os << "  flags:(" << Flags(0) << ", " << Flags(1) << ")\n";
   os << "  score:" << Score() << "\n";
   os << "  fields: [\n";
   auto b_acc = b_.accessor<float, 3>();
   for (int r = 0; r < 11; r++) {
     int cols = 10 - r % 2;
     for (int c = 0; c < cols; c++) {
-      // Output row/col indices and values of all 9 channels
+      // Output row/col indices and values of all 11 channels
       // Example row: (0, 1): 0 0 1 0 0 1 1 1 0
       os << "    (" << r << ", " << c << "): ";
-      for (int i = 0; i < 9; i++) {
+      for (int i = 0; i < 11; i++) {
         int iv = static_cast<int>(b_acc[i][r][c]);
         if (i > 0) {
           os << "|";
         }
         os << iv;
       }
-      if (b_acc[2][r][c] > 0 || b_acc[6][r][c] > 0) {
+      if (b_acc[I_BLOCKED(0)][r][c] > 0 || b_acc[I_BLOCKED(1)][r][c] > 0) {
         os << "|b";
       }
-      if (b_acc[0][r][c] > 0 || b_acc[4][r][c] > 0) {
+      if (b_acc[I_FLAG(0)][r][c] > 0 || b_acc[I_FLAG(1)][r][c] > 0) {
         os << "|f";
       }
-      if (b_acc[1][r][c] > 0 || b_acc[5][r][c] > 0) {
+      if (b_acc[I_VALUE(0)][r][c] > 0 || b_acc[I_VALUE(1)][r][c] > 0) {
         os << "|v";
       }
-      if (b_acc[3][r][c] > 0 || b_acc[7][r][c] > 0) {
+      if (b_acc[I_NEXTVAL(0)][r][c] > 0 || b_acc[I_NEXTVAL(1)][r][c] > 0) {
         os << "|n";
       }
-      if (b_acc[8][r][c] > 0) {
+      if (b_acc[I_GRASS][r][c] > 0) {
         os << "|g";
       }
       os << "\n";

@@ -81,8 +81,6 @@ mkdir build
 cd build
 cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="$HOME/opt/libtorch/share/cmake;/usr/local/lib/cmake/protobuf" ..
 cmake --build . --parallel 4
-# Run the binary, AT LAST!
-HEXZ_LOCAL_MODEL_PATH=/tmp/scriptmodule.pt ./worker
 ```
 
 ### Docker
@@ -96,3 +94,10 @@ docker push europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/ccworker:latest
 
 See `.vscode/c_cpp_properties.json`. Also add `CMAKE_PREFIX_PATH` under _Cmake: Configure Environment_.
 
+## Run the binary
+
+To run the worker, first make sure the training server is up and running. Then:
+
+```
+HEXZ_TRAINING_SERVER_URL=http://localhost:8080 HEXZ_RUNS_PER_MOVE=20 HEXZ_MAX_RUNTIME_SECONDS=60 HEXZ_MAX_GAMES=1 ./worker
+```

@@ -4,7 +4,7 @@ import numpy as np
 import time
 from uuid import uuid4
 
-from pyhexz.board import Board
+from pyhexz.hexc import CBoard
 
 
 class Node:
@@ -106,7 +106,7 @@ class MCTS:
 
     def run(self):
         """Runs a single round of the MCTS loop."""
-        b = Board(self.board)
+        b = CBoard(self.board)
         n = self.root
         # Find leaf node.
         while n.children:

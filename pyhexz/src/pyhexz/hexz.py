@@ -24,7 +24,7 @@ from pyhexz.timing import (
     print_perf_stats,
     print_time,
 )
-from pyhexz.board import Board, CBoard
+from pyhexz.hexc import CBoard
 
 
 class Example:
@@ -181,7 +181,7 @@ class HDF5Dataset(torch.utils.data.Dataset):
 class HexzNeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
-        board_channels = 9
+        board_channels = 11
         cnn_filters = 128
         num_cnn_blocks = 5
         self.cnn_blocks = nn.ModuleList(
@@ -322,9 +322,9 @@ class NeuralMCTS:
         return pred_pr.numpy(force=self.device != "cpu"), pred_val.item()
 
     @timing
-    def run(self, root: hexc.CNN, board: Board) -> None:
+    def run(self, root: hexc.CNN, board: CBoard) -> None:
         """Runs a single round of the neural MCTS loop."""
-        b = Board(board)  # work on a copy.
+        b = CBoard(board)  # work on a copy.
 
         # Find leaf node.
         with timing_ctx("run_find_leaf"):
@@ -424,7 +424,7 @@ def load_model(path, map_location="cpu"):
 
 def time_gameplay(device):
     clear_perf_stats()
-    b = Board()
+    b = CBoard()
     model = HexzNeuralNetwork().to(device)
     m = NeuralMCTS(b, model, device=device)
     _ = m.play_game(runs_per_move=800)
@@ -449,7 +449,7 @@ def record_examples(progress_queue: mp.Queue, args):
         f"W{worker_id}: Appending game examples to {examples_file}. {args.runs_per_move=}"
     )
     while time.time() - started < args.max_seconds and num_games < args.max_games:
-        b = Board()
+        b = CBoard()
         m = NeuralMCTS(b, model, device=device)
         examples = m.play_game(
             runs_per_move=args.runs_per_move, progress_queue=progress_queue

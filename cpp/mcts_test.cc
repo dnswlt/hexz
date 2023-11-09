@@ -216,7 +216,7 @@ TEST(MCTSTest, PlayGame) {
       std::vector<char>(ex0.board().begin(), ex0.board().end()));
   ASSERT_TRUE(board_val.isTensor());
   auto board = board_val.toTensor();
-  EXPECT_EQ(board.sizes()[0], 9);
+  EXPECT_EQ(board.sizes()[0], 11);
   EXPECT_EQ(board.sizes()[1], 11);
   EXPECT_EQ(board.sizes()[2], 10);
   // Check move_probs is a Tensor of the right shape.

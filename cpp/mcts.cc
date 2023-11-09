@@ -287,12 +287,12 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     std::string stats = root->Stats();
     if (n < 5 || n % 10 == 0) {
       ABSL_LOG(INFO) << "Move " << n << " (turn: " << root->turn() << ") ("
-                     << board.DebugString() << ") after "
+                     << board.ShortDebugString() << ") after "
                      << (float)(UnixMicros() - started_micros) / 1000000
                      << "s. stats: " << stats;
     } else {
       ABSL_DLOG(INFO) << "Move " << n << " (turn: " << root->turn() << ") ("
-                      << board.DebugString() << ") after "
+                      << board.ShortDebugString() << ") after "
                       << (float)(UnixMicros() - started_micros) / 1000000
                       << "s. stats: " << stats;
     }
