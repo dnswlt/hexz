@@ -90,6 +90,8 @@ class SelfPlayWorker:
                     hexz_pb2.TrainingExample(
                         unix_micros=time.time_ns() // 1000,
                         board=np_tobytes(ex.board),
+                        # TODO: Compute action_mask in Python as well.
+                        action_mask=np_tobytes(np.ones((2, 11, 10), dtype=np.bool_)),
                         move_probs=np_tobytes(ex.move_probs),
                         result=ex.result,
                         stats=hexz_pb2.TrainingExample.Stats(

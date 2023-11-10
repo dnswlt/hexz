@@ -1,6 +1,7 @@
 #include "mcts.h"
 
 #include <absl/status/status.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <torch/torch.h>
 
@@ -14,12 +15,13 @@ namespace hexz {
 
 namespace {
 
-std::mt19937 rng{std::random_device{}()};
+using testing::ElementsAre;
+using testing::ElementsAreArray;
 
 class FakeModel : public Model {
  public:
   using Prediction = Model::Prediction;
-  Prediction Predict(int player, const Board& board) override {
+  Prediction Predict(const Board& board, const Node& node) override {
     auto t = torch::ones({2, 11, 10});
     t = t / t.sum();
     return Prediction{
@@ -97,6 +99,78 @@ TEST(NodeTest, Backpropagate) {
   EXPECT_EQ(root.wins(), 1.0);
   EXPECT_EQ(n_1.wins(), 0.0);
   EXPECT_EQ(n_1_1.wins(), 1.0);
+}
+
+TEST(NodeTest, FlatIndex) {
+  // Tests that the flat indices point to the right array elements.
+  // We test this by setting their move probabilities to increasing
+  // values and asserting that the child nodes indeed have increasing priors.
+  Node root(nullptr, 0, Move{});
+  auto t = torch::arange(2 * 11 * 10).reshape({2, 11, 10});
+  std::vector<Move> moves{
+      Move{0, 0, 0, 0},
+      Move{0, 0, 8, 0},
+      Move{0, 2, 0, 0},
+      Move{1, 0, 0, 0},
+  };
+  root.CreateChildren(1, moves);
+  root.SetMoveProbs(t / t.sum());
+  float prev = -1;
+  for (const auto& c : root.children()) {
+    ASSERT_LT(prev, c->Prior());
+    prev = c->Prior();
+  }
+}
+
+TEST(NodeTest, AddDirichletNoise) {
+  Node root(nullptr, 0, Move{});
+  std::vector<Move> moves{
+      // Use the moves that come first in the flat representation of
+      // move_probs_.
+      Move{0, 0, 0, 0},
+      Move{0, 0, 1, 0},
+      Move{0, 0, 2, 0},
+  };
+  root.CreateChildren(1 - root.turn(), moves);
+  auto t = torch::zeros({2, 11, 10});
+  t.index_put_({0, 0, 0}, 30);
+  t.index_put_({0, 0, 1}, 40);
+  t.index_put_({0, 0, 2}, 10);
+  t /= t.sum();
+  root.SetMoveProbs(t);
+  const std::vector<float> prior = root.move_probs();
+  float prior_sum = std::accumulate(prior.begin(), prior.end(), 0.0);
+  ASSERT_FLOAT_EQ(prior_sum, 1.0);
+  root.AddDirichletNoise(0.5, 0.3);
+  const std::vector<float> posterior = root.move_probs();
+  // Expect that probs still sum to 1.
+  float sum = std::accumulate(posterior.begin(), posterior.end(), 0.0);
+  EXPECT_FLOAT_EQ(sum, 1.0);
+  // Expect that values have changed.
+  EXPECT_THAT(posterior, testing::Not(ElementsAreArray(prior)));
+  // Only the elements representing child nodes should be modified:
+  EXPECT_TRUE(std::all_of(posterior.begin() + 3, posterior.end(),
+                          [](float x) { return x == 0.0; }));
+  EXPECT_GT(posterior[0], 0);
+  EXPECT_GT(posterior[1], 0);
+  EXPECT_GT(posterior[2], 0);
+}
+
+TEST(NodeTest, ActionMask) {
+  Node root(nullptr, 0, Move{});
+  std::vector<Move> moves{
+      // Can place a flag at (0, 0).
+      Move{0, 0, 0, 0},
+      // Can place a normal cell with value 1.0 at (7, 3).
+      Move{1, 7, 3, 1.0},
+  };
+  root.CreateChildren(1 - root.turn(), moves);
+  auto mask = root.ActionMask();
+  ASSERT_THAT(mask.sizes(), ElementsAre(2, 11, 10));
+  // Exactly two elements should be set:
+  EXPECT_EQ(mask.flatten().nonzero().numel(), 2);
+  EXPECT_TRUE(mask.index({0, 0, 0}).item<bool>());
+  EXPECT_TRUE(mask.index({1, 7, 3}).item<bool>());
 }
 
 TEST(MCTSTest, TensorAsVector) {

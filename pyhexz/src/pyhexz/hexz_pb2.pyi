@@ -265,7 +265,7 @@ class AddTrainingExamplesResponse(_message.Message):
     def __init__(self, status: _Optional[_Union[AddTrainingExamplesResponse.Status, str]] = ..., latest_model: _Optional[_Union[ModelKey, _Mapping]] = ..., error_message: _Optional[str] = ...) -> None: ...
 
 class TrainingExample(_message.Message):
-    __slots__ = ["unix_micros", "turn", "encoding", "board", "move_probs", "result", "stats"]
+    __slots__ = ["unix_micros", "turn", "encoding", "board", "action_mask", "move_probs", "result", "stats"]
     class Encoding(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
         __slots__ = []
         NUMPY: _ClassVar[TrainingExample.Encoding]
@@ -287,6 +287,7 @@ class TrainingExample(_message.Message):
     TURN_FIELD_NUMBER: _ClassVar[int]
     ENCODING_FIELD_NUMBER: _ClassVar[int]
     BOARD_FIELD_NUMBER: _ClassVar[int]
+    ACTION_MASK_FIELD_NUMBER: _ClassVar[int]
     MOVE_PROBS_FIELD_NUMBER: _ClassVar[int]
     RESULT_FIELD_NUMBER: _ClassVar[int]
     STATS_FIELD_NUMBER: _ClassVar[int]
@@ -294,7 +295,8 @@ class TrainingExample(_message.Message):
     turn: int
     encoding: TrainingExample.Encoding
     board: bytes
+    action_mask: bytes
     move_probs: bytes
     result: float
     stats: TrainingExample.Stats
-    def __init__(self, unix_micros: _Optional[int] = ..., turn: _Optional[int] = ..., encoding: _Optional[_Union[TrainingExample.Encoding, str]] = ..., board: _Optional[bytes] = ..., move_probs: _Optional[bytes] = ..., result: _Optional[float] = ..., stats: _Optional[_Union[TrainingExample.Stats, _Mapping]] = ...) -> None: ...
+    def __init__(self, unix_micros: _Optional[int] = ..., turn: _Optional[int] = ..., encoding: _Optional[_Union[TrainingExample.Encoding, str]] = ..., board: _Optional[bytes] = ..., action_mask: _Optional[bytes] = ..., move_probs: _Optional[bytes] = ..., result: _Optional[float] = ..., stats: _Optional[_Union[TrainingExample.Stats, _Mapping]] = ...) -> None: ...

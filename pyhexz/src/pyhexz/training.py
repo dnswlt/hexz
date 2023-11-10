@@ -89,14 +89,15 @@ class TrainingRunnerTask(threading.Thread):
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
 
         for _ in range(num_epochs):
-            for X, (y_pr, y_val) in loader:
+            for (X_board, X_action_mask), (y_pr, y_val) in loader:
                 # Send to device.
-                X = X.to(device)
+                X_board = X_board.to(device)
+                X_action_mask = X_action_mask.to(device)
                 y_pr = y_pr.to(device)
                 y_val = y_val.to(device)
 
                 # Predict
-                pred_pr, pred_val = model(X)
+                pred_pr, pred_val = model(X_board, X_action_mask)
 
                 # Compute loss
                 pr_loss = pr_loss_fn(pred_pr.flatten(1), y_pr.flatten(1))
@@ -248,13 +249,20 @@ class TrainingTask(threading.Thread):
             # Extract example data.
             if ex.encoding == hexz_pb2.TrainingExample.PYTORCH:
                 board = torch.load(io.BytesIO(ex.board)).numpy()
+                action_mask = torch.load(io.BytesIO(ex.action_mask)).numpy()
                 pr = torch.load(io.BytesIO(ex.move_probs)).numpy()
             else:
                 board = np.load(io.BytesIO(ex.board))
+                action_mask = np.load(io.BytesIO(ex.action_mask))
                 pr = np.load(io.BytesIO(ex.move_probs))
             if board.shape != (11, 11, 10):
                 self.logger.error(
                     f"Received board with wrong shape: {board.shape}. Ignored."
+                )
+                return
+            if action_mask.shape != (2, 11, 10):
+                self.logger.error(
+                    f"Received action_mask with wrong shape: {pr.shape}. Ignored."
                 )
                 return
             if pr.shape != (2, 11, 10):
@@ -263,7 +271,7 @@ class TrainingTask(threading.Thread):
                 )
                 return
             val = np.array([ex.result], dtype=np.float32)
-            new_batch.append((board, (pr, val)))
+            new_batch.append(((board, action_mask), (pr, val)))
         self.stats["examples"] += len(req.examples)
         lim = min(len(req.examples), self.capacity())
         # Add translated examples to batch and trigger a training run if we have a full batch.

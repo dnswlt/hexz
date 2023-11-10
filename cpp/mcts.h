@@ -24,9 +24,12 @@ class Node {
   int turn() const { return turn_; }
   const Move& move() const { return move_; }
   int visit_count() const noexcept { return visit_count_; }
+  const std::vector<float>& move_probs() const noexcept { return move_probs_; }
   const Node* parent() const noexcept { return parent_; }
   float wins() const noexcept { return wins_; }
-  std::vector<std::unique_ptr<Node>>& children() { return children_; }
+  const std::vector<std::unique_ptr<Node>>& children() const {
+    return children_;
+  }
   // Update the turn.
   void SetTurn(int turn) { turn_ = turn; }
   float Prior() const;
@@ -53,13 +56,15 @@ class Node {
   // Adds children representing the given moves to this node.
   void CreateChildren(int turn, const std::vector<Move>& moves);
   // Shuffles children randomly. This can be used to avoid selection bias.
-  void ShuffleChildren() {
-    std::shuffle(children_.begin(), children_.end(), internal::rng);
-  }
+  void ShuffleChildren();
 
   // Returns the normalized visit counts (which sum to 1) as a (2, 11, 10)
   // tensor. This value should be used to update the move probs of the model.
   torch::Tensor NormVisitCounts() const;
+
+  // Returns a boolean Tensor of shape (2, 11, 10) that is true in each
+  // position that represents a valid move and false everywhere else.
+  torch::Tensor ActionMask() const;
 
   // Sets the initial move probabilities ("policy") obtained from the model
   // prediction.
@@ -100,7 +105,7 @@ class Model {
     torch::Tensor move_probs;
     float value;
   };
-  virtual Prediction Predict(int player, const Board& board) = 0;
+  virtual Prediction Predict(const Board& board, const Node& node) = 0;
   virtual ~Model() = default;
 };
 
@@ -113,7 +118,7 @@ class TorchModel : public Model {
   explicit TorchModel(torch::jit::Module module) : module_{module} {}
   TorchModel(hexzpb::ModelKey key, torch::jit::Module module)
       : key_{key}, module_{module} {}
-  Prediction Predict(int player, const Board& board) override;
+  Prediction Predict(const Board& board, const Node& node) override;
 
   const hexzpb::ModelKey& Key() const { return key_; }
   torch::jit::Module& Module() { return module_; }

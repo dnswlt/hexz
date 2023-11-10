@@ -219,13 +219,16 @@ message TrainingExample {
 
     // Training inputs.
     //
-    // Numpy array containing the (11, 11, 10) Board from the view of the current player.
+    // Encoded array containing the (11, 11, 10) Board from the view of the current player.
     // Serialized to bytes using np.save or torch::pickle_save.
     bytes board = 2;
+    // Encoded array containing the (2, 11, 10) action mask indicating which moves
+    // are valid on the given board.
+    bytes action_mask = 8;
 
     // Training labels.
     //
-    // Numpy array containing the (2, 11, 10) move likelihoods.
+    // Encoded array containing the (2, 11, 10) move likelihoods.
     // Serialized to bytes using np.save or torch::pickle_save.
     bytes move_probs = 3;
     // The outcome of the game, from the perspective of the current player:

@@ -80,11 +80,28 @@ void Node::SetMoveProbs(torch::Tensor move_probs) {
                          move_probs.data_ptr<float>() + move_probs.numel());
 }
 
+torch::Tensor Node::ActionMask() const {
+  auto action_mask =
+      torch::zeros({2, 11, 10}, c10::TensorOptions().dtype(torch::kBool));
+  auto action_mask_acc = action_mask.accessor<bool, 3>();
+  for (const auto& c : children()) {
+    action_mask_acc[c->move_.typ][c->move_.r][c->move_.c] = true;
+  }
+  return action_mask;
+}
+
+void Node::ShuffleChildren() {
+  std::shuffle(children_.begin(), children_.end(), internal::rng);
+}
+
 void Node::AddDirichletNoise(float weight, float concentration) {
-  // TODO: Only add noise to the valid moves, not to all.
-  std::vector<float> diri = internal::Dirichlet(move_probs_.size(), concentration);
-  for (int i = 0; i < move_probs_.size(); i++) {
-    move_probs_[i] = (1 - weight) * move_probs_[i] + weight * diri[i];
+  std::vector<float> diri =
+      internal::Dirichlet(children_.size(), concentration);
+  int i = 0;
+  for (const auto& c : children_) {
+    move_probs_[c->flat_idx_] =
+        (1 - weight) * move_probs_[c->flat_idx_] + weight * diri[i];
+    i++;
   }
 }
 
@@ -162,12 +179,16 @@ std::string Node::DebugString() const {
   return os.str();
 }
 
-TorchModel::Prediction TorchModel::Predict(int player, const Board& board) {
+TorchModel::Prediction TorchModel::Predict(const Board& board,
+                                           const Node& node) {
+  ABSL_DCHECK(!node.IsLeaf()) << "Must not call Predict on a leaf node.";
   Perfm::Scope ps(Perfm::Predict);
   torch::NoGradGuard no_grad;
-  auto input = board.Tensor(player).unsqueeze(0);
+  auto board_input = board.Tensor(node.turn()).unsqueeze(0);
+  auto action_mask = node.ActionMask().flatten().unsqueeze(0);
   std::vector<torch::jit::IValue> inputs{
-      input,
+      board_input,
+      action_mask,
   };
   auto output = module_.forward(inputs);
 
@@ -175,6 +196,7 @@ TorchModel::Prediction TorchModel::Predict(int player, const Board& board) {
   // tensor of logits, and a single float value prediction.
   assert(output.isTuple());
   const auto output_tuple = output.toTuple();
+  assert(output_tuple->size() == 2);
   const auto logits = output_tuple->elements()[0].toTensor();
   const auto dim = logits.sizes();
   assert(dim.size() == 2 && dim[0] == 1 && dim[1] == 2 * 11 * 10);
@@ -224,11 +246,12 @@ bool NeuralMCTS::Run(Node& root, const Board& b) {
   // false, the turn gets updated when trying to find next moves (see above).
   n->CreateChildren(1 - turn, moves);
   n->ShuffleChildren();  // Avoid selection bias.
-  auto pred = model_.Predict(n->turn(), board);
+  auto pred = model_.Predict(board, *n);
   n->SetMoveProbs(pred.move_probs);
   if (dirichlet_concentration_ > 0 && n == &root) {
     // This is the first iteration, root isn't expanded yet.
-    n->AddDirichletNoise(/*weight=*/0.25, /*concentration=*/dirichlet_concentration_);
+    n->AddDirichletNoise(/*weight=*/0.25,
+                         /*concentration=*/dirichlet_concentration_);
   }
   // Backpropagate the model prediction. Need to reorient it s.t. 1 means player
   // 0 won.
@@ -293,6 +316,8 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     // player whose turn it is.
     auto enc_b = torch::pickle_save(board.Tensor(root->turn()));
     example.mutable_board()->assign(enc_b.begin(), enc_b.end());
+    auto enc_mask = torch::pickle_save(root->ActionMask());
+    example.mutable_action_mask()->assign(enc_mask.begin(), enc_mask.end());
     auto enc_pr = torch::pickle_save(root->NormVisitCounts());
     example.mutable_move_probs()->assign(enc_pr.begin(), enc_pr.end());
     examples.push_back(example);

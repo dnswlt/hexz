@@ -230,12 +230,14 @@ class HexzNeuralNetwork(nn.Module):
             nn.Linear(11 * 10, 1),
         )
 
-    def forward(self, x):
+    def forward(self, x, action_mask):
         for b in self.cnn_blocks:
             x = b(x)
-        pi = self.policy_head(x)
+        policy = self.policy_head(x)
+        # Mask out (i.e. set to ~ 0 in the exp domain) all policy predictions for invalid actions.
+        policy = policy.where(action_mask.flatten(1), torch.full_like(policy, -1e32))
         v = self.value_head(x)
-        return F.log_softmax(pi, dim=1), torch.tanh(v)
+        return F.log_softmax(policy, dim=1), torch.tanh(v)
 
 
 class NNode:
@@ -317,7 +319,9 @@ class NeuralMCTS:
         """Predicts move probabilities and value for the given board and player."""
         b = board.b_for(player)
         X = torch.from_numpy(b).to(self.device, dtype=self.dtype)
-        pred_pr, pred_val = self.model(torch.unsqueeze(X, 0))
+        # TODO: implement action_mask in Python, too.
+        action_mask = torch.ones((2, 11, 10), dtype=torch.bool)
+        pred_pr, pred_val = self.model(torch.unsqueeze(X, 0), torch.unsqueeze(action_mask, 0))
         pred_pr = torch.exp(pred_pr).reshape((2, 11, 10))
         return pred_pr.numpy(force=self.device != "cpu"), pred_val.item()
 

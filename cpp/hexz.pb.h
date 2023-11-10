@@ -4893,6 +4893,7 @@ class TrainingExample final :
   enum : int {
     kBoardFieldNumber = 2,
     kMoveProbsFieldNumber = 3,
+    kActionMaskFieldNumber = 8,
     kStatsFieldNumber = 5,
     kUnixMicrosFieldNumber = 1,
     kResultFieldNumber = 4,
@@ -4929,6 +4930,22 @@ class TrainingExample final :
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_move_probs(
       const std::string& value);
   std::string* _internal_mutable_move_probs();
+
+  public:
+  // bytes action_mask = 8;
+  void clear_action_mask() ;
+  const std::string& action_mask() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_action_mask(Arg_&& arg, Args_... args);
+  std::string* mutable_action_mask();
+  PROTOBUF_NODISCARD std::string* release_action_mask();
+  void set_allocated_action_mask(std::string* ptr);
+
+  private:
+  const std::string& _internal_action_mask() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_action_mask(
+      const std::string& value);
+  std::string* _internal_mutable_action_mask();
 
   public:
   // .hexzpb.TrainingExample.Stats stats = 5;
@@ -4991,7 +5008,7 @@ class TrainingExample final :
   class _Internal;
 
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<3, 7, 1, 0, 2> _table_;
+  static const ::google::protobuf::internal::TcParseTable<3, 8, 1, 0, 2> _table_;
   template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
@@ -5000,6 +5017,7 @@ class TrainingExample final :
     mutable ::google::protobuf::internal::CachedSize _cached_size_;
     ::google::protobuf::internal::ArenaStringPtr board_;
     ::google::protobuf::internal::ArenaStringPtr move_probs_;
+    ::google::protobuf::internal::ArenaStringPtr action_mask_;
     ::hexzpb::TrainingExample_Stats* stats_;
     ::int64_t unix_micros_;
     float result_;
@@ -8487,6 +8505,57 @@ inline void TrainingExample::set_allocated_board(std::string* value) {
         }
   #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
   // @@protoc_insertion_point(field_set_allocated:hexzpb.TrainingExample.board)
+}
+
+// bytes action_mask = 8;
+inline void TrainingExample::clear_action_mask() {
+  _impl_.action_mask_.ClearToEmpty();
+}
+inline const std::string& TrainingExample::action_mask() const {
+  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.action_mask)
+  return _internal_action_mask();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void TrainingExample::set_action_mask(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.action_mask_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:hexzpb.TrainingExample.action_mask)
+}
+inline std::string* TrainingExample::mutable_action_mask() {
+  std::string* _s = _internal_mutable_action_mask();
+  // @@protoc_insertion_point(field_mutable:hexzpb.TrainingExample.action_mask)
+  return _s;
+}
+inline const std::string& TrainingExample::_internal_action_mask() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.action_mask_.Get();
+}
+inline void TrainingExample::_internal_set_action_mask(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.action_mask_.Set(value, GetArenaForAllocation());
+}
+inline std::string* TrainingExample::_internal_mutable_action_mask() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.action_mask_.Mutable( GetArenaForAllocation());
+}
+inline std::string* TrainingExample::release_action_mask() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:hexzpb.TrainingExample.action_mask)
+  return _impl_.action_mask_.Release();
+}
+inline void TrainingExample::set_allocated_action_mask(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.action_mask_.SetAllocated(value, GetArenaForAllocation());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.action_mask_.IsDefault()) {
+          _impl_.action_mask_.Set("", GetArenaForAllocation());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:hexzpb.TrainingExample.action_mask)
 }
 
 // bytes move_probs = 3;
