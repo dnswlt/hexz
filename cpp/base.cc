@@ -9,6 +9,22 @@ namespace hexz {
 
 namespace internal {
 thread_local std::mt19937 rng{std::random_device{}()};
+
+
+std::vector<float> Dirichlet(int n, float concentration) {
+  std::gamma_distribution<float> gamma;
+  std::vector<float> v(n);
+  float sum = 0;
+  for (int i = 0; i < n; i++) {
+    v[i] = gamma(rng);
+    sum += v[i];
+  }
+  for (int i = 0; i < n; i++) {
+    v[i] /= sum;
+  }
+  return v;
+}
+
 }  // namespace internal
 
 std::string Config::String() const {
@@ -25,6 +41,7 @@ std::string Config::String() const {
               absl::StrFormat("max_runtime_seconds: %d", max_runtime_seconds),
               absl::StrFormat("max_games: %d", max_games),
               absl::StrFormat("uct_c: %.3f", uct_c),
+              absl::StrFormat("dirichlet_concentration: %.3f", dirichlet_concentration),
           },
           ", "),
       ")");
@@ -41,6 +58,8 @@ Config Config::FromEnv() {
       .max_runtime_seconds = GetEnvAsInt("HEXZ_MAX_RUNTIME_SECONDS", 60),
       .max_games = GetEnvAsInt("HEXZ_MAX_GAMES", -1),
       .uct_c = static_cast<float>(GetEnvAsDouble("HEXZ_UCT_C", 5.0)),
+      .dirichlet_concentration = static_cast<float>(
+          GetEnvAsDouble("HEXZ_DIRICHLET_CONCENTRATION", 0.0)),
   };
 }
 

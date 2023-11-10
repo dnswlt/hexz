@@ -80,6 +80,14 @@ void Node::SetMoveProbs(torch::Tensor move_probs) {
                          move_probs.data_ptr<float>() + move_probs.numel());
 }
 
+void Node::AddDirichletNoise(float weight, float concentration) {
+  // TODO: Only add noise to the valid moves, not to all.
+  std::vector<float> diri = internal::Dirichlet(move_probs_.size(), concentration);
+  for (int i = 0; i < move_probs_.size(); i++) {
+    move_probs_[i] = (1 - weight) * move_probs_[i] + weight * diri[i];
+  }
+}
+
 torch::Tensor Node::NormVisitCounts() const {
   auto t = torch::zeros({2, 11, 10});
   auto t_acc = t.accessor<float, 3>();
@@ -181,7 +189,8 @@ NeuralMCTS::NeuralMCTS(Model& model, const Params& params)
     : model_{model},
       runs_per_move_{params.runs_per_move},
       max_moves_per_game_{params.max_moves_per_game},
-      runs_per_move_gradient_{params.runs_per_move_gradient} {}
+      runs_per_move_gradient_{params.runs_per_move_gradient},
+      dirichlet_concentration_{params.dirichlet_concentration} {}
 
 bool NeuralMCTS::Run(Node& root, const Board& b) {
   Board board(b);
@@ -217,6 +226,10 @@ bool NeuralMCTS::Run(Node& root, const Board& b) {
   n->ShuffleChildren();  // Avoid selection bias.
   auto pred = model_.Predict(n->turn(), board);
   n->SetMoveProbs(pred.move_probs);
+  if (dirichlet_concentration_ > 0 && n == &root) {
+    // This is the first iteration, root isn't expanded yet.
+    n->AddDirichletNoise(/*weight=*/0.25, /*concentration=*/dirichlet_concentration_);
+  }
   // Backpropagate the model prediction. Need to reorient it s.t. 1 means player
   // 0 won.
   n->Backpropagate(n->turn() == 0 ? pred.value : -pred.value);

@@ -31,6 +31,9 @@ struct Config {
   int max_games = -1;
   // Weight of the exploration term in the Puct formula.
   float uct_c = 5.0;
+  // Concentration factor ("alpha") of the Dirichlet noise that gets
+  // added to the root nodes during MCTS search.
+  float dirichlet_concentration = 0;
 
   static Config FromEnv();
   std::string String() const;
@@ -44,6 +47,12 @@ int64_t UnixMicros();
 
 namespace internal {
 extern thread_local std::mt19937 rng;
+
+// Libtorch does not have a Dirichlet (or any other nontrivial) distribution yet
+// :( So let's roll our own, based on the gamma distribution:
+// https://en.wikipedia.org/wiki/Dirichlet_distribution#Related_distributions
+std::vector<float> Dirichlet(int n, float concentration);
+
 }  // namespace internal
 
 }  // namespace hexz

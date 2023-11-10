@@ -54,6 +54,7 @@ void PlayGameLocally(const Config& config) {
                         .runs_per_move = config.runs_per_move,
                         .runs_per_move_gradient = config.runs_per_move_gradient,
                         .max_moves_per_game = config.max_moves_per_game,
+                        .dirichlet_concentration = config.dirichlet_concentration,
                     }};
     Board b = Board::RandomBoard();
     if (auto result = mcts.PlayGame(b, /*max_runtime_seconds=*/0);
@@ -88,6 +89,7 @@ void GenerateExamples(const Config& config) {
       .runs_per_move = config.runs_per_move,
       .runs_per_move_gradient = config.runs_per_move_gradient,
       .max_moves_per_game = config.max_moves_per_game,
+      .dirichlet_concentration = config.dirichlet_concentration,
   };
   for (int i = 0; i < max_games; i++) {
     auto now = UnixMicros();

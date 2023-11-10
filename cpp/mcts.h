@@ -64,6 +64,10 @@ class Node {
   // Sets the initial move probabilities ("policy") obtained from the model
   // prediction.
   void SetMoveProbs(torch::Tensor move_probs);
+  // Adds Dirichlet noise to the (already set) move probs.
+  // The weight parameter must be in the open interval (0, 1).
+  // concentration is the Dirichlet concentration ("alpha") parameter.
+  void AddDirichletNoise(float weight, float concentration);
 
   // Returns the number of children that had a nonzero visit_count.
   int NumVisitedChildren() const noexcept;
@@ -126,6 +130,8 @@ class NeuralMCTS {
     int runs_per_move = 800;
     double runs_per_move_gradient = 0.0;
     int max_moves_per_game = 200;
+    // Dirichlet noise is only added if this value is >0.
+    float dirichlet_concentration = 0.0;
   };
   // The model is not owned. Owners of the NeuralMCTS instance must ensure it
   // outlives this instance.
@@ -152,7 +158,7 @@ class NeuralMCTS {
   int runs_per_move_;
   double runs_per_move_gradient_;
   int max_moves_per_game_;
-
+  float dirichlet_concentration_;
   // Not owned.
   Model& model_;
 };

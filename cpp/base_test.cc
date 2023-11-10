@@ -3,6 +3,8 @@
 #include <gtest/gtest.h>
 #include <stdlib.h>
 
+#include <algorithm>
+
 namespace hexz {
 
 TEST(BaseTest, GetEnvAsInt) {
@@ -22,6 +24,17 @@ TEST(BaseTest, GetEnvAsDouble) {
   EXPECT_EQ(GetEnvAsDouble("TEST_FOO_DECIMAL", 0), 123.456);
   EXPECT_EQ(GetEnvAsDouble("TEST_FOO_NEG", 0), -123.0);
   EXPECT_EQ(GetEnvAsDouble("TEST_FOO_STR", 17), 0);
+}
+
+TEST(DirichletTest, ValuesInExpectedRange) {
+  auto v = internal::Dirichlet(10, 0.3);
+  ASSERT_EQ(v.size(), 10);
+  float min = *std::min_element(v.begin(), v.end());
+  float max = *std::max_element(v.begin(), v.end());
+  float sum = std::accumulate(v.begin(), v.end(), 0.0);
+  EXPECT_FLOAT_EQ(sum, 1);
+  EXPECT_GE(min, 0);
+  EXPECT_LE(max, 1);
 }
 
 }  // namespace hexz
