@@ -78,7 +78,8 @@
         "typeindex": "cpp",
         "valarray": "cpp",
         "any": "cpp",
-        "cassert": "cpp"
+        "cassert": "cpp",
+        "random": "cpp"
     },
     "cmake.sourceDirectory": "/Users/denniswalter/git/github.com/dnswlt/hexz/cpp",
 }

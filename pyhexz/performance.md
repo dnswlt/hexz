@@ -185,3 +185,22 @@ NextMoves              0.241s     153626   636929.772
 The ml-server also does a decent job:
 
 [2023-11-04 23:39:02,598] INFO in training: Finished training batch of size 1024 for 7 epochs in 20.4s.
+
+
+## 2023-11-10
+
+Added two channels (now at (11, 11, 10)) for remaining flags. Also added action_mask to ignore invalid moves in policy.
+
+I1110 21:54:36.649133       1 worker_main.cc:177] Worker started with Config(training_server_url: 'http://10.172.0.3', local_model_path: '', runs_per_move: 1000, runs_per_move_gradient: -0.010, max_moves_per_game: 200, max_runtime_seconds: 300, max_games: -1, uct_c: 5.000, dirichlet_concentration: 0.350)
+
+2023-11-10 22:59:37.946 CET
+scope              total_time      count        ops/s
+NeuralMCTS::Run      299.278s     155683      520.195
+Predict              295.137s     151481      513.256
+NextMoves              1.833s     168750    92047.441
+FindLeaf               1.501s     155683   103734.353
+MakeMove               1.005s     435675   433635.199
+MaxPuctChild           0.442s     422990   957970.056
+
+
+[2023-11-10 22:06:16,053] INFO in training: Finished training batch of size 1024 for 7 epochs in 20.6s.

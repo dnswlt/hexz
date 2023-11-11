@@ -4,12 +4,13 @@
 #include <absl/strings/str_join.h>
 
 #include <chrono>
+#include <random>
+#include <thread>
 
 namespace hexz {
 
 namespace internal {
 thread_local std::mt19937 rng{std::random_device{}()};
-
 
 std::vector<float> Dirichlet(int n, float concentration) {
   std::gamma_distribution<float> gamma;
@@ -23,6 +24,15 @@ std::vector<float> Dirichlet(int n, float concentration) {
     v[i] /= sum;
   }
   return v;
+}
+
+void RandomDelay(float max_delay_seconds) {
+    if (max_delay_seconds <= 0) {
+        return;
+    }
+    std::uniform_real_distribution<float> dis(0, max_delay_seconds);
+    float delay = dis(rng);
+    std::this_thread::sleep_for(std::chrono::duration<float>(delay));
 }
 
 }  // namespace internal
@@ -41,7 +51,10 @@ std::string Config::String() const {
               absl::StrFormat("max_runtime_seconds: %d", max_runtime_seconds),
               absl::StrFormat("max_games: %d", max_games),
               absl::StrFormat("uct_c: %.3f", uct_c),
-              absl::StrFormat("dirichlet_concentration: %.3f", dirichlet_concentration),
+              absl::StrFormat("dirichlet_concentration: %.3f",
+                              dirichlet_concentration),
+              absl::StrFormat("startup_delay_seconds: %.3f",
+                              startup_delay_seconds),
           },
           ", "),
       ")");
@@ -60,6 +73,8 @@ Config Config::FromEnv() {
       .uct_c = static_cast<float>(GetEnvAsDouble("HEXZ_UCT_C", 5.0)),
       .dirichlet_concentration = static_cast<float>(
           GetEnvAsDouble("HEXZ_DIRICHLET_CONCENTRATION", 0.0)),
+      .startup_delay_seconds =
+          static_cast<float>(GetEnvAsDouble("HEXZ_STARTUP_DELAY_SECONDS", 0.0)),
   };
 }
 

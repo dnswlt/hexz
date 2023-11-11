@@ -26,7 +26,7 @@ COPY entrypoint.sh setup.py ./
 COPY ./src/pyhexz/*.py ./src/pyhexz/*.pyx ./src/pyhexz/
 RUN chmod +x ./entrypoint.sh
 
-RUN source ~/.bashrc && python3 setup.py build_ext --build-lib=src
+RUN source ~/.bashrc && HEXZ_SKIP_BUILD_CCAPI=1 python3 setup.py build_ext --build-lib=src
 
 #
 # BEGIN server specific stuff. Everything above this line should be identical to the

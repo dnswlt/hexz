@@ -35,6 +35,12 @@ struct Config {
   // added to the root nodes during MCTS search.
   float dirichlet_concentration = 0;
 
+  // Maximum delay at startup before generating and sending examples.
+  // The delay will be uniformly randomized between 0 and startup_delay_seconds.
+  // The idea is to avoid a "thundering herd" of workers delivering results
+  // to the training server at the same time.
+  float startup_delay_seconds = 0.0;
+
   static Config FromEnv();
   std::string String() const;
 };
@@ -52,6 +58,10 @@ extern thread_local std::mt19937 rng;
 // :( So let's roll our own, based on the gamma distribution:
 // https://en.wikipedia.org/wiki/Dirichlet_distribution#Related_distributions
 std::vector<float> Dirichlet(int n, float concentration);
+
+// Lets the calling thread sleep for a random amount of time between
+// [0..max_delay_seconds] seconds.
+void RandomDelay(float max_delay_seconds);
 
 }  // namespace internal
 

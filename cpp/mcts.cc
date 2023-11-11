@@ -35,8 +35,22 @@ int Node::NumVisitedChildren() const noexcept {
 }
 
 std::string Node::Stats() const {
-  return absl::StrCat("nchildren:", children_.size(),
-                      " visited_children:", NumVisitedChildren(),
+  int min_child_vc = 0;
+  int max_child_vc = 0;
+  if (!IsLeaf()) {
+    const auto [min_c, max_c] =
+        std::minmax_element(children().begin(), children().end(),
+                            [](const auto& lhs, const auto& rhs) {
+                              return lhs->visit_count() < rhs->visit_count();
+                            });
+    min_child_vc = (*min_c)->visit_count();
+    max_child_vc = (*max_c)->visit_count();
+  }
+  return absl::StrCat("nchildren:", children_.size(),              //
+                      " visited_children:", NumVisitedChildren(),  //
+                      " min_child_vc:", min_child_vc,              //
+                      " max_child_vc:", max_child_vc,              //
+                      " visit_count:", visit_count(),              //
                       " wins:", wins_);
 }
 
@@ -324,13 +338,13 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
 
     std::string stats = root->Stats();
     if (n < 5 || n % 10 == 0) {
-      ABSL_LOG(INFO) << "Move " << n << " (turn: " << root->turn() << ") ("
-                     << board.ShortDebugString() << ") after "
+      ABSL_LOG(INFO) << "Move " << n << " (turn: " << root->turn() << ") "
+                     << board.ShortDebugString() << " after "
                      << (float)(UnixMicros() - started_micros) / 1000000
                      << "s. stats: " << stats;
     } else {
-      ABSL_DLOG(INFO) << "Move " << n << " (turn: " << root->turn() << ") ("
-                      << board.ShortDebugString() << ") after "
+      ABSL_DLOG(INFO) << "Move " << n << " (turn: " << root->turn() << ") "
+                      << board.ShortDebugString() << " after "
                       << (float)(UnixMicros() - started_micros) / 1000000
                       << "s. stats: " << stats;
     }

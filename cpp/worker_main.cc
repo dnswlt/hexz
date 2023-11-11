@@ -175,6 +175,10 @@ int main() {
 
   // Execute
   ABSL_LOG(INFO) << "Worker started with " << config.String();
+  if (config.startup_delay_seconds > 0) {
+    hexz::internal::RandomDelay(config.startup_delay_seconds);
+    ABSL_LOG(INFO) << "Startup delay finished.";
+  }
   if (config.local_model_path != "") {
     ABSL_LOG(INFO)
         << "HEXZ_LOCAL_MODEL_PATH is set. Playing a game with a local model.";
