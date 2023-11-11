@@ -204,3 +204,9 @@ MaxPuctChild           0.442s     422990   957970.056
 
 
 [2023-11-10 22:06:16,053] INFO in training: Finished training batch of size 1024 for 7 epochs in 20.6s.
+
+Tree reuse and Dirichlet noise:
+
+https://ai.stackexchange.com/questions/36808/does-the-alphazero-algorithm-keep-the-subtree-statistics-after-each-move-during
+https://github.com/leela-zero/leela-zero/issues/538
+https://arxiv.org/pdf/1902.10565.pdf (KataGo)

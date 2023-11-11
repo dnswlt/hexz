@@ -228,10 +228,22 @@ NeuralMCTS::NeuralMCTS(Model& model, const Params& params)
       runs_per_move_gradient_{params.runs_per_move_gradient},
       dirichlet_concentration_{params.dirichlet_concentration} {}
 
-bool NeuralMCTS::Run(Node& root, const Board& b) {
+bool NeuralMCTS::Run(Node& root, const Board& b, bool add_noise) {
+  constexpr float kNoiseWeight = 0.25;
   Board board(b);
   Perfm::Scope ps(Perfm::NeuralMCTS_Run);
   Node* n = &root;
+  // If we are re-using the search tree, root might already be expanded
+  // on the first Run call. In this case, add noise before descending
+  // to a leaf node.
+  if (add_noise && !n->IsLeaf()) {
+    ABSL_DLOG(INFO)
+        << "Adding dirichlet noise to already expanded root: weight:"
+        << kNoiseWeight << " concentration:" << dirichlet_concentration_;
+    n->AddDirichletNoise(kNoiseWeight, dirichlet_concentration_);
+    add_noise = false;
+  }
+
   // Move to leaf node.
   auto t_start = UnixMicros();
   {
@@ -262,10 +274,11 @@ bool NeuralMCTS::Run(Node& root, const Board& b) {
   n->ShuffleChildren();  // Avoid selection bias.
   auto pred = model_.Predict(board, *n);
   n->SetMoveProbs(pred.move_probs);
-  if (dirichlet_concentration_ > 0 && n == &root) {
-    // This is the first iteration, root isn't expanded yet.
-    n->AddDirichletNoise(/*weight=*/0.25,
-                         /*concentration=*/dirichlet_concentration_);
+  if (add_noise) {
+    // root has been expanded for the first time.
+    ABSL_DLOG(INFO) << "Adding dirichlet noise: weight:" << kNoiseWeight
+                    << " concentration:" << dirichlet_concentration_;
+    n->AddDirichletNoise(kNoiseWeight, dirichlet_concentration_);
   }
   // Backpropagate the model prediction. Need to reorient it s.t. 1 means player
   // 0 won.
@@ -306,7 +319,8 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     // those.
     const int runs = NumRuns(n);
     for (int i = 0; i < runs && progress; i++) {
-      progress = Run(*root, board);
+      bool add_noise = i == 0 && dirichlet_concentration_ > 0;
+      progress = Run(*root, board, add_noise);
     }
     if (root->IsLeaf()) {
       result = board.Result();
@@ -365,6 +379,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
 
 absl::StatusOr<std::unique_ptr<Node>> NeuralMCTS::SuggestMove(
     int player, const Board& board, int think_time_millis) {
+  const bool add_noise = false;
   int64_t started_micros = UnixMicros();
   auto root =
       std::make_unique<Node>(nullptr, /*turn=*/player, Move{-1, -1, -1, -1.0});
@@ -374,7 +389,7 @@ absl::StatusOr<std::unique_ptr<Node>> NeuralMCTS::SuggestMove(
     if (UnixMicros() > max_micros) {
       break;
     }
-    if (!Run(*root, board)) {
+    if (!Run(*root, board, add_noise)) {
       break;
     }
   }

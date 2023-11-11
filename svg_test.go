@@ -23,3 +23,36 @@ func TestExportSVG(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestConvertHexColor(t *testing.T) {
+	tests := []struct {
+		name    string
+		col1    string
+		col2    string
+		scale   float64
+		want    string
+		wantErr bool
+	}{
+		{"middle_gray", "#000000", "#ffffff", 0.5, "#808080", false},
+		{"varied", "#123456", "#abcdef", 0.3, "#406284", false},
+		{"equal", "#abcdef", "#abcdef", 0.5, "#abcdef", false},
+		{"equal0", "#abcdef", "#abcdef", 0.0, "#abcdef", false},
+		{"equal1", "#abcdef", "#abcdef", 1.0, "#abcdef", false},
+		{"invalid_scale", "#abcdef", "#abcdef", 3.0, "#abcdef", true},
+		{"negative", "#efbbff", "800080", -0.01, "00000", false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := ScaleRGB(test.col1, test.col2, test.scale)
+			if err == nil && test.wantErr {
+				t.Error("Wanted error, but got none")
+			}
+			if err != nil && !test.wantErr {
+				t.Error(err)
+			}
+			if got != test.want && !test.wantErr {
+				t.Errorf("Got color %s, want: %s", got, test.want)
+			}
+		})
+	}
+}

@@ -151,7 +151,9 @@ class NeuralMCTS {
   int NumRuns(int move) const noexcept;
 
   // Executes a single run of the MCTS algorithm, starting at root.
-  bool Run(Node& root, const Board& board);
+  // If add_noise is true, Dirichlet noise will be added to the root node's
+  // move probs.
+  bool Run(Node& root, const Board& board, bool add_noise);
 
   // SuggestMove returns the best move suggestion that the NeuralMCTS algorithm
   // comes up with in think_time_millis milliseconds.
