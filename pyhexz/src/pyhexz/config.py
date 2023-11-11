@@ -29,6 +29,8 @@ class TrainingConfig(typing.NamedTuple):
     max_checkpoint_diff: int = 1
     batch_size: int = 4096
     num_epochs: int = 7
+    learning_rate: float = 1e-3
+    adam_weight_decay: float = 1e-4
     device: str = "cpu"
     shuffle: bool = True
     pin_memory: bool = False

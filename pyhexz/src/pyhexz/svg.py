@@ -1,5 +1,6 @@
 """SVG export of boards. Pretty much a direct translation of the svg.go code to Python."""
 
+import contextlib
 import math
 import numpy as np
 import time
@@ -22,27 +23,27 @@ def svg_hexagon(side_length: float, board: Board, r: int, c: int, move_probs: np
     draw_next_value = move_probs is None
     if board.b[0, r, c] > 0 or board.b[1, r, c] > 0:
         fill = "#255ab4"
-    elif board.b[4, r, c] > 0 or board.b[5, r, c] > 0:
+    elif board.b[5, r, c] > 0 or board.b[6, r, c] > 0:
         fill = "#f8d748"
-    elif board.b[8, r, c] > 0:
+    elif board.b[10, r, c] > 0:
         # Grass
         fill = "#008048"
-    elif board.b[2, r, c] > 0 and board.b[6, r, c] > 0:
+    elif board.b[2, r, c] > 0 and board.b[7, r, c] > 0:
         # Blocked for both: rock
         fill = "#5f5f5f"
     elif board.b[2, r, c] > 0:
         # Blocked only for player 0
         fill = "#fbeba3"
-    elif board.b[6, r, c] > 0:
+    elif board.b[7, r, c] > 0:
         # Blocked only for player 1
         fill = "#92acd9"
-    elif draw_next_value and board.b[3, r, c] > 0 and board.b[7, r, c] > 0:
+    elif draw_next_value and board.b[3, r, c] > 0 and board.b[8, r, c] > 0:
         # Next value for both players.
         fill = "#B5CB99"
     elif draw_next_value and board.b[3, r, c] > 0:
         # Next value only for player 0
         fill = "#92acd9"
-    elif draw_next_value and board.b[7, r, c] > 0:
+    elif draw_next_value and board.b[8, r, c] > 0:
         # Next value only for player 1
         fill = "#fbeba3"
     else:
@@ -57,33 +58,31 @@ def svg_hexagon(side_length: float, board: Board, r: int, c: int, move_probs: np
     elems = [
         f'<polygon points="{points}" stroke="#cbcbcb" stroke-width="1" fill="{fill}" />'
     ]
-    if board.b[0, r, c] > 0 or board.b[4, r, c] > 0:
+    if board.b[0, r, c] > 0 or board.b[5, r, c] > 0:
         # Flag of one of the players.
-        player = int(board.b[4, r, c])
+        player = int(board.b[5, r, c])
         elems.append(f'<g transform="scale({icon_scale:.6f})"><path d="{flag_path}" fill-rule="evenodd" fill="{icon_colors[player]}" /></g>')
-    elif board.b[1, r, c] > 0 or board.b[5, r, c] > 0:
+    elif board.b[1, r, c] > 0 or board.b[6, r, c] > 0:
         # Occupied by one of the players.
-        player = int(board.b[5, r, c] > 0)
-        value = int(board.b[1, r, c] + board.b[5, r, c])
+        player = int(board.b[6, r, c] > 0)
+        value = int(max(board.b[1, r, c], board.b[6, r, c]))
         elems.append(f'<text style="text-anchor: middle; alignment-baseline: middle; font: {int(a)}px sans-serif;" fill="{icon_colors[player]}" x="0" y="0">{value}</text>')
-    elif board.b[8, r, c] > 0:
+    elif board.b[10, r, c] > 0:
         # Grass
-        value = int(board.b[8, r, c])
+        value = int(board.b[10, r, c])
         elems.append(f'<text style="text-anchor: middle; alignment-baseline: middle; font: {int(a)}px sans-serif;" fill="#1e1e1e" x="0" y="0">{value}</text>')
-    elif draw_next_value and (board.b[3, r, c] > 0 or board.b[7, r, c] > 0):
+    elif draw_next_value and (board.b[3, r, c] > 0 or board.b[8, r, c] > 0):
         # Next value. Only drawn if we don't also draw move_probs.
-        if board.b[3, r, c] > 0 and board.b[7, r, c] > 0:
+        if board.b[3, r, c] > 0 and board.b[8, r, c] > 0:
             # both players have a next value
-            value = f"{int(board.b[3, r, c])}&middot;{int(board.b[7, r, c])}"
+            value = f"{int(board.b[3, r, c])}&middot;{int(board.b[8, r, c])}"
             elems.append(f'<text style="text-anchor: middle; alignment-baseline: middle; font: {int(a*.8)}px sans-serif;" fill="#008048" x="0" y="0">{value}</text>')
         else:
-            player = int(board.b[7, r, c] > 0)
-            value = int(board.b[3, r, c] + board.b[7, r, c])
+            player = int(board.b[8, r, c] > 0)
+            value = int(max(board.b[3, r, c], board.b[8, r, c]))
             elems.append(f'<text style="text-anchor: middle; alignment-baseline: middle; font: {int(a)}px sans-serif;" fill="{icon_colors[player]}" x="0" y="0">{value}</text>')
     elif move_probs is not None and move_probs[:, r, c].max() > 0:
         # Move probabilities
-        value = f"{move_probs[0, r, c]:.3f}{move_probs[1, r, c]}"
-        # elems.append(f'<text style="text-anchor: middle; alignment-baseline: middle; font: {int(a/2)}px sans-serif;" fill="#cbcbcb" x="0" y="0">{value}</text>')
         elems.append(f'''<text style="text-anchor: middle; alignment-baseline: middle; font: {int(a/2)}px sans-serif;" fill="#cbcbcb" x="0" y="0">
                            <tspan x="0" dy="0">{100*move_probs[0, r, c]:.1f}</tspan>
                            <tspan x="0" dy="1.2em">{100*move_probs[1, r, c]:.1f}</tspan>
@@ -92,16 +91,21 @@ def svg_hexagon(side_length: float, board: Board, r: int, c: int, move_probs: np
     return f'<g transform="{transform}">{"".join(elems)}</g>'
 
 
-def export(filename: str, boards: list[Board], captions: list[str] = None, move_probs: list[np.ndarray] = None) -> None:
+def export(file_like: str, boards: list[Board], captions: list[str] = None, move_probs: list[np.ndarray] = None) -> None:
     side_length = 30.0
     width = 10 * math.sqrt(3) * side_length
     height = 17 * side_length
     viewbox = f"0 0 {width:.6f} {height:.6f}"
     if move_probs is None:
         move_probs = [None] * len(boards)
-    if captions is None:
+    if not captions:
         captions = [None] * len(boards)
-    with open(filename, "w") as f_out:
+    should_close = False
+    if isinstance(file_like, str):
+        file_like = open(file_like, "w")
+        should_close = True
+    try:
+        f_out = file_like
         f_out.write("""<!DOCTYPE html>
 		<html>
 		<head>
@@ -136,3 +140,5 @@ def export(filename: str, boards: list[Board], captions: list[str] = None, move_
             f_out.write("</div>\n")
         f_out.write("</body>\n")
         f_out.write("</html>\n")
+    finally:
+        if should_close: file_like.close()

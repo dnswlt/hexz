@@ -1,6 +1,8 @@
 import base64
+from collections.abc import Iterable
 from contextlib import contextmanager
 import datetime
+import io
 from flask import Flask, current_app, make_response, request
 from google.protobuf.message import DecodeError
 from google.protobuf import json_format
@@ -92,6 +94,7 @@ def create_app():
     app = Flask(__name__)
     app.logger.setLevel(logging.INFO)
     config = TrainingConfig.from_env()
+    app.logger.info(f"Using {config}")
     app.model_queue = queue.SimpleQueue()
     app.hexz_config = config
 
@@ -188,6 +191,22 @@ def create_app():
         )
         resp: hexz_pb2.AddTrainingExamplesResponse = reply_q.get(timeout=5)
         return resp.SerializeToString(), {"Content-Type": "application/x-protobuf"}
+
+    @app.get("/examples/latest")
+    def examples_html():
+        """Returns a HTML file with SVG images of the latest example batch."""
+        reply_q = queue.SimpleQueue()
+        current_app.training_task_queue.put(
+            {
+                "type": "GetLatestExamples",
+                "reply_q": reply_q,
+            }
+        )
+        examples: Iterable[hexz_pb2.TrainingExample] = reply_q.get(timeout=5)
+        npexs = [training.NumpyExample.decode(e) for e in examples]
+        buf = io.StringIO()
+        svg.export(buf, [CBoard.from_numpy(e.board) for e in npexs], [], [e.move_probs for e in npexs])
+        return buf.getvalue(), {"Content-Type": "text/html; charset=utf-8"}
 
     @app.get("/models/current")
     def model():

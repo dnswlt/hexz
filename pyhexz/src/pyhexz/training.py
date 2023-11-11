@@ -86,7 +86,11 @@ class TrainingRunnerTask(threading.Thread):
         pr_loss_fn = nn.CrossEntropyLoss()
         val_loss_fn = nn.MSELoss()
 
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
+        optimizer = torch.optim.Adam(
+            model.parameters(),
+            lr=self.config.learning_rate,
+            weight_decay=self.config.adam_weight_decay,
+        )
 
         for _ in range(num_epochs):
             for (X_board, X_action_mask), (y_pr, y_val) in loader:
@@ -142,6 +146,38 @@ class TimingStats:
         }
 
 
+class NumpyExample(typing.NamedTuple):
+    board: np.ndarray  # shape: (11, 11, 10)
+    action_mask: np.ndarray  # shape: (2, 11, 10)
+    move_probs: np.ndarray  # shape: (2, 11, 10)
+    value: np.ndarray  # shape: (1,)
+
+    @classmethod
+    def decode(cls, ex: hexz_pb2.TrainingExample) -> "NumpyExample":
+        """Decodes the given TrainingExample and returns its data as a named tuple of np arrays."""
+        if ex.encoding == hexz_pb2.TrainingExample.PYTORCH:
+            board = torch.load(io.BytesIO(ex.board)).numpy()
+            action_mask = torch.load(io.BytesIO(ex.action_mask)).numpy()
+            pr = torch.load(io.BytesIO(ex.move_probs)).numpy()
+        else:
+            board = np.load(io.BytesIO(ex.board))
+            action_mask = np.load(io.BytesIO(ex.action_mask))
+            pr = np.load(io.BytesIO(ex.move_probs))
+        if board.shape != (11, 11, 10):
+            raise ValueError(f"Wrong board shape: {board.shape}.")
+        if action_mask.shape != (2, 11, 10):
+            raise ValueError(f"Wrong action_mask shape: {pr.shape}.")
+        if pr.shape != (2, 11, 10):
+            raise ValueError(f"Wrong move_probs shape: {pr.shape}.")
+        val = np.array([ex.result], dtype=np.float32)
+        return NumpyExample(
+            board=board,
+            action_mask=action_mask,
+            move_probs=pr,
+            value=val,
+        )
+
+
 class TrainingTask(threading.Thread):
     """TrainingTask runs as a separate thread, accepts training data and
     spaws a separate thread or process to train the model and save new
@@ -179,6 +215,7 @@ class TrainingTask(threading.Thread):
         self.timing_stats = TimingStats()
         self.started = time.time()
         self.training_time = 0
+        self.latest_examples = []
 
     def accept_model_key(self, model_key: hexz_pb2.ModelKey):
         return (
@@ -206,7 +243,7 @@ class TrainingTask(threading.Thread):
         """Expects a AddTrainingExamplesRequest and adds it to the current batch.
 
         If the current batch is already full, and a training is still ongoing,
-        the TrainingTask is at capacity and will respond 
+        the TrainingTask is at capacity and will respond
         """
         req: hexz_pb2.AddTrainingExamplesRequest = msg["request"]
         reply_q = msg["reply_q"]
@@ -219,7 +256,9 @@ class TrainingTask(threading.Thread):
             return
         if self.capacity() == 0:
             # We are at capacity. Signal this to the client.
-            self.logger.warning(f"TrainingTask is at capacity. Rejecting {len(req.examples)} examples.")
+            self.logger.warning(
+                f"TrainingTask is at capacity. Rejecting {len(req.examples)} examples."
+            )
             resp = hexz_pb2.AddTrainingExamplesResponse(
                 status=hexz_pb2.AddTrainingExamplesResponse.REJECTED_AT_CAPACITY,
                 error_message=f"Server is currently not able to accept more examples",
@@ -246,38 +285,28 @@ class TrainingTask(threading.Thread):
             )
             self.timing_stats.sum_duration_micros += duration_micros
             self.timing_stats.sum_duration_sq += (duration_micros / 1e6) ** 2
-            # Extract example data.
-            if ex.encoding == hexz_pb2.TrainingExample.PYTORCH:
-                board = torch.load(io.BytesIO(ex.board)).numpy()
-                action_mask = torch.load(io.BytesIO(ex.action_mask)).numpy()
-                pr = torch.load(io.BytesIO(ex.move_probs)).numpy()
-            else:
-                board = np.load(io.BytesIO(ex.board))
-                action_mask = np.load(io.BytesIO(ex.action_mask))
-                pr = np.load(io.BytesIO(ex.move_probs))
-            if board.shape != (11, 11, 10):
-                self.logger.error(
-                    f"Received board with wrong shape: {board.shape}. Ignored."
-                )
+
+            try:
+                np_ex = NumpyExample.decode(ex)
+            except ValueError as e:
+                self.logger.error("Ignoring invalid example batch: ", str(e))
                 return
-            if action_mask.shape != (2, 11, 10):
-                self.logger.error(
-                    f"Received action_mask with wrong shape: {pr.shape}. Ignored."
-                )
-                return
-            if pr.shape != (2, 11, 10):
-                self.logger.error(
-                    f"Received move_probs with wrong shape: {pr.shape}. Ignored."
-                )
-                return
-            val = np.array([ex.result], dtype=np.float32)
-            new_batch.append(((board, action_mask), (pr, val)))
+            new_batch.append(
+                ((np_ex.board, np_ex.action_mask), (np_ex.move_probs, np_ex.value))
+            )
+
+        # Save examples (for on-demand SVG export).
+        self.latest_examples = req.examples
+
         self.stats["examples"] += len(req.examples)
         lim = min(len(req.examples), self.capacity())
         # Add translated examples to batch and trigger a training run if we have a full batch.
         batch_add, batch_buf = new_batch[:lim], new_batch[lim:]
         self.batch.extend(batch_add)
-        if len(self.batch) >= self.config.batch_size and self.state != self._STATE_TRAINING:
+        if (
+            len(self.batch) >= self.config.batch_size
+            and self.state != self._STATE_TRAINING
+        ):
             # Only start a new training task if we're not already training.
             self.start_training_runner_task()
         cap = self.capacity()
@@ -285,8 +314,10 @@ class TrainingTask(threading.Thread):
             # New capacity for the remaining batch_buf elements since we started a new training round.
             if len(batch_buf) >= cap:
                 n_dropped = len(batch_buf) - (self.config.batch_size)
-                batch_buf = batch_buf[:self.config.batch_size]
-                self.logger.warning(f"Dropped {n_dropped} examples. Examples from request exceeded {self.config.batch_size=}.")
+                batch_buf = batch_buf[: self.config.batch_size]
+                self.logger.warning(
+                    f"Dropped {n_dropped} examples. Examples from request exceeded {self.config.batch_size=}."
+                )
             self.batch.extend(batch_buf)
 
     def handle_training_result(self, msg: Mapping[str, Any]):
@@ -364,6 +395,10 @@ class TrainingTask(threading.Thread):
         }
         reply_q.put(info)
 
+    def handle_get_latest_examples(self, msg):
+        reply_q = msg["reply_q"]
+        reply_q.put(self.latest_examples)
+
     def run(self):
         """This is the main dispatcher loop of the TrainingTask.
         All requests to this task must be sent via self.queue and are processed sequentially.
@@ -385,6 +420,8 @@ class TrainingTask(threading.Thread):
                 self.handle_get_model(msg)
             elif msg["type"] == "GetTrainingInfo":
                 self.handle_get_training_info(msg)
+            elif msg["type"] == "GetLatestExamples":
+                self.handle_get_latest_examples(msg)
             else:
                 raise HexzError(
                     f"TrainingTask: received unknown message type {msg['type']}"

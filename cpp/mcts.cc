@@ -237,9 +237,6 @@ bool NeuralMCTS::Run(Node& root, const Board& b, bool add_noise) {
   // on the first Run call. In this case, add noise before descending
   // to a leaf node.
   if (add_noise && !n->IsLeaf()) {
-    ABSL_DLOG(INFO)
-        << "Adding dirichlet noise to already expanded root: weight:"
-        << kNoiseWeight << " concentration:" << dirichlet_concentration_;
     n->AddDirichletNoise(kNoiseWeight, dirichlet_concentration_);
     add_noise = false;
   }
@@ -276,8 +273,6 @@ bool NeuralMCTS::Run(Node& root, const Board& b, bool add_noise) {
   n->SetMoveProbs(pred.move_probs);
   if (add_noise) {
     // root has been expanded for the first time.
-    ABSL_DLOG(INFO) << "Adding dirichlet noise: weight:" << kNoiseWeight
-                    << " concentration:" << dirichlet_concentration_;
     n->AddDirichletNoise(kNoiseWeight, dirichlet_concentration_);
   }
   // Backpropagate the model prediction. Need to reorient it s.t. 1 means player
