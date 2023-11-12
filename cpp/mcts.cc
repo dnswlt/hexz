@@ -143,6 +143,36 @@ std::unique_ptr<Node> Node::MostVisitedChildAsRoot() {
   return best_child;
 }
 
+std::unique_ptr<Node> Node::SelectChildAsRoot() {
+  assert(!children_.empty());
+  float r = internal::UnitRandom();
+  float s = 0;
+  // The sum of the children's visit counts should be equal
+  // to visit_count_ - 1. But summing explicitly (hopefully)
+  // makes this more robust and future proof.
+  int sum_vc = 0;
+  for (const auto& c : children()) {
+    sum_vc += c->visit_count_;
+  }
+  float vc = static_cast<float>(sum_vc);
+  int i;
+  for (i = 0; i < children_.size(); i++) {
+    s += static_cast<float>(children_[i]->visit_count_) / vc;
+    ABSL_LOG(ERROR) << "s = " << s << ", r = " << r;
+    if (s >= r) {
+        break;
+    }
+  }
+  // Due to floating-point rounding issues, we *might* end up here with i === children_.size()
+  // if r ~= 1.0.
+  if (i == children_.size()) {
+    i--;
+  }
+  std::unique_ptr<Node> selected_child = std::move(children_[i]);
+  selected_child->parent_ = nullptr;
+  return selected_child;
+}
+
 void Node::Backpropagate(float result) {
   Node* n = this;
   while (n != nullptr) {
@@ -360,9 +390,9 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
 
     int turn = root->turn();
     // NOTE: Must not access root after this step!
-    std::unique_ptr<Node> best_child = root->MostVisitedChildAsRoot();
-    board.MakeMove(turn, best_child->move());
-    root = std::move(best_child);
+    std::unique_ptr<Node> child = root->SelectChildAsRoot();
+    board.MakeMove(turn, child->move());
+    root = std::move(child);
   }
   if (game_over) {
     for (auto& ex : examples) {

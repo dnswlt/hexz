@@ -34,8 +34,8 @@ class MoveSuggester {
 
  private:
   class impl;
-  impl* pimpl() { return pimpl_.get(); }
-  const impl* pimpl() const { return pimpl_.get(); }
+  impl& pimpl() { return *pimpl_; }
+  const impl& pimpl() const { return *pimpl_; }
   std::unique_ptr<impl> pimpl_;
 };
 

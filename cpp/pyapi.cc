@@ -26,16 +26,16 @@ class MoveSuggester::impl {
 
 // Must be in the .cc file to make pimpl with std::unique_ptr work.
 MoveSuggester::MoveSuggester() : pimpl_{std::make_unique<impl>()} {}
-MoveSuggester::~MoveSuggester() = default;
 MoveSuggester::MoveSuggester(MoveSuggester&&) = default;
 MoveSuggester& MoveSuggester::operator=(MoveSuggester&& other) = default;
+MoveSuggester::~MoveSuggester() = default;
 
 std::string MoveSuggester::SuggestMove(const std::string& request) {
-  return pimpl()->SuggestMove(request);
+  return pimpl().SuggestMove(request);
 }
 
 void MoveSuggester::LoadModel(const std::string& path) {
-  pimpl()->LoadModel(path);
+  pimpl().LoadModel(path);
 }
 
 std::string MoveSuggester::impl::SuggestMove(const std::string& request) {

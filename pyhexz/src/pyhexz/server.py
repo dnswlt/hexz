@@ -205,7 +205,12 @@ def create_app():
         examples: Iterable[hexz_pb2.TrainingExample] = reply_q.get(timeout=5)
         npexs = [training.NumpyExample.decode(e) for e in examples]
         buf = io.StringIO()
-        svg.export(buf, [CBoard.from_numpy(e.board) for e in npexs], [], [e.move_probs for e in npexs])
+        svg.export(
+            buf,
+            boards=[CBoard.from_numpy(e.board) for e in npexs],
+            captions=[f"Value: {e.value[0]:.3f}" for e in npexs],
+            move_probs=[e.move_probs for e in npexs],
+        )
         return buf.getvalue(), {"Content-Type": "text/html; charset=utf-8"}
 
     @app.get("/models/current")
@@ -231,7 +236,7 @@ def create_app():
     @app.get("/models/latest")
     def latest_model():
         """Part of the training workflow. Called by workers to download the latest
-        model straight away. The model key is sent JSON-encoded in the X-Model-Key header.
+        model straight away. The model key is sent back JSON-encoded in the X-Model-Key header.
         """
         repr = request.args.get("repr", "state_dict").lower()
         if repr not in ("state_dict", "scriptmodule"):

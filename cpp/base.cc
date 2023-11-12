@@ -12,6 +12,11 @@ namespace hexz {
 namespace internal {
 thread_local std::mt19937 rng{std::random_device{}()};
 
+float UnitRandom() {
+  std::uniform_real_distribution<float> unif(0, 1);
+  return unif(rng);
+}
+
 std::vector<float> Dirichlet(int n, float concentration) {
   std::gamma_distribution<float> gamma;
   std::vector<float> v(n);
@@ -27,12 +32,12 @@ std::vector<float> Dirichlet(int n, float concentration) {
 }
 
 void RandomDelay(float max_delay_seconds) {
-    if (max_delay_seconds <= 0) {
-        return;
-    }
-    std::uniform_real_distribution<float> dis(0, max_delay_seconds);
-    float delay = dis(rng);
-    std::this_thread::sleep_for(std::chrono::duration<float>(delay));
+  if (max_delay_seconds <= 0) {
+    return;
+  }
+  std::uniform_real_distribution<float> dis(0, max_delay_seconds);
+  float delay = dis(rng);
+  std::this_thread::sleep_for(std::chrono::duration<float>(delay));
 }
 
 }  // namespace internal

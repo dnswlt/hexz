@@ -54,6 +54,9 @@ int64_t UnixMicros();
 namespace internal {
 extern thread_local std::mt19937 rng;
 
+// Returns a random number in the interval [0, 1] drawn from a uniform distribution.
+float UnitRandom();
+
 // Libtorch does not have a Dirichlet (or any other nontrivial) distribution yet
 // :( So let's roll our own, based on the gamma distribution:
 // https://en.wikipedia.org/wiki/Dirichlet_distribution#Related_distributions

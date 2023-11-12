@@ -43,6 +43,7 @@ class TrainingRunnerTask(threading.Thread):
         config: TrainingConfig,
         batch: InMemoryDataset,
         done_queue: queue.SimpleQueue,
+        logger: logging.Logger,
     ):
         super().__init__()
         self.repo = repo
@@ -50,6 +51,7 @@ class TrainingRunnerTask(threading.Thread):
         self.done_queue = done_queue
         self.config = config
         self.batch = batch
+        self.logger = logger
 
     def run(self):
         reply = {
@@ -92,13 +94,15 @@ class TrainingRunnerTask(threading.Thread):
             weight_decay=self.config.adam_weight_decay,
         )
 
-        for _ in range(num_epochs):
-            for (X_board, X_action_mask), (y_pr, y_val) in loader:
+        for epoch in range(num_epochs):
+            for i, ((X_board, X_action_mask), (y_pr, y_val)) in enumerate(loader):
                 # Send to device.
                 X_board = X_board.to(device)
                 X_action_mask = X_action_mask.to(device)
                 y_pr = y_pr.to(device)
                 y_val = y_val.to(device)
+
+                optimizer.zero_grad(set_to_none=True)
 
                 # Predict
                 pred_pr, pred_val = model(X_board, X_action_mask)
@@ -107,11 +111,12 @@ class TrainingRunnerTask(threading.Thread):
                 pr_loss = pr_loss_fn(pred_pr.flatten(1), y_pr.flatten(1))
                 val_loss = val_loss_fn(pred_val, y_val)
                 loss = pr_loss + val_loss
-
+                self.logger.info(
+                    f"Epoch {epoch}: pr_loss:{pr_loss.item():.3f} val_loss:{val_loss.item():.3f} loss: {loss.item():.3f}"
+                )
                 # Backpropagation
                 loss.backward()
                 optimizer.step()
-                optimizer.zero_grad(set_to_none=True)
 
         # Training is done. Save model under incremented checkpoint.
         self.model_key.checkpoint += 1
@@ -230,7 +235,7 @@ class TrainingTask(threading.Thread):
 
     def start_training_runner_task(self):
         t = TrainingRunnerTask(
-            self.repo, self.model_key, self.config, self.batch, self.queue
+            self.repo, self.model_key, self.config, self.batch, self.queue, self.logger
         )
         t.start()
         self.logger.info("Started TrainingRunnerTask")
