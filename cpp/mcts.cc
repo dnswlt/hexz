@@ -2,6 +2,7 @@
 
 #include <absl/log/absl_log.h>
 #include <absl/status/statusor.h>
+#include <absl/strings/str_format.h>
 #include <torch/torch.h>
 
 #include <algorithm>
@@ -15,6 +16,10 @@
 #include "perfm.h"
 
 namespace hexz {
+
+namespace {
+constexpr float kNoiseWeight = 0.25;
+}  // namespace
 
 float Node::uct_c = 5.0;
 
@@ -54,12 +59,13 @@ std::string Node::Stats() const {
                       " wins:", wins_);
 }
 
-float Node::Prior() const {
+float Node::Prior() const noexcept {
   ABSL_DCHECK(parent_ != nullptr) << "Prior: must not be called on root node";
   return parent_->move_probs_[flat_idx_];
 }
 
 float Node::Puct() const noexcept {
+  ABSL_DCHECK(parent_ != nullptr) << "Prior: must not be called on root node";
   float q = 0.0;
   if (visit_count_ > 0) {
     q = wins_ / visit_count_;
@@ -130,6 +136,14 @@ torch::Tensor Node::NormVisitCounts() const {
   return t;
 }
 
+void Node::ResetTree() {
+  wins_ = 0;
+  visit_count_ = 0;
+  for (auto& c : children_) {
+    c->ResetTree();
+  }
+}
+
 std::unique_ptr<Node> Node::MostVisitedChildAsRoot() {
   assert(!children_.empty());
   int best_i = 0;
@@ -158,13 +172,12 @@ std::unique_ptr<Node> Node::SelectChildAsRoot() {
   int i;
   for (i = 0; i < children_.size(); i++) {
     s += static_cast<float>(children_[i]->visit_count_) / vc;
-    ABSL_LOG(ERROR) << "s = " << s << ", r = " << r;
     if (s >= r) {
-        break;
+      break;
     }
   }
-  // Due to floating-point rounding issues, we *might* end up here with i === children_.size()
-  // if r ~= 1.0.
+  // Due to floating-point rounding issues, we *might* end up here with i ===
+  // children_.size() if r ~= 1.0.
   if (i == children_.size()) {
     i--;
   }
@@ -223,6 +236,48 @@ std::string Node::DebugString() const {
   return os.str();
 }
 
+namespace {
+absl::Status WriteDotNodeRec(const Node& n, const std::string& name,
+                             std::ofstream& os) {
+  std::string label = absl::StrFormat(
+      "%d(%d, %d, %d)%.1f v:%.2f\\nvc:%d q:%.2f c:%d",                 //
+      n.turn(), n.move().typ, n.move().r, n.move().c, n.move().value,  //
+      n.value(), n.visit_count(), n.wins(), n.children().size());
+  os << name << "[label=\"" << label << "\"]\n";
+  int i = 0;
+  for (const auto& c : n.children()) {
+    if (c->visit_count() == 0) {
+      continue;
+    }
+    auto child_name = name + "_" + std::to_string(i);
+    auto status = WriteDotNodeRec(*c, child_name, os);
+    if (!status.ok()) {
+      return status;
+    }
+    os << name << " -> " << child_name << "\n";
+    i++;
+  }
+  return absl::OkStatus();
+}
+}  // namespace
+
+absl::Status WriteDotGraph(const Node& root, const std::string& path) {
+  std::ofstream os(path, std::ios::trunc);
+  if (!os.is_open()) {
+    return absl::AbortedError("Cannot open file " + std::string(path));
+  }
+
+  os << "digraph {\n";
+  os << "node[shape=box]\n";
+  std::string root_name = "n_0";
+  auto status = WriteDotNodeRec(root, root_name, os);
+  if (!status.ok()) {
+    return status;
+  }
+  os << "}\n";
+  return absl::OkStatus();
+}
+
 TorchModel::Prediction TorchModel::Predict(const Board& board,
                                            const Node& node) {
   ABSL_DCHECK(!node.IsLeaf()) << "Must not call Predict on a leaf node.";
@@ -258,8 +313,70 @@ NeuralMCTS::NeuralMCTS(Model& model, const Params& params)
       runs_per_move_gradient_{params.runs_per_move_gradient},
       dirichlet_concentration_{params.dirichlet_concentration} {}
 
+bool NeuralMCTS::RunReusingTree(Node& root, const Board& b, bool add_noise) {
+  // Same as Run, but re-use the existing tree starting at root (assuming it
+  // was reset before calling this method for the first iteration).
+  // An unvisited leaf that already has predictions and zeroed child nodes
+  // counts as one Run, but this method will only return once it has called
+  // Predict for a fresh prediction once.
+  Board board(b);
+  Node* n = &root;
+  if (add_noise && !n->IsLeaf()) {
+    // root has already been expanded before, so we can add the noise directly.
+    // If this is the first time we expand root, noise is added below once
+    // the predictions are available.
+    n->AddDirichletNoise(kNoiseWeight, dirichlet_concentration_);
+    add_noise = false;
+  }
+  // Find leaf node
+  while (n->visit_count() > 0 && !n->IsLeaf()) {
+    Node* child = n->MaxPuctChild();
+    board.MakeMove(n->turn(), child->move());
+    n = child;
+  }
+  if (!n->IsLeaf()) {
+    // n->visit_count() == 0, but we've been here before.
+    n->Backpropagate(n->turn() == 0 ? n->value() : -n->value());
+    return true;  // Indicate that we re-used existing predictions.
+  }
+  if (n->terminal()) {
+    // Nothing left to be done here, the game is over.
+    n->Backpropagate(board.Result());
+    return false;
+  }
+  // Expand leaf node. Usually it's the turn as indicated by the node.
+  int turn = n->turn();
+  auto moves = board.NextMoves(turn);
+  if (moves.empty()) {
+    // Player has no valid moves left. Try if opponent can proceed.
+    turn = 1 - turn;
+    n->SetTurn(turn);
+    moves = board.NextMoves(turn);
+    if (moves.empty()) {
+      // No player can make a move => game over.
+      n->SetTerminal(true);
+      n->Backpropagate(board.Result());
+      return false;
+    }
+  }
+  // Initially we assume that it's the opponent's turn. If that turns out to be
+  // false, the turn gets updated when trying to find next moves (see above).
+  n->CreateChildren(1 - turn, moves);
+  n->ShuffleChildren();  // Avoid selection bias.
+  auto pred = model_.Predict(board, *n);
+  n->SetMoveProbs(pred.move_probs);
+  if (add_noise && n == &root) {
+    // root has been expanded for the first time.
+    n->AddDirichletNoise(kNoiseWeight, dirichlet_concentration_);
+  }
+  n->SetValue(pred.value);
+  // Backpropagate the model prediction. Need to reorient it s.t. 1 means player
+  // 0 won.
+  n->Backpropagate(n->turn() == 0 ? pred.value : -pred.value);
+  return false;
+}
+
 bool NeuralMCTS::Run(Node& root, const Board& b, bool add_noise) {
-  constexpr float kNoiseWeight = 0.25;
   Board board(b);
   Perfm::Scope ps(Perfm::NeuralMCTS_Run);
   Node* n = &root;
@@ -289,11 +406,12 @@ bool NeuralMCTS::Run(Node& root, const Board& b, bool add_noise) {
     turn = 1 - turn;
     n->SetTurn(turn);
     moves = board.NextMoves(turn);
-  }
-  if (moves.empty()) {
-    // No player can make a move => game over.
-    n->Backpropagate(board.Result());
-    return n != &root;  // Return if we made any progress at all in this run.
+    if (moves.empty()) {
+      // No player can make a move => game over.
+      n->SetTerminal(true);
+      n->Backpropagate(board.Result());
+      return n != &root;  // Return if we made any progress at all in this run.
+    }
   }
   // Initially we assume that it's the opponent's turn. If that turns out to be
   // false, the turn gets updated when trying to find next moves (see above).
@@ -301,10 +419,11 @@ bool NeuralMCTS::Run(Node& root, const Board& b, bool add_noise) {
   n->ShuffleChildren();  // Avoid selection bias.
   auto pred = model_.Predict(board, *n);
   n->SetMoveProbs(pred.move_probs);
-  if (add_noise) {
+  if (add_noise && n == &root) {
     // root has been expanded for the first time.
     n->AddDirichletNoise(kNoiseWeight, dirichlet_concentration_);
   }
+  n->SetValue(pred.value);
   // Backpropagate the model prediction. Need to reorient it s.t. 1 means player
   // 0 won.
   n->Backpropagate(n->turn() == 0 ? pred.value : -pred.value);
@@ -339,14 +458,21 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       return absl::DeadlineExceededError(
           "max_runtime_seconds exceeded before the game was finished");
     }
-    bool progress = true;
-    // The first moves are the most important ones. Think twice as hard for
-    // those.
     const int runs = NumRuns(n);
-    for (int i = 0; i < runs && progress; i++) {
-      bool add_noise = i == 0 && dirichlet_concentration_ > 0;
-      progress = Run(*root, board, add_noise);
+    int n_runs = 0;
+    int n_reused = 0;
+    while ((n_runs - n_reused) < runs) {
+      bool add_noise = n_runs == 0 && dirichlet_concentration_ > 0;
+      if (RunReusingTree(*root, board, add_noise)) {
+        // Re-used previous prediction, so don't count as a full run.
+        n_reused++;
+      }
+      n_runs++;
     }
+    // if (n < 10)
+    //   WriteDotGraph(*root, "/tmp/searchtree_" + std::to_string(n) + ".dot");
+    ABSL_DLOG(INFO) << "At move " << n << ": n_runs:" << n_runs
+                    << " n_reused:" << n_reused;
     if (root->IsLeaf()) {
       result = board.Result();
       ABSL_LOG(INFO) << "Game over. Final score: " << board.Score()
@@ -354,7 +480,6 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       game_over = true;
       break;
     }
-
     // Add example.
     hexzpb::TrainingExample example;
     int64_t move_ready = UnixMicros();
@@ -393,6 +518,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     std::unique_ptr<Node> child = root->SelectChildAsRoot();
     board.MakeMove(turn, child->move());
     root = std::move(child);
+    root->ResetTree();
   }
   if (game_over) {
     for (auto& ex : examples) {

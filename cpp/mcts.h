@@ -1,12 +1,14 @@
 #ifndef __HEXZ_MCTS_H__
 #define __HEXZ_MCTS_H__
 
+#include <absl/status/status.h>
 #include <absl/status/statusor.h>
 #include <torch/script.h>
 #include <torch/torch.h>
 
 #include <cassert>
 #include <ostream>
+#include <string_view>
 #include <vector>
 
 #include "base.h"
@@ -27,14 +29,20 @@ class Node {
   const std::vector<float>& move_probs() const noexcept { return move_probs_; }
   const Node* parent() const noexcept { return parent_; }
   float wins() const noexcept { return wins_; }
+  float value() const noexcept { return value_; }
+  bool terminal() const noexcept { return terminal_; }
   const std::vector<std::unique_ptr<Node>>& children() const {
     return children_;
   }
   // Update the turn.
   void SetTurn(int turn) { turn_ = turn; }
-  float Prior() const;
+  // Return this node's prior selection probability, i.e. its value
+  // in its parent's move_probs.
+  float Prior() const noexcept;
 
+  // Returns this node's PUCT value.
   float Puct() const noexcept;
+  // Returns a non-owned pointer to the child with the greatest PUCT value.
   Node* MaxPuctChild() const;
   // Returns the child with the greated visit count,
   // marks it as a root node (by setting its parent_ to nullptr),
@@ -67,6 +75,12 @@ class Node {
   // tensor. This value should be used to update the move probs of the model.
   torch::Tensor NormVisitCounts() const;
 
+  // Recursively zeros visit_count_ and wins_ of all nodes in the whole subtree.
+  // This method is used for prediction caching: re-use the search tree of
+  // the previous move during self-play, but only for re-using the mode
+  // predictions.
+  void ResetTree();
+
   // Returns a boolean Tensor of shape (2, 11, 10) that is true in each
   // position that represents a valid move and false everywhere else.
   torch::Tensor ActionMask() const;
@@ -74,6 +88,12 @@ class Node {
   // Sets the initial move probabilities ("policy") obtained from the model
   // prediction.
   void SetMoveProbs(torch::Tensor move_probs);
+  // Sets the value of this node (typically: as predicted by the model).
+  // The value should range between -1 and 1; values greater than 0 predict that
+  // it is a win for the player whose turn it is in this node.
+  void SetValue(float value) { value_ = value; }
+  void SetTerminal(bool b) { terminal_ = b; }
+
   // Adds Dirichlet noise to the (already set) move probs.
   // The weight parameter must be in the open interval (0, 1).
   // concentration is the Dirichlet concentration ("alpha") parameter.
@@ -98,9 +118,14 @@ class Node {
   int flat_idx_;
   float wins_ = 0.0;
   int visit_count_ = 0;
+  float value_ = 0.0;
+  bool terminal_ = false;
   std::vector<float> move_probs_;
   std::vector<std::unique_ptr<Node>> children_;
 };
+
+// Writes the substree starting at root to path as a GraphViz .dot file.
+absl::Status WriteDotGraph(const Node& root, const std::string& path);
 
 // Interface class for a model than can make predictions for
 // move likelihoods and board evaluations.
@@ -159,6 +184,7 @@ class NeuralMCTS {
   // If add_noise is true, Dirichlet noise will be added to the root node's
   // move probs.
   bool Run(Node& root, const Board& board, bool add_noise);
+  bool RunReusingTree(Node& root, const Board& b, bool add_noise);
 
   // SuggestMove returns the best move suggestion that the NeuralMCTS algorithm
   // comes up with in think_time_millis milliseconds.

@@ -1,10 +1,12 @@
 #include "mcts.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/status/status.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <torch/torch.h>
 
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <vector>
@@ -264,7 +266,7 @@ TEST(MCTSTest, PlayGame) {
   scriptmodule.to(torch::kCPU);
   scriptmodule.eval();
   NeuralMCTS::Params params{
-      .runs_per_move = 10,
+      .runs_per_move = 20,
   };
   TorchModel model(scriptmodule);
   NeuralMCTS mcts(model, params);
@@ -278,7 +280,7 @@ TEST(MCTSTest, PlayGame) {
   EXPECT_EQ(ex0.encoding(), hexzpb::TrainingExample::PYTORCH);
   EXPECT_GT(ex0.unix_micros(), 0);
   EXPECT_GT(ex0.stats().duration_micros(), 0);
-  EXPECT_EQ(ex0.stats().visit_count(), 10);
+  EXPECT_EQ(ex0.stats().visit_count(), params.runs_per_move);
   // Every game has 85 initial flag positions.
   EXPECT_EQ(ex0.stats().valid_moves(), 85);
   EXPECT_EQ(ex0.stats().move(), 0);
@@ -301,6 +303,31 @@ TEST(MCTSTest, PlayGame) {
   EXPECT_EQ(pr.sizes()[0], 2);
   EXPECT_EQ(pr.sizes()[1], 11);
   EXPECT_EQ(pr.sizes()[2], 10);
+}
+
+TEST(MCTSTest, WriteDotGraph) {
+  // The file "testdata/scriptmodule.pt" is expected to be a ScriptModule of the
+  // right shape to be used by NeuralMCTS.
+  //
+  // It can be generated with the regenerate.sh sidecar script.
+  auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
+  scriptmodule.to(torch::kCPU);
+  scriptmodule.eval();
+  TorchModel model(scriptmodule);
+  NeuralMCTS mcts(model, NeuralMCTS::Params{});
+  auto b = Board::RandomBoard();
+  auto dot_path =
+      std::filesystem::temp_directory_path() / "_MCTSTest_WriteDotGraph.dot";
+  absl::Cleanup cleanup = [&dot_path]() { std::filesystem::remove(dot_path); };
+  Node root(nullptr, 0, Move{});
+  for (int i = 0; i < 100; i++) {
+    mcts.RunReusingTree(root, b, /*add_noise=*/i == 0);
+  }
+  ASSERT_GT(root.children().size(), 0);
+  auto status = WriteDotGraph(root, dot_path.string());
+  ASSERT_TRUE(status.ok());
+  // Expect that "something" was written.
+  EXPECT_GT(std::filesystem::file_size(dot_path), 1000);
 }
 
 }  // namespace
