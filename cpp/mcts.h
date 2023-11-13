@@ -160,25 +160,18 @@ class TorchModel : public Model {
 
 class NeuralMCTS {
  public:
-  // C'tor parameters to construct a NeuralMCTS.
-  struct Params {
-    int runs_per_move = 800;
-    double runs_per_move_gradient = 0.0;
-    int max_moves_per_game = 200;
-    // Dirichlet noise is only added if this value is >0.
-    float dirichlet_concentration = 0.0;
-  };
   // The model is not owned. Owners of the NeuralMCTS instance must ensure it
   // outlives this instance.
-  NeuralMCTS(Model& model, const Params& params);
+  NeuralMCTS(Model& model, const Config& config);
 
   absl::StatusOr<std::vector<hexzpb::TrainingExample>> PlayGame(
       Board& board, int max_runtime_seconds);
 
-  // Returns the number of times Run should be called for the given move number.
-  // This is only relevant for the "decay" of Run calls in a full PlayGame
-  // cycle.
-  int NumRuns(int move) const noexcept;
+  // Returns a pair of (N, record_example), where N is the number of iterations
+  // for the MCTS run and record_example indicates whether the resulting example
+  // should be recorded.
+  // This is only relevant in a full PlayGame cycle.
+  std::pair<int, bool> NumRuns(int move) const noexcept;
 
   // Executes a single run of the MCTS algorithm, starting at root.
   // If add_noise is true, Dirichlet noise will be added to the root node's
@@ -193,10 +186,7 @@ class NeuralMCTS {
                                                     int think_time_millis);
 
  private:
-  int runs_per_move_;
-  double runs_per_move_gradient_;
-  int max_moves_per_game_;
-  float dirichlet_concentration_;
+  Config config_;
   // Not owned.
   Model& model_;
 };

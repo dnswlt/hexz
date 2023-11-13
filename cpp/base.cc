@@ -3,6 +3,7 @@
 #include <absl/strings/str_format.h>
 #include <absl/strings/str_join.h>
 
+#include <cctype>
 #include <chrono>
 #include <random>
 #include <thread>
@@ -50,6 +51,8 @@ std::string Config::String() const {
               absl::StrFormat("training_server_url: '%s'", training_server_url),
               absl::StrFormat("local_model_path: '%s'", local_model_path),
               absl::StrFormat("runs_per_move: %d", runs_per_move),
+              absl::StrFormat("runs_per_fast_move: %d", runs_per_fast_move),
+              absl::StrFormat("fast_move_prob: %.3f", fast_move_prob),
               absl::StrFormat("runs_per_move_gradient: %.3f",
                               runs_per_move_gradient),
               absl::StrFormat("max_moves_per_game: %d", max_moves_per_game),
@@ -65,28 +68,47 @@ std::string Config::String() const {
       ")");
 }
 
+namespace {
+std::string str_to_upper(const std::string& s) {
+  std::string t = s;
+  std::transform(s.begin(), s.end(), t.begin(),
+                 [](unsigned char c) { return std::toupper(c); });
+  return t;
+}
+}  // namespace
+
+#define GET_ENV(fld) .fld = GetEnv(str_to_upper("HEXZ_" #fld), defaults.fld)
+#define GET_ENV_INT(fld) \
+  .fld = GetEnvAsInt(str_to_upper("HEXZ_" #fld), defaults.fld)
+#define GET_ENV_FLOAT(fld) \
+  .fld = GetEnvAsFloat(str_to_upper("HEXZ_" #fld), defaults.fld)
+
 Config Config::FromEnv() {
+  Config defaults{};
   return Config{
-      .training_server_url = GetEnv("HEXZ_TRAINING_SERVER_URL"),
-      .local_model_path = GetEnv("HEXZ_LOCAL_MODEL_PATH"),
-      .runs_per_move = GetEnvAsInt("HEXZ_RUNS_PER_MOVE", 800),
-      .runs_per_move_gradient =
-          GetEnvAsDouble("HEXZ_RUNS_PER_MOVE_GRADIENT", -0.01),
-      .max_moves_per_game = GetEnvAsInt("HEXZ_MAX_MOVES_PER_GAME", 200),
-      .max_runtime_seconds = GetEnvAsInt("HEXZ_MAX_RUNTIME_SECONDS", 60),
-      .max_games = GetEnvAsInt("HEXZ_MAX_GAMES", -1),
-      .uct_c = static_cast<float>(GetEnvAsDouble("HEXZ_UCT_C", 5.0)),
-      .dirichlet_concentration = static_cast<float>(
-          GetEnvAsDouble("HEXZ_DIRICHLET_CONCENTRATION", 0.0)),
-      .startup_delay_seconds =
-          static_cast<float>(GetEnvAsDouble("HEXZ_STARTUP_DELAY_SECONDS", 0.0)),
+      GET_ENV(training_server_url),
+      GET_ENV(local_model_path),
+      GET_ENV_INT(runs_per_move),
+      GET_ENV_INT(runs_per_fast_move),
+      GET_ENV_FLOAT(fast_move_prob),
+      GET_ENV_FLOAT(runs_per_move_gradient),
+      GET_ENV_INT(max_moves_per_game),
+      GET_ENV_INT(max_runtime_seconds),
+      GET_ENV_INT(max_games),
+      GET_ENV_FLOAT(uct_c),
+      GET_ENV_FLOAT(dirichlet_concentration),
+      GET_ENV_FLOAT(startup_delay_seconds),
   };
 }
 
-std::string GetEnv(const std::string& name) {
+#undef GET_ENV
+#undef GET_ENV_INT
+#undef GET_ENV_DOUBLE
+
+std::string GetEnv(const std::string& name, const std::string& default_value) {
   const char* value = std::getenv(name.c_str());
   if (value == nullptr) {
-    return "";
+    return default_value;
   }
   return std::string(value);
 }
@@ -99,13 +121,13 @@ int GetEnvAsInt(const std::string& name, int default_value) {
   return std::atoi(value);
 }
 
-double GetEnvAsDouble(const std::string& name, double default_value) {
+float GetEnvAsFloat(const std::string& name, float default_value) {
   const char* value = std::getenv(name.c_str());
   if (value == nullptr) {
     return default_value;
   }
   char* end{};
-  double d = std::strtod(value, &end);
+  float d = static_cast<float>(std::strtod(value, &end));
   if (end == value) {
     // Could not parse float. Behave as GetEnvAsInt does.
     return 0;

@@ -57,12 +57,12 @@ std::string MoveSuggester::impl::SuggestMove(const std::string& request) {
     throw std::invalid_argument(
         absl::StrCat("Invalid board: ", board.status().ToString()));
   }
-  NeuralMCTS::Params params{
+  Config config{
       // Don't limit the runs per move, we only rely on
       // limiting the execution time.
       .runs_per_move = std::numeric_limits<int>::max(),
   };
-  NeuralMCTS mcts(*model_, params);
+  NeuralMCTS mcts(*model_, config);
   int turn = pb_board.turn() - 1;  // 0-based vs. 1-based...
   if (turn != 0 && turn != 1) {
     throw std::invalid_argument(

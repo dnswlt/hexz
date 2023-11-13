@@ -49,13 +49,7 @@ void PlayGameLocally(const Config& config) {
   }
   {
     Perfm::Scope ps(Perfm::PlayGameLocally);
-    NeuralMCTS mcts{*model,
-                    NeuralMCTS::Params{
-                        .runs_per_move = config.runs_per_move,
-                        .runs_per_move_gradient = config.runs_per_move_gradient,
-                        .max_moves_per_game = config.max_moves_per_game,
-                        .dirichlet_concentration = config.dirichlet_concentration,
-                    }};
+    NeuralMCTS mcts{*model, config};
     Board b = Board::RandomBoard();
     if (auto result = mcts.PlayGame(b, /*max_runtime_seconds=*/0);
         !result.ok()) {
@@ -85,12 +79,6 @@ void GenerateExamples(const Config& config) {
   std::unique_ptr<TorchModel> model = *std::move(model_or);
   int max_games =
       config.max_games > 0 ? config.max_games : std::numeric_limits<int>::max();
-  NeuralMCTS::Params params{
-      .runs_per_move = config.runs_per_move,
-      .runs_per_move_gradient = config.runs_per_move_gradient,
-      .max_moves_per_game = config.max_moves_per_game,
-      .dirichlet_concentration = config.dirichlet_concentration,
-  };
   for (int i = 0; i < max_games; i++) {
     auto now = UnixMicros();
     if (now >=
@@ -100,7 +88,7 @@ void GenerateExamples(const Config& config) {
                      << config.max_runtime_seconds * 1'000'000;
       break;
     }
-    NeuralMCTS mcts{*model, params};
+    NeuralMCTS mcts{*model, config};
     Board b = Board::RandomBoard();
     int64_t max_runtime_seconds =
         config.max_runtime_seconds - (now - started_micros) / 1'000'000;

@@ -15,12 +15,22 @@ struct Config {
   // MCTS runs executed for each move. Can be further influenced by
   // runs_per_move_decay.
   int runs_per_move = 800;
+  // A variation of KataGo's playout cap randomization
+  // (https://arxiv.org/abs/1902.10565, section 3.1):
+  // With a probability of fast_move_prob, we make a "fast move" with fewer
+  // MCTS iterations. This is only done from move 6 onwards (i.e. after all
+  // flags have potentially been played). Fast moves are not recorded as
+  // examples. The hope is that by playing faster and thus generating more final
+  // results, the value predictions can improve faster.
+  int runs_per_fast_move = 100;
+  // Value between 0 and 1. Set to 0 to disable fast moves.
+  float fast_move_prob = 0.0;
   // The runs for move N are calculated as
   //    max(1, runs_per_move * (1 + runs_per_move_gradient * N))
   // The idea is that the first couple of moves are much more important
   // than the "end game" in hexz. The defaul value -0.01 will result
   // in 50% of the original runs_per_move at move 50.
-  double runs_per_move_gradient = -0.01;
+  float runs_per_move_gradient = -0.01;
   // Maximum number of moves to make per game before aborting.
   // Only useful for testing, otherwise leave it at the default 200,
   // which ensures games are played till the end.
@@ -50,9 +60,9 @@ struct Config {
   std::string String() const;
 };
 
-std::string GetEnv(const std::string& name);
+std::string GetEnv(const std::string& name, const std::string& default_value);
 int GetEnvAsInt(const std::string& name, int default_value);
-double GetEnvAsDouble(const std::string& name, double default_value);
+float GetEnvAsFloat(const std::string& name, float default_value);
 
 int64_t UnixMicros();
 

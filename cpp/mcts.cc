@@ -306,12 +306,8 @@ TorchModel::Prediction TorchModel::Predict(const Board& board,
   };
 }
 
-NeuralMCTS::NeuralMCTS(Model& model, const Params& params)
-    : model_{model},
-      runs_per_move_{params.runs_per_move},
-      max_moves_per_game_{params.max_moves_per_game},
-      runs_per_move_gradient_{params.runs_per_move_gradient},
-      dirichlet_concentration_{params.dirichlet_concentration} {}
+NeuralMCTS::NeuralMCTS(Model& model, const Config& config)
+    : model_{model}, config_{config} {}
 
 bool NeuralMCTS::RunReusingTree(Node& root, const Board& b, bool add_noise) {
   // Same as Run, but re-use the existing tree starting at root (assuming it
@@ -325,7 +321,7 @@ bool NeuralMCTS::RunReusingTree(Node& root, const Board& b, bool add_noise) {
     // root has already been expanded before, so we can add the noise directly.
     // If this is the first time we expand root, noise is added below once
     // the predictions are available.
-    n->AddDirichletNoise(kNoiseWeight, dirichlet_concentration_);
+    n->AddDirichletNoise(kNoiseWeight, config_.dirichlet_concentration);
     add_noise = false;
   }
   // Find leaf node
@@ -367,7 +363,7 @@ bool NeuralMCTS::RunReusingTree(Node& root, const Board& b, bool add_noise) {
   n->SetMoveProbs(pred.move_probs);
   if (add_noise && n == &root) {
     // root has been expanded for the first time.
-    n->AddDirichletNoise(kNoiseWeight, dirichlet_concentration_);
+    n->AddDirichletNoise(kNoiseWeight, config_.dirichlet_concentration);
   }
   n->SetValue(pred.value);
   // Backpropagate the model prediction. Need to reorient it s.t. 1 means player
@@ -384,7 +380,7 @@ bool NeuralMCTS::Run(Node& root, const Board& b, bool add_noise) {
   // on the first Run call. In this case, add noise before descending
   // to a leaf node.
   if (add_noise && !n->IsLeaf()) {
-    n->AddDirichletNoise(kNoiseWeight, dirichlet_concentration_);
+    n->AddDirichletNoise(kNoiseWeight, config_.dirichlet_concentration);
     add_noise = false;
   }
 
@@ -421,7 +417,7 @@ bool NeuralMCTS::Run(Node& root, const Board& b, bool add_noise) {
   n->SetMoveProbs(pred.move_probs);
   if (add_noise && n == &root) {
     // root has been expanded for the first time.
-    n->AddDirichletNoise(kNoiseWeight, dirichlet_concentration_);
+    n->AddDirichletNoise(kNoiseWeight, config_.dirichlet_concentration);
   }
   n->SetValue(pred.value);
   // Backpropagate the model prediction. Need to reorient it s.t. 1 means player
@@ -430,10 +426,18 @@ bool NeuralMCTS::Run(Node& root, const Board& b, bool add_noise) {
   return true;
 }
 
-int NeuralMCTS::NumRuns(int move) const noexcept {
-  return std::max(
-      1, static_cast<int>(std::round(runs_per_move_ *
-                                     (1 + move * runs_per_move_gradient_))));
+std::pair<int, bool> NeuralMCTS::NumRuns(int move) const noexcept {
+  if (config_.fast_move_prob > 0) {
+    if (internal::UnitRandom() < config_.fast_move_prob) {
+      return std::make_pair(config_.runs_per_fast_move, true);
+    }
+    return std::make_pair(config_.runs_per_move, false);
+  }
+  return std::make_pair(
+      std::max(1, static_cast<int>(
+                      std::round(config_.runs_per_move *
+                                 (1 + move * config_.runs_per_move_gradient)))),
+      false);
 }
 
 absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
@@ -452,17 +456,18 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
           ? started_micros +
                 static_cast<int64_t>(max_runtime_seconds) * 1'000'000
           : std::numeric_limits<int64_t>::max();
-  for (; n < max_moves_per_game_; n++) {
+  for (; n < config_.max_moves_per_game; n++) {
     int64_t move_started = UnixMicros();
     if (move_started > max_micros) {
       return absl::DeadlineExceededError(
           "max_runtime_seconds exceeded before the game was finished");
     }
-    const int runs = NumRuns(n);
+    const auto [runs, is_fast_run] = NumRuns(n);
     int n_runs = 0;
     int n_reused = 0;
     while ((n_runs - n_reused) < runs) {
-      bool add_noise = n_runs == 0 && dirichlet_concentration_ > 0;
+      bool add_noise =
+          !is_fast_run && n_runs == 0 && config_.dirichlet_concentration > 0;
       if (RunReusingTree(*root, board, add_noise)) {
         // Re-used previous prediction, so don't count as a full run.
         n_reused++;
@@ -473,31 +478,34 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     //   WriteDotGraph(*root, "/tmp/searchtree_" + std::to_string(n) + ".dot");
     if (root->terminal()) {
       result = board.Result();
-      ABSL_LOG(INFO) << "Game over. Final score: " << board.Score()
-                     << ". Result: " << result;
+      ABSL_LOG(INFO) << "Game over after " << n
+                     << " moves. Final score: " << board.Score()
+                     << ". Result: " << result
+                     << ". Examples: " << examples.size();
       game_over = true;
       break;
     }
-    // Add example.
-    hexzpb::TrainingExample example;
-    int64_t move_ready = UnixMicros();
-    example.set_unix_micros(move_ready);
-    example.set_turn(root->turn());
-    example.mutable_stats()->set_duration_micros(move_ready - move_started);
-    example.mutable_stats()->set_move(n);
-    example.mutable_stats()->set_valid_moves(root->NumChildren());
-    example.mutable_stats()->set_visit_count(root->visit_count());
-    example.set_encoding(hexzpb::TrainingExample::PYTORCH);
-    // The board in the example must be viewed from the perspective of the
-    // player whose turn it is.
-    auto enc_b = torch::pickle_save(board.Tensor(root->turn()));
-    example.mutable_board()->assign(enc_b.begin(), enc_b.end());
-    auto enc_mask = torch::pickle_save(root->ActionMask());
-    example.mutable_action_mask()->assign(enc_mask.begin(), enc_mask.end());
-    auto enc_pr = torch::pickle_save(root->NormVisitCounts());
-    example.mutable_move_probs()->assign(enc_pr.begin(), enc_pr.end());
-    examples.push_back(example);
-
+    if (!is_fast_run) {
+      // Add example.
+      hexzpb::TrainingExample example;
+      int64_t move_ready = UnixMicros();
+      example.set_unix_micros(move_ready);
+      example.set_turn(root->turn());
+      example.mutable_stats()->set_duration_micros(move_ready - move_started);
+      example.mutable_stats()->set_move(n);
+      example.mutable_stats()->set_valid_moves(root->NumChildren());
+      example.mutable_stats()->set_visit_count(root->visit_count());
+      example.set_encoding(hexzpb::TrainingExample::PYTORCH);
+      // The board in the example must be viewed from the perspective of the
+      // player whose turn it is.
+      auto enc_b = torch::pickle_save(board.Tensor(root->turn()));
+      example.mutable_board()->assign(enc_b.begin(), enc_b.end());
+      auto enc_mask = torch::pickle_save(root->ActionMask());
+      example.mutable_action_mask()->assign(enc_mask.begin(), enc_mask.end());
+      auto enc_pr = torch::pickle_save(root->NormVisitCounts());
+      example.mutable_move_probs()->assign(enc_pr.begin(), enc_pr.end());
+      examples.push_back(example);
+    }
     std::string stats = root->Stats();
     if (n < 5 || n % 10 == 0) {
       ABSL_LOG(INFO) << "Move " << n << " (turn: " << root->turn() << ") "
@@ -534,7 +542,7 @@ absl::StatusOr<std::unique_ptr<Node>> NeuralMCTS::SuggestMove(
       std::make_unique<Node>(nullptr, /*turn=*/player, Move{-1, -1, -1, -1.0});
   const int64_t max_micros =
       started_micros + static_cast<int64_t>(think_time_millis) * 1000;
-  for (int n = 0; n < runs_per_move_; n++) {
+  for (int n = 0; n < config_.runs_per_move; n++) {
     if (UnixMicros() > max_micros) {
       break;
     }

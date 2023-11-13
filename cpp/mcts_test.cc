@@ -221,15 +221,15 @@ TEST(MCTSTest, TorchPickleSave) {
 }
 
 TEST(MCTSTest, NumRuns) {
-  NeuralMCTS::Params params{
+  Config config{
       .runs_per_move = 100,
       .runs_per_move_gradient = -0.01,
   };
   FakeModel fake_model;
-  NeuralMCTS mcts(fake_model, params);
-  EXPECT_EQ(mcts.NumRuns(0), 100);
-  EXPECT_EQ(mcts.NumRuns(25), 75);
-  EXPECT_EQ(mcts.NumRuns(50), 50);
+  NeuralMCTS mcts(fake_model, config);
+  EXPECT_EQ(mcts.NumRuns(0).first, 100);
+  EXPECT_EQ(mcts.NumRuns(25).first, 75);
+  EXPECT_EQ(mcts.NumRuns(50).first, 50);
 }
 
 TEST(MCTSTest, RemainingFlagsAreNotNegative) {
@@ -237,12 +237,12 @@ TEST(MCTSTest, RemainingFlagsAreNotNegative) {
   // and the player for which a move was made were mixed up.
   // This led to negative flag values. This test tries to capture
   // that the problem does not reoccur.
-  NeuralMCTS::Params params{
+  Config config{
       .runs_per_move = 10,
       .runs_per_move_gradient = 0.0,
   };
   FakeModel fake_model;
-  NeuralMCTS mcts(fake_model, params);
+  NeuralMCTS mcts(fake_model, config);
   Board b = Board::RandomBoard();
   auto root = std::make_unique<Node>(nullptr, 0, Move{-1, -1, -1, -1});
   for (int i = 0; i < 50; i++) {
@@ -265,11 +265,11 @@ TEST(MCTSTest, PlayGame) {
   auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
   scriptmodule.to(torch::kCPU);
   scriptmodule.eval();
-  NeuralMCTS::Params params{
+  Config config{
       .runs_per_move = 20,
   };
   TorchModel model(scriptmodule);
-  NeuralMCTS mcts(model, params);
+  NeuralMCTS mcts(model, config);
   auto b = Board::RandomBoard();
 
   auto examples = mcts.PlayGame(b, /*max_runtime_seconds=*/0);
@@ -280,7 +280,7 @@ TEST(MCTSTest, PlayGame) {
   EXPECT_EQ(ex0.encoding(), hexzpb::TrainingExample::PYTORCH);
   EXPECT_GT(ex0.unix_micros(), 0);
   EXPECT_GT(ex0.stats().duration_micros(), 0);
-  EXPECT_EQ(ex0.stats().visit_count(), params.runs_per_move);
+  EXPECT_EQ(ex0.stats().visit_count(), config.runs_per_move);
   // Every game has 85 initial flag positions.
   EXPECT_EQ(ex0.stats().valid_moves(), 85);
   EXPECT_EQ(ex0.stats().move(), 0);
@@ -314,7 +314,7 @@ TEST(MCTSTest, WriteDotGraph) {
   scriptmodule.to(torch::kCPU);
   scriptmodule.eval();
   TorchModel model(scriptmodule);
-  NeuralMCTS mcts(model, NeuralMCTS::Params{});
+  NeuralMCTS mcts(model, Config{});
   auto b = Board::RandomBoard();
   auto dot_path =
       std::filesystem::temp_directory_path() / "_MCTSTest_WriteDotGraph.dot";

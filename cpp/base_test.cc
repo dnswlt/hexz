@@ -15,15 +15,20 @@ TEST(BaseTest, GetEnvAsInt) {
   EXPECT_EQ(GetEnvAsInt("TEST_UNDEFINED", 42), 42);
 }
 
-TEST(BaseTest, GetEnvAsDouble) {
+TEST(BaseTest, GetEnvAsFloat) {
   setenv("TEST_FOO_INT", "123", 1);
-  setenv("TEST_FOO_DECIMAL", "123.456", 1);
+  setenv("TEST_FOO_DECIMAL", "123.25", 1);
   setenv("TEST_FOO_NEG", "-123.0", 1);
   setenv("TEST_FOO_STR", "asdf", 1);
-  EXPECT_EQ(GetEnvAsDouble("TEST_FOO_INT", 0), 123);
-  EXPECT_EQ(GetEnvAsDouble("TEST_FOO_DECIMAL", 0), 123.456);
-  EXPECT_EQ(GetEnvAsDouble("TEST_FOO_NEG", 0), -123.0);
-  EXPECT_EQ(GetEnvAsDouble("TEST_FOO_STR", 17), 0);
+  EXPECT_EQ(GetEnvAsFloat("TEST_FOO_INT", 0), 123);
+  EXPECT_EQ(GetEnvAsFloat("TEST_FOO_DECIMAL", 0), 123.25);
+  EXPECT_EQ(GetEnvAsFloat("TEST_FOO_NEG", 0), -123.0);
+  EXPECT_EQ(GetEnvAsFloat("TEST_FOO_STR", 17), 0);
+}
+
+TEST(BaseTest, DefaultConfig) {
+    Config def{};
+    EXPECT_EQ(def.max_games, -1);
 }
 
 TEST(DirichletTest, ValuesInExpectedRange) {
