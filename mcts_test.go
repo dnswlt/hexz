@@ -46,8 +46,8 @@ func TestMCTSFull(t *testing.T) {
 	}
 }
 
-func TestMCTSAverageNumberOfMoves(t *testing.T) {
-	// Calculate the average number of moves in a game.
+func TestMCTSAverageNumberOfNextMoves(t *testing.T) {
+	// Calculate the average number of next valid moves in a game.
 	// Results:
 	// moves:7532 sumnx:136363 avg:18.1
 	t.Skip("Only used for experimentation")
@@ -68,6 +68,67 @@ func TestMCTSAverageNumberOfMoves(t *testing.T) {
 
 	}
 	fmt.Printf("moves:%d sumnx:%d avg:%.1f\n", moves, sumNextMoves, float64(sumNextMoves)/float64(moves))
+}
+
+func TestMCTSAverageNumberOfMovesInGame(t *testing.T) {
+	// Calculate the average number of total moves in a game.
+	// Results:
+	// moves:7507 games:100 avg:75.1
+
+	t.Skip("Only used for experimentation")
+	games := 100
+	moves := 0
+	for i := 0; i < games; i++ {
+		ge := NewGameEngineFlagz()
+		mcts := NewMCTS()
+		for !ge.IsDone() {
+			m, _ := mcts.SuggestMoveLimit(ge, 800)
+			if !ge.MakeMove(m) {
+				t.Fatal("Cannot make move")
+			}
+			moves++
+		}
+		fmt.Printf("Finished game %d\n", i)
+	}
+	fmt.Printf("moves:%d games:%d avg:%.1f\n", moves, games, float64(moves)/float64(games))
+}
+
+func TestMCTSNumberOfForcedWins(t *testing.T) {
+	// Calculate the average number of forced wins in a game.
+	// I.e., the number of moves for which MCTS found the same
+	// outcome for all random playouts.
+	//
+	// Results:
+	// moves:363 forced:119 ratio:0.33 (@ 80000 runs per move)
+	// moves:759 forced:286 ratio:0.38 (@ 8000 runs per move)
+	t.Skip("Only used for experimentation")
+	forced := 0
+	moves := 0
+	for i := 0; i < 5; i++ {
+		ge := NewGameEngineFlagz()
+		mcts := NewMCTS()
+		for !ge.IsDone() {
+			m, stats := mcts.SuggestMoveLimit(ge, 80000)
+			var mStats *MCTSMoveStats
+			for i := range stats.Moves {
+				ms := &stats.Moves[i]
+				if m.Row == ms.Row && m.Col == ms.Col && m.CellType == ms.CellType {
+					mStats = ms
+					break
+				}
+			}
+			if mStats.Q == 0 || mStats.Q == 1 {
+				forced++
+			}
+			if !ge.MakeMove(m) {
+				t.Fatal("Cannot make move")
+			}
+			moves++
+		}
+		fmt.Printf("Finished game %d\n", i)
+
+	}
+	fmt.Printf("moves:%d forced:%d ratio:%.2f\n", moves, forced, float64(forced)/float64(moves))
 }
 
 func TestMCTSLosingBoardWithHighQ(t *testing.T) {

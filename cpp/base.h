@@ -33,6 +33,11 @@ struct Config {
   float uct_c = 5.0;
   // Concentration factor ("alpha") of the Dirichlet noise that gets
   // added to the root nodes during MCTS search.
+  // Flagz has 18 moves on average (with high variance;
+  // there are 85 initial flag moves), so set this to 10/18 ~= 0.55
+  // to imitate AlphaZero:
+  // https://stats.stackexchange.com/questions/322831/purpose-of-dirichlet-noise-in-the-alphazero-paper
+  // or 0.3 to use the setting that was used for chess.
   float dirichlet_concentration = 0;
 
   // Maximum delay at startup before generating and sending examples.
@@ -54,7 +59,8 @@ int64_t UnixMicros();
 namespace internal {
 extern thread_local std::mt19937 rng;
 
-// Returns a random number in the interval [0, 1] drawn from a uniform distribution.
+// Returns a random number in the interval [0, 1] drawn from a uniform
+// distribution.
 float UnitRandom();
 
 // Libtorch does not have a Dirichlet (or any other nontrivial) distribution yet

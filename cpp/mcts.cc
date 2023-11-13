@@ -471,9 +471,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     }
     // if (n < 10)
     //   WriteDotGraph(*root, "/tmp/searchtree_" + std::to_string(n) + ".dot");
-    ABSL_DLOG(INFO) << "At move " << n << ": n_runs:" << n_runs
-                    << " n_reused:" << n_reused;
-    if (root->IsLeaf()) {
+    if (root->terminal()) {
       result = board.Result();
       ABSL_LOG(INFO) << "Game over. Final score: " << board.Score()
                      << ". Result: " << result;
