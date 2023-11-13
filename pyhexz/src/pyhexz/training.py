@@ -330,8 +330,6 @@ class TrainingTask(threading.Thread):
         self.training_runner_task.join()
         self.stats["training_runs"] += 1
         self.training_time += msg.get("elapsed", 0)
-        # Start a new batch, whether training was successful or not.
-        self.batch = InMemoryDataset()
         self.state = self._STATE_ACCEPTING
         if msg["status"] == "OK":
             self.model_key = msg["model_key"]
