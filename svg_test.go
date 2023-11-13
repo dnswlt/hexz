@@ -38,8 +38,9 @@ func TestConvertHexColor(t *testing.T) {
 		{"equal", "#abcdef", "#abcdef", 0.5, "#abcdef", false},
 		{"equal0", "#abcdef", "#abcdef", 0.0, "#abcdef", false},
 		{"equal1", "#abcdef", "#abcdef", 1.0, "#abcdef", false},
-		{"invalid_scale", "#abcdef", "#abcdef", 3.0, "#abcdef", true},
-		{"negative", "#efbbff", "800080", -0.01, "00000", false},
+		{"invalid_scale", "#abcdef", "#abcdff", 3.0, "", true},
+		{"negative", "#808080", "#efefef", -0.1, "#757575", false},
+		{"wrong_input", "rgb(123, 123, 123)", "abcdef", 0, "", true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

@@ -1,6 +1,7 @@
 package hexz
 
 import (
+	"fmt"
 	"math"
 	"runtime"
 	"strings"
@@ -43,6 +44,30 @@ func TestMCTSFull(t *testing.T) {
 			t.Fatal("Cannot make move")
 		}
 	}
+}
+
+func TestMCTSAverageNumberOfMoves(t *testing.T) {
+	// Calculate the average number of moves in a game.
+	// Results:
+	// moves:7532 sumnx:136363 avg:18.1
+	t.Skip("Only used for experimentation")
+	sumNextMoves := 0
+	moves := 0
+	for i := 0; i < 100; i++ {
+		ge := NewGameEngineFlagz()
+		mcts := NewMCTS()
+		for !ge.IsDone() {
+			m, stats := mcts.SuggestMoveLimit(ge, 800)
+			if !ge.MakeMove(m) {
+				t.Fatal("Cannot make move")
+			}
+			sumNextMoves += stats.BranchNodes[1] + stats.LeafNodes[1]
+			moves++
+		}
+		fmt.Printf("Finished game %d\n", i)
+
+	}
+	fmt.Printf("moves:%d sumnx:%d avg:%.1f\n", moves, sumNextMoves, float64(sumNextMoves)/float64(moves))
 }
 
 func TestMCTSLosingBoardWithHighQ(t *testing.T) {

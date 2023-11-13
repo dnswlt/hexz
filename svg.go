@@ -30,7 +30,10 @@ func (c *cellEvalScores) Max() float32 {
 }
 
 func ScaleRGB(col1 string, col2 string, scale float64) (string, error) {
-	a1, err := strconv.ParseInt(col1[1:], 16, 64)
+	if col1[0] != '#' || col2[0] != '#' || len(col1) != 7 || len(col2) != 7 {
+		return "", fmt.Errorf("only 6 digit hex colors are supported (#123456)")
+	}
+	a1, err := strconv.ParseInt(col1[1:7], 16, 64)
 	if err != nil {
 		return "", fmt.Errorf("ScaleRGB: parse col1: %w", err)
 	}
