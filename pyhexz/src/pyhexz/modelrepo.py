@@ -5,12 +5,12 @@ and example zip archives.
 
 from collections.abc import Iterable
 import datetime
+import gzip
 import os
 import pytz
 import re
 from typing import Optional
 import torch
-import zipfile
 
 from pyhexz import hexz_pb2
 from pyhexz.hexz import HexzNeuralNetwork
@@ -53,9 +53,8 @@ class ModelRepository:
         """
         pass
 
-    def add_examples(
-        self, name: str, checkpoint: int, examples: Iterable[hexz_pb2.TrainingExample]
-    ):
+    def add_examples(self, req: hexz_pb2.AddTrainingExamplesRequest) -> None:
+        """Saves the given request req in an examples/ subfolder of the model checkpoint."""
         pass
 
 
@@ -134,13 +133,13 @@ class LocalModelRepository:
             sm.save(sm_path)
         return m_path
 
-    def add_examples(
-        self, name: str, checkpoint: int, examples: Iterable[hexz_pb2.TrainingExample]
-    ) -> None:
+    def add_examples(self, req: hexz_pb2.AddTrainingExamplesRequest) -> None:
+        name = req.model_key.name
+        checkpoint = req.model_key.checkpoint
         d = os.path.dirname(self._model_path(name, checkpoint))
-        os.makedirs(os.path.join(d, "examples"), exist_ok=True)
+        examples_dir = os.path.join(d, "examples")
+        os.makedirs(examples_dir, exist_ok=True)
         now = datetime.datetime.now(tz=pytz.UTC).strftime("%Y%m%d_%H%M%S_%f")
-        filename = os.path.join(d, f"{now}.zip")
-        with zipfile.ZipFile(filename, "w") as zip:
-            for i, ex in enumerate(examples):
-                zip.writestr(f"{i:06d}.pb", ex.SerializeToString())
+        filename = os.path.join(examples_dir, f"{now}.gz")
+        with gzip.open(filename, "wb") as f:
+            f.write(req.SerializeToString())

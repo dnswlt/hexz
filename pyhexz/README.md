@@ -89,6 +89,8 @@ PORT=8080 && docker run -p 8080:${PORT} -e PORT=${PORT} \
   -e HEXZ_MODEL_REPO_BASE_DIR=/tmp/hexz/models \
   -e HEXZ_BATCH_SIZE=512 \
   -e HEXZ_MODEL_NAME=test \
+  -e HEXZ_NUM_EPOCHS=1 \
+  -e HEXZ_MAX_CHECKPOINT_DIFF=2 \
   europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/server:latest
 ```
 

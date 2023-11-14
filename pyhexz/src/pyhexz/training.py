@@ -275,7 +275,7 @@ class TrainingTask(threading.Thread):
             latest_model=self.model_key,
         )
         reply_q.put(resp)
-
+        
         # Translate examples.
         new_batch = []
         for ex in req.examples:
@@ -299,6 +299,8 @@ class TrainingTask(threading.Thread):
             new_batch.append(
                 ((np_ex.board, np_ex.action_mask), (np_ex.move_probs, np_ex.value))
             )
+
+        self.repo.add_examples(req)
 
         # Save examples (for on-demand SVG export).
         self.latest_examples = req.examples

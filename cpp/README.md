@@ -90,6 +90,22 @@ docker build . -f Dockerfile.ccworker --tag europe-west6-docker.pkg.dev/hexz-clo
 docker push europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/ccworker:latest
 ```
 
+Run the Docker image locally:
+
+```bash
+docker run \
+  -e PYTHONUNBUFFERED=1 \
+  -e HEXZ_TRAINING_SERVER_URL=http://localhost:8080 \
+  -e HEXZ_MAX_RUNTIME_SECONDS=60 \
+  -e HEXZ_RUNS_PER_MOVE=800 \
+  -e HEXZ_UCT_C=5.0 \
+  -e HEXZ_RUNS_PER_FAST_MOVE=100 \
+  -e HEXZ_DIRICHLET_CONCENTRATION=0.35 \
+  -e HEXZ_FAST_MOVE_PROB=0.5 \
+  -e HEXZ_STARTUP_DELAY_SECONDS=0 \
+  europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/ccworker:latest
+```
+
 ### VS Code
 
 See `.vscode/c_cpp_properties.json`. Also add `CMAKE_PREFIX_PATH` under _Cmake: Configure Environment_.
