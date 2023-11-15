@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     unzip \
+    bzip2 \
     git \
     libssl-dev \
     && apt-get clean
@@ -42,6 +43,17 @@ RUN curl -L -o libtorch.zip https://download.pytorch.org/libtorch/cpu/libtorch-c
     && unzip libtorch.zip \
     && rm libtorch.zip
 
+RUN curl -L -O https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2 \
+    && tar xjf jemalloc-5.3.0.tar.bz2 \
+    && rm jemalloc-5.3.0.tar.bz2 \
+    && cd jemalloc-5.3.0 \
+    && ./configure \
+    && make \
+    && make install \
+    && cd .. \
+    && rm -rf jemalloc-5.3.0 \
+    && ldconfig
+
 # Copy source files. Do this after required libraries were installed to avoid repeating that
 # each time a source changes.
 COPY . ./
@@ -53,4 +65,4 @@ RUN mkdir build \
 
 WORKDIR /app/build
 
-ENTRYPOINT ["./worker"]
+ENTRYPOINT ["/usr/bin/env", "LD_PRELOAD=/usr/local/lib/libjemalloc.so", "./worker"]

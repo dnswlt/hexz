@@ -210,3 +210,15 @@ Tree reuse and Dirichlet noise:
 https://ai.stackexchange.com/questions/36808/does-the-alphazero-algorithm-keep-the-subtree-statistics-after-each-move-during
 https://github.com/leela-zero/leela-zero/issues/538
 https://arxiv.org/pdf/1902.10565.pdf (KataGo)
+
+
+
+## 2023-11-15
+
+Using jemalloc in Docker on NUC:
+
+scope           total_time      count        ops/s
+Predict            60.557s      27700      457.423
+NextMoves           0.293s      31365   107025.721
+MakeMove            0.124s      91051   735719.748
+MaxPuctChild        0.050s      87181  1746825.495
