@@ -71,6 +71,12 @@ target_link_libraries(hexz_pyapi PUBLIC absl::strings absl::log hexzpb mcts)
 add_executable(worker worker_main.cc)
 target_link_libraries(worker PRIVATE mcts)
 
+# On Linux we require libtcmalloc to be present.
+# See Dockerfile.worker for installation hints.
+if(UNIX AND NOT APPLE)
+target_link_options(worker PRIVATE -ltcmalloc)
+endif()
+
 #
 # Testing
 #
