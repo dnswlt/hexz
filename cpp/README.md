@@ -95,7 +95,7 @@ Run the Docker image locally:
 ```bash
 docker run \
   -e PYTHONUNBUFFERED=1 \
-  -e HEXZ_TRAINING_SERVER_URL=http://localhost:8080 \
+  -e HEXZ_TRAINING_SERVER_URL=http://$HOSTNAME:8080 \
   -e HEXZ_MAX_RUNTIME_SECONDS=60 \
   -e HEXZ_RUNS_PER_MOVE=800 \
   -e HEXZ_UCT_C=5.0 \
@@ -116,4 +116,21 @@ To run the worker, first make sure the training server is up and running. Then:
 
 ```
 HEXZ_TRAINING_SERVER_URL=http://localhost:8080 HEXZ_RUNS_PER_MOVE=20 HEXZ_MAX_RUNTIME_SECONDS=60 HEXZ_MAX_GAMES=1 ./worker
+```
+
+### Heap profiling
+
+Using gperftools:
+
+```
+env HEAPPROFILE=/tmp/worker.hprof LD_PRELOAD=$HOME/tmp/gperftools-2.13/.libs/libtcmalloc.so \
+  HEXZ_TRAINING_SERVER_URL=http://localhost:8080 \
+  HEXZ_MAX_RUNTIME_SECONDS=60 \
+  HEXZ_RUNS_PER_MOVE=800 \
+  HEXZ_UCT_C=1.5 \
+  HEXZ_RUNS_PER_FAST_MOVE=100 \
+  HEXZ_DIRICHLET_CONCENTRATION=0.35 \
+  HEXZ_FAST_MOVE_PROB=0.5 \
+  HEXZ_STARTUP_DELAY_SECONDS=0 \
+  ./worker
 ```

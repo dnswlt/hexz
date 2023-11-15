@@ -9,10 +9,13 @@
 #include <torch/script.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <ctime>
+#include <fstream>
 #include <iostream>
 #include <sstream>
+#include <thread>
 #include <utility>
 
 #include "base.h"
@@ -151,6 +154,26 @@ void GenerateExamples(const Config& config) {
 
 }  // namespace hexz
 
+namespace {
+std::atomic_bool stop_memmon;
+}  // namespace
+
+void MemMon() {
+  while (!stop_memmon) {
+    std::ifstream infile("/proc/self/status");
+    if (!infile.is_open()) {
+      ABSL_LOG(ERROR)
+          << "Cannot open /proc/self/status. Terminating MemMon thread.";
+      return;
+    }
+    std::string line;
+    while (std::getline(infile, line)) {
+      ABSL_LOG(INFO) << line;
+    }
+    std::this_thread::sleep_for(std::chrono::duration<float>(5.0));
+  }
+}
+
 int main() {
   // Initialization
   hexz::Perfm::InitScope perfm;
@@ -173,11 +196,19 @@ int main() {
     PlayGameLocally(config);
     return 0;
   }
+  std::thread memmon;
+  if (config.debug_memory_usage) {
+    memmon = std::thread{MemMon};
+  }
+  // END EXPERIMENT
   if (config.training_server_url != "") {
     ABSL_LOG(INFO)
         << "Generating examples and sending them to the training server.";
     hexz::GenerateExamples(config);
-    return 0;
+  }
+  if (memmon.joinable()) {
+    stop_memmon = true;
+    memmon.join();
   }
   return 0;
 }

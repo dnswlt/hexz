@@ -63,6 +63,7 @@ std::string Config::String() const {
                               dirichlet_concentration),
               absl::StrFormat("startup_delay_seconds: %.3f",
                               startup_delay_seconds),
+              absl::StrFormat("debug_memory_usage: %d", debug_memory_usage),
           },
           ", "),
       ")");
@@ -98,6 +99,7 @@ Config Config::FromEnv() {
       GET_ENV_FLOAT(uct_c),
       GET_ENV_FLOAT(dirichlet_concentration),
       GET_ENV_FLOAT(startup_delay_seconds),
+      GET_ENV_INT(debug_memory_usage),
   };
 }
 

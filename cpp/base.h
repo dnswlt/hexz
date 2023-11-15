@@ -56,6 +56,8 @@ struct Config {
   // to the training server at the same time.
   float startup_delay_seconds = 0.0;
 
+  // Set this to 1 to have /proc/self/status logged every N seconds.
+  int debug_memory_usage = 0;
   static Config FromEnv();
   std::string String() const;
 };
