@@ -164,7 +164,7 @@ bool stop_memmon = false;
 void MemMon() {
   std::unique_lock<std::mutex> lk(cv_memmon_mut);
   while (!cv_memmon.wait_for(lk, std::chrono::duration<float>(5.0),
-                            [] { return stop_memmon; })) {
+                             [] { return stop_memmon; })) {
     std::ifstream infile("/proc/self/status");
     if (!infile.is_open()) {
       ABSL_LOG(ERROR)
@@ -173,7 +173,9 @@ void MemMon() {
     }
     std::string line;
     while (std::getline(infile, line)) {
-      ABSL_LOG(INFO) << line;
+      if (line.compare(0, 2, "Vm") == 0) {
+        ABSL_LOG(INFO) << line;
+      }
     }
   }
 }
