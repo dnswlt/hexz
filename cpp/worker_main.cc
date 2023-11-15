@@ -9,11 +9,13 @@
 #include <torch/script.h>
 
 #include <algorithm>
-#include <atomic>
 #include <cassert>
+#include <chrono>
+#include <condition_variable>
 #include <ctime>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <thread>
 #include <utility>
@@ -155,11 +157,14 @@ void GenerateExamples(const Config& config) {
 }  // namespace hexz
 
 namespace {
-std::atomic_bool stop_memmon;
-}  // namespace
+std::condition_variable cv_memmon;
+std::mutex cv_memmon_mut;
+bool stop_memmon = false;
 
 void MemMon() {
-  while (!stop_memmon) {
+  std::unique_lock<std::mutex> lk(cv_memmon_mut);
+  while (!cv_memmon.wait_for(lk, std::chrono::duration<float>(5.0),
+                            [] { return stop_memmon; })) {
     std::ifstream infile("/proc/self/status");
     if (!infile.is_open()) {
       ABSL_LOG(ERROR)
@@ -170,9 +175,9 @@ void MemMon() {
     while (std::getline(infile, line)) {
       ABSL_LOG(INFO) << line;
     }
-    std::this_thread::sleep_for(std::chrono::duration<float>(5.0));
   }
 }
+}  // namespace
 
 int main() {
   // Initialization
@@ -207,7 +212,11 @@ int main() {
     hexz::GenerateExamples(config);
   }
   if (memmon.joinable()) {
-    stop_memmon = true;
+    {
+      std::lock_guard<std::mutex> lk(cv_memmon_mut);
+      stop_memmon = true;
+    }
+    cv_memmon.notify_one();
     memmon.join();
   }
   return 0;
