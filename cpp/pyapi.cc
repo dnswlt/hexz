@@ -89,7 +89,7 @@ std::string MoveSuggester::impl::SuggestMove(const std::string& request) {
     move.set_row(c->move().r);
     move.set_col(c->move().c);
     move.set_type(c->move().typ == 0 ? hexzpb::Field::FLAG
-                                      : hexzpb::Field::NORMAL);
+                                     : hexzpb::Field::NORMAL);
     auto& final_score = *move.add_scores();
     final_score.set_kind(hexzpb::SuggestMoveStats::FINAL);
     final_score.set_score(float(c->visit_count()) / (*node)->visit_count());
@@ -116,7 +116,7 @@ void MoveSuggester::impl::LoadModel(const std::string& path) {
   try {
     std::ifstream f_in(path, std::ios::binary);
     if (!f_in.is_open()) {
-      throw new std::invalid_argument("cannot read model from path " + path);
+      throw std::invalid_argument("cannot read model from path " + path);
     }
     auto m = torch::jit::load(f_in);
     m.to(torch::kCPU);
@@ -126,7 +126,7 @@ void MoveSuggester::impl::LoadModel(const std::string& path) {
         << "Model loaded successfully. Ready to serve SuggestMove requests!";
 
   } catch (const c10::Error& e) {
-    throw new std::runtime_error("torch::jit::load(" + path + "): " + e.msg());
+    throw std::runtime_error("torch::jit::load(" + path + "): " + e.msg());
   }
 }
 

@@ -24,7 +24,8 @@ class MoveSuggester {
 
   // Accepts a serialized hexzpb::SuggestMoveRequest and suggests a move.
   // Returns a serialized hexzpb::SuggestMoveResponse.
-  // Raises std::invalid_argument if anything goes wrong.
+  // Raises std::invalid_argument if the provided request is not a valid
+  // SuggestMoveRequest, or std::runtime_error if anything goes wrong.
   std::string SuggestMove(const std::string& request);
 
   // Loads the model at the given path.
