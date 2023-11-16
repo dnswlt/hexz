@@ -128,7 +128,7 @@ absl::StatusOr<Board> Board::FromProto(const hexzpb::Board& board) {
   int c = 0;
   if (board.flat_fields_size() != 105) {
     return absl::InvalidArgumentError(
-        absl::StrCat("Expecintg board with exactly 105 fields, got: ",
+        absl::StrCat("Expecting board with exactly 105 fields, got: ",
                      board.flat_fields_size()));
   }
   for (const auto& f : board.flat_fields()) {
