@@ -174,9 +174,12 @@ class NeuralMCTS {
   std::pair<int, bool> NumRuns(int move) const noexcept;
 
   // Executes a single run of the MCTS algorithm, starting at root.
+  // This method should be called during "normal" play, i.e. outside of training.
+  bool Run(Node& root, const Board& board);
+  // RunReusingTree is a variant of Run that should be used for self-play
+  // during training.
   // If add_noise is true, Dirichlet noise will be added to the root node's
   // move probs.
-  bool Run(Node& root, const Board& board, bool add_noise);
   bool RunReusingTree(Node& root, const Board& b, bool add_noise);
 
   // SuggestMove returns the best move suggestion that the NeuralMCTS algorithm

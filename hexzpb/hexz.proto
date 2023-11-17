@@ -131,7 +131,7 @@ message MCTSExample {
 }
 
 //
-// API for communication with remove CPU players.
+// API for communication with remote CPU players.
 //
 
 message SuggestMoveRequest {
@@ -163,6 +163,8 @@ message SuggestMoveStats {
     // All scores that the agent generated. If not empty, the first element
     // in the sequence MUST be the FINAL score.
     repeated ScoredMove moves = 1;
+    // (Optional) evaluation of the board as a whole: does it look winning (1) or losing (-1)?
+    float value = 2;
 }
 
 message SuggestMoveResponse {

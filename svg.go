@@ -57,7 +57,7 @@ func ScaleRGB(col1 string, col2 string, scale float64) (string, error) {
 }
 
 // hexPolySVG returns an SVG <g> element representing the hex cell (r, c).
-func hexPolySVG(sideLength float64, f *Field, r, c int, es *cellEvalScores) string {
+func hexPolySVG(sideLength float64, f *Field, r, c int, move *GameEngineMove, es *cellEvalScores) string {
 	// Unscaled SVG paths for cell icons.
 	cellIconPaths := map[CellType]string{
 		cellFire:  "M -0.8562 -49.9998 L 3.7186 -44.2813 C 9.1362 -37.509 11.1328 -30.8269 10.9476 -24.416 C 10.7676 -18.1826 8.5309 -12.6255 6.2976 -8.0391 C 5.5471 -6.4981 4.7362 -4.95 3.9933 -3.5319 C 3.649 -2.8743 3.319 -2.2448 3.0167 -1.6567 C 2.0067 0.3076 1.2348 1.9333 0.7443 3.3595 C 0.2514 4.7914 0.16 5.6971 0.2229 6.2695 C 0.27 6.7014 0.4152 7.1362 0.9862 7.7071 C 1.9305 8.6514 2.6271 8.9167 3.0495 8.9976 C 3.4809 9.0809 4.0548 9.0538 4.8757 8.7167 C 6.7119 7.9614 8.9538 5.9952 11.3062 3.0457 C 13.5657 0.2124 15.5386 -3.0286 16.9686 -5.6219 C 17.6762 -6.9057 18.2357 -8.0025 18.6147 -8.7717 C 18.8038 -9.1558 18.9476 -9.4567 19.0419 -9.6566 L 19.1452 -9.8781 L 19.1676 -9.9277 L 19.1709 -9.9341 L 19.1714 -9.9357 L 19.1719 -9.9364 L 19.1719 -9.9366 L 21.9605 -16.1081 L 26.8247 -11.3921 C 37.8381 -0.7143 41.2461 14.7043 34.0071 28.7024 C 27.7119 40.8757 14.8205 49.1695 0 49.1695 C -20.9286 49.1695 -38.0952 32.5847 -38.0952 11.8824 C -38.0952 0.9757 -32.0625 -6.8286 -25.4918 -14.5012 C -24.6346 -15.5022 -23.7585 -16.5109 -22.8687 -17.5355 C -16.7675 -24.5605 -10.0167 -32.3334 -4.2276 -43.4985 L -0.8562 -49.9998 Z M 24.4138 0.5619 C 22.9276 3.1319 20.9947 6.1719 18.7519 8.9838 C 16.1195 12.2847 12.6324 15.8243 8.4981 17.5247 C 6.3333 18.4147 3.8614 18.8528 1.2495 18.35 C -1.3719 17.8452 -3.7162 16.4733 -5.7481 14.4414 C -7.8014 12.3881 -8.9543 9.9619 -9.2448 7.3038 C -9.52 4.7857 -8.9876 2.371 -8.2614 0.26 C -7.5328 -1.8562 -6.4895 -3.9957 -5.4529 -6.0114 C -5.0824 -6.7324 -4.7167 -7.4305 -4.3543 -8.1216 C -3.6486 -9.4677 -2.9562 -10.7892 -2.2652 -12.2084 C -0.21 -16.4289 1.3071 -20.5108 1.4276 -24.691 C 1.4924 -26.933 1.1581 -29.3329 0.13 -31.9123 C -5.1862 -23.3496 -10.8945 -16.7869 -15.7256 -11.2326 C -16.6011 -10.226 -17.4478 -9.2526 -18.2581 -8.3064 C -24.8819 -0.5719 -28.5714 4.8252 -28.5714 11.8824 C -28.5714 27.1062 -15.8904 39.6457 0 39.6457 C 11.2109 39.6457 20.8657 33.3819 25.5476 24.3276 C 29.6509 16.3928 29.0709 7.8014 24.4138 0.5619 Z",
@@ -108,6 +108,12 @@ func hexPolySVG(sideLength float64, f *Field, r, c int, es *cellEvalScores) stri
 	default:
 		fill = "none"
 	}
+	stroke := "#cbcbcb"
+	strokeWidth := 1
+	if move != nil && r == move.Row && c == move.Col {
+		stroke = "#be398d"
+		strokeWidth = 4
+	}
 	points := strings.Join(coords, " ")
 	xOff := 0.0
 	if r%2 == 1 {
@@ -117,7 +123,7 @@ func hexPolySVG(sideLength float64, f *Field, r, c int, es *cellEvalScores) stri
 	y := float64(r)*a*3/2 + a
 	transform := fmt.Sprintf("translate(%.6f, %.6f)", x, y)
 	elems := []string{
-		fmt.Sprintf(`<polygon points="%s" stroke="#cbcbcb" stroke-width="1" fill="%s" />`, points, fill),
+		fmt.Sprintf(`<polygon points="%s" stroke="%s" stroke-width="%d" fill="%s" />`, points, stroke, strokeWidth, fill),
 	}
 	if p, ok := cellIconPaths[f.Type]; ok {
 		// Add cell icon overlay.
@@ -146,13 +152,13 @@ func moveScoreForKind(s *pb.SuggestMoveStats_ScoredMove, scoreKind pb.SuggestMov
 }
 
 func ExportSVG(file string, boards []*Board, captions []string) error {
-	return ExportSVGWithScores(file, boards, nil, pb.SuggestMoveStats_FINAL, captions)
+	return ExportSVGWithStats(file, boards, nil, nil, pb.SuggestMoveStats_FINAL, captions)
 }
 
 // ExportSVG writes a HTML document to file that contains SVG renderings of the given boards.
 // stats contains optional evaluation statistics (typically from MCTS),
 // captions contains optional captions of the boards.
-func ExportSVGWithScores(file string, boards []*Board, stats []*pb.SuggestMoveStats, scoreKind pb.SuggestMoveStats_ScoreKind, captions []string) error {
+func ExportSVGWithStats(file string, boards []*Board, moves []*GameEngineMove, stats []*pb.SuggestMoveStats, scoreKind pb.SuggestMoveStats_ScoreKind, captions []string) error {
 	const sideLength = 30.0
 	width := 10 * math.Sqrt(3) * sideLength
 	height := 17 * sideLength
@@ -177,7 +183,7 @@ func ExportSVGWithScores(file string, boards []*Board, stats []*pb.SuggestMoveSt
 	sb.WriteString("<h1>Hexz SVG Export</h1>\n")
 	fmt.Fprintf(&sb, "<p>Created: %s</p>\n", time.Now().Format(time.RFC3339))
 	for i, board := range boards {
-		// Maps cell indices to normal and flag evaluation scores.
+		// Build map from cell indices to normal and flag evaluation scores.
 		evalMap := make(map[idx]*cellEvalScores)
 		if i < len(stats) && stats[i] != nil {
 			for _, m := range stats[i].Moves {
@@ -199,6 +205,7 @@ func ExportSVGWithScores(file string, boards []*Board, stats []*pb.SuggestMoveSt
 			}
 		}
 		fmt.Fprintf(&sb, "<h2>Board %d</h2>\n", i+1)
+		// Add info line that is displayed above the board.
 		infos := []string{
 			fmt.Sprintf("Move: %d", board.Move),
 			fmt.Sprintf("Turn: %d", board.Turn),
@@ -206,13 +213,21 @@ func ExportSVGWithScores(file string, boards []*Board, stats []*pb.SuggestMoveSt
 		if len(board.Score) == 2 {
 			infos = append(infos, fmt.Sprintf("Score: %d &ndash; %d", board.Score[0], board.Score[1]))
 		}
+		if i < len(stats) && stats[i] != nil {
+			infos = append(infos, fmt.Sprintf("Value: %.3f", stats[i].Value))
+		}
 		fmt.Fprintf(&sb, "<p>"+strings.Join(infos, " &bullet; ")+"</p>\n")
+		// Add SVG.
+		var move *GameEngineMove
+		if i < len(moves) && moves[i] != nil {
+			move = moves[i]
+		}
 		sb.WriteString("<div>\n")
 		fmt.Fprintf(&sb, `<svg xmlns="http://www.w3.org/2000/svg" width="%.6f" height="%.6f" viewBox="%s">`+"\n", width, height, viewbox)
 		for r, row := range board.Fields {
 			for c := range row {
 				f := &board.Fields[r][c]
-				hexpoly := hexPolySVG(sideLength, f, r, c, evalMap[idx{r, c}])
+				hexpoly := hexPolySVG(sideLength, f, r, c, move, evalMap[idx{r, c}])
 				sb.WriteString(hexpoly + "\n")
 			}
 		}

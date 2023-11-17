@@ -39,8 +39,7 @@ func (cpu *LocalCPUPlayer) MaxThinkTime() time.Duration {
 	return cpu.maxThinkTime
 }
 
-// Calculates a suggested move (using MCTS) and sends a ControlEventMove to respCh.
-// This method should be called in a separate goroutine.
+// SuggestMove calculates a suggested move (using MCTS).
 // The GameEngineFlagz ge will not be modified.
 func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz) (*GameEngineMove, *pb.SuggestMoveStats, error) {
 	t := cpu.thinkTime
@@ -75,6 +74,7 @@ func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz)
 			CellType:  mv.CellType,
 		}, &pb.SuggestMoveStats{
 			Moves: moveEvals,
+			Value: float32(2*stats.BestMoveQ - 1), // Normalize to the [-1..1] range returned by neural players.
 		}, nil
 }
 

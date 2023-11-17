@@ -189,7 +189,7 @@ class SuggestMoveRequest(_message.Message):
     def __init__(self, max_think_time_ms: _Optional[int] = ..., game_engine_state: _Optional[_Union[GameEngineState, _Mapping]] = ...) -> None: ...
 
 class SuggestMoveStats(_message.Message):
-    __slots__ = ["moves"]
+    __slots__ = ["moves", "value"]
     class ScoreKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
         __slots__ = []
         FINAL: _ClassVar[SuggestMoveStats.ScoreKind]
@@ -215,8 +215,10 @@ class SuggestMoveStats(_message.Message):
         scores: _containers.RepeatedCompositeFieldContainer[SuggestMoveStats.Score]
         def __init__(self, row: _Optional[int] = ..., col: _Optional[int] = ..., type: _Optional[_Union[Field.CellType, str]] = ..., scores: _Optional[_Iterable[_Union[SuggestMoveStats.Score, _Mapping]]] = ...) -> None: ...
     MOVES_FIELD_NUMBER: _ClassVar[int]
+    VALUE_FIELD_NUMBER: _ClassVar[int]
     moves: _containers.RepeatedCompositeFieldContainer[SuggestMoveStats.ScoredMove]
-    def __init__(self, moves: _Optional[_Iterable[_Union[SuggestMoveStats.ScoredMove, _Mapping]]] = ...) -> None: ...
+    value: float
+    def __init__(self, moves: _Optional[_Iterable[_Union[SuggestMoveStats.ScoredMove, _Mapping]]] = ..., value: _Optional[float] = ...) -> None: ...
 
 class SuggestMoveResponse(_message.Message):
     __slots__ = ["move", "move_stats"]

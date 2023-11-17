@@ -176,7 +176,7 @@ std::unique_ptr<Node> Node::SelectChildAsRoot() {
       break;
     }
   }
-  // Due to floating-point rounding issues, we *might* end up here with i ===
+  // Due to floating-point rounding issues, we *might* end up here with i ==
   // children_.size() if r ~= 1.0.
   if (i == children_.size()) {
     i--;
@@ -372,17 +372,10 @@ bool NeuralMCTS::RunReusingTree(Node& root, const Board& b, bool add_noise) {
   return false;
 }
 
-bool NeuralMCTS::Run(Node& root, const Board& b, bool add_noise) {
+bool NeuralMCTS::Run(Node& root, const Board& b) {
   Board board(b);
   Perfm::Scope ps(Perfm::NeuralMCTS_Run);
   Node* n = &root;
-  // If we are re-using the search tree, root might already be expanded
-  // on the first Run call. In this case, add noise before descending
-  // to a leaf node.
-  if (add_noise && !n->IsLeaf()) {
-    n->AddDirichletNoise(kNoiseWeight, config_.dirichlet_concentration);
-    add_noise = false;
-  }
 
   // Move to leaf node.
   auto t_start = UnixMicros();
@@ -415,10 +408,6 @@ bool NeuralMCTS::Run(Node& root, const Board& b, bool add_noise) {
   n->ShuffleChildren();  // Avoid selection bias.
   auto pred = model_.Predict(board, *n);
   n->SetMoveProbs(pred.move_probs);
-  if (add_noise && n == &root) {
-    // root has been expanded for the first time.
-    n->AddDirichletNoise(kNoiseWeight, config_.dirichlet_concentration);
-  }
   n->SetValue(pred.value);
   // Backpropagate the model prediction. Need to reorient it s.t. 1 means player
   // 0 won.
@@ -538,7 +527,6 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
 
 absl::StatusOr<std::unique_ptr<Node>> NeuralMCTS::SuggestMove(
     int player, const Board& board, int think_time_millis) {
-  const bool add_noise = false;
   int64_t started_micros = UnixMicros();
   auto root =
       std::make_unique<Node>(nullptr, /*turn=*/player, Move{-1, -1, -1, -1.0});
@@ -548,7 +536,7 @@ absl::StatusOr<std::unique_ptr<Node>> NeuralMCTS::SuggestMove(
     if (UnixMicros() > max_micros) {
       break;
     }
-    if (!Run(*root, board, add_noise)) {
+    if (!Run(*root, board)) {
       break;
     }
   }

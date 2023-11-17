@@ -246,7 +246,7 @@ TEST(MCTSTest, RemainingFlagsAreNotNegative) {
   Board b = Board::RandomBoard();
   auto root = std::make_unique<Node>(nullptr, 0, Move{-1, -1, -1, -1});
   for (int i = 0; i < 50; i++) {
-    mcts.Run(*root, b, /*add_noise=*/false);
+    mcts.Run(*root, b);
     ASSERT_GE(b.Flags(0), 0);
     ASSERT_GE(b.Flags(1), 0);
     int turn = root->turn();

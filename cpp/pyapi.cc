@@ -80,6 +80,7 @@ std::string MoveSuggester::impl::SuggestMove(const std::string& request) {
   const auto& cs = (*node)->children();
   int most_visited_idx = 0;
   auto& stats = *resp.mutable_move_stats();
+  stats.set_value((*node)->value());
   for (int i = 0; i < cs.size(); i++) {
     const auto& c = cs[i];
     if (c->visit_count() > cs[most_visited_idx]->visit_count()) {

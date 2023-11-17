@@ -295,6 +295,7 @@ type MCTSStats struct {
 	VisitCounts []map[int]int // Per depth level, maps visit count to number of nodes with that count.
 	Elapsed     time.Duration
 	Moves       []MCTSMoveStats
+	BestMoveQ   float64
 }
 
 func (s *MCTSStats) MinQ() float64 {
@@ -372,16 +373,7 @@ func NewMCTSWithMem(cap int) *MCTS {
 
 func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, move int) (GameEngineMove, *MCTSStats) {
 	size, leafNodes, branchNodes, visitCounts := root.nodesPerDepth()
-	stats := &MCTSStats{
-		Iterations:  int(root.count),
-		MaxDepth:    len(leafNodes),
-		Elapsed:     elapsed,
-		TreeSize:    size,
-		LeafNodes:   leafNodes,
-		BranchNodes: branchNodes,
-		VisitCounts: visitCounts,
-		Moves:       make([]MCTSMoveStats, len(root.children)),
-	}
+	moves := make([]MCTSMoveStats, len(root.children))
 	best := &root.children[0]
 	for i := range root.children {
 		c := &root.children[i]
@@ -390,7 +382,7 @@ func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, mov
 		} else if mcts.ReturnMostFrequentlyVisited && c.count > best.count {
 			best = c
 		}
-		stats.Moves[i] = MCTSMoveStats{
+		moves[i] = MCTSMoveStats{
 			Row:        c.r(),
 			Col:        c.c(),
 			CellType:   c.cellType(),
@@ -398,6 +390,17 @@ func (mcts *MCTS) bestNextMoveWithStats(root *mcNode, elapsed time.Duration, mov
 			U:          c.U(root.count, mcts.UctFactor),
 			Q:          c.Q(),
 		}
+	}
+	stats := &MCTSStats{
+		Iterations:  int(root.count),
+		MaxDepth:    len(leafNodes),
+		Elapsed:     elapsed,
+		TreeSize:    size,
+		LeafNodes:   leafNodes,
+		BranchNodes: branchNodes,
+		VisitCounts: visitCounts,
+		Moves:       moves,
+		BestMoveQ:   best.Q(),
 	}
 	m := GameEngineMove{
 		PlayerNum: best.turn(),

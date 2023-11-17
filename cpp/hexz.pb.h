@@ -3752,6 +3752,7 @@ class SuggestMoveStats final :
 
   enum : int {
     kMovesFieldNumber = 1,
+    kValueFieldNumber = 2,
   };
   // repeated .hexzpb.SuggestMoveStats.ScoredMove moves = 1;
   int moves_size() const;
@@ -3771,17 +3772,28 @@ class SuggestMoveStats final :
   ::hexzpb::SuggestMoveStats_ScoredMove* add_moves();
   const ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats_ScoredMove >&
       moves() const;
+  // float value = 2;
+  void clear_value() ;
+  float value() const;
+  void set_value(float value);
+
+  private:
+  float _internal_value() const;
+  void _internal_set_value(float value);
+
+  public:
   // @@protoc_insertion_point(class_scope:hexzpb.SuggestMoveStats)
  private:
   class _Internal;
 
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<0, 1, 1, 0, 2> _table_;
+  static const ::google::protobuf::internal::TcParseTable<1, 2, 1, 0, 2> _table_;
   template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
   struct Impl_ {
     ::google::protobuf::RepeatedPtrField< ::hexzpb::SuggestMoveStats_ScoredMove > moves_;
+    float value_;
     mutable ::google::protobuf::internal::CachedSize _cached_size_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -7700,6 +7712,28 @@ inline ::google::protobuf::RepeatedPtrField<::hexzpb::SuggestMoveStats_ScoredMov
 SuggestMoveStats::_internal_mutable_moves() {
   PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
   return &_impl_.moves_;
+}
+
+// float value = 2;
+inline void SuggestMoveStats::clear_value() {
+  _impl_.value_ = 0;
+}
+inline float SuggestMoveStats::value() const {
+  // @@protoc_insertion_point(field_get:hexzpb.SuggestMoveStats.value)
+  return _internal_value();
+}
+inline void SuggestMoveStats::set_value(float value) {
+  _internal_set_value(value);
+  // @@protoc_insertion_point(field_set:hexzpb.SuggestMoveStats.value)
+}
+inline float SuggestMoveStats::_internal_value() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.value_;
+}
+inline void SuggestMoveStats::_internal_set_value(float value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.value_ = value;
 }
 
 // -------------------------------------------------------------------
