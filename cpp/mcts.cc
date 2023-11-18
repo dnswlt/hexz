@@ -23,6 +23,8 @@ constexpr float kInitialQRoot = -0.2;
 // Value subtracted from the parent's Q value to calculate an unvisited child's
 // initial Q value.
 constexpr float kInitialQPenalty = 0.3;
+// The first move for which a fast move should be possible.
+constexpr int kFirstFastMove = 6;
 }  // namespace
 
 float Node::uct_c = 2.5;
@@ -421,7 +423,7 @@ bool NeuralMCTS::Run(Node& root, const Board& b) {
 }
 
 std::pair<int, bool> NeuralMCTS::NumRuns(int move) const noexcept {
-  if (config_.fast_move_prob > 0) {
+  if (move >= kFirstFastMove && config_.fast_move_prob > 0) {
     if (internal::UnitRandom() < config_.fast_move_prob) {
       return std::make_pair(config_.runs_per_fast_move, true);
     }

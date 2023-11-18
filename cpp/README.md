@@ -21,7 +21,7 @@ All commands assume you are in the `cpp` subdirectory.
 mkdir build
 cd build
 cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="$HOME/miniconda3/pkgs/pytorch-2.1.0-py3.11_0/lib/python3.11/site-packages/torch/share/cmake" ..
-cmake --build . --parallell 4
+cmake --build . --parallel 4
 ```
 
 As of Oct 2023 there are no official pre-built arm64 binaries for libtorch on pytorch.org,
