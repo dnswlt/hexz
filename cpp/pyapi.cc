@@ -96,7 +96,7 @@ std::string MoveSuggester::impl::SuggestMove(const std::string& request) {
     final_score.set_score(float(c->visit_count()) / (*node)->visit_count());
     auto& prior_score = *move.add_scores();
     prior_score.set_kind(hexzpb::SuggestMoveStats::MCTS_PRIOR);
-    prior_score.set_score(c->Prior());
+    prior_score.set_score(c->prior());
   }
   const auto& best_move = cs[most_visited_idx]->move();
   ABSL_DLOG(INFO) << "SuggestMove: computed move suggestion "

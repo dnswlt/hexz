@@ -222,3 +222,9 @@ Predict            60.557s      27700      457.423
 NextMoves           0.293s      31365   107025.721
 MakeMove            0.124s      91051   735719.748
 MaxPuctChild        0.050s      87181  1746825.495
+
+
+## 2023-11-18
+
+Interesting discussion about setting the right initial Q value and tweaking the p_uct:
+https://ai.stackexchange.com/questions/25939/alpha-zero-does-not-converge-for-connect-6-a-game-with-huge-branching-factor

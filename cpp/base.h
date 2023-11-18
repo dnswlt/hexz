@@ -40,7 +40,7 @@ struct Config {
   // Maximum number of games the worker should play. Mostly for testing.
   int max_games = -1;
   // Weight of the exploration term in the Puct formula.
-  float uct_c = 5.0;
+  float uct_c = 2.5;
   // Concentration factor ("alpha") of the Dirichlet noise that gets
   // added to the root nodes during MCTS search.
   // Flagz has 18 moves on average (with high variance;

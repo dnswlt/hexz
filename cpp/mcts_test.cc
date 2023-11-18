@@ -121,8 +121,8 @@ TEST(NodeTest, FlatIndex) {
   root.SetMoveProbs(t / t.sum());
   float prev = -1;
   for (const auto& c : root.children()) {
-    ASSERT_LT(prev, c->Prior());
-    prev = c->Prior();
+    ASSERT_LT(prev, c->prior());
+    prev = c->prior();
   }
 }
 
@@ -142,11 +142,17 @@ TEST(NodeTest, AddDirichletNoise) {
   t.index_put_({0, 0, 2}, 10);
   t /= t.sum();
   root.SetMoveProbs(t);
-  const std::vector<float> prior = root.move_probs();
+  std::vector<float> prior;
+  for (const auto& c: root.children()) {
+    prior.push_back(c->prior());
+  }
   float prior_sum = std::accumulate(prior.begin(), prior.end(), 0.0);
   ASSERT_FLOAT_EQ(prior_sum, 1.0);
   root.AddDirichletNoise(0.5, 0.3);
-  const std::vector<float> posterior = root.move_probs();
+  std::vector<float> posterior;
+  for (const auto& c: root.children()) {
+    posterior.push_back(c->prior());
+  }
   // Expect that probs still sum to 1.
   float sum = std::accumulate(posterior.begin(), posterior.end(), 0.0);
   EXPECT_FLOAT_EQ(sum, 1.0);

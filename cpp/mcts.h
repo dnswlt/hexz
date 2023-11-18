@@ -25,8 +25,8 @@ class Node {
   // Simple getters.
   int turn() const { return turn_; }
   const Move& move() const { return move_; }
+  float prior() const noexcept { return prior_; }
   int visit_count() const noexcept { return visit_count_; }
-  const std::vector<float>& move_probs() const noexcept { return move_probs_; }
   const Node* parent() const noexcept { return parent_; }
   float wins() const noexcept { return wins_; }
   float value() const noexcept { return value_; }
@@ -55,7 +55,7 @@ class Node {
   // Returns a child as the new root, selected with a probability
   // proportional to its relative visit count.
   // Behaves like MostVisitedChildAsRoot in all other respects.
-  std::unique_ptr<Node> SelectChildAsRoot();
+  std::unique_ptr<Node> SampleChildAsRoot();
 
   // Backpropagate propagates the given result to this Node and all parents.
   // The given result is interpreted from the perspective of player 0.
@@ -115,12 +115,11 @@ class Node {
   Node* parent_;
   int turn_;
   Move move_;
-  int flat_idx_;
+  float prior_ = 0.0;
   float wins_ = 0.0;
   int visit_count_ = 0;
   float value_ = 0.0;
   bool terminal_ = false;
-  std::vector<float> move_probs_;
   std::vector<std::unique_ptr<Node>> children_;
 };
 
@@ -174,7 +173,8 @@ class NeuralMCTS {
   std::pair<int, bool> NumRuns(int move) const noexcept;
 
   // Executes a single run of the MCTS algorithm, starting at root.
-  // This method should be called during "normal" play, i.e. outside of training.
+  // This method should be called during "normal" play, i.e. outside of
+  // training.
   bool Run(Node& root, const Board& board);
   // RunReusingTree is a variant of Run that should be used for self-play
   // during training.

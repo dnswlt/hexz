@@ -24,10 +24,7 @@ constexpr float kNoiseWeight = 0.25;
 float Node::uct_c = 5.0;
 
 Node::Node(Node* parent, int turn, Move move)
-    : parent_{parent},
-      turn_{turn},
-      move_{move},
-      flat_idx_{move.typ * 11 * 10 + move.r * 10 + move.c} {}
+    : parent_{parent}, turn_{turn}, move_{move} {}
 
 int Node::NumVisitedChildren() const noexcept {
   int n = 0;
@@ -59,19 +56,13 @@ std::string Node::Stats() const {
                       " wins:", wins_);
 }
 
-float Node::Prior() const noexcept {
-  ABSL_DCHECK(parent_ != nullptr) << "Prior: must not be called on root node";
-  return parent_->move_probs_[flat_idx_];
-}
-
 float Node::Puct() const noexcept {
   ABSL_DCHECK(parent_ != nullptr) << "Prior: must not be called on root node";
   float q = 0.0;
   if (visit_count_ > 0) {
     q = wins_ / visit_count_;
   }
-  float pr = parent_->move_probs_[flat_idx_];
-  return q + Node::uct_c * pr * std::sqrt(parent_->visit_count_) /
+  return q + Node::uct_c * prior_ * std::sqrt(parent_->visit_count_) /
                  (1 + visit_count_);
 }
 
@@ -93,11 +84,13 @@ Node* Node::MaxPuctChild() const {
 }
 
 void Node::SetMoveProbs(torch::Tensor move_probs) {
-  assert(move_probs.numel() == 2 * 11 * 10);
-  assert(std::abs(move_probs.sum().item<float>() - 1.0) < 1e-3);
-  move_probs_ =
-      std::vector<float>(move_probs.data_ptr<float>(),
-                         move_probs.data_ptr<float>() + move_probs.numel());
+  ABSL_DCHECK(move_probs.numel() == 2 * 11 * 10);
+  ABSL_DCHECK(std::abs(move_probs.sum().item<float>() - 1.0) < 1e-3);
+  const auto& move_probs_acc = move_probs.accessor<float, 3>();
+  for (auto& c : children_) {
+    const auto& m = c->move_;
+    c->prior_ = move_probs_acc[m.typ][m.r][m.c];
+  }
 }
 
 torch::Tensor Node::ActionMask() const {
@@ -105,7 +98,8 @@ torch::Tensor Node::ActionMask() const {
       torch::zeros({2, 11, 10}, c10::TensorOptions().dtype(torch::kBool));
   auto action_mask_acc = action_mask.accessor<bool, 3>();
   for (const auto& c : children()) {
-    action_mask_acc[c->move_.typ][c->move_.r][c->move_.c] = true;
+    const auto& m = c->move_;
+    action_mask_acc[m.typ][m.r][m.c] = true;
   }
   return action_mask;
 }
@@ -118,9 +112,8 @@ void Node::AddDirichletNoise(float weight, float concentration) {
   std::vector<float> diri =
       internal::Dirichlet(children_.size(), concentration);
   int i = 0;
-  for (const auto& c : children_) {
-    move_probs_[c->flat_idx_] =
-        (1 - weight) * move_probs_[c->flat_idx_] + weight * diri[i];
+  for (auto& c : children_) {
+    c->prior_ = (1 - weight) * c->prior_ + weight * diri[i];
     i++;
   }
 }
@@ -157,7 +150,7 @@ std::unique_ptr<Node> Node::MostVisitedChildAsRoot() {
   return best_child;
 }
 
-std::unique_ptr<Node> Node::SelectChildAsRoot() {
+std::unique_ptr<Node> Node::SampleChildAsRoot() {
   assert(!children_.empty());
   float r = internal::UnitRandom();
   float s = 0;
@@ -187,6 +180,9 @@ std::unique_ptr<Node> Node::SelectChildAsRoot() {
 }
 
 void Node::Backpropagate(float result) {
+  // XXX this is fishy: we count a -0.2 result as a full loss for P1, but only
+  // as a 0.2 win for P2.
+  // TODO: Fix
   Node* n = this;
   while (n != nullptr) {
     n->visit_count_++;
@@ -514,7 +510,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
 
     int turn = root->turn();
     // NOTE: Must not access root after this step!
-    std::unique_ptr<Node> child = root->SelectChildAsRoot();
+    std::unique_ptr<Node> child = root->SampleChildAsRoot();
     board.MakeMove(turn, child->move());
     root = std::move(child);
     root->ResetTree();
