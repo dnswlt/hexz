@@ -19,12 +19,27 @@ namespace hexz {
 
 namespace {
 constexpr float kNoiseWeight = 0.25;
+constexpr float kInitialQRoot = -0.2;
+// Value subtracted from the parent's Q value to calculate an unvisited child's
+// initial Q value.
+constexpr float kInitialQPenalty = 0.3;
 }  // namespace
 
-float Node::uct_c = 5.0;
+float Node::uct_c = 2.5;
 
 Node::Node(Node* parent, int turn, Move move)
     : parent_{parent}, turn_{turn}, move_{move} {}
+
+float Node::Q() const noexcept {
+  if (visit_count_ == 0) {
+    if (parent_ == nullptr) {
+      return kInitialQRoot;
+    }
+    float parentQ = parent_->turn() != turn() ? -parent_->Q() : parent_->Q();
+    return parentQ - kInitialQPenalty;
+  }
+  return wins_ / visit_count_;
+}
 
 int Node::NumVisitedChildren() const noexcept {
   int n = 0;
@@ -58,29 +73,27 @@ std::string Node::Stats() const {
 
 float Node::Puct() const noexcept {
   ABSL_DCHECK(parent_ != nullptr) << "Prior: must not be called on root node";
-  float q = 0.0;
-  if (visit_count_ > 0) {
-    q = wins_ / visit_count_;
-  }
-  return q + Node::uct_c * prior_ * std::sqrt(parent_->visit_count_) /
-                 (1 + visit_count_);
+  return Q() + Node::uct_c * prior_ * std::sqrt(parent_->visit_count_) /
+                   (1 + visit_count_);
 }
 
 Node* Node::MaxPuctChild() const {
   Perfm::Scope ps(Perfm::MaxPuctChild);
-  if (children_.empty()) {
-    return nullptr;
-  }
-  int best_i = 0;
-  float best_puct = children_[best_i]->Puct();
-  for (int i = 1; i < children_.size(); i++) {
-    float puct = children_[i]->Puct();
+  ABSL_CHECK(!children_.empty());
+  Node* best = nullptr;
+  float best_puct = std::numeric_limits<float>::lowest();
+  ABSL_DLOG(INFO) << "Q:" << Q();
+  for (const auto& c : children_) {
+    float puct = c->Puct();
+    ABSL_DLOG(INFO) << "Puct: " << puct << " wins_:" << c->wins()
+                    << " visit_count_:" << c->visit_count()
+                    << " prior:" << c->prior();
     if (puct > best_puct) {
-      best_i = i;
+      best = c.get();
       best_puct = puct;
     }
   }
-  return children_[best_i].get();
+  return best;
 }
 
 void Node::SetMoveProbs(torch::Tensor move_probs) {
@@ -180,17 +193,10 @@ std::unique_ptr<Node> Node::SampleChildAsRoot() {
 }
 
 void Node::Backpropagate(float result) {
-  // XXX this is fishy: we count a -0.2 result as a full loss for P1, but only
-  // as a 0.2 win for P2.
-  // TODO: Fix
   Node* n = this;
   while (n != nullptr) {
     n->visit_count_++;
-    if (n->turn() == 0 && result > 0) {
-      n->wins_ += result;
-    } else if (n->turn() == 1 && result < 0) {
-      n->wins_ += -result;
-    }
+    n->wins_ += n->turn() == 0 ? result : -result;
     n = n->parent_;
   }
 }
@@ -314,9 +320,9 @@ bool NeuralMCTS::RunReusingTree(Node& root, const Board& b, bool add_noise) {
   Board board(b);
   Node* n = &root;
   if (add_noise && !n->IsLeaf()) {
-    // root has already been expanded before, so we can add the noise directly.
-    // If this is the first time we expand root, noise is added below once
-    // the predictions are available.
+    // root has already been expanded before, so we can add the noise
+    // directly. If this is the first time we expand root, noise is added
+    // below once the predictions are available.
     n->AddDirichletNoise(kNoiseWeight, config_.dirichlet_concentration);
     add_noise = false;
   }
@@ -328,6 +334,7 @@ bool NeuralMCTS::RunReusingTree(Node& root, const Board& b, bool add_noise) {
   }
   if (!n->IsLeaf()) {
     // n->visit_count() == 0, but we've been here before.
+    // Backprop known model prediction.
     n->Backpropagate(n->turn() == 0 ? n->value() : -n->value());
     return true;  // Indicate that we re-used existing predictions.
   }
@@ -351,8 +358,9 @@ bool NeuralMCTS::RunReusingTree(Node& root, const Board& b, bool add_noise) {
       return false;
     }
   }
-  // Initially we assume that it's the opponent's turn. If that turns out to be
-  // false, the turn gets updated when trying to find next moves (see above).
+  // Initially we assume that it's the opponent's turn. If that turns out to
+  // be false, the turn gets updated when trying to find next moves (see
+  // above).
   n->CreateChildren(1 - turn, moves);
   n->ShuffleChildren();  // Avoid selection bias.
   auto pred = model_.Predict(board, *n);
@@ -362,8 +370,8 @@ bool NeuralMCTS::RunReusingTree(Node& root, const Board& b, bool add_noise) {
     n->AddDirichletNoise(kNoiseWeight, config_.dirichlet_concentration);
   }
   n->SetValue(pred.value);
-  // Backpropagate the model prediction. Need to reorient it s.t. 1 means player
-  // 0 won.
+  // Backpropagate the model prediction. Need to reorient it s.t. 1 means
+  // player 0 won.
   n->Backpropagate(n->turn() == 0 ? pred.value : -pred.value);
   return false;
 }
@@ -398,15 +406,16 @@ bool NeuralMCTS::Run(Node& root, const Board& b) {
       return n != &root;  // Return if we made any progress at all in this run.
     }
   }
-  // Initially we assume that it's the opponent's turn. If that turns out to be
-  // false, the turn gets updated when trying to find next moves (see above).
+  // Initially we assume that it's the opponent's turn. If that turns out to
+  // be false, the turn gets updated when trying to find next moves (see
+  // above).
   n->CreateChildren(1 - turn, moves);
   n->ShuffleChildren();  // Avoid selection bias.
   auto pred = model_.Predict(board, *n);
   n->SetMoveProbs(pred.move_probs);
   n->SetValue(pred.value);
-  // Backpropagate the model prediction. Need to reorient it s.t. 1 means player
-  // 0 won.
+  // Backpropagate the model prediction. Need to reorient it s.t. 1 means
+  // player 0 won.
   n->Backpropagate(n->turn() == 0 ? pred.value : -pred.value);
   return true;
 }
@@ -460,7 +469,8 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       n_runs++;
     }
     // if (n < 10)
-    //   WriteDotGraph(*root, "/tmp/searchtree_" + std::to_string(n) + ".dot");
+    //   WriteDotGraph(*root, "/tmp/searchtree_" + std::to_string(n) +
+    //   ".dot");
     if (root->terminal()) {
       result = board.Result();
       ABSL_LOG(INFO) << "Game over after "

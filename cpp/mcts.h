@@ -34,11 +34,13 @@ class Node {
   const std::vector<std::unique_ptr<Node>>& children() const {
     return children_;
   }
+
+  // Returns this node's Q value. If the child has not been visited
+  // yet, returns a Q value derived from the parent's Q value.
+  float Q() const noexcept;
+
   // Update the turn.
   void SetTurn(int turn) { turn_ = turn; }
-  // Return this node's prior selection probability, i.e. its value
-  // in its parent's move_probs.
-  float Prior() const noexcept;
 
   // Returns this node's PUCT value.
   float Puct() const noexcept;
@@ -77,7 +79,7 @@ class Node {
 
   // Recursively zeros visit_count_ and wins_ of all nodes in the whole subtree.
   // This method is used for prediction caching: re-use the search tree of
-  // the previous move during self-play, but only for re-using the mode
+  // the previous move during self-play, but only for re-using the model
   // predictions.
   void ResetTree();
 

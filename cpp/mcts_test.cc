@@ -67,7 +67,6 @@ TEST(NodeTest, MaxPuctChild) {
   n_0.Backpropagate(-1.0);
   Node* c = n.MaxPuctChild();
   ASSERT_TRUE(c != nullptr);
-  //   EXPECT_EQ("FOO", n.DebugString());
   EXPECT_EQ(c, &n_0);
   EXPECT_EQ(c->parent(), &n);
   // PUCT should be greater than 1, the win rate.
@@ -101,8 +100,43 @@ TEST(NodeTest, Backpropagate) {
   EXPECT_EQ(n_1.visit_count(), 1);
   EXPECT_EQ(n_1_1.visit_count(), 1);
   EXPECT_EQ(root.wins(), 1.0);
-  EXPECT_EQ(n_1.wins(), 0.0);
+  EXPECT_EQ(n_1.wins(), -1.0);
   EXPECT_EQ(n_1_1.wins(), 1.0);
+}
+
+
+TEST(NodeTest, BackpropagateFraction) {
+  /*
+  Like Backpropagate, but propagates back only a fractional value,
+  as is common when backpropagating model predictions.
+
+  root (turn=0)
+  - n_1 (turn=1)
+    - n_1_1 (turn=0)
+  - n_2 (player=1)
+
+  Then backpropagate from n_1_1 and expect root AND n_1 to get updated.
+  */
+  Node root(nullptr, 0, Move{});
+  std::vector<Move> root_moves{
+      Move{0, 0, 0, 0},
+      Move{1, 0, 0, 0},
+  };
+  root.CreateChildren(1 - root.turn(), root_moves);
+  auto& n_1 = *root.children()[0];
+  std::vector<Move> n_1_moves{
+      Move{1, 1, 0, 0},
+  };
+  n_1.CreateChildren(1 - n_1.turn(), n_1_moves);
+  auto& n_1_1 = *n_1.children()[0];
+  // Player 0 won.
+  n_1_1.Backpropagate(0.2);
+  EXPECT_EQ(root.visit_count(), 1);
+  EXPECT_EQ(n_1.visit_count(), 1);
+  EXPECT_EQ(n_1_1.visit_count(), 1);
+  EXPECT_FLOAT_EQ(root.wins(), 0.2);
+  EXPECT_FLOAT_EQ(n_1.wins(), -0.2);
+  EXPECT_FLOAT_EQ(n_1_1.wins(), 0.2);
 }
 
 TEST(NodeTest, FlatIndex) {

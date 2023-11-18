@@ -228,3 +228,7 @@ MaxPuctChild        0.050s      87181  1746825.495
 
 Interesting discussion about setting the right initial Q value and tweaking the p_uct:
 https://ai.stackexchange.com/questions/25939/alpha-zero-does-not-converge-for-connect-6-a-game-with-huge-branching-factor
+
+Leela Zero's Q value settings:
+https://lczero.org/play/flags/#:~:text=%E2%80%9CFirst%20Play%20Urgency%E2%80%9D%20changes%20search,absolute%E2%80%9D%20directly%20uses%20that%20value.
+
