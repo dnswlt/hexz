@@ -17,6 +17,8 @@ namespace hexz {
 
 namespace {
 
+namespace fs = std::filesystem;
+
 using testing::ElementsAre;
 using testing::ElementsAreArray;
 
@@ -267,6 +269,7 @@ TEST(MCTSTest, PlayGame) {
   scriptmodule.eval();
   Config config{
       .runs_per_move = 20,
+      .dirichlet_concentration = 0.3,
   };
   TorchModel model(scriptmodule);
   NeuralMCTS mcts(model, config);
@@ -317,8 +320,8 @@ TEST(MCTSTest, WriteDotGraph) {
   NeuralMCTS mcts(model, Config{});
   auto b = Board::RandomBoard();
   auto dot_path =
-      std::filesystem::temp_directory_path() / "_MCTSTest_WriteDotGraph.dot";
-  absl::Cleanup cleanup = [&dot_path]() { std::filesystem::remove(dot_path); };
+      fs::temp_directory_path() / fs::path("_MCTSTest_WriteDotGraph.dot");
+  absl::Cleanup cleanup = [&dot_path]() { fs::remove(dot_path); };
   Node root(nullptr, 0, Move{});
   for (int i = 0; i < 100; i++) {
     mcts.RunReusingTree(root, b, /*add_noise=*/i == 0);
@@ -327,7 +330,7 @@ TEST(MCTSTest, WriteDotGraph) {
   auto status = WriteDotGraph(root, dot_path.string());
   ASSERT_TRUE(status.ok());
   // Expect that "something" was written.
-  EXPECT_GT(std::filesystem::file_size(dot_path), 1000);
+  EXPECT_GT(fs::file_size(dot_path), 1000);
 }
 
 }  // namespace

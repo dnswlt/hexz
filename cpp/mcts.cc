@@ -468,9 +468,11 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     if (root->terminal()) {
       result = board.Result();
       ABSL_LOG(INFO) << "Game over after "
-                     << absl::StrFormat("%.1fs", static_cast<float>(UnixMicros() - started_micros) / 1e6)
-                     << " and " << n
-                     << " moves. Final score: " << board.Score()
+                     << absl::StrFormat(
+                            "%.1fs",
+                            static_cast<float>(UnixMicros() - started_micros) /
+                                1e6)
+                     << " and " << n << " moves. Final score: " << board.Score()
                      << ". Result: " << result
                      << ". Examples: " << examples.size();
       game_over = true;
