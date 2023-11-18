@@ -1,0 +1,21 @@
+version: '2'
+services:
+  hexz:
+    image: europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/hexz:latest
+    build: "."
+    depends_on:
+      - redis
+    ports:
+      - "8080:${HEXZ_PORT}"
+    network_mode: "host"
+  redis:
+    image: arm64v8/redis:alpine
+    restart: always
+    ports:
+      - '6379:6379'
+    volumes:
+      - cache:/data
+    network_mode: "host"
+volumes:
+  cache:
+    driver: local
