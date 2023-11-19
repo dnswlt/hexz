@@ -104,7 +104,7 @@ void Node::SetMoveProbs(torch::Tensor move_probs) {
   const auto& move_probs_acc = move_probs.accessor<float, 3>();
   for (auto& c : children_) {
     const auto& m = c->move_;
-    c->prior_ = move_probs_acc[m.typ][m.r][m.c];
+    c->prior_ = move_probs_acc[static_cast<size_t>(m.typ)][m.r][m.c];
   }
 }
 
@@ -114,7 +114,7 @@ torch::Tensor Node::ActionMask() const {
   auto action_mask_acc = action_mask.accessor<bool, 3>();
   for (const auto& c : children()) {
     const auto& m = c->move_;
-    action_mask_acc[m.typ][m.r][m.c] = true;
+    action_mask_acc[static_cast<size_t>(m.typ)][m.r][m.c] = true;
   }
   return action_mask;
 }
@@ -138,7 +138,8 @@ torch::Tensor Node::NormVisitCounts() const {
   auto t_acc = t.accessor<float, 3>();
   for (const auto& c : children_) {
     const auto& m = c->move_;
-    t_acc[m.typ][m.r][m.c] = static_cast<float>(c->visit_count_);
+    t_acc[static_cast<size_t>(m.typ)][m.r][m.c] =
+        static_cast<float>(c->visit_count_);
   }
   t /= t.sum();
   return t;
@@ -216,8 +217,8 @@ void Node::AppendDebugString(std::ostream& os,
                              const std::string& indent) const {
   os << indent << "Node(\n";
   os << indent << "  turn: " << turn_ << "\n";
-  os << indent << "  move: (" << move_.typ << ", " << move_.r << ", " << move_.c
-     << ", " << move_.value << ")\n";
+  os << indent << "  move: (" << static_cast<int>(move_.typ) << ", " << move_.r
+     << ", " << move_.c << ", " << move_.value << ")\n";
   os << indent << "  wins: " << wins_ << "\n";
   os << indent << "  visit_count: " << visit_count_ << "\n";
   if (parent_ != nullptr) {
@@ -441,10 +442,8 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
   std::vector<hexzpb::TrainingExample> examples;
   int64_t started_micros = UnixMicros();
   int n = 0;
-  // Root's children have the player whose turn it actually is.
-  // Every game starts with player 0, so root must use player 1.
-  auto root =
-      std::make_unique<Node>(nullptr, /*turn=*/0, Move{-1, -1, -1, -1.0});
+  // Every game starts with player 0.
+  auto root = std::make_unique<Node>(nullptr, /*turn=*/0, Move{});
   float result = 0.0;
   bool game_over = false;
   const int64_t max_micros =
@@ -529,13 +528,13 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       // Update TrainingExample with move information.
       auto* mv = examples.rbegin()->mutable_move();
       mv->set_move(n);
-      mv->set_cell_type(move.typ == Move::kFlag ? hexzpb::Field::FLAG
-                                                : hexzpb::Field::NORMAL);
+      mv->set_cell_type(move.typ == Move::Typ::kFlag ? hexzpb::Field::FLAG
+                                                     : hexzpb::Field::NORMAL);
       mv->set_row(move.r);
       mv->set_col(move.c);
       mv->set_player_num(turn + 1);  // 1-based
     }
-    
+
     board.MakeMove(turn, move);
     root = std::move(child);
     root->ResetTree();
@@ -551,8 +550,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
 absl::StatusOr<std::unique_ptr<Node>> NeuralMCTS::SuggestMove(
     int player, const Board& board, int think_time_millis) {
   int64_t started_micros = UnixMicros();
-  auto root =
-      std::make_unique<Node>(nullptr, /*turn=*/player, Move{-1, -1, -1, -1.0});
+  auto root = std::make_unique<Node>(nullptr, /*turn=*/player, Move{});
   const int64_t max_micros =
       started_micros + static_cast<int64_t>(think_time_millis) * 1000;
   for (int n = 0; n < config_.runs_per_move; n++) {

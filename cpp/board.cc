@@ -218,18 +218,18 @@ void Board::MakeMove(int player, const Move& move) {
   auto b_acc = b_.accessor<float, 3>();
   ABSL_DCHECK_EQ(b_acc[I_BLOCKED(player)][move.r][move.c], 0)
       << "MakeMove on blocked field";
-  ABSL_DCHECK(move.typ == Move::kNormal ||
-              move.typ == Move::kFlag &&
+  ABSL_DCHECK(move.typ == Move::Typ::kNormal ||
+              move.typ == Move::Typ::kFlag &&
                   b_acc[I_NEXTVAL(player)][move.r][move.c] == move.value)
       << "MakeMove: wrong value: move: " << move.DebugString()
       << "board: " << DebugString();
-  if (move.typ == Move::kFlag) {
+  if (move.typ == Move::Typ::kFlag) {
     b_acc[I_FLAG(player)][move.r][move.c] = move.value;
   } else {
     // NORMAL move.
     b_acc[I_VALUE(player)][move.r][move.c] = move.value;
   }
-  bool played_flag = move.typ == Move::kFlag;
+  bool played_flag = move.typ == Move::Typ::kFlag;
   // Occupy cell for both players
   b_acc[I_BLOCKED(0)][move.r][move.c] = 1;
   b_acc[I_BLOCKED(1)][move.r][move.c] = 1;
@@ -275,7 +275,7 @@ void Board::MakeMove(int player, const Move& move) {
         b_acc[I_GRASS][nb.r][nb.c] = 0;
         b_acc[I_BLOCKED(player)][nb.r][nb.c] = 0;
         b_acc[I_NEXTVAL(player)][nb.r][nb.c] = grass_val;
-        MakeMove(player, Move{Move::kNormal, nb.r, nb.c, grass_val});
+        MakeMove(player, Move{Move::Typ::kNormal, nb.r, nb.c, grass_val});
       }
     }
   }
@@ -291,11 +291,11 @@ std::vector<Move> Board::NextMoves(int player) const {
     int cols = 10 - r % 2;
     for (int c = 0; c < cols; c++) {
       if (flag && b_acc[I_BLOCKED(player)][r][c] == 0) {
-        moves.push_back(Move{Move::kFlag, r, c, 1.0});
+        moves.push_back(Move{Move::Typ::kFlag, r, c, 1.0});
       }
       float next_val = b_acc[I_NEXTVAL(player)][r][c];
       if (next_val > 0) {
-        moves.push_back(Move{Move::kNormal, r, c, next_val});
+        moves.push_back(Move{Move::Typ::kNormal, r, c, next_val});
       }
     }
   }

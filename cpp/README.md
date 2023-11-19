@@ -115,7 +115,14 @@ See `.vscode/c_cpp_properties.json`. Also add `CMAKE_PREFIX_PATH` under _Cmake: 
 To run the worker, first make sure the training server is up and running. Then:
 
 ```
-HEXZ_TRAINING_SERVER_URL=http://localhost:8080 HEXZ_RUNS_PER_MOVE=20 HEXZ_MAX_RUNTIME_SECONDS=60 HEXZ_MAX_GAMES=1 ./worker
+env HEXZ_TRAINING_SERVER_URL=http://localhost:8080 \
+  HEXZ_MAX_RUNTIME_SECONDS=60 \
+  HEXZ_RUNS_PER_MOVE=800 \
+  HEXZ_UCT_C=2.5 \
+  HEXZ_RUNS_PER_FAST_MOVE=100 \
+  HEXZ_DIRICHLET_CONCENTRATION=0.35 \
+  HEXZ_FAST_MOVE_PROB=0.5 \
+  ./worker
 ```
 
 ### Heap profiling

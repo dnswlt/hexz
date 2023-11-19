@@ -45,11 +45,11 @@ struct hash<hexz::internal::Idx> {
 namespace hexz {
 
 struct Move {
-  enum Typ {
+  enum class Typ {
     kFlag = 0,
     kNormal = 1,
   };
-  int typ;  // 0 for FLAG, 1 for NORMAL
+  Typ typ;
   int r;
   int c;
   float value;

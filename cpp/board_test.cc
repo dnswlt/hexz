@@ -88,7 +88,7 @@ TEST(BoardTest, MakeMoveFlag) {
   b.SetRemainingFlags(player, 1);
   int r = 4;
   int c = 4;
-  b.MakeMove(player, Move{0, r, c, 1});
+  b.MakeMove(player, Move{Move::Typ::kFlag, r, c, 1});
   // Flag should be set.
   EXPECT_EQ(b.CellValue(player, Board::kFlag, r, c), 1);
   EXPECT_EQ(b.CellValue(1 - player, Board::kFlag, r, c), 0);
@@ -112,8 +112,8 @@ TEST(BoardTest, MakeMoveNormal) {
   b.SetRemainingFlags(player, 1);
   int r = 4;
   int c = 4;
-  b.MakeMove(player, Move{0, r, c - 1, 1});
-  b.MakeMove(player, Move{1, r, c, 1});
+  b.MakeMove(player, Move{Move::Typ::kFlag, r, c - 1, 1});
+  b.MakeMove(player, Move{Move::Typ::kNormal, r, c, 1});
   // Cell should not have a value, since it's a flag.
   EXPECT_EQ(b.CellValue(player, Board::kValue, r, c), 1);
   EXPECT_EQ(b.CellValue(1 - player, Board::kValue, r, c), 0);
@@ -141,7 +141,7 @@ TEST(BoardTest, NoValidNextMoves) {
     b.SetCellValue(player, Board::kBlocked, n.r, n.c, 1);
   }
   // Now make the (silly) flag move:
-  b.MakeMove(player, Move{0, 0, 0, 0});
+  b.MakeMove(player, Move{Move::Typ::kFlag, 0, 0, 0});
 
   EXPECT_TRUE(b.NextMoves(player).empty());
   EXPECT_FALSE(b.NextMoves(1 - player).empty());
@@ -162,7 +162,7 @@ TEST(BoardTest, GrassPropagation) {
   b.SetCellValue(player, Board::kGrass, 3, 4, 2);
   // Ensure it's OK to make a move on (3, 5) by setting next value:
   b.SetCellValue(player, Board::kNextValue, 3, 5, 2);
-  b.MakeMove(player, Move{1, 3, 5, 2});
+  b.MakeMove(player, Move{Move::Typ::kNormal, 3, 5, 2});
 
   EXPECT_EQ(b.CellValue(player, Board::kNextValue, 3, 2), 2);
   EXPECT_EQ(b.CellValue(player, Board::kValue, 3, 3), 1);
@@ -178,11 +178,11 @@ TEST(BoardTest, GrassPropagation) {
 TEST(BoardTest, Score) {
   int p0 = 0, p1 = 1;
   Board b = EmptyBoard(/*n_flags=*/3);
-  b.MakeMove(p0, Move{0, 3, 3, 0});
-  b.MakeMove(p1, Move{0, 7, 3, 0});
-  b.MakeMove(p0, Move{1, 3, 4, 1});
-  b.MakeMove(p1, Move{0, 7, 4, 0});
-  b.MakeMove(p0, Move{1, 3, 5, 2});
+  b.MakeMove(p0, Move{Move::Typ::kFlag, 3, 3, 0});
+  b.MakeMove(p1, Move{Move::Typ::kFlag, 7, 3, 0});
+  b.MakeMove(p0, Move{Move::Typ::kNormal, 3, 4, 1});
+  b.MakeMove(p1, Move{Move::Typ::kFlag, 7, 4, 0});
+  b.MakeMove(p0, Move{Move::Typ::kNormal, 3, 5, 2});
   EXPECT_EQ(b.Score(), std::make_pair(3.0f, 0.0f));
 }
 

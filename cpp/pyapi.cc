@@ -89,8 +89,8 @@ std::string MoveSuggester::impl::SuggestMove(const std::string& request) {
     auto& move = *stats.add_moves();
     move.set_row(c->move().r);
     move.set_col(c->move().c);
-    move.set_type(c->move().typ == 0 ? hexzpb::Field::FLAG
-                                     : hexzpb::Field::NORMAL);
+    move.set_type(c->move().typ == Move::Typ::kFlag ? hexzpb::Field::FLAG
+                                                    : hexzpb::Field::NORMAL);
     auto& final_score = *move.add_scores();
     final_score.set_kind(hexzpb::SuggestMoveStats::FINAL);
     final_score.set_score(float(c->visit_count()) / (*node)->visit_count());
@@ -105,8 +105,8 @@ std::string MoveSuggester::impl::SuggestMove(const std::string& request) {
   auto& move = *resp.mutable_move();
   move.set_player_num(pb_board.turn());
   move.set_move(pb_board.move());
-  move.set_cell_type(best_move.typ == 0 ? hexzpb::Field::FLAG
-                                        : hexzpb::Field::NORMAL);
+  move.set_cell_type(best_move.typ == Move::Typ::kFlag ? hexzpb::Field::FLAG
+                                                       : hexzpb::Field::NORMAL);
   move.set_row(best_move.r);
   move.set_col(best_move.c);
   return resp.SerializeAsString();

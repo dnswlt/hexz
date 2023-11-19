@@ -44,7 +44,7 @@ TEST(NodeTest, IsLeaf) {
   Node n(nullptr, 0, Move{});
   EXPECT_TRUE(n.IsLeaf());
   std::vector<Move> moves{
-      Move{0, 0, 0, 0},
+      Move{Move::Typ::kFlag, 0, 0, 0},
   };
   n.CreateChildren(0, moves);
   EXPECT_FALSE(n.IsLeaf());
@@ -54,8 +54,8 @@ TEST(NodeTest, MaxPuctChild) {
   Node::uct_c = 1.0;
   Node n(nullptr, 0, Move{});
   std::vector<Move> moves{
-      Move{0, 0, 0, 0},
-      Move{0, 1, 0, 0},
+      Move{Move::Typ::kFlag, 0, 0, 0},
+      Move{Move::Typ::kFlag, 1, 0, 0},
   };
   n.CreateChildren(1 - n.turn(), moves);
   auto pr = torch::ones({2, 11, 10});
@@ -84,13 +84,13 @@ TEST(NodeTest, Backpropagate) {
   */
   Node root(nullptr, 0, Move{});
   std::vector<Move> root_moves{
-      Move{0, 0, 0, 0},
-      Move{1, 0, 0, 0},
+      Move{Move::Typ::kFlag, 0, 0, 0},
+      Move{Move::Typ::kNormal, 0, 0, 0},
   };
   root.CreateChildren(1 - root.turn(), root_moves);
   auto& n_1 = *root.children()[0];
   std::vector<Move> n_1_moves{
-      Move{1, 1, 0, 0},
+      Move{Move::Typ::kNormal, 1, 0, 0},
   };
   n_1.CreateChildren(1 - n_1.turn(), n_1_moves);
   auto& n_1_1 = *n_1.children()[0];
@@ -119,13 +119,13 @@ TEST(NodeTest, BackpropagateFraction) {
   */
   Node root(nullptr, 0, Move{});
   std::vector<Move> root_moves{
-      Move{0, 0, 0, 0},
-      Move{1, 0, 0, 0},
+      Move{Move::Typ::kFlag, 0, 0, 0},
+      Move{Move::Typ::kNormal, 0, 0, 0},
   };
   root.CreateChildren(1 - root.turn(), root_moves);
   auto& n_1 = *root.children()[0];
   std::vector<Move> n_1_moves{
-      Move{1, 1, 0, 0},
+      Move{Move::Typ::kNormal, 1, 0, 0},
   };
   n_1.CreateChildren(1 - n_1.turn(), n_1_moves);
   auto& n_1_1 = *n_1.children()[0];
@@ -146,10 +146,10 @@ TEST(NodeTest, FlatIndex) {
   Node root(nullptr, 0, Move{});
   auto t = torch::arange(2 * 11 * 10).reshape({2, 11, 10});
   std::vector<Move> moves{
-      Move{0, 0, 0, 0},
-      Move{0, 0, 8, 0},
-      Move{0, 2, 0, 0},
-      Move{1, 0, 0, 0},
+      Move{Move::Typ::kFlag, 0, 0, 0},
+      Move{Move::Typ::kFlag, 0, 8, 0},
+      Move{Move::Typ::kFlag, 2, 0, 0},
+      Move{Move::Typ::kNormal, 0, 0, 0},
   };
   root.CreateChildren(1, moves);
   root.SetMoveProbs(t / t.sum());
@@ -165,9 +165,9 @@ TEST(NodeTest, AddDirichletNoise) {
   std::vector<Move> moves{
       // Use the moves that come first in the flat representation of
       // move_probs_.
-      Move{0, 0, 0, 0},
-      Move{0, 0, 1, 0},
-      Move{0, 0, 2, 0},
+      Move{Move::Typ::kFlag, 0, 0, 0},
+      Move{Move::Typ::kFlag, 0, 1, 0},
+      Move{Move::Typ::kFlag, 0, 2, 0},
   };
   root.CreateChildren(1 - root.turn(), moves);
   auto t = torch::zeros({2, 11, 10});
@@ -204,9 +204,9 @@ TEST(NodeTest, ActionMask) {
   Node root(nullptr, 0, Move{});
   std::vector<Move> moves{
       // Can place a flag at (0, 0).
-      Move{0, 0, 0, 0},
+      Move{Move::Typ::kFlag, 0, 0, 0},
       // Can place a normal cell with value 1.0 at (7, 3).
-      Move{1, 7, 3, 1.0},
+      Move{Move::Typ::kNormal, 7, 3, 1.0},
   };
   root.CreateChildren(1 - root.turn(), moves);
   auto mask = root.ActionMask();
@@ -286,14 +286,14 @@ TEST(MCTSTest, RemainingFlagsAreNotNegative) {
   FakeModel fake_model;
   NeuralMCTS mcts(fake_model, config);
   Board b = Board::RandomBoard();
-  auto root = std::make_unique<Node>(nullptr, 0, Move{-1, -1, -1, -1});
+  auto root = std::make_unique<Node>(nullptr, 0, Move{});
   for (int i = 0; i < 50; i++) {
     mcts.Run(*root, b);
     ASSERT_GE(b.Flags(0), 0);
     ASSERT_GE(b.Flags(1), 0);
     int turn = root->turn();
     root = root->MostVisitedChildAsRoot();
-    ASSERT_TRUE(b.Flags(turn) > 0 || root->move().typ != 0)
+    ASSERT_TRUE(b.Flags(turn) > 0 || root->move().typ != Move::Typ::kFlag)
         << "Failed in move " << i;
     b.MakeMove(turn, root->move());
   }

@@ -47,7 +47,11 @@ locally:
 
 ```bash
 cd src
-HEXZ_BATCH_SIZE=1024 HEXZ_MODEL_NAME=test HEXZ_MODEL_REPO_BASE_DIR=/tmp/models \
+env HEXZ_BATCH_SIZE=1024 \
+  HEXZ_MODEL_NAME=edgar \
+  HEXZ_MODEL_REPO_BASE_DIR=/tmp/hexz-models \
+  HEXZ_NUM_EPOCHS=1 \
+  HEXZ_MAX_CHECKPOINT_DIFF=2 \
   gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.server:create_app()'
 ```
 
