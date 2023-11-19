@@ -6,7 +6,7 @@ services:
     depends_on:
       - redis
     ports:
-      - "8080:${HEXZ_PORT}"
+      - "8080:${PORT}"
     network_mode: "host"
   redis:
     image: arm64v8/redis:alpine
