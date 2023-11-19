@@ -445,9 +445,8 @@ PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
         template <typename>
 PROTOBUF_CONSTEXPR TrainingExample_Stats::TrainingExample_Stats(::_pbi::ConstantInitialized)
     : _impl_{
-      /*decltype(_impl_.move_)*/ 0,
-      /*decltype(_impl_.valid_moves_)*/ 0,
       /*decltype(_impl_.duration_micros_)*/ ::int64_t{0},
+      /*decltype(_impl_.valid_moves_)*/ 0,
       /*decltype(_impl_.visit_count_)*/ 0,
       /*decltype(_impl_._cached_size_)*/ {},
     } {}
@@ -479,6 +478,7 @@ PROTOBUF_CONSTEXPR TrainingExample::TrainingExample(::_pbi::ConstantInitialized)
           ::_pbi::ConstantInitialized{},
       },
       /*decltype(_impl_.stats_)*/ nullptr,
+      /*decltype(_impl_.move_)*/ nullptr,
       /*decltype(_impl_.unix_micros_)*/ ::int64_t{0},
       /*decltype(_impl_.result_)*/ 0,
       /*decltype(_impl_.encoding_)*/ 0,
@@ -777,7 +777,6 @@ const ::uint32_t TableStruct_hexz_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(
     ~0u,  // no _inlined_string_donated_
     ~0u,  // no _split_
     ~0u,  // no sizeof(Split)
-    PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.move_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.duration_micros_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.valid_moves_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.visit_count_),
@@ -791,6 +790,7 @@ const ::uint32_t TableStruct_hexz_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(
     ~0u,  // no sizeof(Split)
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample, _impl_.unix_micros_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample, _impl_.turn_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample, _impl_.move_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample, _impl_.encoding_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample, _impl_.board_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample, _impl_.action_mask_),
@@ -799,6 +799,7 @@ const ::uint32_t TableStruct_hexz_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample, _impl_.stats_),
     ~0u,
     ~0u,
+    1,
     ~0u,
     ~0u,
     ~0u,
@@ -831,7 +832,7 @@ static const ::_pbi::MigrationSchema
         {242, 252, -1, sizeof(::hexzpb::AddTrainingExamplesRequest)},
         {254, 265, -1, sizeof(::hexzpb::AddTrainingExamplesResponse)},
         {268, -1, -1, sizeof(::hexzpb::TrainingExample_Stats)},
-        {280, 296, -1, sizeof(::hexzpb::TrainingExample)},
+        {279, 296, -1, sizeof(::hexzpb::TrainingExample)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -926,17 +927,17 @@ const char descriptor_table_protodef_hexz_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
     "or_message\030\003 \001(\t\"v\n\006Status\022\026\n\022STATUS_UNS"
     "PECIFIED\020\000\022\014\n\010ACCEPTED\020\001\022\030\n\024REJECTED_WRO"
     "NG_MODEL\020\002\022\030\n\024REJECTED_AT_CAPACITY\020\003\022\022\n\016"
-    "REJECTED_OTHER\020\004\"\334\002\n\017TrainingExample\022\023\n\013"
-    "unix_micros\030\001 \001(\003\022\014\n\004turn\030\007 \001(\005\0222\n\010encod"
-    "ing\030\006 \001(\0162 .hexzpb.TrainingExample.Encod"
-    "ing\022\r\n\005board\030\002 \001(\014\022\023\n\013action_mask\030\010 \001(\014\022"
-    "\022\n\nmove_probs\030\003 \001(\014\022\016\n\006result\030\004 \001(\002\022,\n\005s"
-    "tats\030\005 \001(\0132\035.hexzpb.TrainingExample.Stat"
-    "s\032X\n\005Stats\022\014\n\004move\030\001 \001(\005\022\027\n\017duration_mic"
-    "ros\030\003 \001(\003\022\023\n\013valid_moves\030\004 \001(\005\022\023\n\013visit_"
-    "count\030\005 \001(\005\"\"\n\010Encoding\022\t\n\005NUMPY\020\000\022\013\n\007PY"
-    "TORCH\020\001B\037Z\035github.com/dnswlt/hexz/hexzpb"
-    "b\006proto3"
+    "REJECTED_OTHER\020\004\"\364\002\n\017TrainingExample\022\023\n\013"
+    "unix_micros\030\001 \001(\003\022\014\n\004turn\030\007 \001(\005\022$\n\004move\030"
+    "\t \001(\0132\026.hexzpb.GameEngineMove\0222\n\010encodin"
+    "g\030\006 \001(\0162 .hexzpb.TrainingExample.Encodin"
+    "g\022\r\n\005board\030\002 \001(\014\022\023\n\013action_mask\030\010 \001(\014\022\022\n"
+    "\nmove_probs\030\003 \001(\014\022\016\n\006result\030\004 \001(\002\022,\n\005sta"
+    "ts\030\005 \001(\0132\035.hexzpb.TrainingExample.Stats\032"
+    "J\n\005Stats\022\027\n\017duration_micros\030\003 \001(\003\022\023\n\013val"
+    "id_moves\030\004 \001(\005\022\023\n\013visit_count\030\005 \001(\005\"\"\n\010E"
+    "ncoding\022\t\n\005NUMPY\020\000\022\013\n\007PYTORCH\020\001B\037Z\035githu"
+    "b.com/dnswlt/hexz/hexzpbb\006proto3"
 };
 static const ::_pbi::DescriptorTable* const descriptor_table_hexz_2eproto_deps[1] =
     {
@@ -946,7 +947,7 @@ static ::absl::once_flag descriptor_table_hexz_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_hexz_2eproto = {
     false,
     false,
-    3048,
+    3072,
     descriptor_table_protodef_hexz_2eproto,
     "hexz.proto",
     &descriptor_table_hexz_2eproto_once,
@@ -6709,9 +6710,8 @@ TrainingExample_Stats::TrainingExample_Stats(const TrainingExample_Stats& from)
 inline void TrainingExample_Stats::SharedCtor(::_pb::Arena* arena) {
   (void)arena;
   new (&_impl_) Impl_{
-      decltype(_impl_.move_){0},
-      decltype(_impl_.valid_moves_){0},
       decltype(_impl_.duration_micros_){::int64_t{0}},
+      decltype(_impl_.valid_moves_){0},
       decltype(_impl_.visit_count_){0},
       /*decltype(_impl_._cached_size_)*/ {},
   };
@@ -6734,9 +6734,9 @@ PROTOBUF_NOINLINE void TrainingExample_Stats::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  ::memset(&_impl_.move_, 0, static_cast<::size_t>(
+  ::memset(&_impl_.duration_micros_, 0, static_cast<::size_t>(
       reinterpret_cast<char*>(&_impl_.visit_count_) -
-      reinterpret_cast<char*>(&_impl_.move_)) + sizeof(_impl_.visit_count_));
+      reinterpret_cast<char*>(&_impl_.duration_micros_)) + sizeof(_impl_.visit_count_));
   _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
 }
 
@@ -6748,28 +6748,20 @@ const char* TrainingExample_Stats::_InternalParse(
 
 
 PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
-const ::_pbi::TcParseTable<3, 4, 0, 0, 2> TrainingExample_Stats::_table_ = {
+const ::_pbi::TcParseTable<2, 3, 0, 0, 2> TrainingExample_Stats::_table_ = {
   {
     0,  // no _has_bits_
     0, // no _extensions_
-    5, 56,  // max_field_number, fast_idx_mask
+    5, 24,  // max_field_number, fast_idx_mask
     offsetof(decltype(_table_), field_lookup_table),
-    4294967266,  // skipmap
+    4294967267,  // skipmap
     offsetof(decltype(_table_), field_entries),
-    4,  // num_field_entries
+    3,  // num_field_entries
     0,  // num_aux_entries
     offsetof(decltype(_table_), field_names),  // no aux_entries
     &_TrainingExample_Stats_default_instance_._instance,
     ::_pbi::TcParser::GenericFallback,  // fallback
   }, {{
-    {::_pbi::TcParser::MiniParse, {}},
-    // int32 move = 1;
-    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.move_), 63>(),
-     {8, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.move_)}},
-    {::_pbi::TcParser::MiniParse, {}},
-    // int64 duration_micros = 3;
-    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(TrainingExample_Stats, _impl_.duration_micros_), 63>(),
-     {24, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.duration_micros_)}},
     // int32 valid_moves = 4;
     {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.valid_moves_), 63>(),
      {32, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.valid_moves_)}},
@@ -6777,13 +6769,12 @@ const ::_pbi::TcParseTable<3, 4, 0, 0, 2> TrainingExample_Stats::_table_ = {
     {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.visit_count_), 63>(),
      {40, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.visit_count_)}},
     {::_pbi::TcParser::MiniParse, {}},
-    {::_pbi::TcParser::MiniParse, {}},
+    // int64 duration_micros = 3;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(TrainingExample_Stats, _impl_.duration_micros_), 63>(),
+     {24, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.duration_micros_)}},
   }}, {{
     65535, 65535
   }}, {{
-    // int32 move = 1;
-    {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.move_), 0, 0,
-    (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
     // int64 duration_micros = 3;
     {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.duration_micros_), 0, 0,
     (0 | ::_fl::kFcSingular | ::_fl::kInt64)},
@@ -6805,13 +6796,6 @@ const ::_pbi::TcParseTable<3, 4, 0, 0, 2> TrainingExample_Stats::_table_ = {
   // @@protoc_insertion_point(serialize_to_array_start:hexzpb.TrainingExample.Stats)
   ::uint32_t cached_has_bits = 0;
   (void)cached_has_bits;
-
-  // int32 move = 1;
-  if (this->_internal_move() != 0) {
-    target = ::google::protobuf::internal::WireFormatLite::
-        WriteInt32ToArrayWithField<1>(
-            stream, this->_internal_move(), target);
-  }
 
   // int64 duration_micros = 3;
   if (this->_internal_duration_micros() != 0) {
@@ -6851,22 +6835,16 @@ const ::_pbi::TcParseTable<3, 4, 0, 0, 2> TrainingExample_Stats::_table_ = {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  // int32 move = 1;
-  if (this->_internal_move() != 0) {
-    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
-        this->_internal_move());
+  // int64 duration_micros = 3;
+  if (this->_internal_duration_micros() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
+        this->_internal_duration_micros());
   }
 
   // int32 valid_moves = 4;
   if (this->_internal_valid_moves() != 0) {
     total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
         this->_internal_valid_moves());
-  }
-
-  // int64 duration_micros = 3;
-  if (this->_internal_duration_micros() != 0) {
-    total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
-        this->_internal_duration_micros());
   }
 
   // int32 visit_count = 5;
@@ -6893,14 +6871,11 @@ void TrainingExample_Stats::MergeImpl(::google::protobuf::Message& to_msg, const
   ::uint32_t cached_has_bits = 0;
   (void) cached_has_bits;
 
-  if (from._internal_move() != 0) {
-    _this->_internal_set_move(from._internal_move());
+  if (from._internal_duration_micros() != 0) {
+    _this->_internal_set_duration_micros(from._internal_duration_micros());
   }
   if (from._internal_valid_moves() != 0) {
     _this->_internal_set_valid_moves(from._internal_valid_moves());
-  }
-  if (from._internal_duration_micros() != 0) {
-    _this->_internal_set_duration_micros(from._internal_duration_micros());
   }
   if (from._internal_visit_count() != 0) {
     _this->_internal_set_visit_count(from._internal_visit_count());
@@ -6925,9 +6900,9 @@ void TrainingExample_Stats::InternalSwap(TrainingExample_Stats* other) {
   ::google::protobuf::internal::memswap<
       PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.visit_count_)
       + sizeof(TrainingExample_Stats::_impl_.visit_count_)
-      - PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.move_)>(
-          reinterpret_cast<char*>(&_impl_.move_),
-          reinterpret_cast<char*>(&other->_impl_.move_));
+      - PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.duration_micros_)>(
+          reinterpret_cast<char*>(&_impl_.duration_micros_),
+          reinterpret_cast<char*>(&other->_impl_.duration_micros_));
 }
 
 ::google::protobuf::Metadata TrainingExample_Stats::GetMetadata() const {
@@ -6942,12 +6917,19 @@ class TrainingExample::_Internal {
   using HasBits = decltype(std::declval<TrainingExample>()._impl_._has_bits_);
   static constexpr ::int32_t kHasBitsOffset =
     8 * PROTOBUF_FIELD_OFFSET(TrainingExample, _impl_._has_bits_);
+  static const ::hexzpb::GameEngineMove& move(const TrainingExample* msg);
+  static void set_has_move(HasBits* has_bits) {
+    (*has_bits)[0] |= 2u;
+  }
   static const ::hexzpb::TrainingExample_Stats& stats(const TrainingExample* msg);
   static void set_has_stats(HasBits* has_bits) {
     (*has_bits)[0] |= 1u;
   }
 };
 
+const ::hexzpb::GameEngineMove& TrainingExample::_Internal::move(const TrainingExample* msg) {
+  return *msg->_impl_.move_;
+}
 const ::hexzpb::TrainingExample_Stats& TrainingExample::_Internal::stats(const TrainingExample* msg) {
   return *msg->_impl_.stats_;
 }
@@ -6966,6 +6948,7 @@ TrainingExample::TrainingExample(const TrainingExample& from) : ::google::protob
       decltype(_impl_.move_probs_){},
       decltype(_impl_.action_mask_){},
       decltype(_impl_.stats_){nullptr},
+      decltype(_impl_.move_){nullptr},
       decltype(_impl_.unix_micros_){},
       decltype(_impl_.result_){},
       decltype(_impl_.encoding_){},
@@ -6997,6 +6980,9 @@ TrainingExample::TrainingExample(const TrainingExample& from) : ::google::protob
   if ((from._impl_._has_bits_[0] & 0x00000001u) != 0) {
     _this->_impl_.stats_ = new ::hexzpb::TrainingExample_Stats(*from._impl_.stats_);
   }
+  if ((from._impl_._has_bits_[0] & 0x00000002u) != 0) {
+    _this->_impl_.move_ = new ::hexzpb::GameEngineMove(*from._impl_.move_);
+  }
   ::memcpy(&_impl_.unix_micros_, &from._impl_.unix_micros_,
     static_cast<::size_t>(reinterpret_cast<char*>(&_impl_.turn_) -
     reinterpret_cast<char*>(&_impl_.unix_micros_)) + sizeof(_impl_.turn_));
@@ -7012,6 +6998,7 @@ inline void TrainingExample::SharedCtor(::_pb::Arena* arena) {
       decltype(_impl_.move_probs_){},
       decltype(_impl_.action_mask_){},
       decltype(_impl_.stats_){nullptr},
+      decltype(_impl_.move_){nullptr},
       decltype(_impl_.unix_micros_){::int64_t{0}},
       decltype(_impl_.result_){0},
       decltype(_impl_.encoding_){0},
@@ -7041,6 +7028,7 @@ inline void TrainingExample::SharedDtor() {
   _impl_.move_probs_.Destroy();
   _impl_.action_mask_.Destroy();
   if (this != internal_default_instance()) delete _impl_.stats_;
+  if (this != internal_default_instance()) delete _impl_.move_;
 }
 void TrainingExample::SetCachedSize(int size) const {
   _impl_._cached_size_.Set(size);
@@ -7056,9 +7044,15 @@ PROTOBUF_NOINLINE void TrainingExample::Clear() {
   _impl_.move_probs_.ClearToEmpty();
   _impl_.action_mask_.ClearToEmpty();
   cached_has_bits = _impl_._has_bits_[0];
-  if (cached_has_bits & 0x00000001u) {
-    ABSL_DCHECK(_impl_.stats_ != nullptr);
-    _impl_.stats_->Clear();
+  if (cached_has_bits & 0x00000003u) {
+    if (cached_has_bits & 0x00000001u) {
+      ABSL_DCHECK(_impl_.stats_ != nullptr);
+      _impl_.stats_->Clear();
+    }
+    if (cached_has_bits & 0x00000002u) {
+      ABSL_DCHECK(_impl_.move_ != nullptr);
+      _impl_.move_->Clear();
+    }
   }
   ::memset(&_impl_.unix_micros_, 0, static_cast<::size_t>(
       reinterpret_cast<char*>(&_impl_.turn_) -
@@ -7075,23 +7069,21 @@ const char* TrainingExample::_InternalParse(
 
 
 PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
-const ::_pbi::TcParseTable<3, 8, 1, 0, 2> TrainingExample::_table_ = {
+const ::_pbi::TcParseTable<4, 9, 2, 0, 2> TrainingExample::_table_ = {
   {
     PROTOBUF_FIELD_OFFSET(TrainingExample, _impl_._has_bits_),
     0, // no _extensions_
-    8, 56,  // max_field_number, fast_idx_mask
+    9, 120,  // max_field_number, fast_idx_mask
     offsetof(decltype(_table_), field_lookup_table),
-    4294967040,  // skipmap
+    4294966784,  // skipmap
     offsetof(decltype(_table_), field_entries),
-    8,  // num_field_entries
-    1,  // num_aux_entries
+    9,  // num_field_entries
+    2,  // num_aux_entries
     offsetof(decltype(_table_), aux_entries),
     &_TrainingExample_default_instance_._instance,
     ::_pbi::TcParser::GenericFallback,  // fallback
   }, {{
-    // bytes action_mask = 8;
-    {::_pbi::TcParser::FastBS1,
-     {66, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample, _impl_.action_mask_)}},
+    {::_pbi::TcParser::MiniParse, {}},
     // int64 unix_micros = 1;
     {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(TrainingExample, _impl_.unix_micros_), 63>(),
      {8, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample, _impl_.unix_micros_)}},
@@ -7113,6 +7105,18 @@ const ::_pbi::TcParseTable<3, 8, 1, 0, 2> TrainingExample::_table_ = {
     // int32 turn = 7;
     {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample, _impl_.turn_), 63>(),
      {56, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample, _impl_.turn_)}},
+    // bytes action_mask = 8;
+    {::_pbi::TcParser::FastBS1,
+     {66, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample, _impl_.action_mask_)}},
+    // .hexzpb.GameEngineMove move = 9;
+    {::_pbi::TcParser::FastMtS1,
+     {74, 1, 1, PROTOBUF_FIELD_OFFSET(TrainingExample, _impl_.move_)}},
+    {::_pbi::TcParser::MiniParse, {}},
+    {::_pbi::TcParser::MiniParse, {}},
+    {::_pbi::TcParser::MiniParse, {}},
+    {::_pbi::TcParser::MiniParse, {}},
+    {::_pbi::TcParser::MiniParse, {}},
+    {::_pbi::TcParser::MiniParse, {}},
   }}, {{
     65535, 65535
   }}, {{
@@ -7140,8 +7144,12 @@ const ::_pbi::TcParseTable<3, 8, 1, 0, 2> TrainingExample::_table_ = {
     // bytes action_mask = 8;
     {PROTOBUF_FIELD_OFFSET(TrainingExample, _impl_.action_mask_), -1, 0,
     (0 | ::_fl::kFcSingular | ::_fl::kBytes | ::_fl::kRepAString)},
+    // .hexzpb.GameEngineMove move = 9;
+    {PROTOBUF_FIELD_OFFSET(TrainingExample, _impl_.move_), _Internal::kHasBitsOffset + 1, 1,
+    (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
   }}, {{
     {::_pbi::TcParser::GetTable<::hexzpb::TrainingExample_Stats>()},
+    {::_pbi::TcParser::GetTable<::hexzpb::GameEngineMove>()},
   }}, {{
   }},
 };
@@ -7212,6 +7220,13 @@ const ::_pbi::TcParseTable<3, 8, 1, 0, 2> TrainingExample::_table_ = {
     target = stream->WriteBytesMaybeAliased(8, _s, target);
   }
 
+  // .hexzpb.GameEngineMove move = 9;
+  if (cached_has_bits & 0x00000002u) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      InternalWriteMessage(9, _Internal::move(this),
+        _Internal::move(this).GetCachedSize(), target, stream);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target =
         ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
@@ -7247,14 +7262,23 @@ const ::_pbi::TcParseTable<3, 8, 1, 0, 2> TrainingExample::_table_ = {
                                     this->_internal_action_mask());
   }
 
-  // .hexzpb.TrainingExample.Stats stats = 5;
   cached_has_bits = _impl_._has_bits_[0];
-  if (cached_has_bits & 0x00000001u) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::MessageSize(
-        *_impl_.stats_);
-  }
+  if (cached_has_bits & 0x00000003u) {
+    // .hexzpb.TrainingExample.Stats stats = 5;
+    if (cached_has_bits & 0x00000001u) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          *_impl_.stats_);
+    }
 
+    // .hexzpb.GameEngineMove move = 9;
+    if (cached_has_bits & 0x00000002u) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          *_impl_.move_);
+    }
+
+  }
   // int64 unix_micros = 1;
   if (this->_internal_unix_micros() != 0) {
     total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
@@ -7310,9 +7334,16 @@ void TrainingExample::MergeImpl(::google::protobuf::Message& to_msg, const ::goo
   if (!from._internal_action_mask().empty()) {
     _this->_internal_set_action_mask(from._internal_action_mask());
   }
-  if ((from._impl_._has_bits_[0] & 0x00000001u) != 0) {
-    _this->_internal_mutable_stats()->::hexzpb::TrainingExample_Stats::MergeFrom(
-        from._internal_stats());
+  cached_has_bits = from._impl_._has_bits_[0];
+  if (cached_has_bits & 0x00000003u) {
+    if (cached_has_bits & 0x00000001u) {
+      _this->_internal_mutable_stats()->::hexzpb::TrainingExample_Stats::MergeFrom(
+          from._internal_stats());
+    }
+    if (cached_has_bits & 0x00000002u) {
+      _this->_internal_mutable_move()->::hexzpb::GameEngineMove::MergeFrom(
+          from._internal_move());
+    }
   }
   if (from._internal_unix_micros() != 0) {
     _this->_internal_set_unix_micros(from._internal_unix_micros());

@@ -192,9 +192,6 @@ def create_app():
         resp: hexz_pb2.AddTrainingExamplesResponse = reply_q.get(timeout=5)
         return resp.SerializeToString(), {"Content-Type": "application/x-protobuf"}
 
-    @app.get("/examples/browse")
-    def examples_browse():
-        
     @app.get("/examples/latest")
     def examples_html():
         """Returns a HTML file with SVG images of the latest example batch."""

@@ -486,6 +486,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       game_over = true;
       break;
     }
+
     if (!is_fast_run) {
       // Add example.
       hexzpb::TrainingExample example;
@@ -493,7 +494,6 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       example.set_unix_micros(move_ready);
       example.set_turn(root->turn());
       example.mutable_stats()->set_duration_micros(move_ready - move_started);
-      example.mutable_stats()->set_move(n);
       example.mutable_stats()->set_valid_moves(root->NumChildren());
       example.mutable_stats()->set_visit_count(root->visit_count());
       example.set_encoding(hexzpb::TrainingExample::PYTORCH);
@@ -507,13 +507,14 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       example.mutable_move_probs()->assign(enc_pr.begin(), enc_pr.end());
       examples.push_back(example);
     }
-    std::string stats = root->Stats();
     if (n < 5 || n % 10 == 0) {
+      std::string stats = root->Stats();
       ABSL_LOG(INFO) << "Move " << n << " (turn: " << root->turn() << ") "
                      << board.ShortDebugString() << " after "
                      << (float)(UnixMicros() - started_micros) / 1000000
                      << "s. stats: " << stats;
     } else {
+      std::string stats = root->Stats();
       ABSL_DLOG(INFO) << "Move " << n << " (turn: " << root->turn() << ") "
                       << board.ShortDebugString() << " after "
                       << (float)(UnixMicros() - started_micros) / 1000000
@@ -521,9 +522,21 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     }
 
     int turn = root->turn();
-    // NOTE: Must not access root after this step!
+    // NOTE: Must not access root.children() after this step!
     std::unique_ptr<Node> child = root->SampleChildAsRoot();
-    board.MakeMove(turn, child->move());
+    const auto& move = child->move();
+    if (!is_fast_run) {
+      // Update TrainingExample with move information.
+      auto* mv = examples.rbegin()->mutable_move();
+      mv->set_move(n);
+      mv->set_cell_type(move.typ == Move::kFlag ? hexzpb::Field::FLAG
+                                                : hexzpb::Field::NORMAL);
+      mv->set_row(move.r);
+      mv->set_col(move.c);
+      mv->set_player_num(turn + 1);  // 1-based
+    }
+    
+    board.MakeMove(turn, move);
     root = std::move(child);
     root->ResetTree();
   }

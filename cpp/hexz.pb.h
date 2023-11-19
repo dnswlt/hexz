@@ -4687,19 +4687,18 @@ class TrainingExample_Stats final :
   // accessors -------------------------------------------------------
 
   enum : int {
-    kMoveFieldNumber = 1,
-    kValidMovesFieldNumber = 4,
     kDurationMicrosFieldNumber = 3,
+    kValidMovesFieldNumber = 4,
     kVisitCountFieldNumber = 5,
   };
-  // int32 move = 1;
-  void clear_move() ;
-  ::int32_t move() const;
-  void set_move(::int32_t value);
+  // int64 duration_micros = 3;
+  void clear_duration_micros() ;
+  ::int64_t duration_micros() const;
+  void set_duration_micros(::int64_t value);
 
   private:
-  ::int32_t _internal_move() const;
-  void _internal_set_move(::int32_t value);
+  ::int64_t _internal_duration_micros() const;
+  void _internal_set_duration_micros(::int64_t value);
 
   public:
   // int32 valid_moves = 4;
@@ -4710,16 +4709,6 @@ class TrainingExample_Stats final :
   private:
   ::int32_t _internal_valid_moves() const;
   void _internal_set_valid_moves(::int32_t value);
-
-  public:
-  // int64 duration_micros = 3;
-  void clear_duration_micros() ;
-  ::int64_t duration_micros() const;
-  void set_duration_micros(::int64_t value);
-
-  private:
-  ::int64_t _internal_duration_micros() const;
-  void _internal_set_duration_micros(::int64_t value);
 
   public:
   // int32 visit_count = 5;
@@ -4737,14 +4726,13 @@ class TrainingExample_Stats final :
   class _Internal;
 
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<3, 4, 0, 0, 2> _table_;
+  static const ::google::protobuf::internal::TcParseTable<2, 3, 0, 0, 2> _table_;
   template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
   struct Impl_ {
-    ::int32_t move_;
-    ::int32_t valid_moves_;
     ::int64_t duration_micros_;
+    ::int32_t valid_moves_;
     ::int32_t visit_count_;
     mutable ::google::protobuf::internal::CachedSize _cached_size_;
     PROTOBUF_TSAN_DECLARE_MEMBER
@@ -4907,6 +4895,7 @@ class TrainingExample final :
     kMoveProbsFieldNumber = 3,
     kActionMaskFieldNumber = 8,
     kStatsFieldNumber = 5,
+    kMoveFieldNumber = 9,
     kUnixMicrosFieldNumber = 1,
     kResultFieldNumber = 4,
     kEncodingFieldNumber = 6,
@@ -4975,6 +4964,21 @@ class TrainingExample final :
   ::hexzpb::TrainingExample_Stats* _internal_mutable_stats();
 
   public:
+  // .hexzpb.GameEngineMove move = 9;
+  bool has_move() const;
+  void clear_move() ;
+  const ::hexzpb::GameEngineMove& move() const;
+  PROTOBUF_NODISCARD ::hexzpb::GameEngineMove* release_move();
+  ::hexzpb::GameEngineMove* mutable_move();
+  void set_allocated_move(::hexzpb::GameEngineMove* value);
+  void unsafe_arena_set_allocated_move(::hexzpb::GameEngineMove* value);
+  ::hexzpb::GameEngineMove* unsafe_arena_release_move();
+
+  private:
+  const ::hexzpb::GameEngineMove& _internal_move() const;
+  ::hexzpb::GameEngineMove* _internal_mutable_move();
+
+  public:
   // int64 unix_micros = 1;
   void clear_unix_micros() ;
   ::int64_t unix_micros() const;
@@ -5020,7 +5024,7 @@ class TrainingExample final :
   class _Internal;
 
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<3, 8, 1, 0, 2> _table_;
+  static const ::google::protobuf::internal::TcParseTable<4, 9, 2, 0, 2> _table_;
   template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
@@ -5031,6 +5035,7 @@ class TrainingExample final :
     ::google::protobuf::internal::ArenaStringPtr move_probs_;
     ::google::protobuf::internal::ArenaStringPtr action_mask_;
     ::hexzpb::TrainingExample_Stats* stats_;
+    ::hexzpb::GameEngineMove* move_;
     ::int64_t unix_micros_;
     float result_;
     int encoding_;
@@ -8332,28 +8337,6 @@ inline void AddTrainingExamplesResponse::set_allocated_error_message(std::string
 
 // TrainingExample_Stats
 
-// int32 move = 1;
-inline void TrainingExample_Stats::clear_move() {
-  _impl_.move_ = 0;
-}
-inline ::int32_t TrainingExample_Stats::move() const {
-  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.Stats.move)
-  return _internal_move();
-}
-inline void TrainingExample_Stats::set_move(::int32_t value) {
-  _internal_set_move(value);
-  // @@protoc_insertion_point(field_set:hexzpb.TrainingExample.Stats.move)
-}
-inline ::int32_t TrainingExample_Stats::_internal_move() const {
-  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
-  return _impl_.move_;
-}
-inline void TrainingExample_Stats::_internal_set_move(::int32_t value) {
-  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  ;
-  _impl_.move_ = value;
-}
-
 // int64 duration_micros = 3;
 inline void TrainingExample_Stats::clear_duration_micros() {
   _impl_.duration_micros_ = ::int64_t{0};
@@ -8466,6 +8449,102 @@ inline void TrainingExample::_internal_set_turn(::int32_t value) {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   ;
   _impl_.turn_ = value;
+}
+
+// .hexzpb.GameEngineMove move = 9;
+inline bool TrainingExample::has_move() const {
+  bool value = (_impl_._has_bits_[0] & 0x00000002u) != 0;
+  PROTOBUF_ASSUME(!value || _impl_.move_ != nullptr);
+  return value;
+}
+inline void TrainingExample::clear_move() {
+  if (_impl_.move_ != nullptr) _impl_.move_->Clear();
+  _impl_._has_bits_[0] &= ~0x00000002u;
+}
+inline const ::hexzpb::GameEngineMove& TrainingExample::_internal_move() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  const ::hexzpb::GameEngineMove* p = _impl_.move_;
+  return p != nullptr ? *p : reinterpret_cast<const ::hexzpb::GameEngineMove&>(::hexzpb::_GameEngineMove_default_instance_);
+}
+inline const ::hexzpb::GameEngineMove& TrainingExample::move() const {
+  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.move)
+  return _internal_move();
+}
+inline void TrainingExample::unsafe_arena_set_allocated_move(::hexzpb::GameEngineMove* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  if (GetArenaForAllocation() == nullptr) {
+    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.move_);
+  }
+  _impl_.move_ = reinterpret_cast<::hexzpb::GameEngineMove*>(value);
+  if (value != nullptr) {
+    _impl_._has_bits_[0] |= 0x00000002u;
+  } else {
+    _impl_._has_bits_[0] &= ~0x00000002u;
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:hexzpb.TrainingExample.move)
+}
+inline ::hexzpb::GameEngineMove* TrainingExample::release_move() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+
+  _impl_._has_bits_[0] &= ~0x00000002u;
+  ::hexzpb::GameEngineMove* released = _impl_.move_;
+  _impl_.move_ = nullptr;
+#ifdef PROTOBUF_FORCE_COPY_IN_RELEASE
+  auto* old = reinterpret_cast<::google::protobuf::MessageLite*>(released);
+  released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+  if (GetArenaForAllocation() == nullptr) {
+    delete old;
+  }
+#else   // PROTOBUF_FORCE_COPY_IN_RELEASE
+  if (GetArenaForAllocation() != nullptr) {
+    released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+  }
+#endif  // !PROTOBUF_FORCE_COPY_IN_RELEASE
+  return released;
+}
+inline ::hexzpb::GameEngineMove* TrainingExample::unsafe_arena_release_move() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:hexzpb.TrainingExample.move)
+
+  _impl_._has_bits_[0] &= ~0x00000002u;
+  ::hexzpb::GameEngineMove* temp = _impl_.move_;
+  _impl_.move_ = nullptr;
+  return temp;
+}
+inline ::hexzpb::GameEngineMove* TrainingExample::_internal_mutable_move() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_._has_bits_[0] |= 0x00000002u;
+  if (_impl_.move_ == nullptr) {
+    auto* p = CreateMaybeMessage<::hexzpb::GameEngineMove>(GetArenaForAllocation());
+    _impl_.move_ = reinterpret_cast<::hexzpb::GameEngineMove*>(p);
+  }
+  return _impl_.move_;
+}
+inline ::hexzpb::GameEngineMove* TrainingExample::mutable_move() {
+  ::hexzpb::GameEngineMove* _msg = _internal_mutable_move();
+  // @@protoc_insertion_point(field_mutable:hexzpb.TrainingExample.move)
+  return _msg;
+}
+inline void TrainingExample::set_allocated_move(::hexzpb::GameEngineMove* value) {
+  ::google::protobuf::Arena* message_arena = GetArenaForAllocation();
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  if (message_arena == nullptr) {
+    delete reinterpret_cast<::hexzpb::GameEngineMove*>(_impl_.move_);
+  }
+
+  if (value != nullptr) {
+    ::google::protobuf::Arena* submessage_arena =
+        ::google::protobuf::Arena::InternalGetOwningArena(reinterpret_cast<::hexzpb::GameEngineMove*>(value));
+    if (message_arena != submessage_arena) {
+      value = ::google::protobuf::internal::GetOwnedMessage(message_arena, value, submessage_arena);
+    }
+    _impl_._has_bits_[0] |= 0x00000002u;
+  } else {
+    _impl_._has_bits_[0] &= ~0x00000002u;
+  }
+
+  _impl_.move_ = reinterpret_cast<::hexzpb::GameEngineMove*>(value);
+  // @@protoc_insertion_point(field_set_allocated:hexzpb.TrainingExample.move)
 }
 
 // .hexzpb.TrainingExample.Encoding encoding = 6;

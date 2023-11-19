@@ -326,8 +326,8 @@ TEST(MCTSTest, PlayGame) {
   EXPECT_EQ(ex0.stats().visit_count(), config.runs_per_move);
   // Every game has 85 initial flag positions.
   EXPECT_EQ(ex0.stats().valid_moves(), 85);
-  EXPECT_EQ(ex0.stats().move(), 0);
-  EXPECT_EQ(ex1.stats().move(), 1);
+  EXPECT_EQ(ex0.move().move(), 0);
+  EXPECT_EQ(ex1.move().move(), 1);
   EXPECT_EQ(ex0.turn(), 0);
   EXPECT_EQ(ex1.turn(), 1);
   // Check board is a Tensor of the right shape.
