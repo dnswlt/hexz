@@ -15,7 +15,7 @@ docker push europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/hexz:latest
 Run the Artifact Registry image locally:
 
 ```bash
-PORT=8080 && docker-compose run --rm -e PORT=$PORT hexz
+PORT=8080 && docker run -p 8080:${PORT} -e PORT=${PORT} europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/hexz:latest
 ```
 
 Deploy to Cloud Run:
