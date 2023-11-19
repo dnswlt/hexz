@@ -104,7 +104,7 @@ func main() {
 		}
 		hlog.Infof("connected to Redis at %s", cfg.RedisAddr)
 		// Postgres (optional)
-		var dbStore *hexzsql.PostgresStore
+		var dbStore hexz.DatabaseStore
 		if cfg.PostgresURL != "" {
 			dbStore, err = hexzsql.NewPostgresStore(context.Background(), cfg.PostgresURL)
 			if err != nil {
