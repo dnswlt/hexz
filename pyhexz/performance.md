@@ -232,3 +232,5 @@ https://ai.stackexchange.com/questions/25939/alpha-zero-does-not-converge-for-co
 Leela Zero's Q value settings:
 https://lczero.org/play/flags/#:~:text=%E2%80%9CFirst%20Play%20Urgency%E2%80%9D%20changes%20search,absolute%E2%80%9D%20directly%20uses%20that%20value.
 
+And its implementation:
+https://github.com/leela-zero/leela-zero/blob/next/src/UCTNode.cpp#L270

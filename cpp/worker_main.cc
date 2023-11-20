@@ -16,6 +16,7 @@
 #include <fstream>
 #include <iostream>
 #include <mutex>
+#include <random>
 #include <sstream>
 #include <thread>
 #include <utility>
@@ -36,6 +37,16 @@ std::string ModelId(const hexzpb::ModelKey& key) {
 
 bool SameKey(const hexzpb::ModelKey& lhs, const hexzpb::ModelKey& rhs) {
   return lhs.name() == rhs.name() && lhs.checkpoint() == rhs.checkpoint();
+}
+
+std::string RandomUid() {
+  std::uniform_int_distribution<int> dis{0, 15};
+  std::ostringstream os;
+  os << std::hex;
+  for (int i = 0; i < 8; i++) {
+    os << dis(internal::rng);
+  }
+  return os.str();
 }
 
 }  // namespace
@@ -75,6 +86,9 @@ absl::StatusOr<std::unique_ptr<TorchModel>> FetchLatestModel(RPCClient& rpc) {
 
 void GenerateExamples(const Config& config) {
   const auto started_micros = UnixMicros();
+  const std::string execution_id = RandomUid();
+  ABSL_LOG(INFO) << "Generating examples using execution_id " << execution_id
+                 << " and training server URL " << config.training_server_url;
   RPCClient rpc(config);
   auto model_or = FetchLatestModel(rpc);
   if (!model_or.ok()) {
@@ -109,7 +123,7 @@ void GenerateExamples(const Config& config) {
       return;
     }
     const int n_examples = examples->size();
-    auto resp = rpc.SendExamples(model->Key(), *std::move(examples));
+    auto resp = rpc.SendExamples(execution_id, model->Key(), *std::move(examples));
     if (!resp.ok()) {
       ABSL_LOG(ERROR) << "Failed to send examples: " << resp.status();
       return;
@@ -209,8 +223,6 @@ int main() {
   }
   // END EXPERIMENT
   if (config.training_server_url != "") {
-    ABSL_LOG(INFO)
-        << "Generating examples and sending them to the training server.";
     hexz::GenerateExamples(config);
   }
   if (memmon.joinable()) {

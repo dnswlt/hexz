@@ -237,12 +237,14 @@ class ModelKey(_message.Message):
     def __init__(self, name: _Optional[str] = ..., checkpoint: _Optional[int] = ...) -> None: ...
 
 class AddTrainingExamplesRequest(_message.Message):
-    __slots__ = ["model_key", "examples"]
+    __slots__ = ["model_key", "examples", "execution_id"]
     MODEL_KEY_FIELD_NUMBER: _ClassVar[int]
     EXAMPLES_FIELD_NUMBER: _ClassVar[int]
+    EXECUTION_ID_FIELD_NUMBER: _ClassVar[int]
     model_key: ModelKey
     examples: _containers.RepeatedCompositeFieldContainer[TrainingExample]
-    def __init__(self, model_key: _Optional[_Union[ModelKey, _Mapping]] = ..., examples: _Optional[_Iterable[_Union[TrainingExample, _Mapping]]] = ...) -> None: ...
+    execution_id: str
+    def __init__(self, model_key: _Optional[_Union[ModelKey, _Mapping]] = ..., examples: _Optional[_Iterable[_Union[TrainingExample, _Mapping]]] = ..., execution_id: _Optional[str] = ...) -> None: ...
 
 class AddTrainingExamplesResponse(_message.Message):
     __slots__ = ["status", "latest_model", "error_message"]
@@ -267,13 +269,20 @@ class AddTrainingExamplesResponse(_message.Message):
     def __init__(self, status: _Optional[_Union[AddTrainingExamplesResponse.Status, str]] = ..., latest_model: _Optional[_Union[ModelKey, _Mapping]] = ..., error_message: _Optional[str] = ...) -> None: ...
 
 class TrainingExample(_message.Message):
-    __slots__ = ["unix_micros", "turn", "move", "encoding", "board", "action_mask", "move_probs", "result", "stats"]
+    __slots__ = ["unix_micros", "turn", "move", "encoding", "board", "action_mask", "move_probs", "result", "model_predictions", "stats"]
     class Encoding(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
         __slots__ = []
         NUMPY: _ClassVar[TrainingExample.Encoding]
         PYTORCH: _ClassVar[TrainingExample.Encoding]
     NUMPY: TrainingExample.Encoding
     PYTORCH: TrainingExample.Encoding
+    class ModelPredictions(_message.Message):
+        __slots__ = ["priors", "value"]
+        PRIORS_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        priors: bytes
+        value: float
+        def __init__(self, priors: _Optional[bytes] = ..., value: _Optional[float] = ...) -> None: ...
     class Stats(_message.Message):
         __slots__ = ["duration_micros", "valid_moves", "visit_count"]
         DURATION_MICROS_FIELD_NUMBER: _ClassVar[int]
@@ -291,6 +300,7 @@ class TrainingExample(_message.Message):
     ACTION_MASK_FIELD_NUMBER: _ClassVar[int]
     MOVE_PROBS_FIELD_NUMBER: _ClassVar[int]
     RESULT_FIELD_NUMBER: _ClassVar[int]
+    MODEL_PREDICTIONS_FIELD_NUMBER: _ClassVar[int]
     STATS_FIELD_NUMBER: _ClassVar[int]
     unix_micros: int
     turn: int
@@ -300,5 +310,6 @@ class TrainingExample(_message.Message):
     action_mask: bytes
     move_probs: bytes
     result: float
+    model_predictions: TrainingExample.ModelPredictions
     stats: TrainingExample.Stats
-    def __init__(self, unix_micros: _Optional[int] = ..., turn: _Optional[int] = ..., move: _Optional[_Union[GameEngineMove, _Mapping]] = ..., encoding: _Optional[_Union[TrainingExample.Encoding, str]] = ..., board: _Optional[bytes] = ..., action_mask: _Optional[bytes] = ..., move_probs: _Optional[bytes] = ..., result: _Optional[float] = ..., stats: _Optional[_Union[TrainingExample.Stats, _Mapping]] = ...) -> None: ...
+    def __init__(self, unix_micros: _Optional[int] = ..., turn: _Optional[int] = ..., move: _Optional[_Union[GameEngineMove, _Mapping]] = ..., encoding: _Optional[_Union[TrainingExample.Encoding, str]] = ..., board: _Optional[bytes] = ..., action_mask: _Optional[bytes] = ..., move_probs: _Optional[bytes] = ..., result: _Optional[float] = ..., model_predictions: _Optional[_Union[TrainingExample.ModelPredictions, _Mapping]] = ..., stats: _Optional[_Union[TrainingExample.Stats, _Mapping]] = ...) -> None: ...

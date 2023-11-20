@@ -185,6 +185,9 @@ message ModelKey {
 message AddTrainingExamplesRequest {
     ModelKey model_key = 1;
     repeated TrainingExample examples = 2;
+    // ID identifying the worker run that generated this example.
+    // Typically a random UUID.
+    string execution_id = 3;
 }
 
 message AddTrainingExamplesResponse {
@@ -239,6 +242,16 @@ message TrainingExample {
     // The outcome of the game, from the perspective of the current player:
     // -1: lost, 0: draw, 1: won
     float result = 4;
+
+    // Model outputs during self-play.
+    message ModelPredictions {
+        // Encoded array containing the (2, 11, 10) prior move probabilities as predicted
+        // by the model. If enabled, contains the added Dirichlet noise, i.e., these
+        // priors were used for the neural MCTS runs.
+        bytes priors = 1;
+        float value = 2;
+    }
+    ModelPredictions model_predictions = 10;
 
     message Stats {
         // Time it took to generate this example (i.e., to generate the corresponding

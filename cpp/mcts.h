@@ -90,6 +90,10 @@ class Node {
   // Sets the initial move probabilities ("policy") obtained from the model
   // prediction.
   void SetMoveProbs(torch::Tensor move_probs);
+  // Returns the prior move probabilities as a (2, 11, 10) tensor.
+  // The priors will include Dirichlet noise, if it was added.
+  torch::Tensor Priors() const;
+
   // Sets the value of this node (typically: as predicted by the model).
   // The value should range between -1 and 1; values greater than 0 predict that
   // it is a win for the player whose turn it is in this node.

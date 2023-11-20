@@ -122,6 +122,9 @@ extern SuggestMoveStats_ScoredMoveDefaultTypeInternal _SuggestMoveStats_ScoredMo
 class TrainingExample;
 struct TrainingExampleDefaultTypeInternal;
 extern TrainingExampleDefaultTypeInternal _TrainingExample_default_instance_;
+class TrainingExample_ModelPredictions;
+struct TrainingExample_ModelPredictionsDefaultTypeInternal;
+extern TrainingExample_ModelPredictionsDefaultTypeInternal _TrainingExample_ModelPredictions_default_instance_;
 class TrainingExample_Stats;
 struct TrainingExample_StatsDefaultTypeInternal;
 extern TrainingExample_StatsDefaultTypeInternal _TrainingExample_Stats_default_instance_;
@@ -4287,6 +4290,7 @@ class AddTrainingExamplesRequest final :
 
   enum : int {
     kExamplesFieldNumber = 2,
+    kExecutionIdFieldNumber = 3,
     kModelKeyFieldNumber = 1,
   };
   // repeated .hexzpb.TrainingExample examples = 2;
@@ -4307,6 +4311,22 @@ class AddTrainingExamplesRequest final :
   ::hexzpb::TrainingExample* add_examples();
   const ::google::protobuf::RepeatedPtrField< ::hexzpb::TrainingExample >&
       examples() const;
+  // string execution_id = 3;
+  void clear_execution_id() ;
+  const std::string& execution_id() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_execution_id(Arg_&& arg, Args_... args);
+  std::string* mutable_execution_id();
+  PROTOBUF_NODISCARD std::string* release_execution_id();
+  void set_allocated_execution_id(std::string* ptr);
+
+  private:
+  const std::string& _internal_execution_id() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_execution_id(
+      const std::string& value);
+  std::string* _internal_mutable_execution_id();
+
+  public:
   // .hexzpb.ModelKey model_key = 1;
   bool has_model_key() const;
   void clear_model_key() ;
@@ -4327,7 +4347,7 @@ class AddTrainingExamplesRequest final :
   class _Internal;
 
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<1, 2, 2, 0, 2> _table_;
+  static const ::google::protobuf::internal::TcParseTable<2, 3, 2, 54, 2> _table_;
   template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
@@ -4335,6 +4355,7 @@ class AddTrainingExamplesRequest final :
     ::google::protobuf::internal::HasBits<1> _has_bits_;
     mutable ::google::protobuf::internal::CachedSize _cached_size_;
     ::google::protobuf::RepeatedPtrField< ::hexzpb::TrainingExample > examples_;
+    ::google::protobuf::internal::ArenaStringPtr execution_id_;
     ::hexzpb::ModelKey* model_key_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -4559,6 +4580,182 @@ class AddTrainingExamplesResponse final :
   friend struct ::TableStruct_hexz_2eproto;
 };// -------------------------------------------------------------------
 
+class TrainingExample_ModelPredictions final :
+    public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:hexzpb.TrainingExample.ModelPredictions) */ {
+ public:
+  inline TrainingExample_ModelPredictions() : TrainingExample_ModelPredictions(nullptr) {}
+  ~TrainingExample_ModelPredictions() override;
+  template<typename = void>
+  explicit PROTOBUF_CONSTEXPR TrainingExample_ModelPredictions(::google::protobuf::internal::ConstantInitialized);
+
+  TrainingExample_ModelPredictions(const TrainingExample_ModelPredictions& from);
+  TrainingExample_ModelPredictions(TrainingExample_ModelPredictions&& from) noexcept
+    : TrainingExample_ModelPredictions() {
+    *this = ::std::move(from);
+  }
+
+  inline TrainingExample_ModelPredictions& operator=(const TrainingExample_ModelPredictions& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline TrainingExample_ModelPredictions& operator=(TrainingExample_ModelPredictions&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* mutable_unknown_fields() {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const TrainingExample_ModelPredictions& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const TrainingExample_ModelPredictions* internal_default_instance() {
+    return reinterpret_cast<const TrainingExample_ModelPredictions*>(
+               &_TrainingExample_ModelPredictions_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    21;
+
+  friend void swap(TrainingExample_ModelPredictions& a, TrainingExample_ModelPredictions& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(TrainingExample_ModelPredictions* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(TrainingExample_ModelPredictions* other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  TrainingExample_ModelPredictions* New(::google::protobuf::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<TrainingExample_ModelPredictions>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const TrainingExample_ModelPredictions& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom( const TrainingExample_ModelPredictions& from) {
+    TrainingExample_ModelPredictions::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::google::protobuf::Message& to_msg, const ::google::protobuf::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  ::size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::google::protobuf::internal::ParseContext* ctx) final;
+  ::uint8_t* _InternalSerialize(
+      ::uint8_t* target, ::google::protobuf::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::google::protobuf::Arena* arena);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(TrainingExample_ModelPredictions* other);
+
+  private:
+  friend class ::google::protobuf::internal::AnyMetadata;
+  static ::absl::string_view FullMessageName() {
+    return "hexzpb.TrainingExample.ModelPredictions";
+  }
+  protected:
+  explicit TrainingExample_ModelPredictions(::google::protobuf::Arena* arena);
+  public:
+
+  static const ClassData _class_data_;
+  const ::google::protobuf::Message::ClassData*GetClassData() const final;
+
+  ::google::protobuf::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kPriorsFieldNumber = 1,
+    kValueFieldNumber = 2,
+  };
+  // bytes priors = 1;
+  void clear_priors() ;
+  const std::string& priors() const;
+  template <typename Arg_ = const std::string&, typename... Args_>
+  void set_priors(Arg_&& arg, Args_... args);
+  std::string* mutable_priors();
+  PROTOBUF_NODISCARD std::string* release_priors();
+  void set_allocated_priors(std::string* ptr);
+
+  private:
+  const std::string& _internal_priors() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_priors(
+      const std::string& value);
+  std::string* _internal_mutable_priors();
+
+  public:
+  // float value = 2;
+  void clear_value() ;
+  float value() const;
+  void set_value(float value);
+
+  private:
+  float _internal_value() const;
+  void _internal_set_value(float value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:hexzpb.TrainingExample.ModelPredictions)
+ private:
+  class _Internal;
+
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<1, 2, 0, 0, 2> _table_;
+  template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::google::protobuf::internal::ArenaStringPtr priors_;
+    float value_;
+    mutable ::google::protobuf::internal::CachedSize _cached_size_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_hexz_2eproto;
+};// -------------------------------------------------------------------
+
 class TrainingExample_Stats final :
     public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:hexzpb.TrainingExample.Stats) */ {
  public:
@@ -4615,7 +4812,7 @@ class TrainingExample_Stats final :
                &_TrainingExample_Stats_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    21;
+    22;
 
   friend void swap(TrainingExample_Stats& a, TrainingExample_Stats& b) {
     a.Swap(&b);
@@ -4797,7 +4994,7 @@ class TrainingExample final :
                &_TrainingExample_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    22;
+    23;
 
   friend void swap(TrainingExample& a, TrainingExample& b) {
     a.Swap(&b);
@@ -4866,6 +5063,7 @@ class TrainingExample final :
 
   // nested types ----------------------------------------------------
 
+  typedef TrainingExample_ModelPredictions ModelPredictions;
   typedef TrainingExample_Stats Stats;
 
   using Encoding = TrainingExample_Encoding;
@@ -4896,6 +5094,7 @@ class TrainingExample final :
     kActionMaskFieldNumber = 8,
     kStatsFieldNumber = 5,
     kMoveFieldNumber = 9,
+    kModelPredictionsFieldNumber = 10,
     kUnixMicrosFieldNumber = 1,
     kResultFieldNumber = 4,
     kEncodingFieldNumber = 6,
@@ -4979,6 +5178,21 @@ class TrainingExample final :
   ::hexzpb::GameEngineMove* _internal_mutable_move();
 
   public:
+  // .hexzpb.TrainingExample.ModelPredictions model_predictions = 10;
+  bool has_model_predictions() const;
+  void clear_model_predictions() ;
+  const ::hexzpb::TrainingExample_ModelPredictions& model_predictions() const;
+  PROTOBUF_NODISCARD ::hexzpb::TrainingExample_ModelPredictions* release_model_predictions();
+  ::hexzpb::TrainingExample_ModelPredictions* mutable_model_predictions();
+  void set_allocated_model_predictions(::hexzpb::TrainingExample_ModelPredictions* value);
+  void unsafe_arena_set_allocated_model_predictions(::hexzpb::TrainingExample_ModelPredictions* value);
+  ::hexzpb::TrainingExample_ModelPredictions* unsafe_arena_release_model_predictions();
+
+  private:
+  const ::hexzpb::TrainingExample_ModelPredictions& _internal_model_predictions() const;
+  ::hexzpb::TrainingExample_ModelPredictions* _internal_mutable_model_predictions();
+
+  public:
   // int64 unix_micros = 1;
   void clear_unix_micros() ;
   ::int64_t unix_micros() const;
@@ -5024,7 +5238,7 @@ class TrainingExample final :
   class _Internal;
 
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<4, 9, 2, 0, 2> _table_;
+  static const ::google::protobuf::internal::TcParseTable<4, 10, 3, 0, 2> _table_;
   template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
@@ -5036,6 +5250,7 @@ class TrainingExample final :
     ::google::protobuf::internal::ArenaStringPtr action_mask_;
     ::hexzpb::TrainingExample_Stats* stats_;
     ::hexzpb::GameEngineMove* move_;
+    ::hexzpb::TrainingExample_ModelPredictions* model_predictions_;
     ::int64_t unix_micros_;
     float result_;
     int encoding_;
@@ -8160,6 +8375,57 @@ AddTrainingExamplesRequest::_internal_mutable_examples() {
   return &_impl_.examples_;
 }
 
+// string execution_id = 3;
+inline void AddTrainingExamplesRequest::clear_execution_id() {
+  _impl_.execution_id_.ClearToEmpty();
+}
+inline const std::string& AddTrainingExamplesRequest::execution_id() const {
+  // @@protoc_insertion_point(field_get:hexzpb.AddTrainingExamplesRequest.execution_id)
+  return _internal_execution_id();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void AddTrainingExamplesRequest::set_execution_id(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.execution_id_.Set(static_cast<Arg_&&>(arg), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:hexzpb.AddTrainingExamplesRequest.execution_id)
+}
+inline std::string* AddTrainingExamplesRequest::mutable_execution_id() {
+  std::string* _s = _internal_mutable_execution_id();
+  // @@protoc_insertion_point(field_mutable:hexzpb.AddTrainingExamplesRequest.execution_id)
+  return _s;
+}
+inline const std::string& AddTrainingExamplesRequest::_internal_execution_id() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.execution_id_.Get();
+}
+inline void AddTrainingExamplesRequest::_internal_set_execution_id(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.execution_id_.Set(value, GetArenaForAllocation());
+}
+inline std::string* AddTrainingExamplesRequest::_internal_mutable_execution_id() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.execution_id_.Mutable( GetArenaForAllocation());
+}
+inline std::string* AddTrainingExamplesRequest::release_execution_id() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:hexzpb.AddTrainingExamplesRequest.execution_id)
+  return _impl_.execution_id_.Release();
+}
+inline void AddTrainingExamplesRequest::set_allocated_execution_id(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.execution_id_.SetAllocated(value, GetArenaForAllocation());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.execution_id_.IsDefault()) {
+          _impl_.execution_id_.Set("", GetArenaForAllocation());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:hexzpb.AddTrainingExamplesRequest.execution_id)
+}
+
 // -------------------------------------------------------------------
 
 // AddTrainingExamplesResponse
@@ -8331,6 +8597,83 @@ inline void AddTrainingExamplesResponse::set_allocated_error_message(std::string
         }
   #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
   // @@protoc_insertion_point(field_set_allocated:hexzpb.AddTrainingExamplesResponse.error_message)
+}
+
+// -------------------------------------------------------------------
+
+// TrainingExample_ModelPredictions
+
+// bytes priors = 1;
+inline void TrainingExample_ModelPredictions::clear_priors() {
+  _impl_.priors_.ClearToEmpty();
+}
+inline const std::string& TrainingExample_ModelPredictions::priors() const {
+  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.ModelPredictions.priors)
+  return _internal_priors();
+}
+template <typename Arg_, typename... Args_>
+inline PROTOBUF_ALWAYS_INLINE void TrainingExample_ModelPredictions::set_priors(Arg_&& arg,
+                                                     Args_... args) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.priors_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:hexzpb.TrainingExample.ModelPredictions.priors)
+}
+inline std::string* TrainingExample_ModelPredictions::mutable_priors() {
+  std::string* _s = _internal_mutable_priors();
+  // @@protoc_insertion_point(field_mutable:hexzpb.TrainingExample.ModelPredictions.priors)
+  return _s;
+}
+inline const std::string& TrainingExample_ModelPredictions::_internal_priors() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.priors_.Get();
+}
+inline void TrainingExample_ModelPredictions::_internal_set_priors(const std::string& value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.priors_.Set(value, GetArenaForAllocation());
+}
+inline std::string* TrainingExample_ModelPredictions::_internal_mutable_priors() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  return _impl_.priors_.Mutable( GetArenaForAllocation());
+}
+inline std::string* TrainingExample_ModelPredictions::release_priors() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:hexzpb.TrainingExample.ModelPredictions.priors)
+  return _impl_.priors_.Release();
+}
+inline void TrainingExample_ModelPredictions::set_allocated_priors(std::string* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_.priors_.SetAllocated(value, GetArenaForAllocation());
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+        if (_impl_.priors_.IsDefault()) {
+          _impl_.priors_.Set("", GetArenaForAllocation());
+        }
+  #endif  // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:hexzpb.TrainingExample.ModelPredictions.priors)
+}
+
+// float value = 2;
+inline void TrainingExample_ModelPredictions::clear_value() {
+  _impl_.value_ = 0;
+}
+inline float TrainingExample_ModelPredictions::value() const {
+  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.ModelPredictions.value)
+  return _internal_value();
+}
+inline void TrainingExample_ModelPredictions::set_value(float value) {
+  _internal_set_value(value);
+  // @@protoc_insertion_point(field_set:hexzpb.TrainingExample.ModelPredictions.value)
+}
+inline float TrainingExample_ModelPredictions::_internal_value() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.value_;
+}
+inline void TrainingExample_ModelPredictions::_internal_set_value(float value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.value_ = value;
 }
 
 // -------------------------------------------------------------------
@@ -8742,6 +9085,102 @@ inline void TrainingExample::_internal_set_result(float value) {
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   ;
   _impl_.result_ = value;
+}
+
+// .hexzpb.TrainingExample.ModelPredictions model_predictions = 10;
+inline bool TrainingExample::has_model_predictions() const {
+  bool value = (_impl_._has_bits_[0] & 0x00000004u) != 0;
+  PROTOBUF_ASSUME(!value || _impl_.model_predictions_ != nullptr);
+  return value;
+}
+inline void TrainingExample::clear_model_predictions() {
+  if (_impl_.model_predictions_ != nullptr) _impl_.model_predictions_->Clear();
+  _impl_._has_bits_[0] &= ~0x00000004u;
+}
+inline const ::hexzpb::TrainingExample_ModelPredictions& TrainingExample::_internal_model_predictions() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  const ::hexzpb::TrainingExample_ModelPredictions* p = _impl_.model_predictions_;
+  return p != nullptr ? *p : reinterpret_cast<const ::hexzpb::TrainingExample_ModelPredictions&>(::hexzpb::_TrainingExample_ModelPredictions_default_instance_);
+}
+inline const ::hexzpb::TrainingExample_ModelPredictions& TrainingExample::model_predictions() const {
+  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.model_predictions)
+  return _internal_model_predictions();
+}
+inline void TrainingExample::unsafe_arena_set_allocated_model_predictions(::hexzpb::TrainingExample_ModelPredictions* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  if (GetArenaForAllocation() == nullptr) {
+    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.model_predictions_);
+  }
+  _impl_.model_predictions_ = reinterpret_cast<::hexzpb::TrainingExample_ModelPredictions*>(value);
+  if (value != nullptr) {
+    _impl_._has_bits_[0] |= 0x00000004u;
+  } else {
+    _impl_._has_bits_[0] &= ~0x00000004u;
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:hexzpb.TrainingExample.model_predictions)
+}
+inline ::hexzpb::TrainingExample_ModelPredictions* TrainingExample::release_model_predictions() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+
+  _impl_._has_bits_[0] &= ~0x00000004u;
+  ::hexzpb::TrainingExample_ModelPredictions* released = _impl_.model_predictions_;
+  _impl_.model_predictions_ = nullptr;
+#ifdef PROTOBUF_FORCE_COPY_IN_RELEASE
+  auto* old = reinterpret_cast<::google::protobuf::MessageLite*>(released);
+  released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+  if (GetArenaForAllocation() == nullptr) {
+    delete old;
+  }
+#else   // PROTOBUF_FORCE_COPY_IN_RELEASE
+  if (GetArenaForAllocation() != nullptr) {
+    released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+  }
+#endif  // !PROTOBUF_FORCE_COPY_IN_RELEASE
+  return released;
+}
+inline ::hexzpb::TrainingExample_ModelPredictions* TrainingExample::unsafe_arena_release_model_predictions() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:hexzpb.TrainingExample.model_predictions)
+
+  _impl_._has_bits_[0] &= ~0x00000004u;
+  ::hexzpb::TrainingExample_ModelPredictions* temp = _impl_.model_predictions_;
+  _impl_.model_predictions_ = nullptr;
+  return temp;
+}
+inline ::hexzpb::TrainingExample_ModelPredictions* TrainingExample::_internal_mutable_model_predictions() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_._has_bits_[0] |= 0x00000004u;
+  if (_impl_.model_predictions_ == nullptr) {
+    auto* p = CreateMaybeMessage<::hexzpb::TrainingExample_ModelPredictions>(GetArenaForAllocation());
+    _impl_.model_predictions_ = reinterpret_cast<::hexzpb::TrainingExample_ModelPredictions*>(p);
+  }
+  return _impl_.model_predictions_;
+}
+inline ::hexzpb::TrainingExample_ModelPredictions* TrainingExample::mutable_model_predictions() {
+  ::hexzpb::TrainingExample_ModelPredictions* _msg = _internal_mutable_model_predictions();
+  // @@protoc_insertion_point(field_mutable:hexzpb.TrainingExample.model_predictions)
+  return _msg;
+}
+inline void TrainingExample::set_allocated_model_predictions(::hexzpb::TrainingExample_ModelPredictions* value) {
+  ::google::protobuf::Arena* message_arena = GetArenaForAllocation();
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  if (message_arena == nullptr) {
+    delete reinterpret_cast<::hexzpb::TrainingExample_ModelPredictions*>(_impl_.model_predictions_);
+  }
+
+  if (value != nullptr) {
+    ::google::protobuf::Arena* submessage_arena =
+        ::google::protobuf::Arena::InternalGetOwningArena(reinterpret_cast<::hexzpb::TrainingExample_ModelPredictions*>(value));
+    if (message_arena != submessage_arena) {
+      value = ::google::protobuf::internal::GetOwnedMessage(message_arena, value, submessage_arena);
+    }
+    _impl_._has_bits_[0] |= 0x00000004u;
+  } else {
+    _impl_._has_bits_[0] &= ~0x00000004u;
+  }
+
+  _impl_.model_predictions_ = reinterpret_cast<::hexzpb::TrainingExample_ModelPredictions*>(value);
+  // @@protoc_insertion_point(field_set_allocated:hexzpb.TrainingExample.model_predictions)
 }
 
 // .hexzpb.TrainingExample.Stats stats = 5;

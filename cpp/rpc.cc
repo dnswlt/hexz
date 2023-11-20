@@ -59,9 +59,11 @@ absl::StatusOr<KeyedModel> RPCClient::FetchLatestModel() {
 }
 
 absl::StatusOr<hexzpb::AddTrainingExamplesResponse> RPCClient::SendExamples(
+    const std::string& execution_id,
     const hexzpb::ModelKey& key,
     std::vector<hexzpb::TrainingExample>&& examples) {
   hexzpb::AddTrainingExamplesRequest req;
+  req.set_execution_id(execution_id);
   *req.mutable_model_key() = key;
   req.mutable_examples()->Reserve(examples.size());
   std::move(examples.begin(), examples.end(),

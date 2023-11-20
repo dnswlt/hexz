@@ -108,6 +108,16 @@ void Node::SetMoveProbs(torch::Tensor move_probs) {
   }
 }
 
+torch::Tensor Node::Priors() const {
+  auto t = torch::zeros({2, 11, 10});
+  auto t_acc = t.accessor<float, 3>();
+  for (const auto& c : children_) {
+    const auto& m = c->move_;
+    t_acc[static_cast<size_t>(m.typ)][m.r][m.c] = c->prior();
+  }
+  return t;
+}
+
 torch::Tensor Node::ActionMask() const {
   auto action_mask =
       torch::zeros({2, 11, 10}, c10::TensorOptions().dtype(torch::kBool));
@@ -492,6 +502,10 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       int64_t move_ready = UnixMicros();
       example.set_unix_micros(move_ready);
       example.set_turn(root->turn());
+      auto enc_priors = torch::pickle_save(root->Priors());
+      example.mutable_model_predictions()->mutable_priors()->assign(
+          enc_priors.begin(), enc_priors.end());
+      example.mutable_model_predictions()->set_value(root->value());
       example.mutable_stats()->set_duration_micros(move_ready - move_started);
       example.mutable_stats()->set_valid_moves(root->NumChildren());
       example.mutable_stats()->set_visit_count(root->visit_count());
