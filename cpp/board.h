@@ -109,6 +109,7 @@ class Board {
 
   void MakeMove(int player, const Move& move);
   std::vector<Move> NextMoves(int player) const;
+  std::optional<Move> RandomNextMove(int player) const;
 
   std::string DebugString() const;
   std::string ShortDebugString() const;
@@ -128,6 +129,8 @@ class Board {
  private:
   torch::Tensor b_;
 };
+
+float FastRandomPlayout(int turn, const Board& board);
 
 }  // namespace hexz
 #endif  // __HEXZ_BOARD_H__

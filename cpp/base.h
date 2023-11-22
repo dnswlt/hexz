@@ -75,6 +75,8 @@ extern thread_local std::mt19937 rng;
 // distribution.
 float UnitRandom();
 
+int RandomInt(int lower, int upper);
+
 // Libtorch does not have a Dirichlet (or any other nontrivial) distribution yet
 // :( So let's roll our own, based on the gamma distribution:
 // https://en.wikipedia.org/wiki/Dirichlet_distribution#Related_distributions

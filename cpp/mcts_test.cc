@@ -104,7 +104,6 @@ TEST(NodeTest, Backpropagate) {
   EXPECT_EQ(n_1_1.wins(), 1.0);
 }
 
-
 TEST(NodeTest, BackpropagateFraction) {
   /*
   Like Backpropagate, but propagates back only a fractional value,
@@ -177,14 +176,14 @@ TEST(NodeTest, AddDirichletNoise) {
   t /= t.sum();
   root.SetMoveProbs(t);
   std::vector<float> prior;
-  for (const auto& c: root.children()) {
+  for (const auto& c : root.children()) {
     prior.push_back(c->prior());
   }
   float prior_sum = std::accumulate(prior.begin(), prior.end(), 0.0);
   ASSERT_FLOAT_EQ(prior_sum, 1.0);
   root.AddDirichletNoise(0.5, 0.3);
   std::vector<float> posterior;
-  for (const auto& c: root.children()) {
+  for (const auto& c : root.children()) {
     posterior.push_back(c->prior());
   }
   // Expect that probs still sum to 1.
@@ -348,11 +347,26 @@ TEST(MCTSTest, PlayGame) {
   EXPECT_EQ(pr.sizes()[2], 10);
 }
 
+TEST(RolloutTest, RandomRollout) {
+  hexz::Perfm::InitScope perfm;
+  for (int i = 0; i < 1000; i++) {
+    Board b = Board::RandomBoard();
+    auto result = RandomRollout(0, b);
+    EXPECT_TRUE(result == 0 || result == -1 || result == 1);
+  }
+}
+
+TEST(RolloutTest, FastRandomPlayout) {
+  hexz::Perfm::InitScope perfm;
+  for (int i = 0; i < 100000; i++) {
+    Board b = Board::RandomBoard();
+    auto result = FastRandomPlayout(0, b);
+    EXPECT_TRUE(result == 0 || result == -1 || result == 1);
+  }
+}
+
+
 TEST(MCTSTest, WriteDotGraph) {
-  // The file "testdata/scriptmodule.pt" is expected to be a ScriptModule of the
-  // right shape to be used by NeuralMCTS.
-  //
-  // It can be generated with the regenerate.sh sidecar script.
   auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
   scriptmodule.to(torch::kCPU);
   scriptmodule.eval();

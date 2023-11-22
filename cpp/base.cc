@@ -18,6 +18,11 @@ float UnitRandom() {
   return unif(rng);
 }
 
+int RandomInt(int lower, int upper) {
+  std::uniform_int_distribution<int> dis{lower, upper};
+  return dis(rng);
+}
+
 std::vector<float> Dirichlet(int n, float concentration) {
   std::gamma_distribution<float> gamma;
   std::vector<float> v(n);

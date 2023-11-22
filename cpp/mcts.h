@@ -163,6 +163,10 @@ class TorchModel : public Model {
   torch::jit::Module module_;
 };
 
+// Plays a full rollout using random moves, starting at the position in board.
+// Returns the result from the perspective of player 0, like Board::Result.
+float RandomRollout(int turn, const Board& board);
+
 class NeuralMCTS {
  public:
   // The model is not owned. Owners of the NeuralMCTS instance must ensure it

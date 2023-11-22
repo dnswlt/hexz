@@ -561,6 +561,44 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
   return examples;
 }
 
+float RandomRollout_Old(int turn, const Board& board) {
+  Perfm::Scope perfm(Perfm::Rollout);
+  Board b(board);
+  while (true) {
+    auto moves = b.NextMoves(turn);
+    if (moves.empty()) {
+      turn = 1 - turn;
+      moves = b.NextMoves(turn);
+      if (moves.empty()) {
+        return b.Result();
+      }
+    }
+    int n = internal::RandomInt(0, moves.size() - 1);
+    b.MakeMove(turn, moves[n]);
+  }
+  ABSL_CHECK(false) << "Never reached";
+  return 0.0;
+}
+
+float RandomRollout(int turn, const Board& board) {
+  Perfm::Scope perfm(Perfm::Rollout);
+  Board b(board);
+  while (true) {
+    auto move = b.RandomNextMove(turn);
+    if (!move) {
+      turn = 1 - turn;
+      move = b.RandomNextMove(turn);
+      if (!move) {
+        return b.Result();
+      }
+    }
+    b.MakeMove(turn, *move);
+    turn = 1 - turn;
+  }
+  ABSL_CHECK(false) << "Never reached";
+  return 0.0;
+}
+
 absl::StatusOr<std::unique_ptr<Node>> NeuralMCTS::SuggestMove(
     int player, const Board& board, int think_time_millis) {
   int64_t started_micros = UnixMicros();

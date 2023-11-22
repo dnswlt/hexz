@@ -302,6 +302,33 @@ std::vector<Move> Board::NextMoves(int player) const {
   return moves;
 }
 
+std::optional<Move> Board::RandomNextMove(int player) const {
+  Perfm::Scope ps(Perfm::RandomNextMove);
+  auto b_acc = b_.accessor<float, 3>();
+  bool flag = Flags(player) > 0;
+  float n_moves = 0;
+  Move m;
+  for (int r = 0; r < 11; r++) {
+    int cols = 10 - (r & 1);
+    for (int c = 0; c < cols; c++) {
+      if (flag && b_acc[I_BLOCKED(player)][r][c] == 0) {
+        if (internal::UnitRandom() <= 1 / (n_moves + 1)) {
+          m = Move{Move::Typ::kFlag, r, c, 1.0};
+          n_moves += 1;
+        }
+      }
+      float next_val = b_acc[I_NEXTVAL(player)][r][c];
+      if (next_val > 0) {
+        if (internal::UnitRandom() <= 1 / (n_moves + 1)) {
+          m = Move{Move::Typ::kNormal, r, c, next_val};
+          n_moves += 1;
+        }
+      }
+    }
+  }
+  return n_moves > 0 ? std::optional{m} : std::nullopt;
+}
+
 float Board::CellValue(int player, Channel ch, int r, int c) const {
   int ch_idx =
       static_cast<int>(ch == kGrass ? ch : ch + CHANNELS_PER_PLAYER * player);
@@ -365,6 +392,184 @@ std::string Board::DebugString() const {
   os << "  ]\n";
   os << ")";
   return os.str();
+}
+
+namespace {
+
+struct RolloutCell {
+  int8_t val;
+  int8_t next;
+  int8_t blocked;
+};
+
+// Initializes the given arrays with data from board.
+void InitArraysForFastGame(const Board& board, RolloutCell (&b)[2][11][10],
+                           int (&grass)[11][10], int (&nflags)[2]) {
+  auto t = board.Tensor(0);
+  auto acc = t.accessor<float, 3>();
+  nflags[0] = acc[I_NFLAGS(0)][0][0];
+  nflags[1] = acc[I_NFLAGS(1)][0][0];
+  for (int r = 0; r < 11; r++) {
+    for (int c = 0; c < 10 - (r & 1); c++) {
+      for (int i = 0; i < 2; i++) {
+        b[i][r][c].val = acc[I_VALUE(i)][r][c];
+        b[i][r][c].next = acc[I_NEXTVAL(i)][r][c];
+        b[i][r][c].blocked = acc[I_BLOCKED(i)][r][c];
+      }
+    }
+  }
+}
+
+inline uint64_t rol64(uint64_t x, int k) { return (x << k) | (x >> (64 - k)); }
+
+struct xoshiro256ss_state {
+  uint64_t s[4];
+};
+
+uint64_t xoshiro256ss(xoshiro256ss_state* state) {
+  uint64_t* s = state->s;
+  uint64_t const result = rol64(s[1] * 5, 7) * 9;
+  uint64_t const t = s[1] << 17;
+
+  s[2] ^= s[0];
+  s[3] ^= s[1];
+  s[1] ^= s[2];
+  s[0] ^= s[3];
+
+  s[2] ^= t;
+  s[3] = rol64(s[3], 45);
+
+  return result;
+}
+
+constexpr uint32_t kInt24Mask = (1 << 24) - 1;
+
+constexpr float kFMul24 = 0x1p-24;
+
+xoshiro256ss_state xoshi = {
+    .s = {13, 1933, 42, 23},
+};
+
+float xoshiro256ss_float(xoshiro256ss_state* state) {
+  uint64_t r = xoshiro256ss(state);
+  return static_cast<float>((r >> 32) & kInt24Mask) * kFMul24;
+}
+
+bool FastNextMove(Move& m, int turn, RolloutCell (&b)[2][11][10],
+                  int (&grass)[11][10], int (&nflags)[2]) {
+  int n_moves = 0;
+  float j = 0;
+  bool has_flag = nflags[turn] > 0;
+  for (int r = 0; r < 11; r++) {
+    for (int c = 0; c < 10 - (r & 1); c++) {
+      if (has_flag && b[turn][r][c].blocked == 0) {
+        j += 1;
+        if (xoshiro256ss_float(&xoshi) <= 1 / j) {
+          // if (internal::UnitRandom() <= 1 / j) {
+          m = Move{Move::Typ::kFlag, r, c, 1.0};
+          n_moves++;
+        }
+      }
+      float next_val = b[turn][r][c].next;
+      if (next_val > 0) {
+        j += 1;
+        if (xoshiro256ss_float(&xoshi) <= 1 / j) {
+        // if (internal::UnitRandom() <= 1 / j) {
+          m = Move{Move::Typ::kNormal, r, c, next_val};
+          n_moves++;
+        }
+      }
+    }
+  }
+  return n_moves > 0;
+}
+
+void FastMakeMove(const Move& m, int turn, RolloutCell (&b)[2][11][10],
+                  int (&grass)[11][10], int (&nflags)[2]) {
+  if (m.typ == Move::Typ::kNormal) {
+    b[turn][m.r][m.c].val = m.value;
+  }
+  // Occupy cell for both players.
+  b[0][m.r][m.c].blocked = 1;
+  b[1][m.r][m.c].blocked = 1;
+  // Zero next value.
+  b[0][m.r][m.c].next = 0;
+  b[1][m.r][m.c].next = 0;
+  int next_val = 1;
+  if (m.typ == Move::Typ::kFlag) {
+    nflags[turn]--;
+  } else {
+    next_val = m.value + 1;
+  }
+  for (const auto& nb : NeighborsOf(Idx{m.r, m.c})) {
+    if (next_val <= 5) {
+      if (b[turn][nb.r][nb.c].blocked == 0) {
+        // Neighbor cell is not blocked.
+        if (b[turn][nb.r][nb.c].next == 0) {
+          // Neighbor cell did not have a next value yet.
+          b[turn][nb.r][nb.c].next = next_val;
+        } else if (b[turn][nb.r][nb.c].next > next_val) {
+          // Neighbor cell's value was larger: decrease.
+          b[turn][nb.r][nb.c].next = next_val;
+        }
+      }
+    } else {
+      // Played a 5: block neighboring cells and clear next value.
+      b[turn][nb.r][nb.c].blocked = 1;
+      b[turn][nb.r][nb.c].next = 0;
+    }
+  }
+  if (m.typ == Move::Typ::kNormal) {
+    for (const auto& nb : NeighborsOf(Idx{m.r, m.c})) {
+      float grass_val = grass[nb.r][nb.c];
+      if (grass_val > 0 && grass_val <= b[turn][m.r][m.c].val) {
+        // Occupy grass cell: remove grass value and add it as player's value.
+        grass[nb.r][nb.c] = 0;
+        b[turn][nb.r][nb.c].blocked = 0;
+        b[turn][nb.r][nb.c].next = grass_val;
+        FastMakeMove(Move{Move::Typ::kNormal, nb.r, nb.c, grass_val}, turn, b,
+                     grass, nflags);
+      }
+    }
+  }
+}
+
+}  // namespace
+
+float FastRandomPlayout(int turn, const Board& board) {
+  Perfm::Scope perfm(Perfm::Rollout);
+  RolloutCell b[2][11][10];
+  int grass[11][10];
+  int nflags[2];
+
+  InitArraysForFastGame(board, b, grass, nflags);
+  int n_moves = 0;
+  while (true) {
+    // Find random next move.
+    Move m;
+    if (!FastNextMove(m, turn, b, grass, nflags)) {
+      turn = 1 - turn;
+      if (!FastNextMove(m, turn, b, grass, nflags)) {
+        // Game over.
+        int score[2] = {0, 0};
+        for (int r = 0; r < 11; r++) {
+          for (int c = 0; c < 10 - (r & 1); c++) {
+            score[0] += b[0][r][c].val;
+            score[1] += b[1][r][c].val;
+          }
+        }
+        ABSL_DLOG(INFO) << "FastRandomPlayout: moves:" << n_moves
+                        << " score:" << score[0] << "-" << score[1];
+        if (score[0] < score[1]) return -1;
+        if (score[0] == score[1]) return 0;
+        return 1;
+      }
+    }
+    ABSL_DLOG(INFO) << "Making fast move " << m.DebugString();
+    FastMakeMove(m, turn, b, grass, nflags);
+    turn = 1 - turn;
+    n_moves++;
+  }
 }
 
 }  // namespace hexz

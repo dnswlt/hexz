@@ -156,30 +156,39 @@ class NumpyExample(typing.NamedTuple):
     action_mask: np.ndarray  # shape: (2, 11, 10)
     move_probs: np.ndarray  # shape: (2, 11, 10)
     value: np.ndarray  # shape: (1,)
+    priors: np.ndarray  # shape: (2, 11, 10)
 
     @classmethod
     def decode(cls, ex: hexz_pb2.TrainingExample) -> "NumpyExample":
         """Decodes the given TrainingExample and returns its data as a named tuple of np arrays."""
+        priors = None  # Optional.
         if ex.encoding == hexz_pb2.TrainingExample.PYTORCH:
             board = torch.load(io.BytesIO(ex.board)).numpy()
             action_mask = torch.load(io.BytesIO(ex.action_mask)).numpy()
             pr = torch.load(io.BytesIO(ex.move_probs)).numpy()
+            if ex.model_predictions.priors:
+                priors = torch.load(io.BytesIO(ex.model_predictions.priors)).numpy()
         else:
             board = np.load(io.BytesIO(ex.board))
             action_mask = np.load(io.BytesIO(ex.action_mask))
             pr = np.load(io.BytesIO(ex.move_probs))
+            if ex.model_predictions.priors:
+                priors = np.load(io.BytesIO(ex.model_predictions.priors))
         if board.shape != (11, 11, 10):
             raise ValueError(f"Wrong board shape: {board.shape}.")
         if action_mask.shape != (2, 11, 10):
             raise ValueError(f"Wrong action_mask shape: {pr.shape}.")
         if pr.shape != (2, 11, 10):
             raise ValueError(f"Wrong move_probs shape: {pr.shape}.")
+        if priors is not None and priors.shape != (2, 11, 10):
+            raise ValueError(f"Wrong model_predictions.priors shape: {priors.shape}.")
         val = np.array([ex.result], dtype=np.float32)
         return NumpyExample(
             board=board,
             action_mask=action_mask,
             move_probs=pr,
             value=val,
+            priors=priors,
         )
 
 
@@ -275,7 +284,7 @@ class TrainingTask(threading.Thread):
             latest_model=self.model_key,
         )
         reply_q.put(resp)
-        
+
         # Translate examples.
         new_batch = []
         for ex in req.examples:
