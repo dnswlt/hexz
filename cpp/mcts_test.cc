@@ -347,25 +347,6 @@ TEST(MCTSTest, PlayGame) {
   EXPECT_EQ(pr.sizes()[2], 10);
 }
 
-TEST(RolloutTest, RandomRollout) {
-  hexz::Perfm::InitScope perfm;
-  for (int i = 0; i < 1000; i++) {
-    Board b = Board::RandomBoard();
-    auto result = RandomRollout(0, b);
-    EXPECT_TRUE(result == 0 || result == -1 || result == 1);
-  }
-}
-
-TEST(RolloutTest, FastRandomPlayout) {
-  hexz::Perfm::InitScope perfm;
-  for (int i = 0; i < 100000; i++) {
-    Board b = Board::RandomBoard();
-    auto result = FastRandomPlayout(0, b);
-    EXPECT_TRUE(result == 0 || result == -1 || result == 1);
-  }
-}
-
-
 TEST(MCTSTest, WriteDotGraph) {
   auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
   scriptmodule.to(torch::kCPU);

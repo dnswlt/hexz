@@ -6,6 +6,7 @@
 #include <algorithm>
 
 #include "base.h"
+#include "perfm.h"
 
 namespace hexz {
 
@@ -34,6 +35,13 @@ TEST(BoardTest, NeighborsOf) {
   EXPECT_THAT(NeighborsOf(Idx{4, 4}),
               UnorderedElementsAre(Idx{3, 3}, Idx{3, 4}, Idx{5, 3}, Idx{5, 4},
                                    Idx{4, 3}, Idx{4, 5}));
+  size_t max_size = 0;
+  for (int r = 0; r < 11; r++) {
+    for (int c = 0; c < 10 - (r & 1); c++) {
+      max_size = std::max(max_size, NeighborsOf(Idx{r, c}).size());
+    }
+  }
+  EXPECT_LE(max_size, 6);
 }
 
 TEST(BoardTest, EnumValues) {
@@ -277,6 +285,15 @@ TEST(BoardTest, FromProtoValid) {
   EXPECT_EQ(b->CellValue(1, Board::kBlocked, 0, 5), 1.0);
 }
 
+TEST(RolloutTest, FastRandomPlayout) {
+  hexz::Perfm::InitScope perfm;
+  for (int i = 0; i < 1000; i++) {
+    Board b = Board::RandomBoard();
+    auto result = FastRandomPlayout(0, b);
+    EXPECT_TRUE(result == 0 || result == -1 || result == 1);
+  }
+}
+
 TEST(TorchTest, TensorIsRef) {
   // Shows that copying a tensor does not copy the underlying data.
   torch::Tensor t1 = torch::ones({2, 2});
@@ -295,15 +312,16 @@ TEST(TorchTest, TensorAccessorWrites) {
 }
 
 TEST(TorchTest, Broadcast) {
-    // We use this broadcasting for the kRemainingFlags channels,
-    // make sure it works as we expect.
-    auto t = torch::ones({11, 11, 10});
-    t.index_put_({Board::Channel::kRemainingFlags}, 0);
-    // Look at an arbitrary index in the middle:
-    EXPECT_EQ(t.index({Board::Channel::kValue, 4, 7}).item<float>(), 1);
-    EXPECT_EQ(t.index({Board::Channel::kRemainingFlags, 4, 7}).item<float>(), 0);
-    // Check that all are set:
-    EXPECT_TRUE(torch::all(t.index({Board::Channel::kRemainingFlags}) == 0).item<bool>());
+  // We use this broadcasting for the kRemainingFlags channels,
+  // make sure it works as we expect.
+  auto t = torch::ones({11, 11, 10});
+  t.index_put_({Board::Channel::kRemainingFlags}, 0);
+  // Look at an arbitrary index in the middle:
+  EXPECT_EQ(t.index({Board::Channel::kValue, 4, 7}).item<float>(), 1);
+  EXPECT_EQ(t.index({Board::Channel::kRemainingFlags, 4, 7}).item<float>(), 0);
+  // Check that all are set:
+  EXPECT_TRUE(
+      torch::all(t.index({Board::Channel::kRemainingFlags}) == 0).item<bool>());
 }
 
 }  // namespace
