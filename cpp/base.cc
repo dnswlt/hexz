@@ -66,6 +66,7 @@ std::string Config::String() const {
               absl::StrFormat("uct_c: %.3f", uct_c),
               absl::StrFormat("dirichlet_concentration: %.3f",
                               dirichlet_concentration),
+              absl::StrFormat("random_playouts: %d", random_playouts),
               absl::StrFormat("startup_delay_seconds: %.3f",
                               startup_delay_seconds),
               absl::StrFormat("debug_memory_usage: %d", debug_memory_usage),
@@ -103,6 +104,7 @@ Config Config::FromEnv() {
       GET_ENV_INT(max_games),
       GET_ENV_FLOAT(uct_c),
       GET_ENV_FLOAT(dirichlet_concentration),
+      GET_ENV_INT(random_playouts),
       GET_ENV_FLOAT(startup_delay_seconds),
       GET_ENV_INT(debug_memory_usage),
   };

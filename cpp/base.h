@@ -49,7 +49,10 @@ struct Config {
   // https://stats.stackexchange.com/questions/322831/purpose-of-dirichlet-noise-in-the-alphazero-paper
   // or 0.3 to use the setting that was used for chess.
   float dirichlet_concentration = 0;
-
+  // Number of random playouts to play at each leaf node to improve the
+  // (initially totally useless) model value predictions. Random playouts
+  // are also used to resign early.
+  int random_playouts = 0;
   // Maximum delay at startup before generating and sending examples.
   // The delay will be uniformly randomized between 0 and startup_delay_seconds.
   // The idea is to avoid a "thundering herd" of workers delivering results

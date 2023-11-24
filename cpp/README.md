@@ -13,6 +13,8 @@ brew install protobuf
 
 ## Build the binary
 
+**NOTE:** Make sure you are NOT inside a conda environment when building the C++ libs.
+
 ### ARM-based Macs
 
 All commands assume you are in the `cpp` subdirectory.

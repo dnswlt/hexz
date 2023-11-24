@@ -229,7 +229,7 @@ class TrainingTask(threading.Thread):
         self.timing_stats = TimingStats()
         self.started = time.time()
         self.training_time = 0
-        self.latest_examples = []
+        self.latest_request = None
 
     def accept_model_key(self, model_key: hexz_pb2.ModelKey):
         return (
@@ -312,7 +312,7 @@ class TrainingTask(threading.Thread):
         self.repo.add_examples(req)
 
         # Save examples (for on-demand SVG export).
-        self.latest_examples = req.examples
+        self.latest_request = req
 
         self.stats["examples"] += len(req.examples)
         lim = min(len(req.examples), self.capacity())
@@ -409,9 +409,9 @@ class TrainingTask(threading.Thread):
         }
         reply_q.put(info)
 
-    def handle_get_latest_examples(self, msg):
+    def handle_get_latest_request(self, msg):
         reply_q = msg["reply_q"]
-        reply_q.put(self.latest_examples)
+        reply_q.put(self.latest_request)
 
     def run(self):
         """This is the main dispatcher loop of the TrainingTask.
@@ -434,8 +434,8 @@ class TrainingTask(threading.Thread):
                 self.handle_get_model(msg)
             elif msg["type"] == "GetTrainingInfo":
                 self.handle_get_training_info(msg)
-            elif msg["type"] == "GetLatestExamples":
-                self.handle_get_latest_examples(msg)
+            elif msg["type"] == "GetLatestRequest":
+                self.handle_get_latest_request(msg)
             else:
                 raise HexzError(
                     f"TrainingTask: received unknown message type {msg['type']}"

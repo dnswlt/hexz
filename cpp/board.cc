@@ -218,11 +218,11 @@ void Board::MakeMove(int player, const Move& move) {
   auto b_acc = b_.accessor<float, 3>();
   ABSL_DCHECK_EQ(b_acc[I_BLOCKED(player)][move.r][move.c], 0)
       << "MakeMove on blocked field";
-  ABSL_DCHECK(move.typ == Move::Typ::kNormal ||
-              move.typ == Move::Typ::kFlag &&
+  ABSL_DCHECK(move.typ == Move::Typ::kFlag && move.value == 1 ||
+              move.typ == Move::Typ::kNormal &&
                   b_acc[I_NEXTVAL(player)][move.r][move.c] == move.value)
       << "MakeMove: wrong value: move: " << move.DebugString()
-      << "board: " << DebugString();
+      << " board: " << DebugString();
   if (move.typ == Move::Typ::kFlag) {
     b_acc[I_FLAG(player)][move.r][move.c] = move.value;
   } else {
@@ -302,33 +302,6 @@ std::vector<Move> Board::NextMoves(int player) const {
   return moves;
 }
 
-std::optional<Move> Board::RandomNextMove(int player) const {
-  Perfm::Scope ps(Perfm::RandomNextMove);
-  auto b_acc = b_.accessor<float, 3>();
-  bool flag = Flags(player) > 0;
-  float n_moves = 0;
-  Move m;
-  for (int r = 0; r < 11; r++) {
-    int cols = 10 - (r & 1);
-    for (int c = 0; c < cols; c++) {
-      if (flag && b_acc[I_BLOCKED(player)][r][c] == 0) {
-        if (internal::UnitRandom() <= 1 / (n_moves + 1)) {
-          m = Move{Move::Typ::kFlag, r, c, 1.0};
-          n_moves += 1;
-        }
-      }
-      float next_val = b_acc[I_NEXTVAL(player)][r][c];
-      if (next_val > 0) {
-        if (internal::UnitRandom() <= 1 / (n_moves + 1)) {
-          m = Move{Move::Typ::kNormal, r, c, next_val};
-          n_moves += 1;
-        }
-      }
-    }
-  }
-  return n_moves > 0 ? std::optional{m} : std::nullopt;
-}
-
 float Board::CellValue(int player, Channel ch, int r, int c) const {
   int ch_idx =
       static_cast<int>(ch == kGrass ? ch : ch + CHANNELS_PER_PLAYER * player);
@@ -346,9 +319,9 @@ void Board::SetRemainingFlags(int player, int n_flags) {
 }
 
 std::string Board::ShortDebugString() const {
-  auto score = Score();
-  return absl::StrFormat("Board(flags: (%d, %d) score: (%.0f, %.0f)", Flags(0),
-                         Flags(1), score.first, score.second);
+  const auto [s0, s1] = Score();
+  return absl::StrFormat("Board(flags: %d-%d score: %.0f-%.0f)", Flags(0),
+                         Flags(1), s0, s1);
 }
 
 std::string Board::DebugString() const {
@@ -405,7 +378,7 @@ struct RolloutCell {
 class FastGameState {
  public:
   // Initializes this state using the data from board.
-  void Init(const Board& board) {
+  explicit FastGameState(const Board& board) {
     auto t = board.Tensor(0);
     auto acc = t.accessor<float, 3>();
     nflags[0] = acc[I_NFLAGS(0)][0][0];
@@ -563,10 +536,7 @@ class FastGameState {
 }  // namespace
 
 float FastRandomPlayout(int turn, const Board& board) {
-  Perfm::Scope perfm(Perfm::Rollout);
-  FastGameState s;
-
-  s.Init(board);
+  FastGameState s(board);
   int n_moves = 0;
   while (true) {
     // Find random next move.
@@ -575,12 +545,9 @@ float FastRandomPlayout(int turn, const Board& board) {
       turn = 1 - turn;
       if (!s.FastNextMove(turn, m)) {
         // Game over.
-        ABSL_DLOG(INFO) << "FastRandomPlayout finished after " << n_moves
-                       << " moves with score " << s.Result();
         return s.Result();
       }
     }
-    ABSL_DLOG(INFO) << "Making fast move " << m.DebugString();
     s.FastMakeMove(turn, m);
     turn = 1 - turn;
     n_moves++;

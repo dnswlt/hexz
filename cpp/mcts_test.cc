@@ -11,6 +11,7 @@
 #include <iterator>
 #include <vector>
 
+#include "base.h"
 #include "hexz.pb.h"
 
 namespace hexz {
@@ -303,12 +304,14 @@ TEST(MCTSTest, PlayGame) {
   // right shape to be used by NeuralMCTS.
   //
   // It can be generated with the regenerate.sh sidecar script.
+  Perfm::InitScope perfm;
   auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
   scriptmodule.to(torch::kCPU);
   scriptmodule.eval();
   Config config{
-      .runs_per_move = 20,
+      .runs_per_move = 50,
       .dirichlet_concentration = 0.3,
+      .random_playouts = 10,
   };
   TorchModel model(scriptmodule);
   NeuralMCTS mcts(model, config);
@@ -359,7 +362,8 @@ TEST(MCTSTest, WriteDotGraph) {
   absl::Cleanup cleanup = [&dot_path]() { fs::remove(dot_path); };
   Node root(nullptr, 0, Move{});
   for (int i = 0; i < 100; i++) {
-    mcts.RunReusingTree(root, b, /*add_noise=*/i == 0);
+    mcts.RunReusingTree(root, b, /*add_noise=*/i == 0,
+                        /*playout_stats=*/nullptr);
   }
   ASSERT_GT(root.children().size(), 0);
   auto status = WriteDotGraph(root, dot_path.string());

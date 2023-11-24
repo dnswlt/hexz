@@ -109,7 +109,6 @@ class Board {
 
   void MakeMove(int player, const Move& move);
   std::vector<Move> NextMoves(int player) const;
-  std::optional<Move> RandomNextMove(int player) const;
 
   std::string DebugString() const;
   std::string ShortDebugString() const;

@@ -22,9 +22,8 @@ class Perfm {
     Puct = 5,
     NextMoves = 6,
     NeuralMCTS_Run = 7,
-    Rollout = 8,
-    RandomNextMove = 9,
-    StatsSize = 10,
+    RandomPlayout = 8,
+    StatsSize = 9,
   };
 
   // Helper struct to use RAII for initialization and printing final results.
@@ -55,9 +54,9 @@ class Perfm {
 
   static const std::string& LabelName(Perfm::Label label) {
     static std::string names[StatsSize] = {
-        "Predict",      "FindLeaf",       "MakeMove",  "PlayGameLocally",
-        "MaxPuctChild", "Puct",           "NextMoves", "NeuralMCTS::Run",
-        "Rollout",      "RandomNextMove",
+        "Predict",         "FindLeaf",        "MakeMove",
+        "PlayGameLocally", "MaxPuctChild",    "Puct",
+        "NextMoves",       "NeuralMCTS::Run", "RandomPlayout",
     };
     assert(label < StatsSize);
     return names[label];

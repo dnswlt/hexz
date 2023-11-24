@@ -30,6 +30,7 @@ class Node {
   const Node* parent() const noexcept { return parent_; }
   float wins() const noexcept { return wins_; }
   float value() const noexcept { return value_; }
+  float ValueP0() const noexcept { return turn_ == 0 ? value_ : -value_; }
   bool terminal() const noexcept { return terminal_; }
   const std::vector<std::unique_ptr<Node>>& children() const {
     return children_;
@@ -165,6 +166,13 @@ class TorchModel : public Model {
 
 class NeuralMCTS {
  public:
+  struct PlayoutStats {
+    float result_sum = 0;
+    int runs = 0;
+    void Add(float result) noexcept;
+    float Avg() const noexcept { return runs > 0 ? result_sum / runs : 0; }
+    std::string DebugString() const noexcept;
+  };
   // The model is not owned. Owners of the NeuralMCTS instance must ensure it
   // outlives this instance.
   NeuralMCTS(Model& model, const Config& config);
@@ -186,7 +194,8 @@ class NeuralMCTS {
   // during training.
   // If add_noise is true, Dirichlet noise will be added to the root node's
   // move probs.
-  bool RunReusingTree(Node& root, const Board& b, bool add_noise);
+  bool RunReusingTree(Node& root, const Board& b, bool add_noise,
+                      PlayoutStats* playout_stats);
 
   // SuggestMove returns the best move suggestion that the NeuralMCTS algorithm
   // comes up with in think_time_millis milliseconds.

@@ -198,18 +198,24 @@ def create_app():
         reply_q = queue.SimpleQueue()
         current_app.training_task_queue.put(
             {
-                "type": "GetLatestExamples",
+                "type": "GetLatestRequest",
                 "reply_q": reply_q,
             }
         )
-        examples: Iterable[hexz_pb2.TrainingExample] = reply_q.get(timeout=5)
-        npexs = [training.NumpyExample.decode(e) for e in examples]
+        req: hexz_pb2.AddTrainingExamplesRequest = reply_q.get(timeout=5)
+        if not req:
+            return "No examples yet", 404
+        npexs = [training.NumpyExample.decode(e) for e in req.examples]
         buf = io.StringIO()
         svg.export(
             buf,
             boards=[CBoard.from_numpy(e.board) for e in npexs],
-            captions=[f"Value: {e.value[0]:.3f}" for e in npexs],
+            captions=[
+                f"Move: {x.move.move} &bull; Value: {e.value[0]:.3f} PredVal: {x.model_predictions.value:.3f}"
+                for x, e in zip(req.examples, npexs)
+            ],
             move_probs=[e.move_probs for e in npexs],
+            header=f"Execution ID: {req.execution_id}",
         )
         return buf.getvalue(), {"Content-Type": "text/html; charset=utf-8"}
 
