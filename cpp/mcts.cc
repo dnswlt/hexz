@@ -17,17 +17,9 @@
 
 namespace hexz {
 
-namespace {
-constexpr float kNoiseWeight = 0.25;
-constexpr float kInitialQRoot = -0.2;
-// Value subtracted from the parent's Q value to calculate an unvisited child's
-// initial Q value.
-constexpr float kInitialQPenalty = 0.3;
-// The first move for which a fast move should be possible.
-constexpr int kFirstFastMove = 6;
-}  // namespace
-
-float Node::uct_c = 2.5;
+float Node::uct_c = 1.5;
+float Node::initial_root_q_value = 0;
+float Node::initial_q_penalty = 0;
 
 Node::Node(Node* parent, int turn, Move move)
     : parent_{parent}, turn_{turn}, move_{move} {}
@@ -35,10 +27,10 @@ Node::Node(Node* parent, int turn, Move move)
 float Node::Q() const noexcept {
   if (visit_count_ == 0) {
     if (parent_ == nullptr) {
-      return kInitialQRoot;
+      return initial_root_q_value;
     }
     float parentQ = parent_->turn() != turn() ? -parent_->Q() : parent_->Q();
-    return parentQ - kInitialQPenalty;
+    return parentQ - initial_q_penalty;
   }
   return wins_ / visit_count_;
 }
@@ -65,12 +57,36 @@ std::string Node::Stats() const {
     min_child_vc = (*min_c)->visit_count();
     max_child_vc = (*max_c)->visit_count();
   }
-  return absl::StrCat("nchildren:", children_.size(),              //
-                      " visited_children:", NumVisitedChildren(),  //
-                      " min_child_vc:", min_child_vc,              //
-                      " max_child_vc:", max_child_vc,              //
-                      " visit_count:", visit_count(),              //
-                      " Q:", Q());
+  // Traverse tree to compute summary stats.
+  int non_leaf_nodes = 0;
+  int max_depth = 0;
+  int n_children = 0;
+  std::vector<std::pair<const Node*, int>> q;
+  q.emplace_back(this, 0);
+  while (!q.empty()) {
+    const auto [n, d] = q.back();
+    q.pop_back();
+    if (d > max_depth) {
+      max_depth = d;
+    }
+    if (n->IsLeaf()) {
+      continue;
+    }
+    n_children += n->children().size();
+    non_leaf_nodes++;
+    for (const auto& c : n->children()) {
+      q.emplace_back(c.get(), d + 1);
+    }
+  }
+  return absl::StrCat(
+      "nchildren:", children_.size(),              //
+      " visited_children:", NumVisitedChildren(),  //
+      " min_child_vc:", min_child_vc,              //
+      " max_child_vc:", max_child_vc,              //
+      " visit_count:", visit_count(),              //
+      " depth:", max_depth,                        //
+      " avg_children: ", (static_cast<float>(n_children) / non_leaf_nodes),
+      " Q:", Q());
 }
 
 float Node::Puct() const noexcept {
@@ -223,22 +239,25 @@ void Node::AppendDebugString(std::ostream& os,
                              const std::string& indent) const {
   os << indent << "Node(\n";
   os << indent << "  turn: " << turn_ << "\n";
-  os << indent << "  move: (" << static_cast<int>(move_.typ) << ", " << move_.r
-     << ", " << move_.c << ", " << move_.value << ")\n";
+  os << indent << "  move: " << move_.DebugString() << "\n";
   os << indent << "  wins: " << wins_ << "\n";
+  os << indent << "  value: " << value_ << "\n";
   os << indent << "  visit_count: " << visit_count_ << "\n";
   if (parent_ != nullptr) {
     os << indent << "  puct: " << Puct() << "\n";
   }
+  os << indent << "  nchildren: " << children_.size() << "\n";
   if (!children_.empty()) {
     os << indent << "  children: [\n";
     for (const auto& c : children_) {
-      c->AppendDebugString(os, indent + "    ");
-      os << indent << ",\n";
+      if (c->visit_count_ > 0) {
+        c->AppendDebugString(os, indent + "    ");
+        os << indent << ",\n";
+      }
     }
     os << indent << "  ]\n";
   }
-  os << indent << ")";
+  os << indent << ")\n";
 }
 
 std::string Node::DebugString() const {
@@ -250,10 +269,11 @@ std::string Node::DebugString() const {
 namespace {
 absl::Status WriteDotNodeRec(const Node& n, const std::string& name,
                              std::ofstream& os) {
+  float puct = n.parent() == nullptr ? 0.0 : n.Puct() * 100;
   std::string label = absl::StrFormat(
-      "%d(%d, %d, %d)%.1f v:%.2f\\nvc:%d q:%.2f c:%d",                 //
+      "%d(%d, %d, %d)%.0f v:%.2f\\nvc:%d q:%.2f p:%.1f c:%d",          //
       n.turn(), n.move().typ, n.move().r, n.move().c, n.move().value,  //
-      n.value(), n.visit_count(), n.wins(), n.children().size());
+      n.value(), n.visit_count(), n.Q(), puct, n.children().size());
   os << name << "[label=\"" << label << "\"]\n";
   int i = 0;
   for (const auto& c : n.children()) {
@@ -317,20 +337,37 @@ TorchModel::Prediction TorchModel::Predict(const Board& board,
   };
 }
 
-inline void NeuralMCTS::PlayoutStats::Add(float result) noexcept {
+inline void PlayoutRunner::Stats::Add(float result) noexcept {
   result_sum += result;
   runs++;
 }
 
-std::string NeuralMCTS::PlayoutStats::DebugString() const noexcept {
-  return absl::StrFormat("PlayoutStats{.runs=%d, .avg=%.3f}", runs, Avg());
+std::string PlayoutRunner::Stats::DebugString() const noexcept {
+  return absl::StrFormat("PlayoutRunner::Stats{.runs=%d, .avg=%.3f}", runs,
+                         Avg());
 }
 
-NeuralMCTS::NeuralMCTS(Model& model, const Config& config)
-    : model_{model}, config_{config} {}
+PlayoutRunner::Stats RandomPlayoutRunner::Run(const Board& board, int turn,
+                                              int runs) {
+  PlayoutRunner::Stats stats;
+  for (int i = 0; i < runs; i++) {
+    Perfm::Scope perfm(Perfm::RandomPlayout);
+    float r = FastRandomPlayout(turn, board);
+    stats.Add(r);
+  }
+  aggregated_stats_.Merge(stats);
+  return stats;
+}
 
-bool NeuralMCTS::RunReusingTree(Node& root, const Board& b, bool add_noise,
-                                PlayoutStats* playout_stats) {
+NeuralMCTS::NeuralMCTS(Model& model,
+                       std::unique_ptr<PlayoutRunner> playout_runner,
+                       const Config& config)
+    : model_{model},
+      playout_runner_{std::move(playout_runner)},
+      config_{config} {}
+
+bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
+                             bool run_playouts) {
   // Same as Run, but re-use the existing tree starting at root (assuming it
   // was reset before calling this method for the first iteration).
   // An unvisited leaf that already has predictions and zeroed child nodes
@@ -389,17 +426,11 @@ bool NeuralMCTS::RunReusingTree(Node& root, const Board& b, bool add_noise,
     n->AddDirichletNoise(kNoiseWeight, config_.dirichlet_concentration);
   }
   float value = pred.value;
-  if (config_.random_playouts > 0 && playout_stats != nullptr) {
-    float result_sum = 0.0;
-    for (int i = 0; i < config_.random_playouts; i++) {
-      Perfm::Scope perfm(Perfm::RandomPlayout);
-      float r = FastRandomPlayout(n->turn(), board);
-      playout_stats->Add(r);
-      result_sum += r;
-    }
+  if (run_playouts) {
+    auto stats =
+        playout_runner_->Run(board, n->turn(), config_.random_playouts);
     // 50% weight for model predictions and 50% for random playouts.
-    float playout_value =
-        (n->turn() == 0 ? 1 : -1) * result_sum / config_.random_playouts;
+    float playout_value = (n->turn() == 0 ? 1 : -1) * stats.Avg();
     value = (value + playout_value) / 2;
   }
   n->SetValue(value);
@@ -458,13 +489,8 @@ std::pair<int, bool> NeuralMCTS::NumRuns(int move) const noexcept {
     if (internal::UnitRandom() < config_.fast_move_prob) {
       return std::make_pair(config_.runs_per_fast_move, true);
     }
-    return std::make_pair(config_.runs_per_move, false);
   }
-  return std::make_pair(
-      std::max(1, static_cast<int>(
-                      std::round(config_.runs_per_move *
-                                 (1 + move * config_.runs_per_move_gradient)))),
-      false);
+  return std::make_pair(config_.runs_per_move, false);
 }
 
 absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
@@ -473,7 +499,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
   int64_t started_micros = UnixMicros();
   int n = 0;
   // Every game starts with player 0.
-  auto root = std::make_unique<Node>(nullptr, /*turn=*/0, Move{});
+  auto root = std::make_unique<Node>(/*turn=*/0);
   float result = 0.0;
   bool game_over = false;
   const int64_t max_micros =
@@ -490,32 +516,33 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     const auto [runs, is_fast_run] = NumRuns(n);
     int n_runs = 0;
     int n_reused = 0;
-    PlayoutStats playout_stats;
+    bool run_playouts = !is_fast_run && config_.random_playouts > 0;
+    bool add_noise = !is_fast_run && config_.dirichlet_concentration > 0;
+    playout_runner_->ResetStats();
     while ((n_runs - n_reused) < runs) {
-      bool add_noise =
-          !is_fast_run && n_runs == 0 && config_.dirichlet_concentration > 0;
       float playout_value = 0;
-      if (RunReusingTree(*root, board, add_noise,
-                         is_fast_run ? nullptr : &playout_stats)) {
+      if (SelfplayRun(*root, board, add_noise, run_playouts)) {
         // Re-used previous prediction, so don't count as a full run.
         n_reused++;
       }
       n_runs++;
+      add_noise = false;  // Only add noise on first run.
     }
-    if (playout_stats.runs > 0 && std::abs(playout_stats.Avg()) > 0.995) {
+    if (run_playouts &&
+        std::abs(playout_runner_->AggregatedStats().Avg()) > kResignThreshold) {
       const auto [s0, s1] = board.Score();
       ABSL_LOG(INFO) << "Resigning on move " << n << " at score " << s0 << "-"
-                     << s1 << " and avg. playout result " << playout_stats.Avg()
+                     << s1 << " and playout result "
+                     << playout_runner_->AggregatedStats().DebugString()
                      << " and root->value " << root->value()
                      << " and root->turn " << root->turn();
-      result = std::round(
-          playout_stats.Avg());  // Ensure the result is a whole number.
+      // Ensure the result is a whole number.
+      result = std::round(playout_runner_->AggregatedStats().Avg());
       game_over = true;
       break;
     }
     // if (n < 10)
-    //   WriteDotGraph(*root, "/tmp/searchtree_" + std::to_string(n) +
-    //   ".dot");
+    //   WriteDotGraph(*root, "/tmp/searchtree_" + std::to_string(n) + ".dot");
     if (root->terminal()) {
       result = board.Result();
       ABSL_LOG(INFO) << "Game over after "
@@ -557,9 +584,8 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
 
     int turn = root->turn();
     std::string stats = root->Stats();
-    // NOTE: Must not access root.children() after this step!
-    std::unique_ptr<Node> child = root->SampleChildAsRoot();
-    const auto& move = child->move();
+    root = root->SampleChildAsRoot();
+    const auto& move = root->move();
     ABSL_LOG(INFO) << "#" << n << " " << move.DebugString()
                    << (is_fast_run ? "[fast]" : "") << " (turn: " << turn
                    << ") " << board.ShortDebugString() << " after "
@@ -578,8 +604,17 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     }
 
     board.MakeMove(turn, move);
-    root = std::move(child);
-    root->ResetTree();
+    if (is_fast_run && config_.random_playouts > 0) {
+      // Gnarf, this "fast run" code proliferates...
+      // If we make a fast run and use random playouts,
+      // we should not re-use the .value of child nodes
+      // as it interferes badly with value updates done due to random playouts:
+      // the .value of a fast run was generated using only model predictions.
+      // For simplicity, just don't re-use the tree at all.
+      root = std::make_unique<Node>(root->turn());
+    } else {
+      root->ResetTree();
+    }
   }
   if (game_over) {
     for (auto& ex : examples) {
@@ -592,7 +627,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
 absl::StatusOr<std::unique_ptr<Node>> NeuralMCTS::SuggestMove(
     int player, const Board& board, int think_time_millis) {
   int64_t started_micros = UnixMicros();
-  auto root = std::make_unique<Node>(nullptr, /*turn=*/player, Move{});
+  auto root = std::make_unique<Node>(player);
   const int64_t max_micros =
       started_micros + static_cast<int64_t>(think_time_millis) * 1000;
   for (int n = 0; n < config_.runs_per_move; n++) {

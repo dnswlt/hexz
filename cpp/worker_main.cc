@@ -51,29 +51,6 @@ std::string RandomUid() {
 
 }  // namespace
 
-void PlayGameLocally(const Config& config) {
-  std::unique_ptr<TorchModel> model;
-  try {
-    auto module = torch::jit::load(config.local_model_path);
-    module.to(torch::kCPU);
-    module.eval();
-    model = std::make_unique<TorchModel>(module);
-  } catch (const c10::Error& e) {
-    ABSL_LOG(ERROR) << "Failed to load model from " << config.local_model_path
-                    << ": " << e.msg();
-    return;
-  }
-  {
-    Perfm::Scope ps(Perfm::PlayGameLocally);
-    NeuralMCTS mcts{*model, config};
-    Board b = Board::RandomBoard();
-    if (auto result = mcts.PlayGame(b, /*max_runtime_seconds=*/0);
-        !result.ok()) {
-      ABSL_LOG(ERROR) << "Game failed: " << result.status();
-    }
-  }
-}
-
 absl::StatusOr<std::unique_ptr<TorchModel>> FetchLatestModel(RPCClient& rpc) {
   auto km = rpc.FetchLatestModel();
   if (!km.ok()) {
@@ -107,7 +84,7 @@ void GenerateExamples(const Config& config) {
                      << config.max_runtime_seconds * 1'000'000;
       break;
     }
-    NeuralMCTS mcts{*model, config};
+    NeuralMCTS mcts{*model, std::make_unique<RandomPlayoutRunner>(), config};
     Board b = Board::RandomBoard();
     int64_t max_runtime_seconds =
         config.max_runtime_seconds - (now - started_micros) / 1'000'000;
@@ -123,7 +100,8 @@ void GenerateExamples(const Config& config) {
       return;
     }
     const int n_examples = examples->size();
-    auto resp = rpc.SendExamples(execution_id, model->Key(), *std::move(examples));
+    auto resp =
+        rpc.SendExamples(execution_id, model->Key(), *std::move(examples));
     if (!resp.ok()) {
       ABSL_LOG(ERROR) << "Failed to send examples: " << resp.status();
       return;
@@ -203,7 +181,11 @@ int main() {
   absl::InitializeLog();
   // Config
   auto config = hexz::Config::FromEnv();
-  hexz::Node::uct_c = config.uct_c;
+  if (config.training_server_url.empty()) {
+    ABSL_LOG(ERROR) << "training_server_url must be set";
+    return 1;
+  }
+  hexz::Node::InitConfigParams(config);
 
   // Execute
   ABSL_LOG(INFO) << "Worker started with " << config.String();
@@ -211,20 +193,11 @@ int main() {
     hexz::internal::RandomDelay(config.startup_delay_seconds);
     ABSL_LOG(INFO) << "Startup delay finished.";
   }
-  if (config.local_model_path != "") {
-    ABSL_LOG(INFO)
-        << "HEXZ_LOCAL_MODEL_PATH is set. Playing a game with a local model.";
-    PlayGameLocally(config);
-    return 0;
-  }
   std::thread memmon;
   if (config.debug_memory_usage) {
     memmon = std::thread{MemMon};
   }
-  // END EXPERIMENT
-  if (config.training_server_url != "") {
-    hexz::GenerateExamples(config);
-  }
+  hexz::GenerateExamples(config);
   if (memmon.joinable()) {
     {
       std::lock_guard<std::mutex> lk(cv_memmon_mut);

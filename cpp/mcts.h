@@ -18,9 +18,25 @@
 
 namespace hexz {
 
+// Some constants for which I've seen no need to tweak them dynamically.
+// Most of these either get deleted or end up as Config attributes :)
+constexpr float kNoiseWeight = 0.25;
+// The first move for which a fast move is possible.
+constexpr int kFirstFastMove = 6;
+// Value or random playout result threshold above which a player will resign.
+constexpr float kResignThreshold = 0.999;
+
 class Node {
  public:
+  explicit Node(int turn) : Node(nullptr, turn, Move{}) {}
   Node(Node* parent, int turn, Move move);
+
+  // Must be called at startup to initialize static configuration parameters.
+  static void InitConfigParams(const Config& config) {
+    uct_c = config.uct_c;
+    initial_root_q_value = config.initial_root_q_value;
+    initial_q_penalty = config.initial_q_penalty;
+  }
 
   // Simple getters.
   int turn() const { return turn_; }
@@ -110,11 +126,16 @@ class Node {
   int NumVisitedChildren() const noexcept;
   int NumChildren() const noexcept { return children_.size(); }
   std::string Stats() const;
-  // Weight of the exploration term.
-  // Must only be modified at program startup.
-  static float uct_c;
 
   std::string DebugString() const;
+
+  // Static members that server as "configurable constants". They all must
+  // only be modified at program startup.
+  //
+  // See the corresponding field in class Config for documentation.
+  static float uct_c;
+  static float initial_root_q_value;
+  static float initial_q_penalty;
 
  private:
   void AppendDebugString(std::ostream& os, const std::string& indent) const;
@@ -164,18 +185,43 @@ class TorchModel : public Model {
   torch::jit::Module module_;
 };
 
-class NeuralMCTS {
+class PlayoutRunner {
  public:
-  struct PlayoutStats {
+  struct Stats {
     float result_sum = 0;
     int runs = 0;
     void Add(float result) noexcept;
     float Avg() const noexcept { return runs > 0 ? result_sum / runs : 0; }
+    Stats& Merge(const Stats& other) {
+      runs += other.runs;
+      result_sum += other.result_sum;
+      return *this;
+    }
     std::string DebugString() const noexcept;
   };
+
+  virtual Stats Run(const Board& board, int turn, int runs) = 0;
+  virtual const Stats& AggregatedStats() const = 0;
+  virtual void ResetStats() = 0;
+  virtual ~PlayoutRunner() = default;
+};
+
+class RandomPlayoutRunner : public PlayoutRunner {
+ public:
+  Stats Run(const Board& board, int turn, int runs) override;
+  const Stats& AggregatedStats() const override { return aggregated_stats_; };
+  void ResetStats() override { aggregated_stats_ = Stats{}; };
+
+ private:
+  Stats aggregated_stats_;
+};
+
+class NeuralMCTS {
+ public:
   // The model is not owned. Owners of the NeuralMCTS instance must ensure it
   // outlives this instance.
-  NeuralMCTS(Model& model, const Config& config);
+  NeuralMCTS(Model& model, std::unique_ptr<PlayoutRunner> playout_runner,
+             const Config& config);
 
   absl::StatusOr<std::vector<hexzpb::TrainingExample>> PlayGame(
       Board& board, int max_runtime_seconds);
@@ -190,12 +236,14 @@ class NeuralMCTS {
   // This method should be called during "normal" play, i.e. outside of
   // training.
   bool Run(Node& root, const Board& board);
-  // RunReusingTree is a variant of Run that should be used for self-play
+  // SelfplayRun is a variant of Run that should be used for self-play
   // during training.
   // If add_noise is true, Dirichlet noise will be added to the root node's
   // move probs.
-  bool RunReusingTree(Node& root, const Board& b, bool add_noise,
-                      PlayoutStats* playout_stats);
+  // If run_playouts is true, the PlayoutRunner will be used in the value
+  // computation.
+  bool SelfplayRun(Node& root, const Board& b, bool add_noise,
+                   bool run_playouts);
 
   // SuggestMove returns the best move suggestion that the NeuralMCTS algorithm
   // comes up with in think_time_millis milliseconds.
@@ -207,6 +255,8 @@ class NeuralMCTS {
   Config config_;
   // Not owned.
   Model& model_;
+  // Used for refining model predictions with random playouts.
+  std::unique_ptr<PlayoutRunner> playout_runner_;
 };
 
 }  // namespace hexz

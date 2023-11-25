@@ -9,9 +9,6 @@ namespace hexz {
 struct Config {
   // URL of the training server, e.g. "http://localhost:8080".
   std::string training_server_url;
-  // Path to a local model.pt file.
-  // Can be used for local runs without the training server.
-  std::string local_model_path;
   // MCTS runs executed for each move. Can be further influenced by
   // runs_per_move_decay.
   int runs_per_move = 800;
@@ -25,12 +22,6 @@ struct Config {
   int runs_per_fast_move = 100;
   // Value between 0 and 1. Set to 0 to disable fast moves.
   float fast_move_prob = 0.0;
-  // The runs for move N are calculated as
-  //    max(1, runs_per_move * (1 + runs_per_move_gradient * N))
-  // The idea is that the first couple of moves are much more important
-  // than the "end game" in hexz. The defaul value -0.01 will result
-  // in 50% of the original runs_per_move at move 50.
-  float runs_per_move_gradient = -0.01;
   // Maximum number of moves to make per game before aborting.
   // Only useful for testing, otherwise leave it at the default 200,
   // which ensures games are played till the end.
@@ -40,7 +31,15 @@ struct Config {
   // Maximum number of games the worker should play. Mostly for testing.
   int max_games = -1;
   // Weight of the exploration term in the Puct formula.
-  float uct_c = 2.5;
+  float uct_c = 1.5;
+  // The initial Q-value for the root node. This is relevant for its children,
+  // which compute their initial Q-value based on the Q-value of their parent.
+  // (Known as "first play urgency" (FPU) in the literature.)
+  // There shouldn't be a need to tweak this value outside tests.
+  float initial_root_q_value = -0.2;
+  // Value subtracted from the parent's Q value to calculate an unvisited
+  // child's initial Q value.
+  float initial_q_penalty = 0.3;
   // Concentration factor ("alpha") of the Dirichlet noise that gets
   // added to the root nodes during MCTS search.
   // Flagz has 18 moves on average (with high variance;

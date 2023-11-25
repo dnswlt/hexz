@@ -25,7 +25,7 @@ Now compile the Cython modules:
 python3 setup.py build_ext --build-lib=src
 ```
 
-**NOTE**: Building the `pyhexz.cclib` extension assumes that
+**NOTE**: Building the `pyhexz.ccapi` extension assumes that
 the C++ libraries in ../cpp were already built. If you don't care about the
 Python `cpuserver` module (e.g. if you only want to run the training server),
 you can `export HEXZ_SKIP_BUILD_CCAPI=1` before running `setup.py`.
@@ -36,10 +36,12 @@ Test the C++ bindings for the MoveSuggester by running:
 cd src
 # macos version. For Linux, use LD_LIBRARY_PATH
 DYLD_LIBRARY_PATH=$HOME/git/github.com/dnswlt/hexz/cpp/build python3 -c '
-from pyhexz.cclib import CppMoveSuggester
-m = CppMoveSuggester()
+from pyhexz.ccapi import CppMoveSuggester
+m = CppMoveSuggester("../../cpp/testdata/scriptmodule.pt")
 print(m.suggest_move(b"FOO"))'
 ```
+
+It should print the following error: `ValueError: not a valid SuggestMoveRequest proto`.
 
 ### pytest
 

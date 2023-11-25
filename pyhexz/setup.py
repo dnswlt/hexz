@@ -12,7 +12,7 @@ setup(
     ext_modules=cythonize(
         [Extension("pyhexz.hexc", ["src/pyhexz/hexc.py"])]
         + (
-            [  # Building the pyhexz.cclib extension assumes that
+            [  # Building the pyhexz.ccapi extension assumes that
                 # the C++ libraries in ../cpp were already built.
                 Extension(
                     "pyhexz.ccapi",

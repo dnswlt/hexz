@@ -143,3 +143,12 @@ env HEAPPROFILE=/tmp/worker.hprof LD_PRELOAD=$HOME/tmp/gperftools-2.13/.libs/lib
   HEXZ_STARTUP_DELAY_SECONDS=0 \
   ./worker
 ```
+
+## References
+
+* The AlphaGo paper *Mastering the game of Go with deep neural networks and tree search*:
+  https://research.google/pubs/pub44806/
+* The AlphaGo Zero paper *Mastering the Game of Go without Human Knowledge*:
+  https://discovery.ucl.ac.uk/id/eprint/10045895/1/agz_unformatted_nature.pdf
+* The AlphaZero paper *Mastering Chess and Shogi by Self-Play with a General Reinforcement Learning Algorithm*:
+  https://arxiv.org/pdf/1712.01815.pdf
