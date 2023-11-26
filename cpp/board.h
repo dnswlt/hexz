@@ -53,6 +53,10 @@ struct Move {
   int r;
   int c;
   float value;
+  // Helper to create a Flag move.
+  static Move Flag(int r, int c) {
+    return Move{Typ::kFlag, r, c, 1.0};
+  }
   std::string DebugString() const {
     return absl::StrCat("Move(", typ, ", ", r, ", ", c, ", ", value, ")");
   }

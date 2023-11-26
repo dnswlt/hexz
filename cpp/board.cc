@@ -291,7 +291,7 @@ std::vector<Move> Board::NextMoves(int player) const {
     int cols = 10 - r % 2;
     for (int c = 0; c < cols; c++) {
       if (flag && b_acc[I_BLOCKED(player)][r][c] == 0) {
-        moves.push_back(Move{Move::Typ::kFlag, r, c, 1.0});
+        moves.push_back(Move::Flag(r, c));
       }
       float next_val = b_acc[I_NEXTVAL(player)][r][c];
       if (next_val > 0) {

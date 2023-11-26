@@ -85,7 +85,7 @@ TEST(NodeTest, IsLeaf) {
   Node n(nullptr, 0, Move{});
   EXPECT_TRUE(n.IsLeaf());
   std::vector<Move> moves{
-      Move{Move::Typ::kFlag, 0, 0, 0},
+      Move::Flag(0, 0),
   };
   n.CreateChildren(0, moves);
   EXPECT_FALSE(n.IsLeaf());
@@ -97,8 +97,8 @@ TEST(NodeTest, MaxPuctChild) {
   Node::initial_q_penalty = 0.3;
   Node n(nullptr, 0, Move{});
   std::vector<Move> moves{
-      Move{Move::Typ::kFlag, 0, 0, 0},
-      Move{Move::Typ::kFlag, 1, 0, 0},
+      Move::Flag(0, 0),
+      Move::Flag(1, 0),
   };
   n.CreateChildren(1 - n.turn(), moves);
   auto pr = torch::ones({2, 11, 10});
@@ -127,7 +127,7 @@ TEST(NodeTest, Backpropagate) {
   */
   Node root(nullptr, 0, Move{});
   std::vector<Move> root_moves{
-      Move{Move::Typ::kFlag, 0, 0, 0},
+      Move::Flag(0, 0),
       Move{Move::Typ::kNormal, 0, 0, 0},
   };
   root.CreateChildren(1 - root.turn(), root_moves);
@@ -161,7 +161,7 @@ TEST(NodeTest, BackpropagateFraction) {
   */
   Node root(nullptr, 0, Move{});
   std::vector<Move> root_moves{
-      Move{Move::Typ::kFlag, 0, 0, 0},
+      Move::Flag(0, 0),
       Move{Move::Typ::kNormal, 0, 0, 0},
   };
   root.CreateChildren(1 - root.turn(), root_moves);
@@ -188,9 +188,9 @@ TEST(NodeTest, FlatIndex) {
   Node root(nullptr, 0, Move{});
   auto t = torch::arange(2 * 11 * 10).reshape({2, 11, 10});
   std::vector<Move> moves{
-      Move{Move::Typ::kFlag, 0, 0, 0},
-      Move{Move::Typ::kFlag, 0, 8, 0},
-      Move{Move::Typ::kFlag, 2, 0, 0},
+      Move::Flag(0, 0),
+      Move::Flag(0, 8),
+      Move::Flag(2, 0),
       Move{Move::Typ::kNormal, 0, 0, 0},
   };
   root.CreateChildren(1, moves);
@@ -207,9 +207,9 @@ TEST(NodeTest, AddDirichletNoise) {
   std::vector<Move> moves{
       // Use the moves that come first in the flat representation of
       // move_probs_.
-      Move{Move::Typ::kFlag, 0, 0, 0},
-      Move{Move::Typ::kFlag, 0, 1, 0},
-      Move{Move::Typ::kFlag, 0, 2, 0},
+      Move::Flag(0, 0),
+      Move::Flag(0, 1),
+      Move::Flag(0, 2),
   };
   root.CreateChildren(1 - root.turn(), moves);
   auto t = torch::zeros({2, 11, 10});
@@ -246,7 +246,7 @@ TEST(NodeTest, ActionMask) {
   Node root(nullptr, 0, Move{});
   std::vector<Move> moves{
       // Can place a flag at (0, 0).
-      Move{Move::Typ::kFlag, 0, 0, 0},
+      Move::Flag(0, 0),
       // Can place a normal cell with value 1.0 at (7, 3).
       Move{Move::Typ::kNormal, 7, 3, 1.0},
   };
@@ -313,7 +313,7 @@ TEST(MCTSTest, NumRuns) {
   NeuralMCTS mcts(fake_model, /*playout_runner=*/nullptr, config);
   EXPECT_EQ(mcts.NumRuns(0).first, 100);
   EXPECT_EQ(mcts.NumRuns(25).first, 100);
-  // Fast run config should return # of fast runs, but only after the 
+  // Fast run config should return # of fast runs, but only after the
   config = Config{
       .runs_per_move = 100,
       .fast_move_prob = 1.0,  // only fast moves
@@ -400,12 +400,14 @@ TEST(MCTSTest, PlayGame) {
 }
 
 TEST(MCTSTest, PlayGameResign) {
+  // If all random playouts indicate the same winner, the game should be
+  // resigned.
   Perfm::InitScope perfm;
   Config config{
       .runs_per_move = 50,
       .dirichlet_concentration = 0.0,
       .random_playouts = 10,  // use random playouts
-      .fast_move_prob = 0.0,  // but no fast moves
+      .fast_move_prob = 0.0,  // but no fast moves (to avoid interference)
       // Avoid penalties in this test: with fake models returning uniform values
       // for all nodes, the search would otherwise just go down a single path.
       .initial_q_penalty = 0.0,

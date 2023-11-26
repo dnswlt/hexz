@@ -82,4 +82,5 @@
         "random": "cpp"
     },
     "cmake.sourceDirectory": "/Users/denniswalter/git/github.com/dnswlt/hexz/cpp",
+    "cmake.configureOnOpen": true,
 }

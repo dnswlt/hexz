@@ -1,4 +1,5 @@
 #include <absl/base/log_severity.h>
+#include <absl/cleanup/cleanup.h>
 #include <absl/log/absl_log.h>
 #include <absl/log/globals.h>
 #include <absl/log/initialize.h>
@@ -194,17 +195,20 @@ int main() {
     ABSL_LOG(INFO) << "Startup delay finished.";
   }
   std::thread memmon;
+  absl::Cleanup thread_joiner = [&memmon] {
+    if (memmon.joinable()) {
+      ABSL_LOG(INFO) << "Joining memory monitoring thread.";
+      {
+        std::lock_guard<std::mutex> lk(cv_memmon_mut);
+        stop_memmon = true;
+      }
+      cv_memmon.notify_one();
+      memmon.join();
+    }
+  };
   if (config.debug_memory_usage) {
     memmon = std::thread{MemMon};
   }
   hexz::GenerateExamples(config);
-  if (memmon.joinable()) {
-    {
-      std::lock_guard<std::mutex> lk(cv_memmon_mut);
-      stop_memmon = true;
-    }
-    cv_memmon.notify_one();
-    memmon.join();
-  }
   return 0;
 }
