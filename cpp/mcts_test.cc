@@ -54,8 +54,8 @@ class FakePlayoutRunner final : public PlayoutRunner {
     ABSL_CHECK(iteration_ >= 0 && iteration_ < results_.size());
     float r = results_[iteration_];
     Stats s{
-        .runs = runs,
         .result_sum = runs * r,
+        .runs = runs,
     };
     stats_.Merge(s);
     return s;
@@ -316,8 +316,8 @@ TEST(MCTSTest, NumRuns) {
   // Fast run config should return # of fast runs, but only after the
   config = Config{
       .runs_per_move = 100,
-      .fast_move_prob = 1.0,  // only fast moves
       .runs_per_fast_move = 10,
+      .fast_move_prob = 1.0,  // only fast moves
   };
   NeuralMCTS mcts_fast(fake_model, /*playout_runner=*/nullptr, config);
   EXPECT_EQ(mcts_fast.NumRuns(0).first, 100);
@@ -410,8 +410,8 @@ TEST(MCTSTest, PlayGameResign) {
       .fast_move_prob = 0.0,  // but no fast moves (to avoid interference)
       // Avoid penalties in this test: with fake models returning uniform values
       // for all nodes, the search would otherwise just go down a single path.
-      .initial_q_penalty = 0.0,
       .initial_root_q_value = 0.0,
+      .initial_q_penalty = 0.0,
   };
   FakeModel model;
   // Playouts yield a draw on move 0, a very weak value on move 1,
