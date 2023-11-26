@@ -30,7 +30,7 @@ float Node::Q() const noexcept {
       return initial_root_q_value;
     }
     float parentQ = parent_->turn() != turn() ? -parent_->Q() : parent_->Q();
-    return parentQ - initial_q_penalty;
+    return std::max(-1.0f, parentQ - initial_q_penalty);
   }
   return wins_ / visit_count_;
 }
@@ -45,48 +45,70 @@ int Node::NumVisitedChildren() const noexcept {
   return n;
 }
 
-std::string Node::Stats() const {
+namespace {
+inline std::pair<int, int> MinMaxChildVisitCount(const Node& n) {
   int min_child_vc = 0;
   int max_child_vc = 0;
-  if (!IsLeaf()) {
+  if (!n.IsLeaf()) {
     const auto [min_c, max_c] =
-        std::minmax_element(children().begin(), children().end(),
+        std::minmax_element(n.children().begin(), n.children().end(),
                             [](const auto& lhs, const auto& rhs) {
                               return lhs->visit_count() < rhs->visit_count();
                             });
     min_child_vc = (*min_c)->visit_count();
     max_child_vc = (*max_c)->visit_count();
   }
+  return std::make_pair(min_child_vc, max_child_vc);
+}
+}  // namespace
+
+std::string Node::Stats() const {
+  const auto [min_vc, max_vc] = MinMaxChildVisitCount(*this);
+  return absl::StrCat("nchildren:", children_.size(),              //
+                      " visited_children:", NumVisitedChildren(),  //
+                      " min_child_vc:", min_vc,                    //
+                      " max_child_vc:", max_vc,                    //
+                      " visit_count:", visit_count(),              //
+                      " Q:", Q());
+}
+
+void Node::PopulateStats(hexzpb::TrainingExample::Stats& stats) const {
+  const auto [min_vc, max_vc] = MinMaxChildVisitCount(*this);
   // Traverse tree to compute summary stats.
-  int non_leaf_nodes = 0;
-  int max_depth = 0;
-  int n_children = 0;
+  int branch_nodes = 0;
+  int max_depth = -1;
+  int tree_size = 0;
   std::vector<std::pair<const Node*, int>> q;
   q.emplace_back(this, 0);
+  std::vector<int32_t> nodes_per_depth;
   while (!q.empty()) {
     const auto [n, d] = q.back();
     q.pop_back();
+    tree_size++;
     if (d > max_depth) {
       max_depth = d;
+      nodes_per_depth.resize(max_depth + 1);
     }
+    nodes_per_depth[d]++;
     if (n->IsLeaf()) {
       continue;
     }
-    n_children += n->children().size();
-    non_leaf_nodes++;
+    branch_nodes++;
     for (const auto& c : n->children()) {
       q.emplace_back(c.get(), d + 1);
     }
   }
-  return absl::StrCat(
-      "nchildren:", children_.size(),              //
-      " visited_children:", NumVisitedChildren(),  //
-      " min_child_vc:", min_child_vc,              //
-      " max_child_vc:", max_child_vc,              //
-      " visit_count:", visit_count(),              //
-      " depth:", max_depth,                        //
-      " avg_children: ", (static_cast<float>(n_children) / non_leaf_nodes),
-      " Q:", Q());
+  stats.set_valid_moves(children().size());
+  stats.set_visit_count(visit_count());
+  stats.set_visited_children(NumVisitedChildren());
+  stats.set_search_depth(max_depth);
+  stats.set_search_tree_size(tree_size);
+  stats.set_branch_nodes(branch_nodes);
+  stats.set_min_child_vc(min_vc);
+  stats.set_max_child_vc(max_vc);
+  stats.set_q_value(Q());
+  stats.mutable_nodes_per_depth()->Assign(nodes_per_depth.begin(),
+                                          nodes_per_depth.end());
 }
 
 float Node::Puct() const noexcept {
@@ -368,11 +390,6 @@ NeuralMCTS::NeuralMCTS(Model& model,
 
 bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
                              bool run_playouts) {
-  // Same as Run, but re-use the existing tree starting at root (assuming it
-  // was reset before calling this method for the first iteration).
-  // An unvisited leaf that already has predictions and zeroed child nodes
-  // counts as one Run, but this method will only return once it has called
-  // Predict for a fresh prediction once.
   Board board(b);
   Node* n = &root;
   if (add_noise && !n->IsLeaf()) {
@@ -441,6 +458,8 @@ bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
 }
 
 bool NeuralMCTS::Run(Node& root, const Board& b) {
+  // TODO: Check that this is all still correct. We are making a lot of changes
+  // to SelfplayRun which might not all be reflected here.
   Board board(b);
   Perfm::Scope ps(Perfm::NeuralMCTS_Run);
   Node* n = &root;
@@ -528,8 +547,8 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       n_runs++;
       add_noise = false;  // Only add noise on first run.
     }
-    if (run_playouts &&
-        std::abs(playout_runner_->AggregatedStats().Avg()) > kResignThreshold) {
+    if (run_playouts && std::abs(playout_runner_->AggregatedStats().Avg()) >
+                            config_.resign_threshold) {
       const auto [s0, s1] = board.Score();
       ABSL_LOG(INFO) << "Resigning on move " << n << " at score " << s0 << "-"
                      << s1 << " and playout result "
@@ -568,8 +587,6 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
           enc_priors.begin(), enc_priors.end());
       example.mutable_model_predictions()->set_value(root->value());
       example.mutable_stats()->set_duration_micros(move_ready - move_started);
-      example.mutable_stats()->set_valid_moves(root->NumChildren());
-      example.mutable_stats()->set_visit_count(root->visit_count());
       example.set_encoding(hexzpb::TrainingExample::PYTORCH);
       // The board in the example must be viewed from the perspective of the
       // player whose turn it is.
@@ -579,11 +596,12 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       example.mutable_action_mask()->assign(enc_mask.begin(), enc_mask.end());
       auto enc_pr = torch::pickle_save(root->NormVisitCounts());
       example.mutable_move_probs()->assign(enc_pr.begin(), enc_pr.end());
-      examples.push_back(example);
+      root->PopulateStats(*example.mutable_stats());
+      examples.push_back(std::move(example));
     }
 
+    const std::string stats = root->Stats();
     int turn = root->turn();
-    std::string stats = root->Stats();
     root = root->SampleChildAsRoot();
     const auto& move = root->move();
     ABSL_LOG(INFO) << "#" << n << " " << move.DebugString()

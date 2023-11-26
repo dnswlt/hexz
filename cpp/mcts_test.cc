@@ -24,7 +24,7 @@ namespace fs = std::filesystem;
 using testing::ElementsAre;
 using testing::ElementsAreArray;
 
-class FakeModel final : public Model {
+class UniformFakeModel final : public Model {
  public:
   // Always returns uniform probabilities.
   Prediction Predict(const Board& board, const Node& node) override {
@@ -37,8 +37,25 @@ class FakeModel final : public Model {
   }
 };
 
-static_assert(!std::is_abstract<FakeModel>(),
-              "FakeModel should not be abstract");
+class ConstantFakeModel final : public Model {
+ public:
+  ConstantFakeModel(torch::Tensor move_probs, float p0_value)
+      : move_probs_{move_probs}, p0_value_{p0_value} {
+    auto dim = move_probs.sizes();
+    ABSL_CHECK(dim.size() == 3);
+    ABSL_CHECK(dim[0] == 2 && dim[1] == 11 && dim[2] == 10);
+  }
+  Prediction Predict(const Board& board, const Node& node) override {
+    return Prediction{
+        .move_probs = move_probs_,
+        .value = node.turn() == 0 ? p0_value_ : -p0_value_,
+    };
+  }
+
+ private:
+  torch::Tensor move_probs_;
+  float p0_value_;
+};
 
 // A PlayoutRunner useful for tests. You can specify the results
 // it is supposed to return.
@@ -50,7 +67,6 @@ class FakePlayoutRunner final : public PlayoutRunner {
  public:
   explicit FakePlayoutRunner(std::vector<float> results) : results_{results} {}
   Stats Run(const Board& board, int turn, int runs) override {
-    ABSL_LOG(INFO) << "RUNNNNN " << iteration_;
     ABSL_CHECK(iteration_ >= 0 && iteration_ < results_.size());
     float r = results_[iteration_];
     Stats s{
@@ -62,7 +78,6 @@ class FakePlayoutRunner final : public PlayoutRunner {
   }
   const Stats& AggregatedStats() const override { return stats_; }
   void ResetStats() override {
-    ABSL_LOG(INFO) << "RESETTTTTT " << iteration_;
     iteration_++;
     stats_ = Stats{};
   }
@@ -72,9 +87,6 @@ class FakePlayoutRunner final : public PlayoutRunner {
   std::vector<float> results_;
   int iteration_ = -1;
 };
-
-static_assert(!std::is_abstract<FakePlayoutRunner>(),
-              "FakePlayoutRunner should not be abstract");
 
 TEST(NodeTest, InitializedToZero) {
   Node n(nullptr, 0, Move{});
@@ -259,6 +271,21 @@ TEST(NodeTest, ActionMask) {
   EXPECT_TRUE(mask.index({1, 7, 3}).item<bool>());
 }
 
+class MCTSScriptModuleTest : public testing::Test {
+ protected:
+  void SetUp() override {
+    // The file "testdata/scriptmodule.pt" is expected to be a ScriptModule of
+    // the right shape to be used by NeuralMCTS.
+    //
+    // It can be generated with the regenerate.sh sidecar script.
+    scriptmodule_ = torch::jit::load("testdata/scriptmodule.pt");
+    scriptmodule_.to(torch::kCPU);
+    scriptmodule_.eval();
+  }
+
+  torch::jit::Module scriptmodule_;
+};
+
 TEST(MCTSTest, TensorAsVector) {
   torch::Tensor t = torch::rand({2, 11, 10}, torch::kFloat32);
   std::vector<float> data(t.data_ptr<float>(), t.data_ptr<float>() + t.numel());
@@ -309,7 +336,7 @@ TEST(MCTSTest, NumRuns) {
   Config config{
       .runs_per_move = 100,
   };
-  FakeModel fake_model;
+  UniformFakeModel fake_model;
   NeuralMCTS mcts(fake_model, /*playout_runner=*/nullptr, config);
   EXPECT_EQ(mcts.NumRuns(0).first, 100);
   EXPECT_EQ(mcts.NumRuns(25).first, 100);
@@ -332,7 +359,7 @@ TEST(MCTSTest, RemainingFlagsAreNotNegative) {
   Config config{
       .runs_per_move = 10,
   };
-  FakeModel fake_model;
+  UniformFakeModel fake_model;
   NeuralMCTS mcts(fake_model, /*playout_runner=*/nullptr, config);
   Board b = Board::RandomBoard();
   auto root = std::make_unique<Node>(nullptr, 0, Move{});
@@ -348,21 +375,15 @@ TEST(MCTSTest, RemainingFlagsAreNotNegative) {
   }
 }
 
-TEST(MCTSTest, PlayGame) {
-  // The file "testdata/scriptmodule.pt" is expected to be a ScriptModule of the
-  // right shape to be used by NeuralMCTS.
-  //
-  // It can be generated with the regenerate.sh sidecar script.
+TEST_F(MCTSScriptModuleTest, PlayGame) {
   Perfm::InitScope perfm;
-  auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
-  scriptmodule.to(torch::kCPU);
-  scriptmodule.eval();
   Config config{
       .runs_per_move = 50,
       .dirichlet_concentration = 0.3,
       .random_playouts = 10,
+      .resign_threshold = std::numeric_limits<float>::max(),  // never resign
   };
-  TorchModel model(scriptmodule);
+  TorchModel model(scriptmodule_);
   NeuralMCTS mcts(model, std::make_unique<RandomPlayoutRunner>(), config);
   auto b = Board::RandomBoard();
 
@@ -399,10 +420,43 @@ TEST(MCTSTest, PlayGame) {
   EXPECT_EQ(pr.sizes()[2], 10);
 }
 
+TEST(MCTSTest, PlayGameStats) {
+  // Test that TrainingExample stats are populated as expected.
+  Config config{
+      .runs_per_move = 50,
+      .dirichlet_concentration = 0.0,
+      .random_playouts = 0,
+      .resign_threshold = std::numeric_limits<float>::max(),  // never resign
+  };
+  auto move_probs = torch::ones({2, 11, 10});
+  move_probs /= move_probs.sum();
+  float value = 1.0;
+  ConstantFakeModel fake_model(move_probs, value);
+  NeuralMCTS mcts(fake_model, std::make_unique<RandomPlayoutRunner>(), config);
+  auto b = Board::RandomBoard();
+
+  auto examples = mcts.PlayGame(b, /*max_runtime_seconds=*/0);
+  ASSERT_TRUE(examples.ok());
+  ASSERT_GE(examples->size(), 1);
+  auto ex = (*examples)[0];
+  ASSERT_TRUE(ex.has_stats());
+  const auto& stats = ex.stats();
+  EXPECT_EQ(stats.visit_count(), config.runs_per_move);
+  // Every game has 85 initial flag positions.
+  EXPECT_EQ(stats.valid_moves(), 85);
+  // In the given config, each game is won by P0, so the first selected
+  // child node should be terribly interesting and explored further and
+  // further.
+  //
+  // TODO: This test currently fails, as it uncovered a terrible bug in the
+  // MCTS implementation -- wins are wrongly calculated for the opponent!
+  // Need to clean up this turn mess.
+  EXPECT_EQ(stats.visited_children(), 1);
+}
+
 TEST(MCTSTest, PlayGameResign) {
   // If all random playouts indicate the same winner, the game should be
   // resigned.
-  Perfm::InitScope perfm;
   Config config{
       .runs_per_move = 50,
       .fast_move_prob = 0.0,  // but no fast moves (to avoid interference)
@@ -412,8 +466,9 @@ TEST(MCTSTest, PlayGameResign) {
       .initial_q_penalty = 0.0,
       .dirichlet_concentration = 0.0,
       .random_playouts = 10,  // use random playouts
+      .resign_threshold = 0.999,
   };
-  FakeModel model;
+  UniformFakeModel model;
   // Playouts yield a draw on move 0, a very weak value on move 1,
   // then player 1 wins every game in move 2, which should lead to resignation.
   auto runner =
@@ -425,11 +480,8 @@ TEST(MCTSTest, PlayGameResign) {
   EXPECT_EQ(examples->size(), 2) << "Should have resigned on the third move";
 }
 
-TEST(MCTSTest, WriteDotGraph) {
-  auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
-  scriptmodule.to(torch::kCPU);
-  scriptmodule.eval();
-  TorchModel model(scriptmodule);
+TEST_F(MCTSScriptModuleTest, WriteDotGraph) {
+  TorchModel model(scriptmodule_);
   NeuralMCTS mcts(model, /*playout_runner=*/nullptr, Config{});
   auto b = Board::RandomBoard();
   auto dot_path =

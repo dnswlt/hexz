@@ -23,8 +23,6 @@ namespace hexz {
 constexpr float kNoiseWeight = 0.25;
 // The first move for which a fast move is possible.
 constexpr int kFirstFastMove = 6;
-// Value or random playout result threshold above which a player will resign.
-constexpr float kResignThreshold = 0.999;
 
 class Node {
  public:
@@ -124,7 +122,7 @@ class Node {
 
   // Returns the number of children that had a nonzero visit_count.
   int NumVisitedChildren() const noexcept;
-  int NumChildren() const noexcept { return children_.size(); }
+  void PopulateStats(hexzpb::TrainingExample::Stats& stats) const;
   std::string Stats() const;
 
   std::string DebugString() const;

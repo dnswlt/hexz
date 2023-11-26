@@ -469,9 +469,18 @@ PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
         template <typename>
 PROTOBUF_CONSTEXPR TrainingExample_Stats::TrainingExample_Stats(::_pbi::ConstantInitialized)
     : _impl_{
+      /*decltype(_impl_.nodes_per_depth_)*/ {},
+      /* _impl_._nodes_per_depth_cached_byte_size_ = */ {0},
       /*decltype(_impl_.duration_micros_)*/ ::int64_t{0},
       /*decltype(_impl_.valid_moves_)*/ 0,
       /*decltype(_impl_.visit_count_)*/ 0,
+      /*decltype(_impl_.visited_children_)*/ 0,
+      /*decltype(_impl_.search_depth_)*/ 0,
+      /*decltype(_impl_.search_tree_size_)*/ 0,
+      /*decltype(_impl_.min_child_vc_)*/ 0,
+      /*decltype(_impl_.max_child_vc_)*/ 0,
+      /*decltype(_impl_.q_value_)*/ 0,
+      /*decltype(_impl_.branch_nodes_)*/ 0,
       /*decltype(_impl_._cached_size_)*/ {},
     } {}
 struct TrainingExample_StatsDefaultTypeInternal {
@@ -817,6 +826,14 @@ const ::uint32_t TableStruct_hexz_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.duration_micros_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.valid_moves_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.visit_count_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.visited_children_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.search_depth_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.search_tree_size_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.branch_nodes_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.min_child_vc_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.max_child_vc_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.q_value_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.nodes_per_depth_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample, _impl_._has_bits_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample, _internal_metadata_),
     ~0u,  // no _extensions_
@@ -872,7 +889,7 @@ static const ::_pbi::MigrationSchema
         {256, 267, -1, sizeof(::hexzpb::AddTrainingExamplesResponse)},
         {270, -1, -1, sizeof(::hexzpb::TrainingExample_ModelPredictions)},
         {280, -1, -1, sizeof(::hexzpb::TrainingExample_Stats)},
-        {291, 309, -1, sizeof(::hexzpb::TrainingExample)},
+        {299, 317, -1, sizeof(::hexzpb::TrainingExample)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -969,7 +986,7 @@ const char descriptor_table_protodef_hexz_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
     "v\n\006Status\022\026\n\022STATUS_UNSPECIFIED\020\000\022\014\n\010ACC"
     "EPTED\020\001\022\030\n\024REJECTED_WRONG_MODEL\020\002\022\030\n\024REJ"
     "ECTED_AT_CAPACITY\020\003\022\022\n\016REJECTED_OTHER\020\004\""
-    "\354\003\n\017TrainingExample\022\023\n\013unix_micros\030\001 \001(\003"
+    "\243\005\n\017TrainingExample\022\023\n\013unix_micros\030\001 \001(\003"
     "\022\014\n\004turn\030\007 \001(\005\022$\n\004move\030\t \001(\0132\026.hexzpb.Ga"
     "meEngineMove\0222\n\010encoding\030\006 \001(\0162 .hexzpb."
     "TrainingExample.Encoding\022\r\n\005board\030\002 \001(\014\022"
@@ -978,11 +995,15 @@ const char descriptor_table_protodef_hexz_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
     "\001(\0132(.hexzpb.TrainingExample.ModelPredic"
     "tions\022,\n\005stats\030\005 \001(\0132\035.hexzpb.TrainingEx"
     "ample.Stats\0321\n\020ModelPredictions\022\016\n\006prior"
-    "s\030\001 \001(\014\022\r\n\005value\030\002 \001(\002\032J\n\005Stats\022\027\n\017durat"
-    "ion_micros\030\003 \001(\003\022\023\n\013valid_moves\030\004 \001(\005\022\023\n"
-    "\013visit_count\030\005 \001(\005\"\"\n\010Encoding\022\t\n\005NUMPY\020"
-    "\000\022\013\n\007PYTORCH\020\001B\037Z\035github.com/dnswlt/hexz"
-    "/hexzpbb\006proto3"
+    "s\030\001 \001(\014\022\r\n\005value\030\002 \001(\002\032\200\002\n\005Stats\022\027\n\017dura"
+    "tion_micros\030\001 \001(\003\022\023\n\013valid_moves\030\002 \001(\005\022\023"
+    "\n\013visit_count\030\003 \001(\005\022\030\n\020visited_children\030"
+    "\004 \001(\005\022\024\n\014search_depth\030\005 \001(\005\022\030\n\020search_tr"
+    "ee_size\030\006 \001(\005\022\024\n\014branch_nodes\030\n \001(\005\022\024\n\014m"
+    "in_child_vc\030\007 \001(\005\022\024\n\014max_child_vc\030\010 \001(\005\022"
+    "\017\n\007q_value\030\t \001(\002\022\027\n\017nodes_per_depth\030\013 \003("
+    "\005\"\"\n\010Encoding\022\t\n\005NUMPY\020\000\022\013\n\007PYTORCH\020\001B\037Z"
+    "\035github.com/dnswlt/hexz/hexzpbb\006proto3"
 };
 static const ::_pbi::DescriptorTable* const descriptor_table_hexz_2eproto_deps[1] =
     {
@@ -992,7 +1013,7 @@ static ::absl::once_flag descriptor_table_hexz_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_hexz_2eproto = {
     false,
     false,
-    3215,
+    3398,
     descriptor_table_protodef_hexz_2eproto,
     "hexz.proto",
     &descriptor_table_hexz_2eproto_once,
@@ -7019,18 +7040,47 @@ TrainingExample_Stats::TrainingExample_Stats(::google::protobuf::Arena* arena)
   SharedCtor(arena);
   // @@protoc_insertion_point(arena_constructor:hexzpb.TrainingExample.Stats)
 }
-TrainingExample_Stats::TrainingExample_Stats(const TrainingExample_Stats& from)
-    : ::google::protobuf::Message(), _impl_(from._impl_) {
+TrainingExample_Stats::TrainingExample_Stats(const TrainingExample_Stats& from) : ::google::protobuf::Message() {
+  TrainingExample_Stats* const _this = this;
+  (void)_this;
+  new (&_impl_) Impl_{
+      decltype(_impl_.nodes_per_depth_){from._impl_.nodes_per_depth_},
+      /* _impl_._nodes_per_depth_cached_byte_size_ = */ {0},
+      decltype(_impl_.duration_micros_){},
+      decltype(_impl_.valid_moves_){},
+      decltype(_impl_.visit_count_){},
+      decltype(_impl_.visited_children_){},
+      decltype(_impl_.search_depth_){},
+      decltype(_impl_.search_tree_size_){},
+      decltype(_impl_.min_child_vc_){},
+      decltype(_impl_.max_child_vc_){},
+      decltype(_impl_.q_value_){},
+      decltype(_impl_.branch_nodes_){},
+      /*decltype(_impl_._cached_size_)*/ {},
+  };
   _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
       from._internal_metadata_);
+  ::memcpy(&_impl_.duration_micros_, &from._impl_.duration_micros_,
+    static_cast<::size_t>(reinterpret_cast<char*>(&_impl_.branch_nodes_) -
+    reinterpret_cast<char*>(&_impl_.duration_micros_)) + sizeof(_impl_.branch_nodes_));
+
   // @@protoc_insertion_point(copy_constructor:hexzpb.TrainingExample.Stats)
 }
 inline void TrainingExample_Stats::SharedCtor(::_pb::Arena* arena) {
   (void)arena;
   new (&_impl_) Impl_{
+      decltype(_impl_.nodes_per_depth_){arena},
+      /* _impl_._nodes_per_depth_cached_byte_size_ = */ {0},
       decltype(_impl_.duration_micros_){::int64_t{0}},
       decltype(_impl_.valid_moves_){0},
       decltype(_impl_.visit_count_){0},
+      decltype(_impl_.visited_children_){0},
+      decltype(_impl_.search_depth_){0},
+      decltype(_impl_.search_tree_size_){0},
+      decltype(_impl_.min_child_vc_){0},
+      decltype(_impl_.max_child_vc_){0},
+      decltype(_impl_.q_value_){0},
+      decltype(_impl_.branch_nodes_){0},
       /*decltype(_impl_._cached_size_)*/ {},
   };
 }
@@ -7041,6 +7091,7 @@ TrainingExample_Stats::~TrainingExample_Stats() {
 }
 inline void TrainingExample_Stats::SharedDtor() {
   ABSL_DCHECK(GetArenaForAllocation() == nullptr);
+  _impl_.nodes_per_depth_.~RepeatedField();
 }
 void TrainingExample_Stats::SetCachedSize(int size) const {
   _impl_._cached_size_.Set(size);
@@ -7052,9 +7103,10 @@ PROTOBUF_NOINLINE void TrainingExample_Stats::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  _internal_mutable_nodes_per_depth()->Clear();
   ::memset(&_impl_.duration_micros_, 0, static_cast<::size_t>(
-      reinterpret_cast<char*>(&_impl_.visit_count_) -
-      reinterpret_cast<char*>(&_impl_.duration_micros_)) + sizeof(_impl_.visit_count_));
+      reinterpret_cast<char*>(&_impl_.branch_nodes_) -
+      reinterpret_cast<char*>(&_impl_.duration_micros_)) + sizeof(_impl_.branch_nodes_));
   _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
 }
 
@@ -7066,42 +7118,94 @@ const char* TrainingExample_Stats::_InternalParse(
 
 
 PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
-const ::_pbi::TcParseTable<2, 3, 0, 0, 2> TrainingExample_Stats::_table_ = {
+const ::_pbi::TcParseTable<4, 11, 0, 0, 2> TrainingExample_Stats::_table_ = {
   {
     0,  // no _has_bits_
     0, // no _extensions_
-    5, 24,  // max_field_number, fast_idx_mask
+    11, 120,  // max_field_number, fast_idx_mask
     offsetof(decltype(_table_), field_lookup_table),
-    4294967267,  // skipmap
+    4294965248,  // skipmap
     offsetof(decltype(_table_), field_entries),
-    3,  // num_field_entries
+    11,  // num_field_entries
     0,  // num_aux_entries
     offsetof(decltype(_table_), field_names),  // no aux_entries
     &_TrainingExample_Stats_default_instance_._instance,
     ::_pbi::TcParser::GenericFallback,  // fallback
   }, {{
-    // int32 valid_moves = 4;
-    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.valid_moves_), 63>(),
-     {32, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.valid_moves_)}},
-    // int32 visit_count = 5;
-    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.visit_count_), 63>(),
-     {40, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.visit_count_)}},
     {::_pbi::TcParser::MiniParse, {}},
-    // int64 duration_micros = 3;
+    // int64 duration_micros = 1;
     {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(TrainingExample_Stats, _impl_.duration_micros_), 63>(),
-     {24, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.duration_micros_)}},
+     {8, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.duration_micros_)}},
+    // int32 valid_moves = 2;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.valid_moves_), 63>(),
+     {16, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.valid_moves_)}},
+    // int32 visit_count = 3;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.visit_count_), 63>(),
+     {24, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.visit_count_)}},
+    // int32 visited_children = 4;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.visited_children_), 63>(),
+     {32, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.visited_children_)}},
+    // int32 search_depth = 5;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.search_depth_), 63>(),
+     {40, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.search_depth_)}},
+    // int32 search_tree_size = 6;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.search_tree_size_), 63>(),
+     {48, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.search_tree_size_)}},
+    // int32 min_child_vc = 7;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.min_child_vc_), 63>(),
+     {56, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.min_child_vc_)}},
+    // int32 max_child_vc = 8;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.max_child_vc_), 63>(),
+     {64, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.max_child_vc_)}},
+    // float q_value = 9;
+    {::_pbi::TcParser::FastF32S1,
+     {77, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.q_value_)}},
+    // int32 branch_nodes = 10;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.branch_nodes_), 63>(),
+     {80, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.branch_nodes_)}},
+    // repeated int32 nodes_per_depth = 11;
+    {::_pbi::TcParser::FastV32P1,
+     {90, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.nodes_per_depth_)}},
+    {::_pbi::TcParser::MiniParse, {}},
+    {::_pbi::TcParser::MiniParse, {}},
+    {::_pbi::TcParser::MiniParse, {}},
+    {::_pbi::TcParser::MiniParse, {}},
   }}, {{
     65535, 65535
   }}, {{
-    // int64 duration_micros = 3;
+    // int64 duration_micros = 1;
     {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.duration_micros_), 0, 0,
     (0 | ::_fl::kFcSingular | ::_fl::kInt64)},
-    // int32 valid_moves = 4;
+    // int32 valid_moves = 2;
     {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.valid_moves_), 0, 0,
     (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
-    // int32 visit_count = 5;
+    // int32 visit_count = 3;
     {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.visit_count_), 0, 0,
     (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
+    // int32 visited_children = 4;
+    {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.visited_children_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
+    // int32 search_depth = 5;
+    {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.search_depth_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
+    // int32 search_tree_size = 6;
+    {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.search_tree_size_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
+    // int32 min_child_vc = 7;
+    {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.min_child_vc_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
+    // int32 max_child_vc = 8;
+    {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.max_child_vc_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
+    // float q_value = 9;
+    {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.q_value_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kFloat)},
+    // int32 branch_nodes = 10;
+    {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.branch_nodes_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
+    // repeated int32 nodes_per_depth = 11;
+    {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.nodes_per_depth_), 0, 0,
+    (0 | ::_fl::kFcRepeated | ::_fl::kPackedInt32)},
   }},
   // no aux_entries
   {{
@@ -7115,25 +7219,88 @@ const ::_pbi::TcParseTable<2, 3, 0, 0, 2> TrainingExample_Stats::_table_ = {
   ::uint32_t cached_has_bits = 0;
   (void)cached_has_bits;
 
-  // int64 duration_micros = 3;
+  // int64 duration_micros = 1;
   if (this->_internal_duration_micros() != 0) {
     target = ::google::protobuf::internal::WireFormatLite::
-        WriteInt64ToArrayWithField<3>(
+        WriteInt64ToArrayWithField<1>(
             stream, this->_internal_duration_micros(), target);
   }
 
-  // int32 valid_moves = 4;
+  // int32 valid_moves = 2;
   if (this->_internal_valid_moves() != 0) {
     target = ::google::protobuf::internal::WireFormatLite::
-        WriteInt32ToArrayWithField<4>(
+        WriteInt32ToArrayWithField<2>(
             stream, this->_internal_valid_moves(), target);
   }
 
-  // int32 visit_count = 5;
+  // int32 visit_count = 3;
   if (this->_internal_visit_count() != 0) {
     target = ::google::protobuf::internal::WireFormatLite::
-        WriteInt32ToArrayWithField<5>(
+        WriteInt32ToArrayWithField<3>(
             stream, this->_internal_visit_count(), target);
+  }
+
+  // int32 visited_children = 4;
+  if (this->_internal_visited_children() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::
+        WriteInt32ToArrayWithField<4>(
+            stream, this->_internal_visited_children(), target);
+  }
+
+  // int32 search_depth = 5;
+  if (this->_internal_search_depth() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::
+        WriteInt32ToArrayWithField<5>(
+            stream, this->_internal_search_depth(), target);
+  }
+
+  // int32 search_tree_size = 6;
+  if (this->_internal_search_tree_size() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::
+        WriteInt32ToArrayWithField<6>(
+            stream, this->_internal_search_tree_size(), target);
+  }
+
+  // int32 min_child_vc = 7;
+  if (this->_internal_min_child_vc() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::
+        WriteInt32ToArrayWithField<7>(
+            stream, this->_internal_min_child_vc(), target);
+  }
+
+  // int32 max_child_vc = 8;
+  if (this->_internal_max_child_vc() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::
+        WriteInt32ToArrayWithField<8>(
+            stream, this->_internal_max_child_vc(), target);
+  }
+
+  // float q_value = 9;
+  static_assert(sizeof(::uint32_t) == sizeof(float),
+                "Code assumes ::uint32_t and float are the same size.");
+  float tmp_q_value = this->_internal_q_value();
+  ::uint32_t raw_q_value;
+  memcpy(&raw_q_value, &tmp_q_value, sizeof(tmp_q_value));
+  if (raw_q_value != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteFloatToArray(
+        9, this->_internal_q_value(), target);
+  }
+
+  // int32 branch_nodes = 10;
+  if (this->_internal_branch_nodes() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::
+        WriteInt32ToArrayWithField<10>(
+            stream, this->_internal_branch_nodes(), target);
+  }
+
+  // repeated int32 nodes_per_depth = 11;
+  {
+    int byte_size = _impl_._nodes_per_depth_cached_byte_size_.Get();
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(11, _internal_nodes_per_depth(),
+                                                 byte_size, target);
+    }
   }
 
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
@@ -7153,22 +7320,81 @@ const ::_pbi::TcParseTable<2, 3, 0, 0, 2> TrainingExample_Stats::_table_ = {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  // int64 duration_micros = 3;
+  // repeated int32 nodes_per_depth = 11;
+  {
+    std::size_t data_size = ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_nodes_per_depth())
+    ;
+    _impl_._nodes_per_depth_cached_byte_size_.Set(::_pbi::ToCachedSize(data_size));
+    std::size_t tag_size = data_size == 0
+        ? 0
+        : 1 + ::_pbi::WireFormatLite::Int32Size(
+                            static_cast<int32_t>(data_size))
+    ;
+    total_size += tag_size + data_size;
+  }
+  // int64 duration_micros = 1;
   if (this->_internal_duration_micros() != 0) {
     total_size += ::_pbi::WireFormatLite::Int64SizePlusOne(
         this->_internal_duration_micros());
   }
 
-  // int32 valid_moves = 4;
+  // int32 valid_moves = 2;
   if (this->_internal_valid_moves() != 0) {
     total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
         this->_internal_valid_moves());
   }
 
-  // int32 visit_count = 5;
+  // int32 visit_count = 3;
   if (this->_internal_visit_count() != 0) {
     total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
         this->_internal_visit_count());
+  }
+
+  // int32 visited_children = 4;
+  if (this->_internal_visited_children() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+        this->_internal_visited_children());
+  }
+
+  // int32 search_depth = 5;
+  if (this->_internal_search_depth() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+        this->_internal_search_depth());
+  }
+
+  // int32 search_tree_size = 6;
+  if (this->_internal_search_tree_size() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+        this->_internal_search_tree_size());
+  }
+
+  // int32 min_child_vc = 7;
+  if (this->_internal_min_child_vc() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+        this->_internal_min_child_vc());
+  }
+
+  // int32 max_child_vc = 8;
+  if (this->_internal_max_child_vc() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+        this->_internal_max_child_vc());
+  }
+
+  // float q_value = 9;
+  static_assert(sizeof(::uint32_t) == sizeof(float),
+                "Code assumes ::uint32_t and float are the same size.");
+  float tmp_q_value = this->_internal_q_value();
+  ::uint32_t raw_q_value;
+  memcpy(&raw_q_value, &tmp_q_value, sizeof(tmp_q_value));
+  if (raw_q_value != 0) {
+    total_size += 5;
+  }
+
+  // int32 branch_nodes = 10;
+  if (this->_internal_branch_nodes() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+        this->_internal_branch_nodes());
   }
 
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
@@ -7189,6 +7415,7 @@ void TrainingExample_Stats::MergeImpl(::google::protobuf::Message& to_msg, const
   ::uint32_t cached_has_bits = 0;
   (void) cached_has_bits;
 
+  _this->_internal_mutable_nodes_per_depth()->MergeFrom(from._internal_nodes_per_depth());
   if (from._internal_duration_micros() != 0) {
     _this->_internal_set_duration_micros(from._internal_duration_micros());
   }
@@ -7197,6 +7424,32 @@ void TrainingExample_Stats::MergeImpl(::google::protobuf::Message& to_msg, const
   }
   if (from._internal_visit_count() != 0) {
     _this->_internal_set_visit_count(from._internal_visit_count());
+  }
+  if (from._internal_visited_children() != 0) {
+    _this->_internal_set_visited_children(from._internal_visited_children());
+  }
+  if (from._internal_search_depth() != 0) {
+    _this->_internal_set_search_depth(from._internal_search_depth());
+  }
+  if (from._internal_search_tree_size() != 0) {
+    _this->_internal_set_search_tree_size(from._internal_search_tree_size());
+  }
+  if (from._internal_min_child_vc() != 0) {
+    _this->_internal_set_min_child_vc(from._internal_min_child_vc());
+  }
+  if (from._internal_max_child_vc() != 0) {
+    _this->_internal_set_max_child_vc(from._internal_max_child_vc());
+  }
+  static_assert(sizeof(::uint32_t) == sizeof(float),
+                "Code assumes ::uint32_t and float are the same size.");
+  float tmp_q_value = from._internal_q_value();
+  ::uint32_t raw_q_value;
+  memcpy(&raw_q_value, &tmp_q_value, sizeof(tmp_q_value));
+  if (raw_q_value != 0) {
+    _this->_internal_set_q_value(from._internal_q_value());
+  }
+  if (from._internal_branch_nodes() != 0) {
+    _this->_internal_set_branch_nodes(from._internal_branch_nodes());
   }
   _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
 }
@@ -7215,9 +7468,10 @@ PROTOBUF_NOINLINE bool TrainingExample_Stats::IsInitialized() const {
 void TrainingExample_Stats::InternalSwap(TrainingExample_Stats* other) {
   using std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  _impl_.nodes_per_depth_.InternalSwap(&other->_impl_.nodes_per_depth_);
   ::google::protobuf::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.visit_count_)
-      + sizeof(TrainingExample_Stats::_impl_.visit_count_)
+      PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.branch_nodes_)
+      + sizeof(TrainingExample_Stats::_impl_.branch_nodes_)
       - PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.duration_micros_)>(
           reinterpret_cast<char*>(&_impl_.duration_micros_),
           reinterpret_cast<char*>(&other->_impl_.duration_micros_));

@@ -256,11 +256,26 @@ message TrainingExample {
     message Stats {
         // Time it took to generate this example (i.e., to generate the corresponding
         // neural MCTS move suggestion).
-        int64 duration_micros = 3;
-        // Number of valid moves
-        int32 valid_moves = 4;
+        int64 duration_micros = 1;
+        // Number of valid moves (equal to the number of root child nodes).
+        int32 valid_moves = 2;
         // Times that the root node was visited.
-        int32 visit_count = 5;
+        int32 visit_count = 3;
+        // Child nodes of the root node that were visited at least once.
+        int32 visited_children = 4;
+        // Maximum depth of the search tree. The root node has depth 0.
+        int32 search_depth = 5;
+        // Total number of nodes in the search tree, including leaves.
+        int32 search_tree_size = 6;
+        // Number of non-leaf nodes in the tree, i.e. those visited at least once.
+        int32 branch_nodes = 10;
+        // Min/max visit counts of the root node's children.
+        int32 min_child_vc = 7;
+        int32 max_child_vc = 8;
+        // The Q-value of the root node, i.e. wins/visit_count.
+        float q_value = 9;
+        // Number of nodes per depth level in the tree.
+        repeated int32 nodes_per_depth = 11;
     }
     Stats stats = 5;
 }
