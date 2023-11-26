@@ -27,7 +27,7 @@ cmake --build . --parallel 4
 ```
 
 As of Oct 2023 there are no official pre-built arm64 binaries for libtorch on pytorch.org,
-so the small example from https://pytorch.org/cppdocs/installing.html does not work.
+so the small example from <https://pytorch.org/cppdocs/installing.html> does not work.
 
 The easiest way to get libtorch for arm64 is by installing torch via Anaconda (or miniconda3),
 and then adding the path to the torch `cmake` folder to `CMAKE_PREFIX_PATH` (see above).
@@ -54,7 +54,7 @@ ldconfig
 [^1] NOTE: I had linker error when trying to use the statically linked protobuf library. It
     might be an option to build statically with `-DDCMAKE_POSITION_INDEPENDENT_CODE=ON` (I tried
     that, but then forgot to actually install the library before testing it... :facepalm:).
-    But since PyTorch is dynamically linked and the much larger lib anyway, we can go all-in 
+    But since PyTorch is dynamically linked and the much larger lib anyway, we can go all-in
     on dylib, why not.
 
 ```
@@ -116,7 +116,7 @@ See `.vscode/c_cpp_properties.json`. Also add `CMAKE_PREFIX_PATH` under _Cmake: 
 
 To run the worker, first make sure the training server is up and running. Then:
 
-```
+```bash
 env HEXZ_TRAINING_SERVER_URL=http://localhost:8080 \
   HEXZ_MAX_RUNTIME_SECONDS=60 \
   HEXZ_RUNS_PER_MOVE=800 \
@@ -131,7 +131,7 @@ env HEXZ_TRAINING_SERVER_URL=http://localhost:8080 \
 
 Using gperftools:
 
-```
+```bash
 env HEAPPROFILE=/tmp/worker.hprof LD_PRELOAD=$HOME/tmp/gperftools-2.13/.libs/libtcmalloc.so \
   HEXZ_TRAINING_SERVER_URL=http://localhost:8080 \
   HEXZ_MAX_RUNTIME_SECONDS=60 \
@@ -146,9 +146,14 @@ env HEAPPROFILE=/tmp/worker.hprof LD_PRELOAD=$HOME/tmp/gperftools-2.13/.libs/lib
 
 ## References
 
-* The AlphaGo paper *Mastering the game of Go with deep neural networks and tree search*:
-  https://research.google/pubs/pub44806/
-* The AlphaGo Zero paper *Mastering the Game of Go without Human Knowledge*:
-  https://discovery.ucl.ac.uk/id/eprint/10045895/1/agz_unformatted_nature.pdf
-* The AlphaZero paper *Mastering Chess and Shogi by Self-Play with a General Reinforcement Learning Algorithm*:
-  https://arxiv.org/pdf/1712.01815.pdf
+* The AlphaGo paper _Mastering the game of Go with deep neural networks and tree search_:
+  <https://research.google/pubs/pub44806/>,
+  <https://indico.hep.caltech.edu/event/56/contributions/774/attachments/385/475/nature16961.pdf>
+* The AlphaGo Zero paper _Mastering the Game of Go without Human Knowledge_:
+  <https://discovery.ucl.ac.uk/id/eprint/10045895/1/agz_unformatted_nature.pdf>
+* The AlphaZero paper _Mastering Chess and Shogi by Self-Play with a General Reinforcement Learning Algorithm_:
+  <https://arxiv.org/pdf/1712.01815.pdf>
+* Facebook's reimplementation of AZ: _ELF OpenGo: An Analysis and Open Reimplementation of AlphaZero_:
+  <https://research.facebook.com/publications/elf-opengo-an-analysis-and-open-reimplementation-of-alphazero/>
+* KataGo: D. Wu, _Accelerating Self-Play Learning in Go_:
+  <https://arxiv.org/pdf/1902.10565.pdf>

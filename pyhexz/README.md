@@ -8,7 +8,7 @@ Unless stated otherwise, all commands should be run from the current `pyhexz` di
 
 ### Anaconda
 
-Follow https://docs.conda.io/projects/miniconda/en/latest/miniconda-install.html to install `miniconda`.
+Follow <https://docs.conda.io/projects/miniconda/en/latest/miniconda-install.html> to install `miniconda`.
 
 Then create the `pyhexz` conda environment and activate it:
 
@@ -118,7 +118,7 @@ docker run \
 
 The architecture is as follows:
 
-* A single `server` running in a Docker container on a GCE VM is responsible for training and 
+* A single `server` running in a Docker container on a GCE VM is responsible for training and
   distributing model updates.
   * It holds the latest checkpoint of the configured model in memory (specified by the `MODEL_NAME` and
     loaded from GCS).
