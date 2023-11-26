@@ -405,13 +405,13 @@ TEST(MCTSTest, PlayGameResign) {
   Perfm::InitScope perfm;
   Config config{
       .runs_per_move = 50,
-      .dirichlet_concentration = 0.0,
-      .random_playouts = 10,  // use random playouts
       .fast_move_prob = 0.0,  // but no fast moves (to avoid interference)
       // Avoid penalties in this test: with fake models returning uniform values
       // for all nodes, the search would otherwise just go down a single path.
       .initial_root_q_value = 0.0,
       .initial_q_penalty = 0.0,
+      .dirichlet_concentration = 0.0,
+      .random_playouts = 10,  // use random playouts
   };
   FakeModel model;
   // Playouts yield a draw on move 0, a very weak value on move 1,
