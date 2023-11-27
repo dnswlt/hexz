@@ -35,7 +35,6 @@ gcloud services enable run.googleapis.com
 
 Import the already existing service account that you created above into the terraform state, and then grant
 permission to the service account to push to artifactregistry. This saves us a bit of pointing and clicking.
-(Icky clicky.)
 
 ```bash
 terraform import google_service_account.hexz-service-account projects/$project_id/serviceAccounts/$service_account_email
