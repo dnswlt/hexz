@@ -22,8 +22,7 @@ All commands assume you are in the `cpp` subdirectory.
 ```bash
 mkdir build
 cd build
-package_prefix="$(find $HOME/miniconda3/pkgs/ -name 'pytorch-2.1.0*' -type d)"
-cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="$package_prefix/lib/python3.11/site-packages/torch/share/cmake" ..
+cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="$HOME/miniconda3/pkgs/pytorch-2.1.0-py3.11_0/lib/python3.11/site-packages/torch/share/cmake" ..
 cmake --build . --parallel 4
 ```
 
