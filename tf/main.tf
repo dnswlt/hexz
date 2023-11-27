@@ -43,15 +43,18 @@ resource "google_artifact_registry_repository" "hexz-images" {
 }
 
 resource "docker_registry_image" "hexz-game-history-db" {
-  name = docker_image.hexz-game-history-db.name
+  name       = docker_image.hexz-game-history-db.name
   depends_on = [google_artifact_registry_repository.hexz-images]
 }
 
 resource "docker_image" "hexz-game-history-db" {
   name = "${var.region}-docker.pkg.dev/${var.project}/hexz-images/hexz-game-history-db"
   build {
-    context = "${path.cwd}/../sql"
-    tag     = ["${var.region}-docker.pkg.dev/${var.project}/hexz-images/hexz-game-history-db"]
+    context = local.build_contexts.hexz_game_history_db
+    tag     = ["${var.region}-docker.pkg.dev/${var.project}/hexz-images/hexz-game-history-db:1.0"]
+  }
+  triggers = {
+    dir_sha1 = sha1(join("", [for f in fileset("${local.build_contexts.hexz_game_history_db}", "*") : filesha1("${local.build_contexts.hexz_game_history_db}/${f}")]))
   }
 }
 
