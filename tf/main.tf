@@ -13,7 +13,7 @@ terraform {
 
 provider "docker" {
   registry_auth {
-    address = "europe-west6-docker.pkg.dev"
+    address     = "${var.region}-docker.pkg.dev"
     config_file = pathexpand("~/.docker/config.json")
   }
 }
@@ -35,22 +35,23 @@ resource "google_redis_instance" "cache" {
   }
 }
 
-resource "google_artifact_registry_repository" "hexz-game-history-db" {
+resource "google_artifact_registry_repository" "hexz-images" {
   location      = var.region
-  repository_id = "hexz-game-history-db"
-  description   = "hexz game history DB docker registry"
+  repository_id = "hexz-images"
+  description   = "hexz docker image registry"
   format        = "DOCKER"
 }
 
 resource "docker_registry_image" "hexz-game-history-db" {
-  name          = docker_image.hexz-game-history-db.name
+  name = docker_image.hexz-game-history-db.name
+  depends_on = [google_artifact_registry_repository.hexz-images]
 }
 
 resource "docker_image" "hexz-game-history-db" {
-  name = "europe-west6-docker.pkg.dev/${var.project}/hexz-game-history-db/hexz-game-history-db"
+  name = "${var.region}-docker.pkg.dev/${var.project}/hexz-images/hexz-game-history-db"
   build {
     context = "${path.cwd}/../sql"
-    tag     = ["europe-west6-docker.pkg.dev/${var.project}/hexz-game-history-db/hexz-game-history-db"]
+    tag     = ["${var.region}-docker.pkg.dev/${var.project}/hexz-images/hexz-game-history-db"]
   }
 }
 
@@ -61,8 +62,8 @@ resource "google_service_account" "hexz-service-account" {
 }
 
 resource "google_artifact_registry_repository_iam_member" "hexz-repo-iam" {
-  location   = google_artifact_registry_repository.hexz-game-history-db.location
-  repository = google_artifact_registry_repository.hexz-game-history-db.name
+  location   = google_artifact_registry_repository.hexz-images.location
+  repository = google_artifact_registry_repository.hexz-images.name
   role       = "roles/artifactregistry.writer"
   member     = "serviceAccount:${google_service_account.hexz-service-account.email}"
 }

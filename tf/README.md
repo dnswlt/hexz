@@ -44,3 +44,10 @@ gcloud projects add-iam-policy-binding $project_id \
     --role=roles/artifactregistry.admin \
     --condition=None
 ```
+
+Now you can do the normal things:
+
+```bash
+terraform init
+terraform apply
+```
