@@ -37,7 +37,6 @@ class Node {
   }
 
   // Simple getters.
-  int turn() const { return turn_; }
   const Move& move() const { return move_; }
   float prior() const noexcept { return prior_; }
   int visit_count() const noexcept { return visit_count_; }
@@ -54,8 +53,15 @@ class Node {
   // yet, returns a Q value derived from the parent's Q value.
   float Q() const noexcept;
 
-  // Update the turn.
-  void SetTurn(int turn) { turn_ = turn; }
+  // Returns the player whose turn it is to make the move stored
+  // in this node. MUST NOT be called on the root node.
+  int MoveTurn() const noexcept;
+  // Returns the player whose turn it is after the move stored
+  // in this node was made. This may be wrong ONLY in leaf nodes, b/c
+  // Flagz isn't strictly alternating (a player can run out of moves).
+  int NextTurn() const { return turn_; }
+  // Updates the turn.
+  void SetNextTurn(int turn) { turn_ = turn; }
 
   // Returns this node's PUCT value.
   float Puct() const noexcept;
@@ -81,10 +87,11 @@ class Node {
   // which are usually from the perspective of the current player.
   void Backpropagate(float result);
 
-  bool IsLeaf() const { return children_.empty(); }
+  bool IsRoot() const noexcept { return parent_ == nullptr; }
+  bool IsLeaf() const noexcept { return children_.empty(); }
 
   // Adds children representing the given moves to this node.
-  void CreateChildren(int turn, const std::vector<Move>& moves);
+  void CreateChildren(const std::vector<Move>& moves);
   // Shuffles children randomly. This can be used to avoid selection bias.
   void ShuffleChildren();
 
@@ -138,14 +145,86 @@ class Node {
  private:
   void AppendDebugString(std::ostream& os, const std::string& indent) const;
 
+  /*
+  It is slightly confusing which information in a node
+  is viewed from the perspective of the player making the
+  move, and which is viewed from the perspective of the
+  player whose turn it is after the move was made. (Which in
+  Flagz may be the same player, if the opponent has no moves
+  left.)
+
+  After a single SelfplayRun of a new game, the search
+  tree might look like this:
+
+  +------------------------------------+
+  | @root
+  |------------------------------------|
+  | parent_ = nullptr
+  | turn_ = 0  // P0 makes 1st move
+  | move_ = {}  // No move
+  | prior_ = 0.0  // No prior
+  | wins_ = 0.0  // Not set
+  | value_ = predicted value for turn_
+  | children_ = [@c1, ...]
+  | NextTurn() = 0
+  | MoveTurn() = undefined
+  +------------------------------------+
+
+  +------------------------------------
+  | @c1
+  |------------------------------------
+  | parent_ = @root
+  | turn_ = 1  // P1 makes 2nd move
+  | move_ = Move::Flag(0, 0)
+  | prior_ = 0.02 // predicted from @root
+  | wins_ = not yet set
+  | value_ = not yet set
+  | children_ = []
+  | NextTurn() = 1
+  | MoveTurn() = 0  // parent_->turn_
+  +------------------------------------
+
+    Values interpreted as "before move":
+    * turn_
+        * The player whose turn it is to make the move.
+          Should be accessed using the NextTurn() method.
+          The MoveTurn() method yields the player whose turn it is to make the
+          move.
+    * prior_
+        The probability to make this move, compared to its siblings.
+
+    Values interpreted as "after move":
+    * wins_
+        * the accumulated results (or predicted results)
+          after the move was made.
+          *** We store this value from the perspective of MoveTurn()! ***
+    * value_
+        * the model's evaluation of the board after the move was made.
+        * The model outputs this value from the perspective of the
+          player that will make the next move, i.e. NextTurn(),
+          because this value is predicted together with the
+          move probabilities ("policy") for the NEXT move.
+  */
+
   Node* parent_;
+  // The player whose turn it is to make the move stored in this node.
   int turn_;
+  // The move to be made.
   Move move_;
+  // The prior move probability of this node (relative to its siblings),
+  // as predicted by the model. Possibly includes Dirichlet noise.
   float prior_ = 0.0;
+  // The accumulated (predicted or actual) results obtained from playing
+  // this move, evaluated from the perspective of the MoveTurn() player.
   float wins_ = 0.0;
+  // Number of times this node was visited during MCTS.
   int visit_count_ = 0;
+  // The model's predicted value of the board after the move_ was made,
+  // from the perspective of the NextTurn() player.
   float value_ = 0.0;
+  // True if this is a terminal node of the game.
   bool terminal_ = false;
+  // Child nodes.
   std::vector<std::unique_ptr<Node>> children_;
 };
 

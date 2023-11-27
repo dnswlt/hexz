@@ -1929,14 +1929,14 @@ type TrainingExample_Stats struct {
 	SearchDepth int32 `protobuf:"varint,5,opt,name=search_depth,json=searchDepth,proto3" json:"search_depth,omitempty"`
 	// Total number of nodes in the search tree, including leaves.
 	SearchTreeSize int32 `protobuf:"varint,6,opt,name=search_tree_size,json=searchTreeSize,proto3" json:"search_tree_size,omitempty"`
-	// Number of nodes in the tree that were visited at least once.
+	// Number of non-leaf nodes in the tree, i.e. those visited at least once.
 	BranchNodes int32 `protobuf:"varint,10,opt,name=branch_nodes,json=branchNodes,proto3" json:"branch_nodes,omitempty"`
 	// Min/max visit counts of the root node's children.
 	MinChildVc int32 `protobuf:"varint,7,opt,name=min_child_vc,json=minChildVc,proto3" json:"min_child_vc,omitempty"`
 	MaxChildVc int32 `protobuf:"varint,8,opt,name=max_child_vc,json=maxChildVc,proto3" json:"max_child_vc,omitempty"`
 	// The Q-value of the root node, i.e. wins/visit_count.
 	QValue float32 `protobuf:"fixed32,9,opt,name=q_value,json=qValue,proto3" json:"q_value,omitempty"`
-	// Number of visited nodes per depth.
+	// Number of nodes per depth level in the tree.
 	NodesPerDepth []int32 `protobuf:"varint,11,rep,packed,name=nodes_per_depth,json=nodesPerDepth,proto3" json:"nodes_per_depth,omitempty"`
 }
 

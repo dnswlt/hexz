@@ -26,10 +26,11 @@ Node::Node(Node* parent, int turn, Move move)
 
 float Node::Q() const noexcept {
   if (visit_count_ == 0) {
-    if (parent_ == nullptr) {
+    if (parent_->IsRoot()) {
       return initial_root_q_value;
     }
-    float parentQ = parent_->turn() != turn() ? -parent_->Q() : parent_->Q();
+    float parentQ =
+        parent_->NextTurn() != NextTurn() ? -parent_->Q() : parent_->Q();
     return std::max(-1.0f, parentQ - initial_q_penalty);
   }
   return wins_ / visit_count_;
@@ -112,7 +113,7 @@ void Node::PopulateStats(hexzpb::TrainingExample::Stats& stats) const {
 }
 
 float Node::Puct() const noexcept {
-  ABSL_DCHECK(parent_ != nullptr) << "Prior: must not be called on root node";
+  ABSL_DCHECK(!IsRoot()) << "Prior: must not be called on root node";
   return Q() + Node::uct_c * prior_ * std::sqrt(parent_->visit_count_) /
                    (1 + visit_count_);
 }
@@ -239,40 +240,54 @@ std::unique_ptr<Node> Node::SampleChildAsRoot() {
   return selected_child;
 }
 
-void Node::Backpropagate(float result) {
-  Node* n = this;
-  while (n != nullptr) {
-    n->visit_count_++;
-    n->wins_ += n->turn() == 0 ? result : -result;
-    n = n->parent_;
-  }
+inline int Node::MoveTurn() const noexcept {
+  ABSL_DCHECK(!IsRoot());
+  return parent_->turn_;
 }
 
-void Node::CreateChildren(int turn, const std::vector<Move>& moves) {
+void Node::Backpropagate(float result) {
+  Node* n = this;
+  while (!n->IsRoot()) {
+    n->visit_count_++;
+    // wins_ aggregates the results from the perspective of the player
+    // who makes the move_, not the player whose turn it is after
+    // the move was made!
+    n->wins_ += n->MoveTurn() == 0 ? result : -result;
+    n = n->parent_;
+  }
+  // Update visit count of root node.
+  n->visit_count_++;
+}
+
+void Node::CreateChildren(const std::vector<Move>& moves) {
   ABSL_DCHECK(children_.empty())
       << "Must not add children if they already exist.";
+  // Initially we assume that it's the opponent's turn to make the next move.
+  // If that turns out to be false, the turn gets updated when trying to find
+  // next moves.
+  int next_turn = 1 - NextTurn();
   children_.reserve(moves.size());
   for (int i = 0; i < moves.size(); i++) {
-    children_.emplace_back(std::make_unique<Node>(this, turn, moves[i]));
+    children_.emplace_back(std::make_unique<Node>(this, next_turn, moves[i]));
   }
 }
 
 void Node::AppendDebugString(std::ostream& os,
                              const std::string& indent) const {
   os << indent << "Node(\n";
-  os << indent << "  turn: " << turn_ << "\n";
-  os << indent << "  move: " << move_.DebugString() << "\n";
-  os << indent << "  wins: " << wins_ << "\n";
-  os << indent << "  value: " << value_ << "\n";
-  os << indent << "  visit_count: " << visit_count_ << "\n";
-  if (parent_ != nullptr) {
+  os << indent << "  next_turn: " << NextTurn() << "\n";
+  os << indent << "  move: " << move().DebugString() << "\n";
+  os << indent << "  wins: " << wins() << "\n";
+  os << indent << "  value: " << value() << "\n";
+  os << indent << "  visit_count: " << visit_count() << "\n";
+  if (!IsRoot()) {
     os << indent << "  puct: " << Puct() << "\n";
   }
-  os << indent << "  nchildren: " << children_.size() << "\n";
-  if (!children_.empty()) {
+  os << indent << "  nchildren: " << children().size() << "\n";
+  if (!children().empty()) {
     os << indent << "  children: [\n";
-    for (const auto& c : children_) {
-      if (c->visit_count_ > 0) {
+    for (const auto& c : children()) {
+      if (c->visit_count() > 0) {
         c->AppendDebugString(os, indent + "    ");
         os << indent << ",\n";
       }
@@ -291,10 +306,10 @@ std::string Node::DebugString() const {
 namespace {
 absl::Status WriteDotNodeRec(const Node& n, const std::string& name,
                              std::ofstream& os) {
-  float puct = n.parent() == nullptr ? 0.0 : n.Puct() * 100;
+  float puct = n.IsRoot() ? 0.0 : n.Puct() * 100;
   std::string label = absl::StrFormat(
-      "%d(%d, %d, %d)%.0f v:%.2f\\nvc:%d q:%.2f p:%.1f c:%d",          //
-      n.turn(), n.move().typ, n.move().r, n.move().c, n.move().value,  //
+      "%d(%d, %d, %d)%.0f v:%.2f\\nvc:%d q:%.2f p:%.1f c:%d",              //
+      n.NextTurn(), n.move().typ, n.move().r, n.move().c, n.move().value,  //
       n.value(), n.visit_count(), n.Q(), puct, n.children().size());
   os << name << "[label=\"" << label << "\"]\n";
   int i = 0;
@@ -336,7 +351,7 @@ TorchModel::Prediction TorchModel::Predict(const Board& board,
   ABSL_DCHECK(!node.IsLeaf()) << "Must not call Predict on a leaf node.";
   Perfm::Scope ps(Perfm::Predict);
   torch::NoGradGuard no_grad;
-  auto board_input = board.Tensor(node.turn()).unsqueeze(0);
+  auto board_input = board.Tensor(node.NextTurn()).unsqueeze(0);
   auto action_mask = node.ActionMask().flatten().unsqueeze(0);
   std::vector<torch::jit::IValue> inputs{
       board_input,
@@ -402,7 +417,7 @@ bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
   // Find leaf node
   while (n->visit_count() > 0 && !n->IsLeaf()) {
     Node* child = n->MaxPuctChild();
-    board.MakeMove(n->turn(), child->move());
+    board.MakeMove(child->MoveTurn(), child->move());
     n = child;
   }
   if (!n->IsLeaf()) {
@@ -417,13 +432,13 @@ bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
     return false;
   }
   // Expand leaf node. Usually it's the turn as indicated by the node.
-  int turn = n->turn();
-  auto moves = board.NextMoves(turn);
+  int next_turn = n->NextTurn();
+  auto moves = board.NextMoves(next_turn);
   if (moves.empty()) {
     // Player has no valid moves left. Try if opponent can proceed.
-    turn = 1 - turn;
-    n->SetTurn(turn);
-    moves = board.NextMoves(turn);
+    next_turn = 1 - next_turn;
+    n->SetNextTurn(next_turn);
+    moves = board.NextMoves(next_turn);
     if (moves.empty()) {
       // No player can make a move => game over.
       n->SetTerminal(true);
@@ -431,10 +446,7 @@ bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
       return false;
     }
   }
-  // Initially we assume that it's the opponent's turn. If that turns out to
-  // be false, the turn gets updated when trying to find next moves (see
-  // above).
-  n->CreateChildren(1 - turn, moves);
+  n->CreateChildren(moves);
   n->ShuffleChildren();  // Avoid selection bias.
   auto pred = model_.Predict(board, *n);
   n->SetMoveProbs(pred.move_probs);
@@ -445,9 +457,9 @@ bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
   float value = pred.value;
   if (run_playouts) {
     auto stats =
-        playout_runner_->Run(board, n->turn(), config_.random_playouts);
+        playout_runner_->Run(board, n->NextTurn(), config_.random_playouts);
     // 50% weight for model predictions and 50% for random playouts.
-    float playout_value = (n->turn() == 0 ? 1 : -1) * stats.Avg();
+    float playout_value = (n->NextTurn() == 0 ? 1 : -1) * stats.Avg();
     value = (value + playout_value) / 2;
   }
   n->SetValue(value);
@@ -470,18 +482,18 @@ bool NeuralMCTS::Run(Node& root, const Board& b) {
     Perfm::Scope ps(Perfm::FindLeaf);
     while (!n->IsLeaf()) {
       Node* child = n->MaxPuctChild();
-      board.MakeMove(n->turn(), child->move());
+      board.MakeMove(child->MoveTurn(), child->move());
       n = child;
     }
   }
   // Expand leaf node. Usually it's the turn as indicated by the node.
-  int turn = n->turn();
-  auto moves = board.NextMoves(turn);
+  int next_turn = n->NextTurn();
+  auto moves = board.NextMoves(next_turn);
   if (moves.empty()) {
     // Player has no valid moves left. Try if opponent can proceed.
-    turn = 1 - turn;
-    n->SetTurn(turn);
-    moves = board.NextMoves(turn);
+    next_turn = 1 - next_turn;
+    n->SetNextTurn(next_turn);
+    moves = board.NextMoves(next_turn);
     if (moves.empty()) {
       // No player can make a move => game over.
       n->SetTerminal(true);
@@ -489,17 +501,12 @@ bool NeuralMCTS::Run(Node& root, const Board& b) {
       return n != &root;  // Return if we made any progress at all in this run.
     }
   }
-  // Initially we assume that it's the opponent's turn. If that turns out to
-  // be false, the turn gets updated when trying to find next moves (see
-  // above).
-  n->CreateChildren(1 - turn, moves);
+  n->CreateChildren(moves);
   n->ShuffleChildren();  // Avoid selection bias.
   auto pred = model_.Predict(board, *n);
   n->SetMoveProbs(pred.move_probs);
   n->SetValue(pred.value);
-  // Backpropagate the model prediction. Need to reorient it s.t. 1 means
-  // player 0 won.
-  n->Backpropagate(n->turn() == 0 ? pred.value : -pred.value);
+  n->Backpropagate(n->ValueP0());
   return true;
 }
 
@@ -554,7 +561,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
                      << s1 << " and playout result "
                      << playout_runner_->AggregatedStats().DebugString()
                      << " and root->value " << root->value()
-                     << " and root->turn " << root->turn();
+                     << " and root->turn " << root->NextTurn();
       // Ensure the result is a whole number.
       result = std::round(playout_runner_->AggregatedStats().Avg());
       game_over = true;
@@ -581,7 +588,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       hexzpb::TrainingExample example;
       int64_t move_ready = UnixMicros();
       example.set_unix_micros(move_ready);
-      example.set_turn(root->turn());
+      example.set_turn(root->NextTurn());
       auto enc_priors = torch::pickle_save(root->Priors());
       example.mutable_model_predictions()->mutable_priors()->assign(
           enc_priors.begin(), enc_priors.end());
@@ -590,7 +597,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       example.set_encoding(hexzpb::TrainingExample::PYTORCH);
       // The board in the example must be viewed from the perspective of the
       // player whose turn it is.
-      auto enc_b = torch::pickle_save(board.Tensor(root->turn()));
+      auto enc_b = torch::pickle_save(board.Tensor(root->NextTurn()));
       example.mutable_board()->assign(enc_b.begin(), enc_b.end());
       auto enc_mask = torch::pickle_save(root->ActionMask());
       example.mutable_action_mask()->assign(enc_mask.begin(), enc_mask.end());
@@ -601,7 +608,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     }
 
     const std::string stats = root->Stats();
-    int turn = root->turn();
+    int turn = root->NextTurn();
     root = root->SampleChildAsRoot();
     const auto& move = root->move();
     ABSL_LOG(INFO) << "#" << n << " " << move.DebugString()
@@ -629,7 +636,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       // as it interferes badly with value updates done due to random playouts:
       // the .value of a fast run was generated using only model predictions.
       // For simplicity, just don't re-use the tree at all.
-      root = std::make_unique<Node>(root->turn());
+      root = std::make_unique<Node>(root->NextTurn());
     } else {
       root->ResetTree();
     }
@@ -656,7 +663,7 @@ absl::StatusOr<std::unique_ptr<Node>> NeuralMCTS::SuggestMove(
       break;
     }
   }
-  if (root->IsLeaf() || root->turn() != player) {
+  if (root->IsLeaf() || root->NextTurn() != player) {
     // Run may flip the turn of the root node if it finds that only
     // the opponent can make a valid move.
     return absl::InvalidArgumentError("Player has no valid moves left.");

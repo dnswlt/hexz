@@ -48,7 +48,7 @@ class ConstantFakeModel final : public Model {
   Prediction Predict(const Board& board, const Node& node) override {
     return Prediction{
         .move_probs = move_probs_,
-        .value = node.turn() == 0 ? p0_value_ : -p0_value_,
+        .value = node.NextTurn() == 0 ? p0_value_ : -p0_value_,
     };
   }
 
@@ -99,7 +99,7 @@ TEST(NodeTest, IsLeaf) {
   std::vector<Move> moves{
       Move::Flag(0, 0),
   };
-  n.CreateChildren(0, moves);
+  n.CreateChildren(moves);
   EXPECT_FALSE(n.IsLeaf());
 }
 
@@ -107,25 +107,57 @@ TEST(NodeTest, MaxPuctChild) {
   Node::uct_c = 1.0;
   Node::initial_root_q_value = -0.2;
   Node::initial_q_penalty = 0.3;
-  Node n(nullptr, 0, Move{});
+  Node n(0);
   std::vector<Move> moves{
       Move::Flag(0, 0),
       Move::Flag(1, 0),
   };
-  n.CreateChildren(1 - n.turn(), moves);
+  n.CreateChildren(moves);
   auto pr = torch::ones({2, 11, 10});
   pr = pr / pr.sum();
   n.SetMoveProbs(pr);
   auto& n_0 = *n.children()[0];
   auto& n_1 = *n.children()[1];
   // Mark victory for child n_0.
-  n_0.Backpropagate(-1.0);
+  n_0.Backpropagate(1.0);
   Node* c = n.MaxPuctChild();
   ASSERT_TRUE(c != nullptr);
   EXPECT_EQ(c, &n_0);
   EXPECT_EQ(c->parent(), &n);
   // PUCT should be greater than 1, the win rate.
   EXPECT_GT(c->Puct(), 1);
+}
+
+TEST(NodeTest, MaxPuctChildDepth2) {
+  Node::uct_c = 1.0;
+  Node::initial_root_q_value = -0.2;
+  Node::initial_q_penalty = 0.3;
+  Node root(0);
+  std::vector<Move> root_moves{
+      Move::Flag(0, 0),
+      Move::Flag(1, 0),
+  };
+  root.CreateChildren(root_moves);
+  auto pr = torch::ones({2, 11, 10});
+  pr = pr / pr.sum();
+  root.SetMoveProbs(pr);
+  auto& n_0 = *root.children()[0];
+  auto& n_1 = *root.children()[1];
+  std::vector<Move> n_0_moves{
+      Move{Move::Typ::kNormal, 2, 0, 0},
+      Move{Move::Typ::kNormal, 3, 0, 0},
+  };
+  n_0.CreateChildren(n_0_moves);
+  auto& n_0_0 = *n_0.children()[0];
+  n_0_0.Backpropagate(-1.0);  // P1 wins.
+
+  Node* c = root.MaxPuctChild();
+  ASSERT_TRUE(c != nullptr);
+  EXPECT_EQ(c, &n_1);
+  // Should be the initial Q value + the prior, since uct_c and the visit count
+  // factor should be 1.
+  EXPECT_FLOAT_EQ(c->Puct(), Node::initial_root_q_value +
+                                 pr.index({0, 1, 0}).item<float>());
 }
 
 TEST(NodeTest, Backpropagate) {
@@ -137,26 +169,27 @@ TEST(NodeTest, Backpropagate) {
 
   Then backpropagate from n_1_1 and expect root to get updated.
   */
-  Node root(nullptr, 0, Move{});
+  Node root(0);
   std::vector<Move> root_moves{
       Move::Flag(0, 0),
       Move{Move::Typ::kNormal, 0, 0, 0},
   };
-  root.CreateChildren(1 - root.turn(), root_moves);
+  root.CreateChildren(root_moves);
   auto& n_1 = *root.children()[0];
   std::vector<Move> n_1_moves{
       Move{Move::Typ::kNormal, 1, 0, 0},
   };
-  n_1.CreateChildren(1 - n_1.turn(), n_1_moves);
+  n_1.CreateChildren(n_1_moves);
   auto& n_1_1 = *n_1.children()[0];
   // Player 0 won.
   n_1_1.Backpropagate(1.0);
   EXPECT_EQ(root.visit_count(), 1);
   EXPECT_EQ(n_1.visit_count(), 1);
   EXPECT_EQ(n_1_1.visit_count(), 1);
-  EXPECT_EQ(root.wins(), 1.0);
-  EXPECT_EQ(n_1.wins(), -1.0);
-  EXPECT_EQ(n_1_1.wins(), 1.0);
+  EXPECT_EQ(root.wins(), 0.0)
+      << "Root wins should not get updated, they are meaningless";
+  EXPECT_EQ(n_1.wins(), 1.0);
+  EXPECT_EQ(n_1_1.wins(), -1.0);
 }
 
 TEST(NodeTest, BackpropagateFraction) {
@@ -169,28 +202,28 @@ TEST(NodeTest, BackpropagateFraction) {
     - n_1_1 (turn=0)
   - n_2 (player=1)
 
-  Then backpropagate from n_1_1 and expect root AND n_1 to get updated.
+  Then backpropagate from n_1_1.
   */
-  Node root(nullptr, 0, Move{});
+  Node root(0);
   std::vector<Move> root_moves{
       Move::Flag(0, 0),
       Move{Move::Typ::kNormal, 0, 0, 0},
   };
-  root.CreateChildren(1 - root.turn(), root_moves);
+  root.CreateChildren(root_moves);
   auto& n_1 = *root.children()[0];
   std::vector<Move> n_1_moves{
       Move{Move::Typ::kNormal, 1, 0, 0},
   };
-  n_1.CreateChildren(1 - n_1.turn(), n_1_moves);
+  n_1.CreateChildren(n_1_moves);
   auto& n_1_1 = *n_1.children()[0];
   // Player 0 won.
   n_1_1.Backpropagate(0.2);
   EXPECT_EQ(root.visit_count(), 1);
   EXPECT_EQ(n_1.visit_count(), 1);
   EXPECT_EQ(n_1_1.visit_count(), 1);
-  EXPECT_FLOAT_EQ(root.wins(), 0.2);
-  EXPECT_FLOAT_EQ(n_1.wins(), -0.2);
-  EXPECT_FLOAT_EQ(n_1_1.wins(), 0.2);
+  EXPECT_FLOAT_EQ(root.wins(), 0.0);
+  EXPECT_FLOAT_EQ(n_1.wins(), 0.2);
+  EXPECT_FLOAT_EQ(n_1_1.wins(), -0.2);
 }
 
 TEST(NodeTest, FlatIndex) {
@@ -205,7 +238,7 @@ TEST(NodeTest, FlatIndex) {
       Move::Flag(2, 0),
       Move{Move::Typ::kNormal, 0, 0, 0},
   };
-  root.CreateChildren(1, moves);
+  root.CreateChildren(moves);
   root.SetMoveProbs(t / t.sum());
   float prev = -1;
   for (const auto& c : root.children()) {
@@ -223,7 +256,7 @@ TEST(NodeTest, AddDirichletNoise) {
       Move::Flag(0, 1),
       Move::Flag(0, 2),
   };
-  root.CreateChildren(1 - root.turn(), moves);
+  root.CreateChildren(moves);
   auto t = torch::zeros({2, 11, 10});
   t.index_put_({0, 0, 0}, 30);
   t.index_put_({0, 0, 1}, 40);
@@ -262,7 +295,7 @@ TEST(NodeTest, ActionMask) {
       // Can place a normal cell with value 1.0 at (7, 3).
       Move{Move::Typ::kNormal, 7, 3, 1.0},
   };
-  root.CreateChildren(1 - root.turn(), moves);
+  root.CreateChildren(moves);
   auto mask = root.ActionMask();
   ASSERT_THAT(mask.sizes(), ElementsAre(2, 11, 10));
   // Exactly two elements should be set:
@@ -367,7 +400,7 @@ TEST(MCTSTest, RemainingFlagsAreNotNegative) {
     mcts.Run(*root, b);
     ASSERT_GE(b.Flags(0), 0);
     ASSERT_GE(b.Flags(1), 0);
-    int turn = root->turn();
+    int turn = root->NextTurn();
     root = root->MostVisitedChildAsRoot();
     ASSERT_TRUE(b.Flags(turn) > 0 || root->move().typ != Move::Typ::kFlag)
         << "Failed in move " << i;
