@@ -16,3 +16,7 @@ dump.rdb
 examples-*.html
 *.cred.txt
 main
+.terraform*
+terraform*
+tags
+*.sw?
