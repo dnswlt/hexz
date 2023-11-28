@@ -234,3 +234,26 @@ https://lczero.org/play/flags/#:~:text=%E2%80%9CFirst%20Play%20Urgency%E2%80%9D%
 
 And its implementation:
 https://github.com/leela-zero/leela-zero/blob/next/src/UCTNode.cpp#L270
+
+
+## 2023-11-27
+
+Crazy stuff: in the Debug build, random playouts are MUCH slower:
+
+Debug:
+
+scope            total_time      count        ops/s
+RandomPlayout      198.070s    4331900    21870.554
+Predict            100.392s      94538      941.687
+MakeMove             0.885s     530494   599324.670
+NextMoves            0.789s      95595   121204.863
+MaxPuctChild         0.537s     508754   947060.179
+
+Release:
+
+scope            total_time      count        ops/s
+Predict            237.454s     251300     1058.309
+RandomPlayout       59.917s   11280000   188259.737
+NextMoves            0.773s     251300   324949.740
+MakeMove             0.594s    1417160  2387065.939
+MaxPuctChild         0.398s    1354861  3406033.806

@@ -268,14 +268,15 @@ message TrainingExample {
         // Total number of nodes in the search tree, including leaves.
         int32 search_tree_size = 6;
         // Number of non-leaf nodes in the tree, i.e. those visited at least once.
-        int32 branch_nodes = 10;
+        int32 branch_nodes = 7;
         // Min/max visit counts of the root node's children.
-        int32 min_child_vc = 7;
-        int32 max_child_vc = 8;
-        // The Q-value of the root node, i.e. wins/visit_count.
-        float q_value = 9;
+        int32 min_child_vc = 8;
+        int32 max_child_vc = 9;
+        int32 selected_child_vc = 10;
+        // The Q-value of the selected child node, i.e. wins/visit_count.
+        float q_value =  11;
         // Number of nodes per depth level in the tree.
-        repeated int32 nodes_per_depth = 11;
+        repeated int32 nodes_per_depth = 12;
     }
     Stats stats = 5;
 }

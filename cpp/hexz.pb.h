@@ -4884,19 +4884,20 @@ class TrainingExample_Stats final :
   // accessors -------------------------------------------------------
 
   enum : int {
-    kNodesPerDepthFieldNumber = 11,
+    kNodesPerDepthFieldNumber = 12,
     kDurationMicrosFieldNumber = 1,
     kValidMovesFieldNumber = 2,
     kVisitCountFieldNumber = 3,
     kVisitedChildrenFieldNumber = 4,
     kSearchDepthFieldNumber = 5,
     kSearchTreeSizeFieldNumber = 6,
-    kMinChildVcFieldNumber = 7,
-    kMaxChildVcFieldNumber = 8,
-    kQValueFieldNumber = 9,
-    kBranchNodesFieldNumber = 10,
+    kBranchNodesFieldNumber = 7,
+    kMinChildVcFieldNumber = 8,
+    kMaxChildVcFieldNumber = 9,
+    kSelectedChildVcFieldNumber = 10,
+    kQValueFieldNumber = 11,
   };
-  // repeated int32 nodes_per_depth = 11;
+  // repeated int32 nodes_per_depth = 12;
   int nodes_per_depth_size() const;
   private:
   int _internal_nodes_per_depth_size() const;
@@ -4974,37 +4975,7 @@ class TrainingExample_Stats final :
   void _internal_set_search_tree_size(::int32_t value);
 
   public:
-  // int32 min_child_vc = 7;
-  void clear_min_child_vc() ;
-  ::int32_t min_child_vc() const;
-  void set_min_child_vc(::int32_t value);
-
-  private:
-  ::int32_t _internal_min_child_vc() const;
-  void _internal_set_min_child_vc(::int32_t value);
-
-  public:
-  // int32 max_child_vc = 8;
-  void clear_max_child_vc() ;
-  ::int32_t max_child_vc() const;
-  void set_max_child_vc(::int32_t value);
-
-  private:
-  ::int32_t _internal_max_child_vc() const;
-  void _internal_set_max_child_vc(::int32_t value);
-
-  public:
-  // float q_value = 9;
-  void clear_q_value() ;
-  float q_value() const;
-  void set_q_value(float value);
-
-  private:
-  float _internal_q_value() const;
-  void _internal_set_q_value(float value);
-
-  public:
-  // int32 branch_nodes = 10;
+  // int32 branch_nodes = 7;
   void clear_branch_nodes() ;
   ::int32_t branch_nodes() const;
   void set_branch_nodes(::int32_t value);
@@ -5014,12 +4985,52 @@ class TrainingExample_Stats final :
   void _internal_set_branch_nodes(::int32_t value);
 
   public:
+  // int32 min_child_vc = 8;
+  void clear_min_child_vc() ;
+  ::int32_t min_child_vc() const;
+  void set_min_child_vc(::int32_t value);
+
+  private:
+  ::int32_t _internal_min_child_vc() const;
+  void _internal_set_min_child_vc(::int32_t value);
+
+  public:
+  // int32 max_child_vc = 9;
+  void clear_max_child_vc() ;
+  ::int32_t max_child_vc() const;
+  void set_max_child_vc(::int32_t value);
+
+  private:
+  ::int32_t _internal_max_child_vc() const;
+  void _internal_set_max_child_vc(::int32_t value);
+
+  public:
+  // int32 selected_child_vc = 10;
+  void clear_selected_child_vc() ;
+  ::int32_t selected_child_vc() const;
+  void set_selected_child_vc(::int32_t value);
+
+  private:
+  ::int32_t _internal_selected_child_vc() const;
+  void _internal_set_selected_child_vc(::int32_t value);
+
+  public:
+  // float q_value = 11;
+  void clear_q_value() ;
+  float q_value() const;
+  void set_q_value(float value);
+
+  private:
+  float _internal_q_value() const;
+  void _internal_set_q_value(float value);
+
+  public:
   // @@protoc_insertion_point(class_scope:hexzpb.TrainingExample.Stats)
  private:
   class _Internal;
 
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<4, 11, 0, 0, 2> _table_;
+  static const ::google::protobuf::internal::TcParseTable<4, 12, 0, 0, 2> _table_;
   template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
@@ -5032,10 +5043,11 @@ class TrainingExample_Stats final :
     ::int32_t visited_children_;
     ::int32_t search_depth_;
     ::int32_t search_tree_size_;
+    ::int32_t branch_nodes_;
     ::int32_t min_child_vc_;
     ::int32_t max_child_vc_;
+    ::int32_t selected_child_vc_;
     float q_value_;
-    ::int32_t branch_nodes_;
     mutable ::google::protobuf::internal::CachedSize _cached_size_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -8917,7 +8929,7 @@ inline void TrainingExample_Stats::_internal_set_search_tree_size(::int32_t valu
   _impl_.search_tree_size_ = value;
 }
 
-// int32 branch_nodes = 10;
+// int32 branch_nodes = 7;
 inline void TrainingExample_Stats::clear_branch_nodes() {
   _impl_.branch_nodes_ = 0;
 }
@@ -8939,7 +8951,7 @@ inline void TrainingExample_Stats::_internal_set_branch_nodes(::int32_t value) {
   _impl_.branch_nodes_ = value;
 }
 
-// int32 min_child_vc = 7;
+// int32 min_child_vc = 8;
 inline void TrainingExample_Stats::clear_min_child_vc() {
   _impl_.min_child_vc_ = 0;
 }
@@ -8961,7 +8973,7 @@ inline void TrainingExample_Stats::_internal_set_min_child_vc(::int32_t value) {
   _impl_.min_child_vc_ = value;
 }
 
-// int32 max_child_vc = 8;
+// int32 max_child_vc = 9;
 inline void TrainingExample_Stats::clear_max_child_vc() {
   _impl_.max_child_vc_ = 0;
 }
@@ -8983,7 +8995,29 @@ inline void TrainingExample_Stats::_internal_set_max_child_vc(::int32_t value) {
   _impl_.max_child_vc_ = value;
 }
 
-// float q_value = 9;
+// int32 selected_child_vc = 10;
+inline void TrainingExample_Stats::clear_selected_child_vc() {
+  _impl_.selected_child_vc_ = 0;
+}
+inline ::int32_t TrainingExample_Stats::selected_child_vc() const {
+  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.Stats.selected_child_vc)
+  return _internal_selected_child_vc();
+}
+inline void TrainingExample_Stats::set_selected_child_vc(::int32_t value) {
+  _internal_set_selected_child_vc(value);
+  // @@protoc_insertion_point(field_set:hexzpb.TrainingExample.Stats.selected_child_vc)
+}
+inline ::int32_t TrainingExample_Stats::_internal_selected_child_vc() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.selected_child_vc_;
+}
+inline void TrainingExample_Stats::_internal_set_selected_child_vc(::int32_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.selected_child_vc_ = value;
+}
+
+// float q_value = 11;
 inline void TrainingExample_Stats::clear_q_value() {
   _impl_.q_value_ = 0;
 }
@@ -9005,7 +9039,7 @@ inline void TrainingExample_Stats::_internal_set_q_value(float value) {
   _impl_.q_value_ = value;
 }
 
-// repeated int32 nodes_per_depth = 11;
+// repeated int32 nodes_per_depth = 12;
 inline int TrainingExample_Stats::_internal_nodes_per_depth_size() const {
   return _internal_nodes_per_depth().size();
 }

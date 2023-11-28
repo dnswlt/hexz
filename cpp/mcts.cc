@@ -25,6 +25,8 @@ Node::Node(Node* parent, int turn, Move move)
     : parent_{parent}, turn_{turn}, move_{move} {}
 
 float Node::Q() const noexcept {
+  ABSL_DCHECK(!IsRoot())
+      << "Must not call Q() on root node, it has no meaning.";
   if (visit_count_ == 0) {
     if (parent_->IsRoot()) {
       return initial_root_q_value;
@@ -69,8 +71,7 @@ std::string Node::Stats() const {
                       " visited_children:", NumVisitedChildren(),  //
                       " min_child_vc:", min_vc,                    //
                       " max_child_vc:", max_vc,                    //
-                      " visit_count:", visit_count(),              //
-                      " Q:", Q());
+                      " visit_count:", visit_count());
 }
 
 void Node::PopulateStats(hexzpb::TrainingExample::Stats& stats) const {
@@ -90,10 +91,10 @@ void Node::PopulateStats(hexzpb::TrainingExample::Stats& stats) const {
       max_depth = d;
       nodes_per_depth.resize(max_depth + 1);
     }
-    nodes_per_depth[d]++;
     if (n->IsLeaf()) {
       continue;
     }
+    nodes_per_depth[d]++;
     branch_nodes++;
     for (const auto& c : n->children()) {
       q.emplace_back(c.get(), d + 1);
@@ -198,21 +199,8 @@ void Node::ResetTree() {
   }
 }
 
-std::unique_ptr<Node> Node::MostVisitedChildAsRoot() {
-  assert(!children_.empty());
-  int best_i = 0;
-  for (int i = 1; i < children_.size(); i++) {
-    if (children_[i]->visit_count_ > children_[best_i]->visit_count_) {
-      best_i = i;
-    }
-  }
-  std::unique_ptr<Node> best_child = std::move(children_[best_i]);
-  best_child->parent_ = nullptr;
-  return best_child;
-}
-
-std::unique_ptr<Node> Node::SampleChildAsRoot() {
-  assert(!children_.empty());
+int Node::SampleChild() const {
+  ABSL_CHECK(!children_.empty());
   float r = internal::UnitRandom();
   float s = 0;
   // The sum of the children's visit counts should be equal
@@ -235,6 +223,11 @@ std::unique_ptr<Node> Node::SampleChildAsRoot() {
   if (i == children_.size()) {
     i--;
   }
+  return i;
+}
+
+std::unique_ptr<Node> Node::SelectChildAsRoot(int i) {
+  ABSL_CHECK(i >= 0 && i < children_.size());
   std::unique_ptr<Node> selected_child = std::move(children_[i]);
   selected_child->parent_ = nullptr;
   return selected_child;
@@ -521,6 +514,7 @@ std::pair<int, bool> NeuralMCTS::NumRuns(int move) const noexcept {
 
 absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     Board& board, int max_runtime_seconds) {
+  Perfm::Scope ps(Perfm::PlayGame);
   std::vector<hexzpb::TrainingExample> examples;
   int64_t started_micros = UnixMicros();
   int n = 0;
@@ -609,8 +603,9 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
 
     const std::string stats = root->Stats();
     int turn = root->NextTurn();
-    root = root->SampleChildAsRoot();
-    const auto& move = root->move();
+    int child_idx = root->SampleChild();
+    const auto& child = *root->children()[child_idx];
+    const auto& move = child.move();
     ABSL_LOG(INFO) << "#" << n << " " << move.DebugString()
                    << (is_fast_run ? "[fast]" : "") << " (turn: " << turn
                    << ") " << board.ShortDebugString() << " after "
@@ -618,17 +613,24 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
                    << "s. Stats: " << stats;
 
     if (!is_fast_run) {
-      // Update TrainingExample with move information.
-      auto* mv = examples.rbegin()->mutable_move();
+      // Update TrainingExample with information from selected child.
+      auto& ex = examples.back();
+      auto* mv = ex.mutable_move();
       mv->set_move(n);
       mv->set_cell_type(move.typ == Move::Typ::kFlag ? hexzpb::Field::FLAG
                                                      : hexzpb::Field::NORMAL);
       mv->set_row(move.r);
       mv->set_col(move.c);
       mv->set_player_num(turn + 1);  // 1-based
+
+      ex.mutable_stats()->set_q_value(child.Q());
+      ex.mutable_stats()->set_selected_child_vc(child.visit_count());
     }
 
     board.MakeMove(turn, move);
+
+    // Replace root with selected child.
+    root = root->SelectChildAsRoot(child_idx);
     if (is_fast_run && config_.random_playouts > 0) {
       // Gnarf, this "fast run" code proliferates...
       // If we make a fast run and use random playouts,

@@ -401,7 +401,7 @@ TEST(MCTSTest, RemainingFlagsAreNotNegative) {
     ASSERT_GE(b.Flags(0), 0);
     ASSERT_GE(b.Flags(1), 0);
     int turn = root->NextTurn();
-    root = root->MostVisitedChildAsRoot();
+    root = root->SelectChildAsRoot(root->SampleChild());
     ASSERT_TRUE(b.Flags(turn) > 0 || root->move().typ != Move::Typ::kFlag)
         << "Failed in move " << i;
     b.MakeMove(turn, root->move());
@@ -463,7 +463,7 @@ TEST(MCTSTest, PlayGameStats) {
   };
   auto move_probs = torch::ones({2, 11, 10});
   move_probs /= move_probs.sum();
-  float value = 1.0;
+  float value = 1.0;  // P0 always wins.
   ConstantFakeModel fake_model(move_probs, value);
   NeuralMCTS mcts(fake_model, std::make_unique<RandomPlayoutRunner>(), config);
   auto b = Board::RandomBoard();
@@ -480,11 +480,22 @@ TEST(MCTSTest, PlayGameStats) {
   // In the given config, each game is won by P0, so the first selected
   // child node should be terribly interesting and explored further and
   // further.
-  //
-  // TODO: This test currently fails, as it uncovered a terrible bug in the
-  // MCTS implementation -- wins are wrongly calculated for the opponent!
-  // Need to clean up this turn mess.
   EXPECT_EQ(stats.visited_children(), 1);
+  //   EXPECT_EQ(stats.search_depth(), 100);
+  EXPECT_EQ(stats.min_child_vc(), 0);
+  EXPECT_EQ(stats.max_child_vc(), config.runs_per_move - 1);
+  EXPECT_EQ(stats.q_value(), 1.0);
+  EXPECT_EQ(stats.selected_child_vc(), config.runs_per_move - 1);
+  ASSERT_EQ(stats.nodes_per_depth().size(), 4);
+  // The root node:
+  EXPECT_EQ(stats.nodes_per_depth()[0], 1);
+  // Only one of its children is visited:
+  EXPECT_EQ(stats.nodes_per_depth()[1], 1);
+  // All its children (up to the limit dictated by runs_per_move) are visited,
+  // b/c they all constantly lose.
+  EXPECT_EQ(stats.nodes_per_depth()[2], 48);
+  // Not enough runs to visit any nodes one level deeper.
+  EXPECT_EQ(stats.nodes_per_depth()[3], 0);
 }
 
 TEST(MCTSTest, PlayGameResign) {

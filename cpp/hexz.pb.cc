@@ -477,10 +477,11 @@ PROTOBUF_CONSTEXPR TrainingExample_Stats::TrainingExample_Stats(::_pbi::Constant
       /*decltype(_impl_.visited_children_)*/ 0,
       /*decltype(_impl_.search_depth_)*/ 0,
       /*decltype(_impl_.search_tree_size_)*/ 0,
+      /*decltype(_impl_.branch_nodes_)*/ 0,
       /*decltype(_impl_.min_child_vc_)*/ 0,
       /*decltype(_impl_.max_child_vc_)*/ 0,
+      /*decltype(_impl_.selected_child_vc_)*/ 0,
       /*decltype(_impl_.q_value_)*/ 0,
-      /*decltype(_impl_.branch_nodes_)*/ 0,
       /*decltype(_impl_._cached_size_)*/ {},
     } {}
 struct TrainingExample_StatsDefaultTypeInternal {
@@ -832,6 +833,7 @@ const ::uint32_t TableStruct_hexz_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.branch_nodes_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.min_child_vc_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.max_child_vc_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.selected_child_vc_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.q_value_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample_Stats, _impl_.nodes_per_depth_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample, _impl_._has_bits_),
@@ -889,7 +891,7 @@ static const ::_pbi::MigrationSchema
         {256, 267, -1, sizeof(::hexzpb::AddTrainingExamplesResponse)},
         {270, -1, -1, sizeof(::hexzpb::TrainingExample_ModelPredictions)},
         {280, -1, -1, sizeof(::hexzpb::TrainingExample_Stats)},
-        {299, 317, -1, sizeof(::hexzpb::TrainingExample)},
+        {300, 318, -1, sizeof(::hexzpb::TrainingExample)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -986,7 +988,7 @@ const char descriptor_table_protodef_hexz_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
     "v\n\006Status\022\026\n\022STATUS_UNSPECIFIED\020\000\022\014\n\010ACC"
     "EPTED\020\001\022\030\n\024REJECTED_WRONG_MODEL\020\002\022\030\n\024REJ"
     "ECTED_AT_CAPACITY\020\003\022\022\n\016REJECTED_OTHER\020\004\""
-    "\243\005\n\017TrainingExample\022\023\n\013unix_micros\030\001 \001(\003"
+    "\276\005\n\017TrainingExample\022\023\n\013unix_micros\030\001 \001(\003"
     "\022\014\n\004turn\030\007 \001(\005\022$\n\004move\030\t \001(\0132\026.hexzpb.Ga"
     "meEngineMove\0222\n\010encoding\030\006 \001(\0162 .hexzpb."
     "TrainingExample.Encoding\022\r\n\005board\030\002 \001(\014\022"
@@ -995,15 +997,16 @@ const char descriptor_table_protodef_hexz_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
     "\001(\0132(.hexzpb.TrainingExample.ModelPredic"
     "tions\022,\n\005stats\030\005 \001(\0132\035.hexzpb.TrainingEx"
     "ample.Stats\0321\n\020ModelPredictions\022\016\n\006prior"
-    "s\030\001 \001(\014\022\r\n\005value\030\002 \001(\002\032\200\002\n\005Stats\022\027\n\017dura"
+    "s\030\001 \001(\014\022\r\n\005value\030\002 \001(\002\032\233\002\n\005Stats\022\027\n\017dura"
     "tion_micros\030\001 \001(\003\022\023\n\013valid_moves\030\002 \001(\005\022\023"
     "\n\013visit_count\030\003 \001(\005\022\030\n\020visited_children\030"
     "\004 \001(\005\022\024\n\014search_depth\030\005 \001(\005\022\030\n\020search_tr"
-    "ee_size\030\006 \001(\005\022\024\n\014branch_nodes\030\n \001(\005\022\024\n\014m"
-    "in_child_vc\030\007 \001(\005\022\024\n\014max_child_vc\030\010 \001(\005\022"
-    "\017\n\007q_value\030\t \001(\002\022\027\n\017nodes_per_depth\030\013 \003("
-    "\005\"\"\n\010Encoding\022\t\n\005NUMPY\020\000\022\013\n\007PYTORCH\020\001B\037Z"
-    "\035github.com/dnswlt/hexz/hexzpbb\006proto3"
+    "ee_size\030\006 \001(\005\022\024\n\014branch_nodes\030\007 \001(\005\022\024\n\014m"
+    "in_child_vc\030\010 \001(\005\022\024\n\014max_child_vc\030\t \001(\005\022"
+    "\031\n\021selected_child_vc\030\n \001(\005\022\017\n\007q_value\030\013 "
+    "\001(\002\022\027\n\017nodes_per_depth\030\014 \003(\005\"\"\n\010Encoding"
+    "\022\t\n\005NUMPY\020\000\022\013\n\007PYTORCH\020\001B\037Z\035github.com/d"
+    "nswlt/hexz/hexzpbb\006proto3"
 };
 static const ::_pbi::DescriptorTable* const descriptor_table_hexz_2eproto_deps[1] =
     {
@@ -1013,7 +1016,7 @@ static ::absl::once_flag descriptor_table_hexz_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_hexz_2eproto = {
     false,
     false,
-    3398,
+    3425,
     descriptor_table_protodef_hexz_2eproto,
     "hexz.proto",
     &descriptor_table_hexz_2eproto_once,
@@ -7052,17 +7055,18 @@ TrainingExample_Stats::TrainingExample_Stats(const TrainingExample_Stats& from) 
       decltype(_impl_.visited_children_){},
       decltype(_impl_.search_depth_){},
       decltype(_impl_.search_tree_size_){},
+      decltype(_impl_.branch_nodes_){},
       decltype(_impl_.min_child_vc_){},
       decltype(_impl_.max_child_vc_){},
+      decltype(_impl_.selected_child_vc_){},
       decltype(_impl_.q_value_){},
-      decltype(_impl_.branch_nodes_){},
       /*decltype(_impl_._cached_size_)*/ {},
   };
   _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
       from._internal_metadata_);
   ::memcpy(&_impl_.duration_micros_, &from._impl_.duration_micros_,
-    static_cast<::size_t>(reinterpret_cast<char*>(&_impl_.branch_nodes_) -
-    reinterpret_cast<char*>(&_impl_.duration_micros_)) + sizeof(_impl_.branch_nodes_));
+    static_cast<::size_t>(reinterpret_cast<char*>(&_impl_.q_value_) -
+    reinterpret_cast<char*>(&_impl_.duration_micros_)) + sizeof(_impl_.q_value_));
 
   // @@protoc_insertion_point(copy_constructor:hexzpb.TrainingExample.Stats)
 }
@@ -7077,10 +7081,11 @@ inline void TrainingExample_Stats::SharedCtor(::_pb::Arena* arena) {
       decltype(_impl_.visited_children_){0},
       decltype(_impl_.search_depth_){0},
       decltype(_impl_.search_tree_size_){0},
+      decltype(_impl_.branch_nodes_){0},
       decltype(_impl_.min_child_vc_){0},
       decltype(_impl_.max_child_vc_){0},
+      decltype(_impl_.selected_child_vc_){0},
       decltype(_impl_.q_value_){0},
-      decltype(_impl_.branch_nodes_){0},
       /*decltype(_impl_._cached_size_)*/ {},
   };
 }
@@ -7105,8 +7110,8 @@ PROTOBUF_NOINLINE void TrainingExample_Stats::Clear() {
 
   _internal_mutable_nodes_per_depth()->Clear();
   ::memset(&_impl_.duration_micros_, 0, static_cast<::size_t>(
-      reinterpret_cast<char*>(&_impl_.branch_nodes_) -
-      reinterpret_cast<char*>(&_impl_.duration_micros_)) + sizeof(_impl_.branch_nodes_));
+      reinterpret_cast<char*>(&_impl_.q_value_) -
+      reinterpret_cast<char*>(&_impl_.duration_micros_)) + sizeof(_impl_.q_value_));
   _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
 }
 
@@ -7118,15 +7123,15 @@ const char* TrainingExample_Stats::_InternalParse(
 
 
 PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
-const ::_pbi::TcParseTable<4, 11, 0, 0, 2> TrainingExample_Stats::_table_ = {
+const ::_pbi::TcParseTable<4, 12, 0, 0, 2> TrainingExample_Stats::_table_ = {
   {
     0,  // no _has_bits_
     0, // no _extensions_
-    11, 120,  // max_field_number, fast_idx_mask
+    12, 120,  // max_field_number, fast_idx_mask
     offsetof(decltype(_table_), field_lookup_table),
-    4294965248,  // skipmap
+    4294963200,  // skipmap
     offsetof(decltype(_table_), field_entries),
-    11,  // num_field_entries
+    12,  // num_field_entries
     0,  // num_aux_entries
     offsetof(decltype(_table_), field_names),  // no aux_entries
     &_TrainingExample_Stats_default_instance_._instance,
@@ -7151,22 +7156,24 @@ const ::_pbi::TcParseTable<4, 11, 0, 0, 2> TrainingExample_Stats::_table_ = {
     // int32 search_tree_size = 6;
     {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.search_tree_size_), 63>(),
      {48, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.search_tree_size_)}},
-    // int32 min_child_vc = 7;
-    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.min_child_vc_), 63>(),
-     {56, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.min_child_vc_)}},
-    // int32 max_child_vc = 8;
-    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.max_child_vc_), 63>(),
-     {64, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.max_child_vc_)}},
-    // float q_value = 9;
-    {::_pbi::TcParser::FastF32S1,
-     {77, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.q_value_)}},
-    // int32 branch_nodes = 10;
+    // int32 branch_nodes = 7;
     {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.branch_nodes_), 63>(),
-     {80, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.branch_nodes_)}},
-    // repeated int32 nodes_per_depth = 11;
+     {56, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.branch_nodes_)}},
+    // int32 min_child_vc = 8;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.min_child_vc_), 63>(),
+     {64, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.min_child_vc_)}},
+    // int32 max_child_vc = 9;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.max_child_vc_), 63>(),
+     {72, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.max_child_vc_)}},
+    // int32 selected_child_vc = 10;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(TrainingExample_Stats, _impl_.selected_child_vc_), 63>(),
+     {80, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.selected_child_vc_)}},
+    // float q_value = 11;
+    {::_pbi::TcParser::FastF32S1,
+     {93, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.q_value_)}},
+    // repeated int32 nodes_per_depth = 12;
     {::_pbi::TcParser::FastV32P1,
-     {90, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.nodes_per_depth_)}},
-    {::_pbi::TcParser::MiniParse, {}},
+     {98, 63, 0, PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.nodes_per_depth_)}},
     {::_pbi::TcParser::MiniParse, {}},
     {::_pbi::TcParser::MiniParse, {}},
     {::_pbi::TcParser::MiniParse, {}},
@@ -7191,19 +7198,22 @@ const ::_pbi::TcParseTable<4, 11, 0, 0, 2> TrainingExample_Stats::_table_ = {
     // int32 search_tree_size = 6;
     {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.search_tree_size_), 0, 0,
     (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
-    // int32 min_child_vc = 7;
-    {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.min_child_vc_), 0, 0,
-    (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
-    // int32 max_child_vc = 8;
-    {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.max_child_vc_), 0, 0,
-    (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
-    // float q_value = 9;
-    {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.q_value_), 0, 0,
-    (0 | ::_fl::kFcSingular | ::_fl::kFloat)},
-    // int32 branch_nodes = 10;
+    // int32 branch_nodes = 7;
     {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.branch_nodes_), 0, 0,
     (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
-    // repeated int32 nodes_per_depth = 11;
+    // int32 min_child_vc = 8;
+    {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.min_child_vc_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
+    // int32 max_child_vc = 9;
+    {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.max_child_vc_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
+    // int32 selected_child_vc = 10;
+    {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.selected_child_vc_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kInt32)},
+    // float q_value = 11;
+    {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.q_value_), 0, 0,
+    (0 | ::_fl::kFcSingular | ::_fl::kFloat)},
+    // repeated int32 nodes_per_depth = 12;
     {PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.nodes_per_depth_), 0, 0,
     (0 | ::_fl::kFcRepeated | ::_fl::kPackedInt32)},
   }},
@@ -7261,21 +7271,35 @@ const ::_pbi::TcParseTable<4, 11, 0, 0, 2> TrainingExample_Stats::_table_ = {
             stream, this->_internal_search_tree_size(), target);
   }
 
-  // int32 min_child_vc = 7;
-  if (this->_internal_min_child_vc() != 0) {
+  // int32 branch_nodes = 7;
+  if (this->_internal_branch_nodes() != 0) {
     target = ::google::protobuf::internal::WireFormatLite::
         WriteInt32ToArrayWithField<7>(
+            stream, this->_internal_branch_nodes(), target);
+  }
+
+  // int32 min_child_vc = 8;
+  if (this->_internal_min_child_vc() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::
+        WriteInt32ToArrayWithField<8>(
             stream, this->_internal_min_child_vc(), target);
   }
 
-  // int32 max_child_vc = 8;
+  // int32 max_child_vc = 9;
   if (this->_internal_max_child_vc() != 0) {
     target = ::google::protobuf::internal::WireFormatLite::
-        WriteInt32ToArrayWithField<8>(
+        WriteInt32ToArrayWithField<9>(
             stream, this->_internal_max_child_vc(), target);
   }
 
-  // float q_value = 9;
+  // int32 selected_child_vc = 10;
+  if (this->_internal_selected_child_vc() != 0) {
+    target = ::google::protobuf::internal::WireFormatLite::
+        WriteInt32ToArrayWithField<10>(
+            stream, this->_internal_selected_child_vc(), target);
+  }
+
+  // float q_value = 11;
   static_assert(sizeof(::uint32_t) == sizeof(float),
                 "Code assumes ::uint32_t and float are the same size.");
   float tmp_q_value = this->_internal_q_value();
@@ -7284,21 +7308,14 @@ const ::_pbi::TcParseTable<4, 11, 0, 0, 2> TrainingExample_Stats::_table_ = {
   if (raw_q_value != 0) {
     target = stream->EnsureSpace(target);
     target = ::_pbi::WireFormatLite::WriteFloatToArray(
-        9, this->_internal_q_value(), target);
+        11, this->_internal_q_value(), target);
   }
 
-  // int32 branch_nodes = 10;
-  if (this->_internal_branch_nodes() != 0) {
-    target = ::google::protobuf::internal::WireFormatLite::
-        WriteInt32ToArrayWithField<10>(
-            stream, this->_internal_branch_nodes(), target);
-  }
-
-  // repeated int32 nodes_per_depth = 11;
+  // repeated int32 nodes_per_depth = 12;
   {
     int byte_size = _impl_._nodes_per_depth_cached_byte_size_.Get();
     if (byte_size > 0) {
-      target = stream->WriteInt32Packed(11, _internal_nodes_per_depth(),
+      target = stream->WriteInt32Packed(12, _internal_nodes_per_depth(),
                                                  byte_size, target);
     }
   }
@@ -7320,7 +7337,7 @@ const ::_pbi::TcParseTable<4, 11, 0, 0, 2> TrainingExample_Stats::_table_ = {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  // repeated int32 nodes_per_depth = 11;
+  // repeated int32 nodes_per_depth = 12;
   {
     std::size_t data_size = ::_pbi::WireFormatLite::Int32Size(
         this->_internal_nodes_per_depth())
@@ -7369,19 +7386,31 @@ const ::_pbi::TcParseTable<4, 11, 0, 0, 2> TrainingExample_Stats::_table_ = {
         this->_internal_search_tree_size());
   }
 
-  // int32 min_child_vc = 7;
+  // int32 branch_nodes = 7;
+  if (this->_internal_branch_nodes() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+        this->_internal_branch_nodes());
+  }
+
+  // int32 min_child_vc = 8;
   if (this->_internal_min_child_vc() != 0) {
     total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
         this->_internal_min_child_vc());
   }
 
-  // int32 max_child_vc = 8;
+  // int32 max_child_vc = 9;
   if (this->_internal_max_child_vc() != 0) {
     total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
         this->_internal_max_child_vc());
   }
 
-  // float q_value = 9;
+  // int32 selected_child_vc = 10;
+  if (this->_internal_selected_child_vc() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
+        this->_internal_selected_child_vc());
+  }
+
+  // float q_value = 11;
   static_assert(sizeof(::uint32_t) == sizeof(float),
                 "Code assumes ::uint32_t and float are the same size.");
   float tmp_q_value = this->_internal_q_value();
@@ -7389,12 +7418,6 @@ const ::_pbi::TcParseTable<4, 11, 0, 0, 2> TrainingExample_Stats::_table_ = {
   memcpy(&raw_q_value, &tmp_q_value, sizeof(tmp_q_value));
   if (raw_q_value != 0) {
     total_size += 5;
-  }
-
-  // int32 branch_nodes = 10;
-  if (this->_internal_branch_nodes() != 0) {
-    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(
-        this->_internal_branch_nodes());
   }
 
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
@@ -7434,11 +7457,17 @@ void TrainingExample_Stats::MergeImpl(::google::protobuf::Message& to_msg, const
   if (from._internal_search_tree_size() != 0) {
     _this->_internal_set_search_tree_size(from._internal_search_tree_size());
   }
+  if (from._internal_branch_nodes() != 0) {
+    _this->_internal_set_branch_nodes(from._internal_branch_nodes());
+  }
   if (from._internal_min_child_vc() != 0) {
     _this->_internal_set_min_child_vc(from._internal_min_child_vc());
   }
   if (from._internal_max_child_vc() != 0) {
     _this->_internal_set_max_child_vc(from._internal_max_child_vc());
+  }
+  if (from._internal_selected_child_vc() != 0) {
+    _this->_internal_set_selected_child_vc(from._internal_selected_child_vc());
   }
   static_assert(sizeof(::uint32_t) == sizeof(float),
                 "Code assumes ::uint32_t and float are the same size.");
@@ -7447,9 +7476,6 @@ void TrainingExample_Stats::MergeImpl(::google::protobuf::Message& to_msg, const
   memcpy(&raw_q_value, &tmp_q_value, sizeof(tmp_q_value));
   if (raw_q_value != 0) {
     _this->_internal_set_q_value(from._internal_q_value());
-  }
-  if (from._internal_branch_nodes() != 0) {
-    _this->_internal_set_branch_nodes(from._internal_branch_nodes());
   }
   _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
 }
@@ -7470,8 +7496,8 @@ void TrainingExample_Stats::InternalSwap(TrainingExample_Stats* other) {
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   _impl_.nodes_per_depth_.InternalSwap(&other->_impl_.nodes_per_depth_);
   ::google::protobuf::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.branch_nodes_)
-      + sizeof(TrainingExample_Stats::_impl_.branch_nodes_)
+      PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.q_value_)
+      + sizeof(TrainingExample_Stats::_impl_.q_value_)
       - PROTOBUF_FIELD_OFFSET(TrainingExample_Stats, _impl_.duration_micros_)>(
           reinterpret_cast<char*>(&_impl_.duration_micros_),
           reinterpret_cast<char*>(&other->_impl_.duration_micros_));

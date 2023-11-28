@@ -17,7 +17,7 @@ class Perfm {
     // It indicates the number of labels we have and defines array sizes below.
     //
     // Also add the new enum to the LabelName method below.
-    PlayGameLocally = 3,
+    PlayGame = 3,
     MaxPuctChild = 4,
     Puct = 5,
     NextMoves = 6,
@@ -54,9 +54,9 @@ class Perfm {
 
   static const std::string& LabelName(Perfm::Label label) {
     static std::string names[StatsSize] = {
-        "Predict",         "FindLeaf",        "MakeMove",
-        "PlayGameLocally", "MaxPuctChild",    "Puct",
-        "NextMoves",       "NeuralMCTS::Run", "RandomPlayout",
+        "Predict",   "FindLeaf",        "MakeMove",
+        "PlayGame",  "MaxPuctChild",    "Puct",
+        "NextMoves", "NeuralMCTS::Run", "RandomPlayout",
     };
     assert(label < StatsSize);
     return names[label];

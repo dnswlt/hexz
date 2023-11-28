@@ -67,18 +67,18 @@ class Node {
   float Puct() const noexcept;
   // Returns a non-owned pointer to the child with the greatest PUCT value.
   Node* MaxPuctChild() const;
-  // Returns the child with the greated visit count,
-  // marks it as a root node (by setting its parent_ to nullptr),
-  // and clears the vector of child nodes of *this* Node.
+
+  // Selects a child node with a probability
+  // proportional to its relative visit count.
+  int SampleChild() const;
+
+  // Returns the specified child and marks it as a root node (by
+  // setting its parent_ to nullptr), and moves the child node out of the
+  // children vector of *this* Node.
   //
   // The Node on which this method was called MUST NOT be used
   // afterwards!
-  std::unique_ptr<Node> MostVisitedChildAsRoot();
-
-  // Returns a child as the new root, selected with a probability
-  // proportional to its relative visit count.
-  // Behaves like MostVisitedChildAsRoot in all other respects.
-  std::unique_ptr<Node> SampleChildAsRoot();
+  std::unique_ptr<Node> SelectChildAsRoot(int i);
 
   // Backpropagate propagates the given result to this Node and all parents.
   // The given result is interpreted from the perspective of player 0.
