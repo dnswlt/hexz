@@ -13,17 +13,18 @@ class Perfm {
     Predict = 0,
     FindLeaf = 1,
     MakeMove = 2,
-    // Add new labels here. But don't remove StatsSize and increment its value:
-    // It indicates the number of labels we have and defines array sizes below.
-    //
-    // Also add the new enum to the LabelName method below.
     PlayGame = 3,
     MaxPuctChild = 4,
     Puct = 5,
     NextMoves = 6,
     NeuralMCTS_Run = 7,
     RandomPlayout = 8,
-    StatsSize = 9,
+    PredictBatch = 9,
+    // Add new labels here. But don't remove StatsSize and increment its value:
+    // It indicates the number of labels we have and defines array sizes below.
+    //
+    // Also add the new enum to the LabelName method below.
+    StatsSize = 10,
   };
 
   // Helper struct to use RAII for initialization and printing final results.
@@ -54,9 +55,9 @@ class Perfm {
 
   static const std::string& LabelName(Perfm::Label label) {
     static std::string names[StatsSize] = {
-        "Predict",   "FindLeaf",        "MakeMove",
-        "PlayGame",  "MaxPuctChild",    "Puct",
-        "NextMoves", "NeuralMCTS::Run", "RandomPlayout",
+        "Predict",       "FindLeaf",     "MakeMove",  "PlayGame",
+        "MaxPuctChild",  "Puct",         "NextMoves", "NeuralMCTS::Run",
+        "RandomPlayout", "PredictBatch",
     };
     assert(label < StatsSize);
     return names[label];

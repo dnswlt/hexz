@@ -21,6 +21,11 @@ float Node::uct_c = 1.5;
 float Node::initial_root_q_value = 0;
 float Node::initial_q_penalty = 0;
 
+void InitializeFromConfig(const Config& config) {
+    Node::InitializeStaticMembers(config);
+}
+
+
 Node::Node(Node* parent, int turn, Move move)
     : parent_{parent}, turn_{turn}, move_{move} {}
 
@@ -341,7 +346,7 @@ absl::Status WriteDotGraph(const Node& root, const std::string& path) {
 
 TorchModel::Prediction TorchModel::Predict(const Board& board,
                                            const Node& node) {
-  ABSL_DCHECK(!node.IsLeaf()) << "Must not call Predict on a leaf node.";
+  ABSL_CHECK(!node.IsLeaf()) << "Must not call Predict on a leaf node.";
   Perfm::Scope ps(Perfm::Predict);
   torch::NoGradGuard no_grad;
   auto board_input = board.Tensor(node.NextTurn()).unsqueeze(0);

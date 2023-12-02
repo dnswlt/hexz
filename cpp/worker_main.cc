@@ -172,6 +172,105 @@ void MemMon() {
     }
   }
 }
+
+std::mutex m_out;
+
+void SyncPrint(const std::string& s) {
+  std::scoped_lock<std::mutex> l(m_out);
+  std::cout << s;
+}
+
+class Batcher {
+ public:
+  explicit Batcher(int batch_size)
+      : slots_(batch_size), results_(batch_size, 0), inputs_(batch_size, 0) {}
+  int ComputeValue(int thread_id, int v) {
+    std::unique_lock<std::mutex> l(m_);
+    SyncPrint(absl::StrFormat("Thread %d: wait for cv_enter\n", thread_id));
+    cv_enter_.wait(l, [this] { return slots_ > 0; });
+    SyncPrint(absl::StrFormat("Thread %d: cv_enter with slots_ == %d\n",
+                              thread_id, slots_));
+    slots_--;
+    int my_slot = slots_;
+    inputs_[my_slot] = v;
+    if (slots_ > 0) {
+      // wait for next batch to be filled.
+      SyncPrint(absl::StrFormat("Thread %d: wait for cv_ready\n", thread_id));
+      cv_ready_.wait(l, [this] { return batch_ready_; });
+      SyncPrint(absl::StrFormat("Thread %d: cv_ready\n", thread_id));
+      done_++;
+      int result = results_[my_slot];
+      if (done_ == results_.size()) {
+        // This is the last thread leaving the batch.
+        batch_ready_ = false;
+        slots_ = results_.size();
+        done_ = 0;
+        l.unlock();
+        cv_enter_.notify_all();
+      }
+      return result;
+    }
+    // The thread that got the last slot in the batch has to
+    // compute values for all waiting threads.
+    for (int i = 0; i < results_.size(); i++) {
+      results_[i] = inputs_[i] * 7;
+    }
+    // Pretend the computation takes a while
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    batch_ready_ = true;
+    int result = results_[my_slot];
+    done_++;
+    if (done_ == results_.size()) {
+      // This is the last thread leaving the batch. Can only happen here
+      // if batch size is 1.
+      SyncPrint(
+          absl::StrFormat("!!! Thread %d: notify cv_enter !!!\n", thread_id));
+      batch_ready_ = false;
+      slots_ = results_.size();
+      done_ = 0;
+      l.unlock();
+      cv_enter_.notify_all();
+    } else {
+      SyncPrint(absl::StrFormat("Thread %d: notify cv_ready\n", thread_id));
+      l.unlock();              // avoid pessimization.
+      cv_ready_.notify_all();  // notify others waiting on batch results.
+    }
+    return result;
+  }
+
+ private:
+  bool batch_ready_ = false;
+  int slots_ = 0;
+  int done_ = 0;
+  std::vector<int> inputs_;
+  std::vector<int> results_;
+  std::mutex m_;
+  std::condition_variable cv_enter_;
+  std::condition_variable cv_ready_;
+};
+
+void TRun(int id, Batcher& batcher) {
+  for (int i = 0; i < 10; i++) {
+    int v = batcher.ComputeValue(id, i);
+    SyncPrint(absl::StrFormat("Thread %d: f(%d) = %d\n", id, i, v));
+  }
+  SyncPrint(absl::StrFormat("Thread %d: DONE\n", id));
+}
+
+void RunMultithreadExperiment() {
+  std::vector<std::thread> ts;
+  Batcher b(8);
+  for (int i = 0; i < 4; i++) {
+    ts.emplace_back([&b, i] { TRun(i, b); });
+  }
+  for (auto& t : ts) {
+    if (t.joinable()) {
+      t.join();
+    }
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -186,8 +285,12 @@ int main() {
     ABSL_LOG(ERROR) << "training_server_url must be set";
     return 1;
   }
-  hexz::Node::InitConfigParams(config);
+  hexz::InitializeFromConfig(config);
 
+  if (true) {
+    RunMultithreadExperiment();
+    return 0;
+  }
   // Execute
   ABSL_LOG(INFO) << "Worker started with " << config.String();
   if (config.startup_delay_seconds > 0) {

@@ -24,13 +24,17 @@ constexpr float kNoiseWeight = 0.25;
 // The first move for which a fast move is possible.
 constexpr int kFirstFastMove = 6;
 
+// All code that must be run once at program startup should
+// be added to this function.
+void InitializeFromConfig(const Config& config);
+
 class Node {
  public:
   explicit Node(int turn) : Node(nullptr, turn, Move{}) {}
   Node(Node* parent, int turn, Move move);
 
   // Must be called at startup to initialize static configuration parameters.
-  static void InitConfigParams(const Config& config) {
+  static void InitializeStaticMembers(const Config& config) {
     uct_c = config.uct_c;
     initial_root_q_value = config.initial_root_q_value;
     initial_q_penalty = config.initial_q_penalty;
@@ -244,10 +248,9 @@ class Model {
 };
 
 // Implementation of Model that uses an actual PyTorch ScriptModule.
-// This is the implementation that should be used everywhere outside of tests.
+// This implementation is synchronous, i.e. each call to Predict is
+// immediately evaluated by the model.
 class TorchModel : public Model {
-  using Prediction = Model::Prediction;
-
  public:
   explicit TorchModel(torch::jit::Module module) : module_{module} {}
   TorchModel(hexzpb::ModelKey key, torch::jit::Module module)
