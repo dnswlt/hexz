@@ -180,30 +180,72 @@ void SyncPrint(const std::string& s) {
   std::cout << s;
 }
 
+class IntCompute {
+ public:
+  using input_t = int;
+  using result_t = int;
+
+  int AddInput(input_t v) {
+    inputs_.push_back(v);
+    return inputs_.size() - 1;
+  }
+
+  void ComputeAll() {
+    for (const auto& inp : inputs_) {
+      results_.push_back(ComputeOne(inp));
+    }
+    // Pretend the computation takes a while
+    int64_t t_before = hexz::UnixMicros();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    SyncPrint(absl::StrFormat("Slept for %d us.\n", hexz::UnixMicros() - t_before));
+  }
+
+  result_t GetResult(int idx) {
+    ABSL_CHECK(idx >= 0 && idx < results_.size());
+    return results_[idx];
+  }
+
+  void Reset() {
+    inputs_.clear();
+    results_.clear();
+  }
+
+ private:
+  result_t ComputeOne(const input_t& v) { return v * v; }
+
+  std::vector<input_t> inputs_;
+  std::vector<result_t> results_;
+};
+
+template <typename ComputeT>
 class Batcher {
  public:
-  explicit Batcher(int batch_size)
-      : slots_(batch_size), results_(batch_size, 0), inputs_(batch_size, 0) {}
-  int ComputeValue(int thread_id, int v) {
+  using input_t = typename ComputeT::input_t;
+  using result_t = typename ComputeT::result_t;
+
+  Batcher(ComputeT comp, int batch_size)
+      : comp_(comp), slots_(batch_size), batch_size_(batch_size) {}
+
+  int ComputeValue(int thread_id, input_t v) {
     std::unique_lock<std::mutex> l(m_);
     SyncPrint(absl::StrFormat("Thread %d: wait for cv_enter\n", thread_id));
     cv_enter_.wait(l, [this] { return slots_ > 0; });
     SyncPrint(absl::StrFormat("Thread %d: cv_enter with slots_ == %d\n",
                               thread_id, slots_));
     slots_--;
-    int my_slot = slots_;
-    inputs_[my_slot] = v;
+    int result_key = comp_.AddInput(v);
     if (slots_ > 0) {
       // wait for next batch to be filled.
       SyncPrint(absl::StrFormat("Thread %d: wait for cv_ready\n", thread_id));
       cv_ready_.wait(l, [this] { return batch_ready_; });
       SyncPrint(absl::StrFormat("Thread %d: cv_ready\n", thread_id));
       done_++;
-      int result = results_[my_slot];
-      if (done_ == results_.size()) {
+      result_t result = comp_.GetResult(result_key);
+      if (done_ == batch_size_) {
         // This is the last thread leaving the batch.
+        comp_.Reset();
         batch_ready_ = false;
-        slots_ = results_.size();
+        slots_ = batch_size_;
         done_ = 0;
         l.unlock();
         cv_enter_.notify_all();
@@ -212,22 +254,19 @@ class Batcher {
     }
     // The thread that got the last slot in the batch has to
     // compute values for all waiting threads.
-    for (int i = 0; i < results_.size(); i++) {
-      results_[i] = inputs_[i] * 7;
-    }
-    // Pretend the computation takes a while
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    comp_.ComputeAll();
 
     batch_ready_ = true;
-    int result = results_[my_slot];
+    result_t result = comp_.GetResult(result_key);
     done_++;
-    if (done_ == results_.size()) {
+    if (done_ == batch_size_) {
       // This is the last thread leaving the batch. Can only happen here
       // if batch size is 1.
       SyncPrint(
           absl::StrFormat("!!! Thread %d: notify cv_enter !!!\n", thread_id));
+      comp_.Reset();
       batch_ready_ = false;
-      slots_ = results_.size();
+      slots_ = batch_size_;
       done_ = 0;
       l.unlock();
       cv_enter_.notify_all();
@@ -240,18 +279,18 @@ class Batcher {
   }
 
  private:
+  ComputeT comp_;
   bool batch_ready_ = false;
+  int batch_size_ = 0;
   int slots_ = 0;
   int done_ = 0;
-  std::vector<int> inputs_;
-  std::vector<int> results_;
   std::mutex m_;
   std::condition_variable cv_enter_;
   std::condition_variable cv_ready_;
 };
 
-void TRun(int id, Batcher& batcher) {
-  for (int i = 0; i < 10; i++) {
+void TRun(int id, int rounds, Batcher<IntCompute>& batcher) {
+  for (int i = 0; i < rounds; i++) {
     int v = batcher.ComputeValue(id, i);
     SyncPrint(absl::StrFormat("Thread %d: f(%d) = %d\n", id, i, v));
   }
@@ -259,16 +298,22 @@ void TRun(int id, Batcher& batcher) {
 }
 
 void RunMultithreadExperiment() {
+  constexpr int n_threads = 8;
+  constexpr int n_rounds = 100;
   std::vector<std::thread> ts;
-  Batcher b(8);
-  for (int i = 0; i < 4; i++) {
-    ts.emplace_back([&b, i] { TRun(i, b); });
+  Batcher<IntCompute> b(IntCompute(), n_threads);
+  int64_t t_started = hexz::UnixMicros();
+  for (int i = 0; i < n_threads; i++) {
+    ts.emplace_back([&b, i] { TRun(i, n_rounds, b); });
   }
   for (auto& t : ts) {
     if (t.joinable()) {
       t.join();
     }
   }
+  int64_t t_done = hexz::UnixMicros();
+  std::cout << "Done with " << n_rounds << " rounds in "
+            << static_cast<double>(t_done - t_started) / 1e6 << " seconds\n";
 }
 
 }  // namespace
