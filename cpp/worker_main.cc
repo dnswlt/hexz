@@ -73,6 +73,11 @@ void GenerateExamples(const Config& config) {
     return;
   }
   std::unique_ptr<TorchModel> model = *std::move(model_or);
+  if (config.device == "mps") {
+    model->SetDevice(torch::kMPS);
+  } else if (config.device == "cuda") {
+    model->SetDevice(torch::kCUDA);
+  }
   int max_games =
       config.max_games > 0 ? config.max_games : std::numeric_limits<int>::max();
   for (int i = 0; i < max_games; i++) {
@@ -182,16 +187,20 @@ int main() {
   absl::InitializeLog();
   // Config
   auto config = hexz::Config::FromEnv();
-  if (config.training_server_url.empty()) {
+  if (!config.ok()) {
+    ABSL_LOG(ERROR) << "Invalid config: " << config.status();
+    return 1;
+  }
+  if (config->training_server_url.empty()) {
     ABSL_LOG(ERROR) << "training_server_url must be set";
     return 1;
   }
-  hexz::InitializeFromConfig(config);
+  hexz::InitializeFromConfig(*config);
 
   // Execute
-  ABSL_LOG(INFO) << "Worker started with " << config.String();
-  if (config.startup_delay_seconds > 0) {
-    hexz::internal::RandomDelay(config.startup_delay_seconds);
+  ABSL_LOG(INFO) << "Worker started with " << config->String();
+  if (config->startup_delay_seconds > 0) {
+    hexz::internal::RandomDelay(config->startup_delay_seconds);
     ABSL_LOG(INFO) << "Startup delay finished.";
   }
   std::thread memmon;
@@ -206,9 +215,9 @@ int main() {
       memmon.join();
     }
   };
-  if (config.debug_memory_usage) {
+  if (config->debug_memory_usage) {
     memmon = std::thread{MemMon};
   }
-  hexz::GenerateExamples(config);
+  hexz::GenerateExamples(*config);
   return 0;
 }

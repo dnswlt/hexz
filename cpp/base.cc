@@ -1,5 +1,6 @@
 #include "base.h"
 
+#include <absl/status/statusor.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/str_join.h>
 
@@ -54,6 +55,7 @@ std::string Config::String() const {
       absl::StrJoin(
           {
               absl::StrFormat("training_server_url: '%s'", training_server_url),
+              absl::StrFormat("device: '%s'", device),
               absl::StrFormat("runs_per_move: %d", runs_per_move),
               absl::StrFormat("runs_per_fast_move: %d", runs_per_fast_move),
               absl::StrFormat("fast_move_prob: %.3f", fast_move_prob),
@@ -61,7 +63,8 @@ std::string Config::String() const {
               absl::StrFormat("max_runtime_seconds: %d", max_runtime_seconds),
               absl::StrFormat("max_games: %d", max_games),
               absl::StrFormat("uct_c: %.3f", uct_c),
-              absl::StrFormat("initial_root_q_value: %.3f", initial_root_q_value),
+              absl::StrFormat("initial_root_q_value: %.3f",
+                              initial_root_q_value),
               absl::StrFormat("initial_q_penalty: %.3f", initial_q_penalty),
               absl::StrFormat("dirichlet_concentration: %.3f",
                               dirichlet_concentration),
@@ -90,10 +93,11 @@ std::string str_to_upper(const std::string& s) {
 #define GET_ENV_FLOAT(fld) \
   .fld = GetEnvAsFloat(str_to_upper("HEXZ_" #fld), defaults.fld)
 
-Config Config::FromEnv() {
+absl::StatusOr<Config> Config::FromEnv() {
   Config defaults{};
-  return Config{
+  Config config{
       GET_ENV(training_server_url),
+      GET_ENV(device),
       GET_ENV_INT(runs_per_move),
       GET_ENV_INT(runs_per_fast_move),
       GET_ENV_FLOAT(fast_move_prob),
@@ -109,6 +113,14 @@ Config Config::FromEnv() {
       GET_ENV_FLOAT(startup_delay_seconds),
       GET_ENV_INT(debug_memory_usage),
   };
+  // Validate values
+  const std::vector<std::string> valid_devices = {"cpu", "mps", "cuda"};
+  if (std::find(valid_devices.begin(), valid_devices.end(), config.device) ==
+      valid_devices.end()) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "Invalid device: %s. Must be one of (cpu, mps, cuda).", config.device));
+  }
+  return config;
 }
 
 #undef GET_ENV

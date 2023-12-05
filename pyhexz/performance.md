@@ -1,8 +1,6 @@
 # Performance measurement log
 
-
 ## 2023-10-27
-
 
 What's going on in Cloud Run? `run_find_leaf` is horrensibly slow!?
 
@@ -25,7 +23,7 @@ NeuralMCTS.run            149.082s      64800      434.7
 CBoard.make_move            0.001s         80    57971.0
 ```
 
-From https://pythonspeed.com/articles/docker-performance-overhead/ I learnt that sometime
+From <https://pythonspeed.com/articles/docker-performance-overhead/> I learnt that sometime
 Docker security features are to blame.
 
 I can reproduce a significant speedup for `run_find_leaf` on my nuc when running Docker with
@@ -100,10 +98,9 @@ NeuralMCTS.predict         74.413s      71313      958.3
 NeuralMCTS.run             90.630s      83200      918.0
 CBoard.make_move            0.001s        102   185118.0
 
-
 ## 2023-10-31
 
-https://github.com/gperftools/gperftools/issues/532
+<https://github.com/gperftools/gperftools/issues/532>
 
 Neither gprof nor gperftools yield any reasonable profiling results:
 
@@ -122,7 +119,6 @@ Showing top 20 nodes out of 71
      0.57s  1.56% 88.72%      0.57s  1.56%  mkl_blas_avx2_sgemm_scopy_down24_ea
      0.50s  1.37% 90.08%      0.57s  1.56%  gblock_by_k_omp
 ```
-
 
 ## 2023-11-02
 
@@ -153,7 +149,6 @@ NextMoves              0.082s      88679  1086000.210
 ```
 
 Nice, they're essentially running equally fast.
-
 
 ## 2023-11-03
 
@@ -186,12 +181,13 @@ The ml-server also does a decent job:
 
 [2023-11-04 23:39:02,598] INFO in training: Finished training batch of size 1024 for 7 epochs in 20.4s.
 
-
 ## 2023-11-10
 
 Added two channels (now at (11, 11, 10)) for remaining flags. Also added action_mask to ignore invalid moves in policy.
 
+```
 I1110 21:54:36.649133       1 worker_main.cc:177] Worker started with Config(training_server_url: 'http://10.172.0.3', local_model_path: '', runs_per_move: 1000, runs_per_move_gradient: -0.010, max_moves_per_game: 200, max_runtime_seconds: 300, max_games: -1, uct_c: 5.000, dirichlet_concentration: 0.350)
+```
 
 2023-11-10 22:59:37.946 CET
 scope              total_time      count        ops/s
@@ -202,16 +198,13 @@ FindLeaf               1.501s     155683   103734.353
 MakeMove               1.005s     435675   433635.199
 MaxPuctChild           0.442s     422990   957970.056
 
-
 [2023-11-10 22:06:16,053] INFO in training: Finished training batch of size 1024 for 7 epochs in 20.6s.
 
 Tree reuse and Dirichlet noise:
 
-https://ai.stackexchange.com/questions/36808/does-the-alphazero-algorithm-keep-the-subtree-statistics-after-each-move-during
-https://github.com/leela-zero/leela-zero/issues/538
-https://arxiv.org/pdf/1902.10565.pdf (KataGo)
-
-
+<https://ai.stackexchange.com/questions/36808/does-the-alphazero-algorithm-keep-the-subtree-statistics-after-each-move-during>
+<https://github.com/leela-zero/leela-zero/issues/538>
+<https://arxiv.org/pdf/1902.10565.pdf> (KataGo)
 
 ## 2023-11-15
 
@@ -223,18 +216,16 @@ NextMoves           0.293s      31365   107025.721
 MakeMove            0.124s      91051   735719.748
 MaxPuctChild        0.050s      87181  1746825.495
 
-
 ## 2023-11-18
 
 Interesting discussion about setting the right initial Q value and tweaking the p_uct:
-https://ai.stackexchange.com/questions/25939/alpha-zero-does-not-converge-for-connect-6-a-game-with-huge-branching-factor
+<https://ai.stackexchange.com/questions/25939/alpha-zero-does-not-converge-for-connect-6-a-game-with-huge-branching-factor>
 
 Leela Zero's Q value settings:
-https://lczero.org/play/flags/#:~:text=%E2%80%9CFirst%20Play%20Urgency%E2%80%9D%20changes%20search,absolute%E2%80%9D%20directly%20uses%20that%20value.
+<https://lczero.org/play/flags/#:~:text=%E2%80%9CFirst%20Play%20Urgency%E2%80%9D%20changes%20search,absolute%E2%80%9D%20directly%20uses%20that%20value>.
 
 And its implementation:
-https://github.com/leela-zero/leela-zero/blob/next/src/UCTNode.cpp#L270
-
+<https://github.com/leela-zero/leela-zero/blob/next/src/UCTNode.cpp#L270>
 
 ## 2023-11-27
 
@@ -257,3 +248,27 @@ RandomPlayout       59.917s   11280000   188259.737
 NextMoves            0.773s     251300   324949.740
 MakeMove             0.594s    1417160  2387065.939
 MaxPuctChild         0.398s    1354861  3406033.806
+
+## 2023-12-05
+
+In single-threaded mode, Predict runs 3-4 times faster on CPU than on MPS:
+
+CPU:
+
+scope            total_time      count        ops/s
+PlayGame            60.628s          1        0.016
+Predict             53.048s      15100      284.646
+RandomPlayout        7.288s     720000    98791.874
+MakeMove             0.112s      94085   840112.474
+NextMoves            0.058s      15100   259301.319
+MaxPuctChild         0.032s      90728  2845707.531
+
+MPS:
+
+scope            total_time      count        ops/s
+PlayGame            60.480s          1        0.017
+Predict             44.480s      41200      926.258
+RandomPlayout       15.291s    1980000   129486.310
+NextMoves            0.162s      41200   254693.001
+MakeMove             0.133s     239363  1804754.206
+MaxPuctChild         0.086s     228045  2643199.103

@@ -257,12 +257,17 @@ class TorchModel : public Model {
       : key_{key}, module_{module} {}
   Prediction Predict(const Board& board, const Node& node) override;
 
+  // Returns the model key, if it was set during construction. Otherwise,
+  // returns the "zero value" of ModelKey.
   const hexzpb::ModelKey& Key() const { return key_; }
-  torch::jit::Module& Module() { return module_; }
+  // Sets the device on which model predictions will be made.
+  // The default is torch::kCPU and does not need to be set explicitly.
+  void SetDevice(torch::DeviceType device);
 
  private:
   hexzpb::ModelKey key_;
   torch::jit::Module module_;
+  torch::DeviceType device_ = torch::kCPU;
 };
 
 class PlayoutRunner {

@@ -22,9 +22,8 @@ float Node::initial_root_q_value = 0;
 float Node::initial_q_penalty = 0;
 
 void InitializeFromConfig(const Config& config) {
-    Node::InitializeStaticMembers(config);
+  Node::InitializeStaticMembers(config);
 }
-
 
 Node::Node(Node* parent, int turn, Move move)
     : parent_{parent}, turn_{turn}, move_{move} {}
@@ -344,13 +343,18 @@ absl::Status WriteDotGraph(const Node& root, const std::string& path) {
   return absl::OkStatus();
 }
 
+void TorchModel::SetDevice(torch::DeviceType device) {
+    device_ = device;
+    module_.to(device_);
+}
+
 TorchModel::Prediction TorchModel::Predict(const Board& board,
                                            const Node& node) {
   ABSL_CHECK(!node.IsLeaf()) << "Must not call Predict on a leaf node.";
   Perfm::Scope ps(Perfm::Predict);
   torch::NoGradGuard no_grad;
-  auto board_input = board.Tensor(node.NextTurn()).unsqueeze(0);
-  auto action_mask = node.ActionMask().flatten().unsqueeze(0);
+  auto board_input = board.Tensor(node.NextTurn()).unsqueeze(0).to(device_);
+  auto action_mask = node.ActionMask().flatten().unsqueeze(0).to(device_);
   std::vector<torch::jit::IValue> inputs{
       board_input,
       action_mask,
@@ -362,7 +366,8 @@ TorchModel::Prediction TorchModel::Predict(const Board& board,
   ABSL_DCHECK(output.isTuple());
   const auto output_tuple = output.toTuple();
   ABSL_DCHECK(output_tuple->size() == 2);
-  const auto logits = output_tuple->elements()[0].toTensor();
+  // Read logits back to CPU / main memory.
+  const auto logits = output_tuple->elements()[0].toTensor().to(torch::kCPU);
   const auto dim = logits.sizes();
   ABSL_DCHECK(dim.size() == 2 && dim[0] == 1 && dim[1] == 2 * 11 * 10);
   const auto value = output_tuple->elements()[1].toTensor().item<float>();

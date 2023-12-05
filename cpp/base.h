@@ -1,6 +1,8 @@
 #ifndef __HEXZ_CONFIG_H__
 #define __HEXZ_CONFIG_H__
 
+#include <absl/status/statusor.h>
+
 #include <random>
 #include <string>
 
@@ -9,6 +11,9 @@ namespace hexz {
 struct Config {
   // URL of the training server, e.g. "http://localhost:8080".
   std::string training_server_url;
+  // The device on which model predictions are made. Must be one of
+  // {"cpu", "mps", "cuda"}.
+  std::string device = "cpu";
   // MCTS runs executed for each move. Can be further influenced by
   // runs_per_move_decay.
   int runs_per_move = 800;
@@ -52,8 +57,8 @@ struct Config {
   // (initially totally useless) model value predictions. Random playouts
   // are also used to resign early.
   int random_playouts = 0;
-  // Threshold Q value above which a game will be resigned, to speed up self-play.
-  // Currently this is only used for random playouts.
+  // Threshold Q value above which a game will be resigned, to speed up
+  // self-play. Currently this is only used for random playouts.
   float resign_threshold = std::numeric_limits<float>::max();
   // Maximum delay at startup before generating and sending examples.
   // The delay will be uniformly randomized between 0 and startup_delay_seconds.
@@ -63,7 +68,7 @@ struct Config {
 
   // Set this to 1 to have /proc/self/status logged every N seconds.
   int debug_memory_usage = 0;
-  static Config FromEnv();
+  static absl::StatusOr<Config> FromEnv();
   std::string String() const;
 };
 
