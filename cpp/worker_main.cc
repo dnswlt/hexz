@@ -61,7 +61,32 @@ absl::StatusOr<std::unique_ptr<TorchModel>> FetchLatestModel(RPCClient& rpc) {
   return std::make_unique<TorchModel>(km->key, km->model);
 }
 
+void GenerateExamplesMultithreaded(const Config& config) {
+  RPCClient rpc(config);
+  auto km = rpc.FetchLatestModel();
+  if (!km.ok()) {
+    ABSL_LOG(ERROR) << "Failed to fetch latest model: " << km.status();
+    return;
+  }
+  // TODO: implement.
+  std::vector<std::thread> worker_threads;
+
+  if (config.startup_delay_seconds > 0) {
+    float delay = config.startup_delay_seconds * internal::UnitRandom();
+    ABSL_LOG(INFO) << "Delaying startup by " << delay << " seconds.";
+    std::this_thread::sleep_for(std::chrono::duration<float>(delay));
+  }
+}
+
 void GenerateExamples(const Config& config) {
+  if (config.worker_threads > 1) {
+    GenerateExamplesMultithreaded(config);
+  }
+  if (config.startup_delay_seconds > 0) {
+    float delay = config.startup_delay_seconds * internal::UnitRandom();
+    ABSL_LOG(INFO) << "Delaying startup by " << delay << " seconds.";
+    std::this_thread::sleep_for(std::chrono::duration<float>(delay));
+  }
   const auto started_micros = UnixMicros();
   const std::string execution_id = RandomUid();
   ABSL_LOG(INFO) << "Generating examples using execution_id " << execution_id
@@ -199,10 +224,6 @@ int main() {
 
   // Execute
   ABSL_LOG(INFO) << "Worker started with " << config->String();
-  if (config->startup_delay_seconds > 0) {
-    hexz::internal::RandomDelay(config->startup_delay_seconds);
-    ABSL_LOG(INFO) << "Startup delay finished.";
-  }
   std::thread memmon;
   absl::Cleanup thread_joiner = [&memmon] {
     if (memmon.joinable()) {

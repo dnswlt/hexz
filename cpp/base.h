@@ -14,6 +14,8 @@ struct Config {
   // The device on which model predictions are made. Must be one of
   // {"cpu", "mps", "cuda"}.
   std::string device = "cpu";
+  // How many threads to use for self-play.
+  int worker_threads = 1;
   // MCTS runs executed for each move. Can be further influenced by
   // runs_per_move_decay.
   int runs_per_move = 800;
@@ -91,10 +93,6 @@ int RandomInt(int lower, int upper);
 // :( So let's roll our own, based on the gamma distribution:
 // https://en.wikipedia.org/wiki/Dirichlet_distribution#Related_distributions
 std::vector<float> Dirichlet(int n, float concentration);
-
-// Lets the calling thread sleep for a random amount of time between
-// [0..max_delay_seconds] seconds.
-void RandomDelay(float max_delay_seconds);
 
 }  // namespace internal
 

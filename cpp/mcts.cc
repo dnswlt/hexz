@@ -344,14 +344,88 @@ absl::Status WriteDotGraph(const Node& root, const std::string& path) {
 }
 
 void TorchModel::SetDevice(torch::DeviceType device) {
-    device_ = device;
-    module_.to(device_);
+  device_ = device;
+  module_.to(device_);
 }
 
 TorchModel::Prediction TorchModel::Predict(const Board& board,
                                            const Node& node) {
   ABSL_CHECK(!node.IsLeaf()) << "Must not call Predict on a leaf node.";
   Perfm::Scope ps(Perfm::Predict);
+  torch::NoGradGuard no_grad;
+  auto board_input = board.Tensor(node.NextTurn()).unsqueeze(0).to(device_);
+  auto action_mask = node.ActionMask().flatten().unsqueeze(0).to(device_);
+  std::vector<torch::jit::IValue> inputs{
+      board_input,
+      action_mask,
+  };
+  auto output = module_.forward(inputs);
+
+  // The model should output two values: the move likelihoods as a [1, 220]
+  // tensor of logits, and a single float value prediction.
+  ABSL_DCHECK(output.isTuple());
+  const auto output_tuple = output.toTuple();
+  ABSL_DCHECK(output_tuple->size() == 2);
+  // Read logits back to CPU / main memory.
+  const auto logits = output_tuple->elements()[0].toTensor().to(torch::kCPU);
+  const auto dim = logits.sizes();
+  ABSL_DCHECK(dim.size() == 2 && dim[0] == 1 && dim[1] == 2 * 11 * 10);
+  const auto value = output_tuple->elements()[1].toTensor().item<float>();
+  return Prediction{
+      .move_probs = logits.reshape({2, 11, 10}).exp(),
+      .value = value,
+  };
+}
+
+void BatchedTorchModel::SetDevice(torch::DeviceType device) {
+  device_ = device;
+  module_.to(device_);
+}
+
+int BatchedTorchModel::ComputeT::AddInput(
+    BatchedTorchModel::ComputeT::input_t v) {
+  int idx = boards_.size();
+  boards_.push_back(v.board);
+  action_masks_.push_back(v.action_mask);
+  return idx;
+}
+
+void BatchedTorchModel::ComputeT::ComputeAll() {
+  const int n_inputs = boards_.size();
+  std::vector<torch::jit::IValue> model_inputs = {
+      torch::cat(boards_),
+      torch::cat(action_masks_),
+  };
+  auto pred = model_.module_.forward(model_inputs);
+  ABSL_DCHECK(pred.isTuple());
+  const auto output_tuple = pred.toTuple();
+  ABSL_DCHECK(output_tuple->size() == 2);
+  // Read logits back to CPU / main memory.
+  const auto logits = output_tuple->elements()[0].toTensor().to(torch::kCPU);
+  const auto dim = logits.sizes();
+  ABSL_DCHECK(dim.size() == 2 && dim[0] == n_inputs && dim[1] == 2 * 11 * 10);
+  const auto values = output_tuple->elements()[1].toTensor().to(torch::kCPU);
+  logits_ = logits;
+  values_ = values;
+}
+
+Model::Prediction BatchedTorchModel::ComputeT::GetResult(
+    int idx) {
+  return Model::Prediction{
+    .move_probs = logits_.index({idx}).reshape({2, 11, 10}).exp(),
+    .value = values_.index({idx}).item<float>(),
+  };
+}
+
+void BatchedTorchModel::ComputeT::Reset() {
+  boards_.clear();
+  action_masks_.clear();
+}
+
+BatchedTorchModel::Prediction BatchedTorchModel::Predict(const Board& board,
+                                                         const Node& node) {
+  ABSL_CHECK(!node.IsLeaf()) << "Must not call Predict on a leaf node.";
+  Perfm::Scope ps(Perfm::PredictBatch);
   torch::NoGradGuard no_grad;
   auto board_input = board.Tensor(node.NextTurn()).unsqueeze(0).to(device_);
   auto action_mask = node.ActionMask().flatten().unsqueeze(0).to(device_);

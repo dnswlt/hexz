@@ -1,5 +1,6 @@
 #include "base.h"
 
+#include <absl/log/absl_check.h>
 #include <absl/status/statusor.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/str_join.h>
@@ -20,6 +21,7 @@ float UnitRandom() {
 }
 
 int RandomInt(int lower, int upper) {
+  ABSL_DCHECK(lower <= upper);
   std::uniform_int_distribution<int> dis{lower, upper};
   return dis(rng);
 }
@@ -38,15 +40,6 @@ std::vector<float> Dirichlet(int n, float concentration) {
   return v;
 }
 
-void RandomDelay(float max_delay_seconds) {
-  if (max_delay_seconds <= 0) {
-    return;
-  }
-  std::uniform_real_distribution<float> dis(0, max_delay_seconds);
-  float delay = dis(rng);
-  std::this_thread::sleep_for(std::chrono::duration<float>(delay));
-}
-
 }  // namespace internal
 
 std::string Config::String() const {
@@ -56,6 +49,7 @@ std::string Config::String() const {
           {
               absl::StrFormat("training_server_url: '%s'", training_server_url),
               absl::StrFormat("device: '%s'", device),
+              absl::StrFormat("worker_threads: %d", worker_threads),
               absl::StrFormat("runs_per_move: %d", runs_per_move),
               absl::StrFormat("runs_per_fast_move: %d", runs_per_fast_move),
               absl::StrFormat("fast_move_prob: %.3f", fast_move_prob),
@@ -98,6 +92,7 @@ absl::StatusOr<Config> Config::FromEnv() {
   Config config{
       GET_ENV(training_server_url),
       GET_ENV(device),
+      GET_ENV_INT(worker_threads),
       GET_ENV_INT(runs_per_move),
       GET_ENV_INT(runs_per_fast_move),
       GET_ENV_FLOAT(fast_move_prob),

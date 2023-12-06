@@ -304,6 +304,26 @@ TEST(NodeTest, ActionMask) {
   EXPECT_TRUE(mask.index({1, 7, 3}).item<bool>());
 }
 
+TEST(BatchedTorchModelTest, SmokeTest) {
+  auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
+  scriptmodule.to(torch::kCPU);
+  scriptmodule.eval();
+  constexpr int batch_size = 2;
+  constexpr int64_t timeout_micros = 1'000'000;
+  BatchedTorchModel m(hexzpb::ModelKey(), scriptmodule, batch_size,
+                      timeout_micros);
+  auto board = Board::RandomBoard();
+  auto all_moves = board.NextMoves(0);
+  Node root(0);
+  root.CreateChildren(all_moves);
+  auto pred = m.Predict(board, root);
+  auto pred1 = m.Predict(board, root);
+  auto sizes = pred.move_probs.sizes();
+  EXPECT_EQ(sizes[0], 2);
+  EXPECT_EQ(sizes[1], 11);
+  EXPECT_EQ(sizes[2], 10);
+}
+
 class MCTSScriptModuleTest : public testing::Test {
  protected:
   void SetUp() override {

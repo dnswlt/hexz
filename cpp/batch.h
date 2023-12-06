@@ -13,7 +13,7 @@ class Batcher {
   using input_t = typename ComputeT::input_t;
   using result_t = typename ComputeT::result_t;
 
-  Batcher(ComputeT& comp, int batch_size, int timeout_micros)
+  Batcher(ComputeT& comp, int batch_size, int64_t timeout_micros)
       : comp_(comp),
         max_batch_size_(batch_size),
         timeout_micros_(timeout_micros),

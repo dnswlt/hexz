@@ -408,9 +408,9 @@ class FastGameState {
   bool FastNextMove(int turn, Move& m) const {
     int moves_cnt = 0;
     float j = 0;
-    bool has_flag = nflags[turn] > 0;
+    bool can_place_flag = nflags[turn] > 0 && free_cells[turn] > 0;
     bool pick_flag =
-        has_flag &&
+        can_place_flag &&
         (nmoves[turn] == 0 ||
          internal::UnitRandom() <=
              nflags[turn] / static_cast<float>(nmoves[turn] + nflags[turn]));
@@ -429,7 +429,7 @@ class FastGameState {
         }
       }
     }
-    {
+    if (nmoves[turn] > 0) {
       // No flag picked. Try a normal move.
       int n = internal::RandomInt(0, nmoves[turn] - 1);
       int k = 0;
@@ -538,7 +538,7 @@ class FastGameState {
 float FastRandomPlayout(int turn, const Board& board) {
   FastGameState s(board);
   int n_moves = 0;
-  while (true) {
+  while (n_moves < 200) {
     // Find random next move.
     Move m;
     if (!s.FastNextMove(turn, m)) {
@@ -552,6 +552,8 @@ float FastRandomPlayout(int turn, const Board& board) {
     turn = 1 - turn;
     n_moves++;
   }
+  ABSL_LOG(FATAL) << "FastRandomPlayout error: did not finish the game";
+  return 0.0;  // Never reached
 }
 
 }  // namespace hexz

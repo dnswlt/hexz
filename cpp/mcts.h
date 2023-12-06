@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base.h"
+#include "batch.h"
 #include "board.h"
 #include "hexz.pb.h"
 #include "perfm.h"
@@ -268,6 +269,58 @@ class TorchModel : public Model {
   hexzpb::ModelKey key_;
   torch::jit::Module module_;
   torch::DeviceType device_ = torch::kCPU;
+};
+
+// Implementation of Model that uses an actual PyTorch ScriptModule.
+// This implementation is supposed to be used as the ComputeT in a
+// hexz::Batcher, so that model predictions are batched across several threads
+// working on independent search trees.
+class BatchedTorchModel : public Model {
+ public:
+  class ComputeT {
+   public:
+    struct input_t {
+      torch::Tensor board;
+      torch::Tensor action_mask;
+    };
+    using result_t = Model::Prediction;
+    explicit ComputeT(BatchedTorchModel& model) : model_{model} {}
+    int AddInput(input_t v);
+    void ComputeAll();
+    result_t GetResult(int idx);
+    void Reset();
+
+   private:
+    BatchedTorchModel& model_;
+    // Inputs
+    std::vector<torch::Tensor> boards_;
+    std::vector<torch::Tensor> action_masks_;
+    // Ouptuts
+    torch::Tensor logits_;  // N x 2 x 11 x 10
+    torch::Tensor values_;  // N x 1
+  };
+  BatchedTorchModel(hexzpb::ModelKey key, torch::jit::Module module,
+                    int batch_size, int64_t timeout_micros)
+      : compute_{*this},
+        key_{key},
+        module_{module},
+        batcher_{compute_, batch_size, timeout_micros} {}
+  Prediction Predict(const Board& board, const Node& node) override;
+
+  // Returns the model key.
+  const hexzpb::ModelKey& Key() const { return key_; }
+  // Sets the device on which model predictions will be made.
+  // The default is torch::kCPU, but that is typically not a useful
+  // choice, as the batching speedups are achieved by running on a GPU.
+  void SetDevice(torch::DeviceType device);
+
+ private:
+  // The BatchedTorchModel owns its compute. Batcher only holds a reference.
+  ComputeT compute_;
+  hexzpb::ModelKey key_;
+  torch::jit::Module module_;
+  torch::DeviceType device_ = torch::kCPU;
+  Batcher<ComputeT> batcher_;
 };
 
 class PlayoutRunner {
