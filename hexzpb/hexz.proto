@@ -272,9 +272,10 @@ message TrainingExample {
         // Min/max visit counts of the root node's children.
         int32 min_child_vc = 8;
         int32 max_child_vc = 9;
-        int32 selected_child_vc = 10;
         // The Q-value of the selected child node, i.e. wins/visit_count.
-        float q_value =  11;
+        int32 selected_child_q = 13;
+        // The visit count of the selected child node.
+        int32 selected_child_vc = 10;
         // Number of nodes per depth level in the tree.
         repeated int32 nodes_per_depth = 12;
     }

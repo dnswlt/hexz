@@ -4895,7 +4895,7 @@ class TrainingExample_Stats final :
     kMinChildVcFieldNumber = 8,
     kMaxChildVcFieldNumber = 9,
     kSelectedChildVcFieldNumber = 10,
-    kQValueFieldNumber = 11,
+    kSelectedChildQFieldNumber = 13,
   };
   // repeated int32 nodes_per_depth = 12;
   int nodes_per_depth_size() const;
@@ -5015,14 +5015,14 @@ class TrainingExample_Stats final :
   void _internal_set_selected_child_vc(::int32_t value);
 
   public:
-  // float q_value = 11;
-  void clear_q_value() ;
-  float q_value() const;
-  void set_q_value(float value);
+  // int32 selected_child_q = 13;
+  void clear_selected_child_q() ;
+  ::int32_t selected_child_q() const;
+  void set_selected_child_q(::int32_t value);
 
   private:
-  float _internal_q_value() const;
-  void _internal_set_q_value(float value);
+  ::int32_t _internal_selected_child_q() const;
+  void _internal_set_selected_child_q(::int32_t value);
 
   public:
   // @@protoc_insertion_point(class_scope:hexzpb.TrainingExample.Stats)
@@ -5047,7 +5047,7 @@ class TrainingExample_Stats final :
     ::int32_t min_child_vc_;
     ::int32_t max_child_vc_;
     ::int32_t selected_child_vc_;
-    float q_value_;
+    ::int32_t selected_child_q_;
     mutable ::google::protobuf::internal::CachedSize _cached_size_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -8995,6 +8995,28 @@ inline void TrainingExample_Stats::_internal_set_max_child_vc(::int32_t value) {
   _impl_.max_child_vc_ = value;
 }
 
+// int32 selected_child_q = 13;
+inline void TrainingExample_Stats::clear_selected_child_q() {
+  _impl_.selected_child_q_ = 0;
+}
+inline ::int32_t TrainingExample_Stats::selected_child_q() const {
+  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.Stats.selected_child_q)
+  return _internal_selected_child_q();
+}
+inline void TrainingExample_Stats::set_selected_child_q(::int32_t value) {
+  _internal_set_selected_child_q(value);
+  // @@protoc_insertion_point(field_set:hexzpb.TrainingExample.Stats.selected_child_q)
+}
+inline ::int32_t TrainingExample_Stats::_internal_selected_child_q() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  return _impl_.selected_child_q_;
+}
+inline void TrainingExample_Stats::_internal_set_selected_child_q(::int32_t value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  ;
+  _impl_.selected_child_q_ = value;
+}
+
 // int32 selected_child_vc = 10;
 inline void TrainingExample_Stats::clear_selected_child_vc() {
   _impl_.selected_child_vc_ = 0;
@@ -9015,28 +9037,6 @@ inline void TrainingExample_Stats::_internal_set_selected_child_vc(::int32_t val
   PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
   ;
   _impl_.selected_child_vc_ = value;
-}
-
-// float q_value = 11;
-inline void TrainingExample_Stats::clear_q_value() {
-  _impl_.q_value_ = 0;
-}
-inline float TrainingExample_Stats::q_value() const {
-  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.Stats.q_value)
-  return _internal_q_value();
-}
-inline void TrainingExample_Stats::set_q_value(float value) {
-  _internal_set_q_value(value);
-  // @@protoc_insertion_point(field_set:hexzpb.TrainingExample.Stats.q_value)
-}
-inline float TrainingExample_Stats::_internal_q_value() const {
-  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
-  return _impl_.q_value_;
-}
-inline void TrainingExample_Stats::_internal_set_q_value(float value) {
-  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  ;
-  _impl_.q_value_ = value;
 }
 
 // repeated int32 nodes_per_depth = 12;

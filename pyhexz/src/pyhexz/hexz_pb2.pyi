@@ -284,7 +284,7 @@ class TrainingExample(_message.Message):
         value: float
         def __init__(self, priors: _Optional[bytes] = ..., value: _Optional[float] = ...) -> None: ...
     class Stats(_message.Message):
-        __slots__ = ["duration_micros", "valid_moves", "visit_count", "visited_children", "search_depth", "search_tree_size", "branch_nodes", "min_child_vc", "max_child_vc", "selected_child_vc", "q_value", "nodes_per_depth"]
+        __slots__ = ["duration_micros", "valid_moves", "visit_count", "visited_children", "search_depth", "search_tree_size", "branch_nodes", "min_child_vc", "max_child_vc", "selected_child_q", "selected_child_vc", "nodes_per_depth"]
         DURATION_MICROS_FIELD_NUMBER: _ClassVar[int]
         VALID_MOVES_FIELD_NUMBER: _ClassVar[int]
         VISIT_COUNT_FIELD_NUMBER: _ClassVar[int]
@@ -294,8 +294,8 @@ class TrainingExample(_message.Message):
         BRANCH_NODES_FIELD_NUMBER: _ClassVar[int]
         MIN_CHILD_VC_FIELD_NUMBER: _ClassVar[int]
         MAX_CHILD_VC_FIELD_NUMBER: _ClassVar[int]
+        SELECTED_CHILD_Q_FIELD_NUMBER: _ClassVar[int]
         SELECTED_CHILD_VC_FIELD_NUMBER: _ClassVar[int]
-        Q_VALUE_FIELD_NUMBER: _ClassVar[int]
         NODES_PER_DEPTH_FIELD_NUMBER: _ClassVar[int]
         duration_micros: int
         valid_moves: int
@@ -306,10 +306,10 @@ class TrainingExample(_message.Message):
         branch_nodes: int
         min_child_vc: int
         max_child_vc: int
+        selected_child_q: int
         selected_child_vc: int
-        q_value: float
         nodes_per_depth: _containers.RepeatedScalarFieldContainer[int]
-        def __init__(self, duration_micros: _Optional[int] = ..., valid_moves: _Optional[int] = ..., visit_count: _Optional[int] = ..., visited_children: _Optional[int] = ..., search_depth: _Optional[int] = ..., search_tree_size: _Optional[int] = ..., branch_nodes: _Optional[int] = ..., min_child_vc: _Optional[int] = ..., max_child_vc: _Optional[int] = ..., selected_child_vc: _Optional[int] = ..., q_value: _Optional[float] = ..., nodes_per_depth: _Optional[_Iterable[int]] = ...) -> None: ...
+        def __init__(self, duration_micros: _Optional[int] = ..., valid_moves: _Optional[int] = ..., visit_count: _Optional[int] = ..., visited_children: _Optional[int] = ..., search_depth: _Optional[int] = ..., search_tree_size: _Optional[int] = ..., branch_nodes: _Optional[int] = ..., min_child_vc: _Optional[int] = ..., max_child_vc: _Optional[int] = ..., selected_child_q: _Optional[int] = ..., selected_child_vc: _Optional[int] = ..., nodes_per_depth: _Optional[_Iterable[int]] = ...) -> None: ...
     UNIX_MICROS_FIELD_NUMBER: _ClassVar[int]
     TURN_FIELD_NUMBER: _ClassVar[int]
     MOVE_FIELD_NUMBER: _ClassVar[int]

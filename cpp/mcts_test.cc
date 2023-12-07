@@ -504,7 +504,7 @@ TEST(MCTSTest, PlayGameStats) {
   //   EXPECT_EQ(stats.search_depth(), 100);
   EXPECT_EQ(stats.min_child_vc(), 0);
   EXPECT_EQ(stats.max_child_vc(), config.runs_per_move - 1);
-  EXPECT_EQ(stats.q_value(), 1.0);
+  EXPECT_EQ(stats.selected_child_q(), 1.0);
   EXPECT_EQ(stats.selected_child_vc(), config.runs_per_move - 1);
   ASSERT_EQ(stats.nodes_per_depth().size(), 4);
   // The root node:

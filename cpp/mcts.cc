@@ -112,7 +112,6 @@ void Node::PopulateStats(hexzpb::TrainingExample::Stats& stats) const {
   stats.set_branch_nodes(branch_nodes);
   stats.set_min_child_vc(min_vc);
   stats.set_max_child_vc(max_vc);
-  stats.set_q_value(Q());
   stats.mutable_nodes_per_depth()->Assign(nodes_per_depth.begin(),
                                           nodes_per_depth.end());
 }
@@ -304,10 +303,11 @@ namespace {
 absl::Status WriteDotNodeRec(const Node& n, const std::string& name,
                              std::ofstream& os) {
   float puct = n.IsRoot() ? 0.0 : n.Puct() * 100;
+  float q = n.IsRoot() ? 0.0 : n.Q();
   std::string label = absl::StrFormat(
       "%d(%d, %d, %d)%.0f v:%.2f\\nvc:%d q:%.2f p:%.1f c:%d",              //
       n.NextTurn(), n.move().typ, n.move().r, n.move().c, n.move().value,  //
-      n.value(), n.visit_count(), n.Q(), puct, n.children().size());
+      n.value(), n.visit_count(), q, puct, n.children().size());
   os << name << "[label=\"" << label << "\"]\n";
   int i = 0;
   for (const auto& c : n.children()) {
@@ -409,11 +409,10 @@ void BatchedTorchModel::ComputeT::ComputeAll() {
   values_ = values;
 }
 
-Model::Prediction BatchedTorchModel::ComputeT::GetResult(
-    int idx) {
+Model::Prediction BatchedTorchModel::ComputeT::GetResult(int idx) {
   return Model::Prediction{
-    .move_probs = logits_.index({idx}).reshape({2, 11, 10}).exp(),
-    .value = values_.index({idx}).item<float>(),
+      .move_probs = logits_.index({idx}).reshape({2, 11, 10}).exp(),
+      .value = values_.index({idx}).item<float>(),
   };
 }
 
@@ -707,7 +706,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       mv->set_col(move.c);
       mv->set_player_num(turn + 1);  // 1-based
 
-      ex.mutable_stats()->set_q_value(child.Q());
+      ex.mutable_stats()->set_selected_child_q(child.Q());
       ex.mutable_stats()->set_selected_child_vc(child.visit_count());
     }
 
