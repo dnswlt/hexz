@@ -301,9 +301,9 @@ class BatchedTorchModel : public Model {
   };
   BatchedTorchModel(hexzpb::ModelKey key, torch::jit::Module module,
                     int batch_size, int64_t timeout_micros)
-      : compute_{*this},
-        key_{key},
+      : key_{key},
         module_{module},
+        compute_{*this},
         batcher_{compute_, batch_size, timeout_micros} {}
   Prediction Predict(const Board& board, const Node& node) override;
 
@@ -316,10 +316,11 @@ class BatchedTorchModel : public Model {
 
  private:
   // The BatchedTorchModel owns its compute. Batcher only holds a reference.
-  ComputeT compute_;
   hexzpb::ModelKey key_;
   torch::jit::Module module_;
   torch::DeviceType device_ = torch::kCPU;
+  ComputeT compute_;
+  // batcher_ must come after compute_, as it depends on it.
   Batcher<ComputeT> batcher_;
 };
 

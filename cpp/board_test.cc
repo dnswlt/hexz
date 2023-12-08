@@ -324,5 +324,13 @@ TEST(TorchTest, Broadcast) {
       torch::all(t.index({Board::Channel::kRemainingFlags}) == 0).item<bool>());
 }
 
+TEST(TorchTest, StackTest) {
+  // torch::stack is the function to use to create batches of tensors to pass to
+  // the model.
+  auto t = torch::ones({3, 4, 5});
+  auto t2 = torch::stack({t, t});
+  EXPECT_THAT(t2.sizes(), testing::ElementsAre(2, 3, 4, 5));
+}
+
 }  // namespace
 }  // namespace hexz

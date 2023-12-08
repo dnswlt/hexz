@@ -21,7 +21,7 @@ class Batcher {
         batch_ready_(false),
         done_(0) {}
 
-  int ComputeValue(int thread_id, input_t v) {
+  result_t ComputeValue(input_t v) {
     std::unique_lock<std::mutex> l(m_);
     cv_enter_.wait(l, [this] { return SlotAvailable(); });
 
@@ -36,8 +36,7 @@ class Batcher {
                                 [this] { return batch_ready_; })) {
           // Timed out before batch was filled entirely. Start computation.
           ABSL_LOG(WARNING)
-              << "Thread " << thread_id << " timed out at batch size "
-              << current_batch_size_;
+              << "Timed out at batch size " << current_batch_size_;
           return ComputeAllAndNotify(std::move(l), result_key);
         }
       } else {

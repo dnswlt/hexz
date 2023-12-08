@@ -1,5 +1,5 @@
-# Use C++17 at least.
-set (CMAKE_CXX_STANDARD 17)
+# Use C++20 at least.
+set (CMAKE_CXX_STANDARD 20)
 
 cmake_minimum_required(VERSION 3.10)
 

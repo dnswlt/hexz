@@ -304,24 +304,61 @@ TEST(NodeTest, ActionMask) {
   EXPECT_TRUE(mask.index({1, 7, 3}).item<bool>());
 }
 
-TEST(BatchedTorchModelTest, SmokeTest) {
+TEST(BatchedTorchModelTest, SmokeTestSingleThreaded) {
+  // Happy path for BatchedTorchModel.
   auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
   scriptmodule.to(torch::kCPU);
   scriptmodule.eval();
-  constexpr int batch_size = 2;
+  constexpr int batch_size = 4;
   constexpr int64_t timeout_micros = 1'000'000;
   BatchedTorchModel m(hexzpb::ModelKey(), scriptmodule, batch_size,
                       timeout_micros);
+  // Prepare inputs.
   auto board = Board::RandomBoard();
   auto all_moves = board.NextMoves(0);
   Node root(0);
   root.CreateChildren(all_moves);
+
+  // Execute.
   auto pred = m.Predict(board, root);
-  auto pred1 = m.Predict(board, root);
+
+  // Validate.
   auto sizes = pred.move_probs.sizes();
-  EXPECT_EQ(sizes[0], 2);
-  EXPECT_EQ(sizes[1], 11);
-  EXPECT_EQ(sizes[2], 10);
+  EXPECT_THAT(sizes, testing::ElementsAre(2, 11, 10));
+  EXPECT_TRUE(std::abs(pred.move_probs.sum().item<float>() - 1.0) < 0.01);
+}
+
+TEST(BatchedTorchModelTest, SmokeTestMultiThreaded) {
+  auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
+  scriptmodule.to(torch::kCPU);
+  scriptmodule.eval();
+  constexpr int batch_size = 4;
+  constexpr int64_t timeout_micros = 1'000'000;
+  BatchedTorchModel m(hexzpb::ModelKey(), scriptmodule, batch_size,
+                      timeout_micros);
+  std::vector<std::thread> ts(batch_size);
+  std::vector<float> sum_pr(ts.size(), 0);
+  std::mutex mut;
+  for (int i = 0; i < batch_size; i++) {
+    ts[i] = std::thread([&, i] {
+      // Prepare inputs.
+      auto board = Board::RandomBoard();
+      auto all_moves = board.NextMoves(0);
+      Node root(0);
+      root.CreateChildren(all_moves);
+
+      // Execute.
+      auto pred = m.Predict(board, root);
+
+      // Record results.
+      {
+        std::scoped_lock<std::mutex> lk(mut);
+        sum_pr[i] = pred.move_probs.sum().item<float>();
+      }
+    });
+  }
+  std::for_each(ts.begin(), ts.end(), [](auto& t) { t.join(); });
+  EXPECT_THAT(sum_pr, testing::Each(testing::FloatNear(1, 1e-2)));
 }
 
 class MCTSScriptModuleTest : public testing::Test {

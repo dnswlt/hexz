@@ -67,10 +67,9 @@ TEST(BatchTest, BatchSizeEqNumThreads) {
   Batcher<IntCompute> batcher(comp, kMaxBatchSize, kTimeoutMicros);
   for (int i = 0; i < kNumThreads; i++) {
     ts.emplace_back([&batcher, i] {
-      const int thread_id = i;
       int sum = 0;
       for (int j = 0; j < kNumRounds; j++) {
-        sum += batcher.ComputeValue(thread_id, j);
+        sum += batcher.ComputeValue(j);
       }
       ASSERT_EQ(sum, (kNumRounds * (kNumRounds - 1)) / 2);
     });
@@ -97,10 +96,9 @@ TEST(BatchTest, BatchSizeOne) {
   Batcher<IntCompute> batcher(comp, kMaxBatchSize, kTimeoutMicros);
   for (int i = 0; i < kNumThreads; i++) {
     ts.emplace_back([&batcher, i] {
-      const int thread_id = i;
       int sum = 0;
       for (int j = 0; j < kNumRounds; j++) {
-        sum += batcher.ComputeValue(thread_id, j);
+        sum += batcher.ComputeValue(j);
       }
       ASSERT_EQ(sum, (kNumRounds * (kNumRounds - 1)) / 2);
     });
@@ -128,10 +126,9 @@ TEST(BatchTest, BatchSizeHalf) {
   Batcher<IntCompute> batcher(comp, kMaxBatchSize, kTimeoutMicros);
   for (int i = 0; i < kNumThreads; i++) {
     ts.emplace_back([&batcher, i] {
-      const int thread_id = i;
       int sum = 0;
       for (int j = 0; j < kNumRounds; j++) {
-        sum += batcher.ComputeValue(thread_id, j);
+        sum += batcher.ComputeValue(j);
       }
       ASSERT_EQ(sum, (kNumRounds * (kNumRounds - 1)) / 2);
     });
