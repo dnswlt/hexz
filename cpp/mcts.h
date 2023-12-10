@@ -284,42 +284,33 @@ class BatchedTorchModel : public Model {
       torch::Tensor action_mask;
     };
     using result_t = Model::Prediction;
-    explicit ComputeT(BatchedTorchModel& model) : model_{model} {}
-    int AddInput(input_t v);
-    void ComputeAll();
-    result_t GetResult(int idx);
-    void Reset();
+    ComputeT(torch::jit::Module module, torch::DeviceType device) : module_{module}, device_{device} {
+        module_.to(device);
+    }
+    std::vector<result_t> ComputeAll(std::vector<input_t>&& inputs);
 
    private:
-    BatchedTorchModel& model_;
-    // Inputs
-    std::vector<torch::Tensor> boards_;
-    std::vector<torch::Tensor> action_masks_;
-    // Ouptuts
-    torch::Tensor logits_;  // N x 2 x 11 x 10
-    torch::Tensor values_;  // N x 1
+    torch::jit::Module module_;
+    torch::DeviceType device_;
   };
   BatchedTorchModel(hexzpb::ModelKey key, torch::jit::Module module,
-                    int batch_size, int64_t timeout_micros)
+                    torch::DeviceType device, int batch_size,
+                    int64_t timeout_micros)
       : key_{key},
-        module_{module},
-        compute_{*this},
-        batcher_{compute_, batch_size, timeout_micros} {}
+        compute_{std::make_unique<ComputeT>(module, device)},
+        batcher_{compute_.get(), batch_size, timeout_micros} {}
+
   Prediction Predict(const Board& board, const Node& node) override;
 
   // Returns the model key.
   const hexzpb::ModelKey& Key() const { return key_; }
-  // Sets the device on which model predictions will be made.
-  // The default is torch::kCPU, but that is typically not a useful
-  // choice, as the batching speedups are achieved by running on a GPU.
-  void SetDevice(torch::DeviceType device);
 
  private:
-  // The BatchedTorchModel owns its compute. Batcher only holds a reference.
   hexzpb::ModelKey key_;
-  torch::jit::Module module_;
+
   torch::DeviceType device_ = torch::kCPU;
-  ComputeT compute_;
+  // The BatchedTorchModel owns the compute. Batcher only holds a non-owning pointer.
+  std::unique_ptr<ComputeT> compute_;
   // batcher_ must come after compute_, as it depends on it.
   Batcher<ComputeT> batcher_;
 };

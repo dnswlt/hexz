@@ -305,13 +305,14 @@ TEST(NodeTest, ActionMask) {
 }
 
 TEST(BatchedTorchModelTest, SmokeTestSingleThreaded) {
+  Perfm::InitScope perfm;
   // Happy path for BatchedTorchModel.
   auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
   scriptmodule.to(torch::kCPU);
   scriptmodule.eval();
   constexpr int batch_size = 4;
   constexpr int64_t timeout_micros = 1'000'000;
-  BatchedTorchModel m(hexzpb::ModelKey(), scriptmodule, batch_size,
+  BatchedTorchModel m(hexzpb::ModelKey(), scriptmodule, torch::kCPU, batch_size,
                       timeout_micros);
   // Prepare inputs.
   auto board = Board::RandomBoard();
@@ -329,12 +330,13 @@ TEST(BatchedTorchModelTest, SmokeTestSingleThreaded) {
 }
 
 TEST(BatchedTorchModelTest, SmokeTestMultiThreaded) {
+  Perfm::InitScope perfm;
   auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
   scriptmodule.to(torch::kCPU);
   scriptmodule.eval();
-  constexpr int batch_size = 4;
+  constexpr int batch_size = 8;
   constexpr int64_t timeout_micros = 1'000'000;
-  BatchedTorchModel m(hexzpb::ModelKey(), scriptmodule, batch_size,
+  BatchedTorchModel m(hexzpb::ModelKey(), scriptmodule, torch::kCPU, batch_size,
                       timeout_micros);
   std::vector<std::thread> ts(batch_size);
   std::vector<float> sum_pr(ts.size(), 0);

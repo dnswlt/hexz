@@ -377,57 +377,50 @@ TorchModel::Prediction TorchModel::Predict(const Board& board,
   };
 }
 
-void BatchedTorchModel::SetDevice(torch::DeviceType device) {
-  device_ = device;
-  module_.to(device_);
-}
-
-int BatchedTorchModel::ComputeT::AddInput(
-    BatchedTorchModel::ComputeT::input_t v) {
-  int idx = boards_.size();
-  boards_.push_back(v.board);
-  action_masks_.push_back(v.action_mask);
-  return idx;
-}
-
-void BatchedTorchModel::ComputeT::ComputeAll() {
-  const int n_inputs = boards_.size();
+std::vector<Model::Prediction> BatchedTorchModel::ComputeT::ComputeAll(
+    std::vector<ComputeT::input_t>&& inputs) {
+  Perfm::Scope ps(Perfm::PredictBatch);
+  const size_t n_inputs = inputs.size();
+  std::vector<torch::Tensor> boards;
+  boards.reserve(n_inputs);
+  std::vector<torch::Tensor> action_masks;
+  action_masks.reserve(n_inputs);
+  for (auto& inp : inputs) {
+    boards.emplace_back(std::move(inp.board));
+    action_masks.emplace_back(std::move(inp.action_mask));
+  }
   std::vector<torch::jit::IValue> model_inputs = {
-      torch::stack(boards_),
-      torch::stack(action_masks_),
+      torch::stack(boards).to(device_),
+      torch::stack(action_masks).to(device_),
   };
-  auto pred = model_.module_.forward(model_inputs);
+  auto pred = module_.forward(model_inputs);
   ABSL_DCHECK(pred.isTuple());
   const auto output_tuple = pred.toTuple();
   ABSL_DCHECK(output_tuple->size() == 2);
   // Read logits back to CPU / main memory.
-  const auto logits = output_tuple->elements()[0].toTensor().to(torch::kCPU);
-  const auto dim = logits.sizes();
+  const auto probs =
+      output_tuple->elements()[0].toTensor().exp().to(torch::kCPU);
+  const auto dim = probs.sizes();
   ABSL_DCHECK(dim.size() == 2 && dim[0] == n_inputs && dim[1] == 2 * 11 * 10);
   const auto values = output_tuple->elements()[1].toTensor().to(torch::kCPU);
-  logits_ = logits;
-  values_ = values;
-}
-
-Model::Prediction BatchedTorchModel::ComputeT::GetResult(int idx) {
-  return Model::Prediction{
-      .move_probs = logits_.index({idx}).reshape({2, 11, 10}).exp(),
-      .value = values_.index({idx}).item<float>(),
-  };
-}
-
-void BatchedTorchModel::ComputeT::Reset() {
-  boards_.clear();
-  action_masks_.clear();
+  std::vector<Model::Prediction> result;
+  result.reserve(n_inputs);
+  for (int i = 0; i < n_inputs; i++) {
+    result.push_back(Model::Prediction{
+        .move_probs = probs.index({i}).reshape({2, 11, 10}),
+        .value = values.index({i}).item<float>(),
+    });
+  }
+  return result;
 }
 
 BatchedTorchModel::Prediction BatchedTorchModel::Predict(const Board& board,
                                                          const Node& node) {
   ABSL_CHECK(!node.IsLeaf()) << "Must not call Predict on a leaf node.";
-  Perfm::Scope ps(Perfm::PredictBatch);
+  Perfm::Scope ps(Perfm::Predict);
   return batcher_.ComputeValue(ComputeT::input_t{
-    .board = board.Tensor(node.NextTurn()),
-    .action_mask = node.ActionMask().flatten(),
+      .board = board.Tensor(node.NextTurn()),
+      .action_mask = node.ActionMask().flatten(),
   });
 }
 
@@ -527,8 +520,8 @@ bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
 }
 
 bool NeuralMCTS::Run(Node& root, const Board& b) {
-  // TODO: Check that this is all still correct. We are making a lot of changes
-  // to SelfplayRun which might not all be reflected here.
+  // TODO: Check that this is all still correct. We are making a lot of
+  // changes to SelfplayRun which might not all be reflected here.
   Board board(b);
   Perfm::Scope ps(Perfm::NeuralMCTS_Run);
   Node* n = &root;
@@ -626,7 +619,8 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       break;
     }
     // if (n < 10)
-    //   WriteDotGraph(*root, "/tmp/searchtree_" + std::to_string(n) + ".dot");
+    //   WriteDotGraph(*root, "/tmp/searchtree_" + std::to_string(n) +
+    //   ".dot");
     if (root->terminal()) {
       result = board.Result();
       ABSL_LOG(INFO) << "Game over after "
@@ -699,9 +693,9 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       // Gnarf, this "fast run" code proliferates...
       // If we make a fast run and use random playouts,
       // we should not re-use the .value of child nodes
-      // as it interferes badly with value updates done due to random playouts:
-      // the .value of a fast run was generated using only model predictions.
-      // For simplicity, just don't re-use the tree at all.
+      // as it interferes badly with value updates done due to random
+      // playouts: the .value of a fast run was generated using only model
+      // predictions. For simplicity, just don't re-use the tree at all.
       root = std::make_unique<Node>(root->NextTurn());
     } else {
       root->ResetTree();

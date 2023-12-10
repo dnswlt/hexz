@@ -68,6 +68,18 @@ void GenerateExamplesMultithreaded(const Config& config) {
     ABSL_LOG(ERROR) << "Failed to fetch latest model: " << km.status();
     return;
   }
+  torch::DeviceType device = torch::kCPU;
+  if (config.device == "mps") {
+    device = torch::kMPS;
+  } else if (config.device == "cuda") {
+    device = torch::kCUDA;
+  }
+  constexpr int n_threads = 8;
+  constexpr int64_t timeout_micros = 1'000'000;
+  BatchedTorchModel model(km->key, km->model, device, config.worker_threads,
+                          timeout_micros);
+  // Mutex that protects updates to the model
+  std::mutex model_update_mut;
   // TODO: implement.
   std::vector<std::thread> worker_threads;
 

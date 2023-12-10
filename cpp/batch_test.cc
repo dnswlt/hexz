@@ -17,45 +17,64 @@ class IntCompute {
   using input_t = int;
   using result_t = int;
 
-  int AddInput(input_t v) {
-    inputs_.push_back(v);
-    return inputs_.size() - 1;
-  }
-
-  void ComputeAll() {
+  std::vector<int> ComputeAll(std::vector<int>&& inputs) {
     n_calls_++;
-    for (const auto& inp : inputs_) {
-      results_.push_back(ComputeOne(inp));
-    }
+    // Identity function.
+    std::vector<int> results = std::move(inputs);
+
     // Pretend the computation takes a while
     int64_t t_before = hexz::UnixMicros();
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     acc_time_ += hexz::UnixMicros() - t_before;
-  }
-
-  result_t GetResult(int idx) {
-    ABSL_CHECK(idx >= 0 && idx < results_.size())
-        << "idx: " << idx << ", results_.size(): " << results_.size();
-    return results_[idx];
-  }
-
-  void Reset() {
-    inputs_.clear();
-    results_.clear();
+    return results;
   }
 
   int64_t acc_time() { return acc_time_; }
   int n_calls() { return n_calls_; }
 
  private:
-  // The identify function.
-  result_t ComputeOne(const input_t& v) { return v; }
-
   int64_t acc_time_ = 0;
   int n_calls_ = 0;
-  std::vector<input_t> inputs_;
-  std::vector<result_t> results_;
 };
+
+class Moveable {
+ public:
+  explicit Moveable(int value) : value_{value} {}
+  Moveable(const Moveable& other) : value_{other.value_} { copies_++; }
+  Moveable(Moveable&& other) : value_{other.value_} {
+    other.value_ = 0;
+    moves_++;
+  }
+  int value() { return value_; }
+
+  static void PassByRValueRef(Moveable&& m) { m.value_++; }
+  static void PassByRValueRefAndMove(Moveable&& m) { Moveable unused(std::move(m)); }
+  static int moves_;
+  static int copies_;
+
+ private:
+  int value_ = 0;
+};
+
+int Moveable::moves_ = 0;
+int Moveable::copies_ = 0;
+
+TEST(MoveTest, MoveMadness) {
+  Moveable s(1);
+  Moveable& t = s;
+  Moveable u = std::move(t);
+  EXPECT_EQ(s.value(), 0);
+  EXPECT_EQ(u.value(), 1);
+  EXPECT_EQ(Moveable::moves_, 1);
+  EXPECT_EQ(Moveable::copies_, 0);
+  Moveable::PassByRValueRef(std::move(s));
+  EXPECT_EQ(s.value(), 1);
+  EXPECT_EQ(Moveable::moves_, 1);
+  EXPECT_EQ(Moveable::copies_, 0);
+  Moveable::PassByRValueRefAndMove(std::move(s));
+  EXPECT_EQ(s.value(), 0);
+  EXPECT_EQ(Moveable::moves_, 2);
+}
 
 TEST(BatchTest, BatchSizeEqNumThreads) {
   constexpr int kNumThreads = 8;
@@ -64,7 +83,7 @@ TEST(BatchTest, BatchSizeEqNumThreads) {
   constexpr int kNumRounds = 10;
   std::vector<std::thread> ts;
   IntCompute comp;
-  Batcher<IntCompute> batcher(comp, kMaxBatchSize, kTimeoutMicros);
+  Batcher<IntCompute> batcher(&comp, kMaxBatchSize, kTimeoutMicros);
   for (int i = 0; i < kNumThreads; i++) {
     ts.emplace_back([&batcher, i] {
       int sum = 0;
@@ -93,7 +112,7 @@ TEST(BatchTest, BatchSizeOne) {
   constexpr int kNumRounds = 10;
   std::vector<std::thread> ts;
   IntCompute comp;
-  Batcher<IntCompute> batcher(comp, kMaxBatchSize, kTimeoutMicros);
+  Batcher<IntCompute> batcher(&comp, kMaxBatchSize, kTimeoutMicros);
   for (int i = 0; i < kNumThreads; i++) {
     ts.emplace_back([&batcher, i] {
       int sum = 0;
@@ -123,7 +142,7 @@ TEST(BatchTest, BatchSizeHalf) {
   constexpr int kNumRounds = 10;
   std::vector<std::thread> ts;
   IntCompute comp;
-  Batcher<IntCompute> batcher(comp, kMaxBatchSize, kTimeoutMicros);
+  Batcher<IntCompute> batcher(&comp, kMaxBatchSize, kTimeoutMicros);
   for (int i = 0; i < kNumThreads; i++) {
     ts.emplace_back([&batcher, i] {
       int sum = 0;
