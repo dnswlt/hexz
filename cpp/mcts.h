@@ -284,8 +284,9 @@ class BatchedTorchModel : public Model {
       torch::Tensor action_mask;
     };
     using result_t = Model::Prediction;
-    ComputeT(torch::jit::Module module, torch::DeviceType device) : module_{module}, device_{device} {
-        module_.to(device);
+    ComputeT(torch::jit::Module module, torch::DeviceType device)
+        : module_{module}, device_{device} {
+      module_.to(device);
     }
     std::vector<result_t> ComputeAll(std::vector<input_t>&& inputs);
 
@@ -297,8 +298,8 @@ class BatchedTorchModel : public Model {
                     torch::DeviceType device, int batch_size,
                     int64_t timeout_micros)
       : key_{key},
-        compute_{std::make_unique<ComputeT>(module, device)},
-        batcher_{compute_.get(), batch_size, timeout_micros} {}
+        batcher_{std::make_unique<ComputeT>(module, device), batch_size,
+                 timeout_micros} {}
 
   Prediction Predict(const Board& board, const Node& node) override;
 
@@ -307,11 +308,6 @@ class BatchedTorchModel : public Model {
 
  private:
   hexzpb::ModelKey key_;
-
-  torch::DeviceType device_ = torch::kCPU;
-  // The BatchedTorchModel owns the compute. Batcher only holds a non-owning pointer.
-  std::unique_ptr<ComputeT> compute_;
-  // batcher_ must come after compute_, as it depends on it.
   Batcher<ComputeT> batcher_;
 };
 

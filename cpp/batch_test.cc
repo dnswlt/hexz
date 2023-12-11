@@ -12,31 +12,6 @@ namespace hexz {
 
 namespace {
 
-class IntCompute {
- public:
-  using input_t = int;
-  using result_t = int;
-
-  std::vector<int> ComputeAll(std::vector<int>&& inputs) {
-    n_calls_++;
-    // Identity function.
-    std::vector<int> results = std::move(inputs);
-
-    // Pretend the computation takes a while
-    int64_t t_before = hexz::UnixMicros();
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    acc_time_ += hexz::UnixMicros() - t_before;
-    return results;
-  }
-
-  int64_t acc_time() { return acc_time_; }
-  int n_calls() { return n_calls_; }
-
- private:
-  int64_t acc_time_ = 0;
-  int n_calls_ = 0;
-};
-
 class Moveable {
  public:
   explicit Moveable(int value) : value_{value} {}
@@ -48,7 +23,9 @@ class Moveable {
   int value() { return value_; }
 
   static void PassByRValueRef(Moveable&& m) { m.value_++; }
-  static void PassByRValueRefAndMove(Moveable&& m) { Moveable unused(std::move(m)); }
+  static void PassByRValueRefAndMove(Moveable&& m) {
+    Moveable unused(std::move(m));
+  }
   static int moves_;
   static int copies_;
 
@@ -60,6 +37,7 @@ int Moveable::moves_ = 0;
 int Moveable::copies_ = 0;
 
 TEST(MoveTest, MoveMadness) {
+  // Just to confirm my intuition about C++ rvalues and moves.
   Moveable s(1);
   Moveable& t = s;
   Moveable u = std::move(t);
@@ -76,14 +54,39 @@ TEST(MoveTest, MoveMadness) {
   EXPECT_EQ(Moveable::moves_, 2);
 }
 
+class IntCompute {
+ public:
+  using input_t = int;
+  using result_t = int;
+
+  explicit IntCompute(int& n_calls) : n_calls_{n_calls} {}
+
+  std::vector<int> ComputeAll(std::vector<int>&& inputs) {
+    n_calls_++;
+    // Identity function.
+    std::vector<int> results = std::move(inputs);
+
+    // Pretend the computation takes a while
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    return results;
+  }
+
+  int n_calls() { return n_calls_; }
+
+ private:
+  // Using a reference here so we can view the updates from the "outside".
+  int& n_calls_;
+};
+
 TEST(BatchTest, BatchSizeEqNumThreads) {
   constexpr int kNumThreads = 8;
   constexpr int kMaxBatchSize = kNumThreads;
   constexpr int64_t kTimeoutMicros = 1'000'000;
   constexpr int kNumRounds = 10;
   std::vector<std::thread> ts;
-  IntCompute comp;
-  Batcher<IntCompute> batcher(&comp, kMaxBatchSize, kTimeoutMicros);
+  int n_calls = 0;
+  Batcher<IntCompute> batcher(std::make_unique<IntCompute>(n_calls),
+                              kMaxBatchSize, kTimeoutMicros);
   for (int i = 0; i < kNumThreads; i++) {
     ts.emplace_back([&batcher, i] {
       int sum = 0;
@@ -100,7 +103,7 @@ TEST(BatchTest, BatchSizeEqNumThreads) {
   }
   // If the batch size is equal to the number of threads,
   // ComputeAll should have been called exactly once each round.
-  EXPECT_EQ(comp.n_calls(), kNumRounds);
+  EXPECT_EQ(n_calls, kNumRounds);
 }
 
 TEST(BatchTest, BatchSizeOne) {
@@ -111,8 +114,9 @@ TEST(BatchTest, BatchSizeOne) {
   constexpr int64_t kTimeoutMicros = 1'000'000;
   constexpr int kNumRounds = 10;
   std::vector<std::thread> ts;
-  IntCompute comp;
-  Batcher<IntCompute> batcher(&comp, kMaxBatchSize, kTimeoutMicros);
+  int n_calls = 0;
+  Batcher<IntCompute> batcher(std::make_unique<IntCompute>(n_calls),
+                              kMaxBatchSize, kTimeoutMicros);
   for (int i = 0; i < kNumThreads; i++) {
     ts.emplace_back([&batcher, i] {
       int sum = 0;
@@ -127,7 +131,7 @@ TEST(BatchTest, BatchSizeOne) {
       t.join();
     }
   }
-  EXPECT_EQ(comp.n_calls(), kNumRounds * kNumThreads);
+  EXPECT_EQ(n_calls, kNumRounds * kNumThreads);
 }
 
 TEST(BatchTest, BatchSizeHalf) {
@@ -141,8 +145,9 @@ TEST(BatchTest, BatchSizeHalf) {
   constexpr int64_t kTimeoutMicros = 100'000;
   constexpr int kNumRounds = 10;
   std::vector<std::thread> ts;
-  IntCompute comp;
-  Batcher<IntCompute> batcher(&comp, kMaxBatchSize, kTimeoutMicros);
+  int n_calls = 0;
+  Batcher<IntCompute> batcher(std::make_unique<IntCompute>(n_calls),
+                              kMaxBatchSize, kTimeoutMicros);
   for (int i = 0; i < kNumThreads; i++) {
     ts.emplace_back([&batcher, i] {
       int sum = 0;
@@ -157,11 +162,11 @@ TEST(BatchTest, BatchSizeHalf) {
       t.join();
     }
   }
-  EXPECT_GE(comp.n_calls(), kNumRounds * 2);
+  EXPECT_GE(n_calls, kNumRounds * 2);
   // In the worst case, each of the last kMaxBatchSize-1 threads has to
   // rely on timeouts to get their remaining computations done.
   // This is a very conservative upper bound.
-  EXPECT_LE(comp.n_calls(), kNumRounds * 2 + (kMaxBatchSize - 1) * kNumRounds);
+  EXPECT_LE(n_calls, kNumRounds * 2 + (kMaxBatchSize - 1) * kNumRounds);
 }
 
 }  // namespace
