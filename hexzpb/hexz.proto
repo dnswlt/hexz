@@ -183,11 +183,10 @@ message ModelKey {
 
 // Used by workers to upload examples to the training server.
 message AddTrainingExamplesRequest {
-    ModelKey model_key = 1;
-    repeated TrainingExample examples = 2;
+    repeated TrainingExample examples = 1;
     // ID identifying the worker run that generated this example.
     // Typically a random UUID.
-    string execution_id = 3;
+    string execution_id = 2;
 }
 
 message AddTrainingExamplesResponse {
@@ -252,6 +251,12 @@ message TrainingExample {
         float value = 2;
     }
     ModelPredictions model_predictions = 10;
+    
+    // The model that was used to generate this particular example.
+    // Strictly speaking, the model can be updated even while a single
+    // is generated (i.e. in the middle of a single MCTS tree search).
+    // The key stored here is the one that was current when the search was over.
+    ModelKey model_key = 11;
 
     message Stats {
         // Time it took to generate this example (i.e., to generate the corresponding

@@ -405,14 +405,12 @@ PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
         template <typename>
 PROTOBUF_CONSTEXPR AddTrainingExamplesRequest::AddTrainingExamplesRequest(::_pbi::ConstantInitialized)
     : _impl_{
-      /*decltype(_impl_._has_bits_)*/ {},
-      /*decltype(_impl_._cached_size_)*/ {},
       /*decltype(_impl_.examples_)*/ {},
       /*decltype(_impl_.execution_id_)*/ {
           &::_pbi::fixed_address_empty_string,
           ::_pbi::ConstantInitialized{},
       },
-      /*decltype(_impl_.model_key_)*/ nullptr,
+      /*decltype(_impl_._cached_size_)*/ {},
     } {}
 struct AddTrainingExamplesRequestDefaultTypeInternal {
   PROTOBUF_CONSTEXPR AddTrainingExamplesRequestDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
@@ -514,6 +512,7 @@ PROTOBUF_CONSTEXPR TrainingExample::TrainingExample(::_pbi::ConstantInitialized)
       /*decltype(_impl_.stats_)*/ nullptr,
       /*decltype(_impl_.move_)*/ nullptr,
       /*decltype(_impl_.model_predictions_)*/ nullptr,
+      /*decltype(_impl_.model_key_)*/ nullptr,
       /*decltype(_impl_.unix_micros_)*/ ::int64_t{0},
       /*decltype(_impl_.result_)*/ 0,
       /*decltype(_impl_.encoding_)*/ 0,
@@ -778,7 +777,7 @@ const ::uint32_t TableStruct_hexz_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(
     ~0u,  // no sizeof(Split)
     PROTOBUF_FIELD_OFFSET(::hexzpb::ModelKey, _impl_.name_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::ModelKey, _impl_.checkpoint_),
-    PROTOBUF_FIELD_OFFSET(::hexzpb::AddTrainingExamplesRequest, _impl_._has_bits_),
+    ~0u,  // no _has_bits_
     PROTOBUF_FIELD_OFFSET(::hexzpb::AddTrainingExamplesRequest, _internal_metadata_),
     ~0u,  // no _extensions_
     ~0u,  // no _oneof_case_
@@ -786,12 +785,8 @@ const ::uint32_t TableStruct_hexz_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(
     ~0u,  // no _inlined_string_donated_
     ~0u,  // no _split_
     ~0u,  // no sizeof(Split)
-    PROTOBUF_FIELD_OFFSET(::hexzpb::AddTrainingExamplesRequest, _impl_.model_key_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::AddTrainingExamplesRequest, _impl_.examples_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::AddTrainingExamplesRequest, _impl_.execution_id_),
-    0,
-    ~0u,
-    ~0u,
     PROTOBUF_FIELD_OFFSET(::hexzpb::AddTrainingExamplesResponse, _impl_._has_bits_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::AddTrainingExamplesResponse, _internal_metadata_),
     ~0u,  // no _extensions_
@@ -853,6 +848,7 @@ const ::uint32_t TableStruct_hexz_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample, _impl_.move_probs_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample, _impl_.result_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample, _impl_.model_predictions_),
+    PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample, _impl_.model_key_),
     PROTOBUF_FIELD_OFFSET(::hexzpb::TrainingExample, _impl_.stats_),
     ~0u,
     ~0u,
@@ -863,6 +859,7 @@ const ::uint32_t TableStruct_hexz_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(
     ~0u,
     ~0u,
     2,
+    3,
     0,
 };
 
@@ -887,11 +884,11 @@ static const ::_pbi::MigrationSchema
         {210, -1, -1, sizeof(::hexzpb::SuggestMoveStats)},
         {220, 230, -1, sizeof(::hexzpb::SuggestMoveResponse)},
         {232, -1, -1, sizeof(::hexzpb::ModelKey)},
-        {242, 253, -1, sizeof(::hexzpb::AddTrainingExamplesRequest)},
-        {256, 267, -1, sizeof(::hexzpb::AddTrainingExamplesResponse)},
-        {270, -1, -1, sizeof(::hexzpb::TrainingExample_ModelPredictions)},
-        {280, -1, -1, sizeof(::hexzpb::TrainingExample_Stats)},
-        {300, 318, -1, sizeof(::hexzpb::TrainingExample)},
+        {242, -1, -1, sizeof(::hexzpb::AddTrainingExamplesRequest)},
+        {252, 263, -1, sizeof(::hexzpb::AddTrainingExamplesResponse)},
+        {266, -1, -1, sizeof(::hexzpb::TrainingExample_ModelPredictions)},
+        {276, -1, -1, sizeof(::hexzpb::TrainingExample_Stats)},
+        {296, 315, -1, sizeof(::hexzpb::TrainingExample)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -977,36 +974,36 @@ const char descriptor_table_protodef_hexz_2eproto[] PROTOBUF_SECTION_VARIABLE(pr
     "\n\023SuggestMoveResponse\022$\n\004move\030\001 \001(\0132\026.he"
     "xzpb.GameEngineMove\022,\n\nmove_stats\030\002 \001(\0132"
     "\030.hexzpb.SuggestMoveStats\",\n\010ModelKey\022\014\n"
-    "\004name\030\001 \001(\t\022\022\n\ncheckpoint\030\002 \001(\005\"\202\001\n\032AddT"
-    "rainingExamplesRequest\022#\n\tmodel_key\030\001 \001("
-    "\0132\020.hexzpb.ModelKey\022)\n\010examples\030\002 \003(\0132\027."
-    "hexzpb.TrainingExample\022\024\n\014execution_id\030\003"
-    " \001(\t\"\220\002\n\033AddTrainingExamplesResponse\022:\n\006"
-    "status\030\001 \001(\0162*.hexzpb.AddTrainingExample"
-    "sResponse.Status\022&\n\014latest_model\030\002 \001(\0132\020"
-    ".hexzpb.ModelKey\022\025\n\rerror_message\030\003 \001(\t\""
-    "v\n\006Status\022\026\n\022STATUS_UNSPECIFIED\020\000\022\014\n\010ACC"
-    "EPTED\020\001\022\030\n\024REJECTED_WRONG_MODEL\020\002\022\030\n\024REJ"
-    "ECTED_AT_CAPACITY\020\003\022\022\n\016REJECTED_OTHER\020\004\""
-    "\307\005\n\017TrainingExample\022\023\n\013unix_micros\030\001 \001(\003"
-    "\022\014\n\004turn\030\007 \001(\005\022$\n\004move\030\t \001(\0132\026.hexzpb.Ga"
-    "meEngineMove\0222\n\010encoding\030\006 \001(\0162 .hexzpb."
-    "TrainingExample.Encoding\022\r\n\005board\030\002 \001(\014\022"
-    "\023\n\013action_mask\030\010 \001(\014\022\022\n\nmove_probs\030\003 \001(\014"
-    "\022\016\n\006result\030\004 \001(\002\022C\n\021model_predictions\030\n "
-    "\001(\0132(.hexzpb.TrainingExample.ModelPredic"
-    "tions\022,\n\005stats\030\005 \001(\0132\035.hexzpb.TrainingEx"
-    "ample.Stats\0321\n\020ModelPredictions\022\016\n\006prior"
-    "s\030\001 \001(\014\022\r\n\005value\030\002 \001(\002\032\244\002\n\005Stats\022\027\n\017dura"
-    "tion_micros\030\001 \001(\003\022\023\n\013valid_moves\030\002 \001(\005\022\023"
-    "\n\013visit_count\030\003 \001(\005\022\030\n\020visited_children\030"
-    "\004 \001(\005\022\024\n\014search_depth\030\005 \001(\005\022\030\n\020search_tr"
-    "ee_size\030\006 \001(\005\022\024\n\014branch_nodes\030\007 \001(\005\022\024\n\014m"
-    "in_child_vc\030\010 \001(\005\022\024\n\014max_child_vc\030\t \001(\005\022"
-    "\030\n\020selected_child_q\030\r \001(\005\022\031\n\021selected_ch"
-    "ild_vc\030\n \001(\005\022\027\n\017nodes_per_depth\030\014 \003(\005\"\"\n"
-    "\010Encoding\022\t\n\005NUMPY\020\000\022\013\n\007PYTORCH\020\001B\037Z\035git"
-    "hub.com/dnswlt/hexz/hexzpbb\006proto3"
+    "\004name\030\001 \001(\t\022\022\n\ncheckpoint\030\002 \001(\005\"]\n\032AddTr"
+    "ainingExamplesRequest\022)\n\010examples\030\001 \003(\0132"
+    "\027.hexzpb.TrainingExample\022\024\n\014execution_id"
+    "\030\002 \001(\t\"\220\002\n\033AddTrainingExamplesResponse\022:"
+    "\n\006status\030\001 \001(\0162*.hexzpb.AddTrainingExamp"
+    "lesResponse.Status\022&\n\014latest_model\030\002 \001(\013"
+    "2\020.hexzpb.ModelKey\022\025\n\rerror_message\030\003 \001("
+    "\t\"v\n\006Status\022\026\n\022STATUS_UNSPECIFIED\020\000\022\014\n\010A"
+    "CCEPTED\020\001\022\030\n\024REJECTED_WRONG_MODEL\020\002\022\030\n\024R"
+    "EJECTED_AT_CAPACITY\020\003\022\022\n\016REJECTED_OTHER\020"
+    "\004\"\354\005\n\017TrainingExample\022\023\n\013unix_micros\030\001 \001"
+    "(\003\022\014\n\004turn\030\007 \001(\005\022$\n\004move\030\t \001(\0132\026.hexzpb."
+    "GameEngineMove\0222\n\010encoding\030\006 \001(\0162 .hexzp"
+    "b.TrainingExample.Encoding\022\r\n\005board\030\002 \001("
+    "\014\022\023\n\013action_mask\030\010 \001(\014\022\022\n\nmove_probs\030\003 \001"
+    "(\014\022\016\n\006result\030\004 \001(\002\022C\n\021model_predictions\030"
+    "\n \001(\0132(.hexzpb.TrainingExample.ModelPred"
+    "ictions\022#\n\tmodel_key\030\013 \001(\0132\020.hexzpb.Mode"
+    "lKey\022,\n\005stats\030\005 \001(\0132\035.hexzpb.TrainingExa"
+    "mple.Stats\0321\n\020ModelPredictions\022\016\n\006priors"
+    "\030\001 \001(\014\022\r\n\005value\030\002 \001(\002\032\244\002\n\005Stats\022\027\n\017durat"
+    "ion_micros\030\001 \001(\003\022\023\n\013valid_moves\030\002 \001(\005\022\023\n"
+    "\013visit_count\030\003 \001(\005\022\030\n\020visited_children\030\004"
+    " \001(\005\022\024\n\014search_depth\030\005 \001(\005\022\030\n\020search_tre"
+    "e_size\030\006 \001(\005\022\024\n\014branch_nodes\030\007 \001(\005\022\024\n\014mi"
+    "n_child_vc\030\010 \001(\005\022\024\n\014max_child_vc\030\t \001(\005\022\030"
+    "\n\020selected_child_q\030\r \001(\005\022\031\n\021selected_chi"
+    "ld_vc\030\n \001(\005\022\027\n\017nodes_per_depth\030\014 \003(\005\"\"\n\010"
+    "Encoding\022\t\n\005NUMPY\020\000\022\013\n\007PYTORCH\020\001B\037Z\035gith"
+    "ub.com/dnswlt/hexz/hexzpbb\006proto3"
 };
 static const ::_pbi::DescriptorTable* const descriptor_table_hexz_2eproto_deps[1] =
     {
@@ -1016,7 +1013,7 @@ static ::absl::once_flag descriptor_table_hexz_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_hexz_2eproto = {
     false,
     false,
-    3434,
+    3433,
     descriptor_table_protodef_hexz_2eproto,
     "hexz.proto",
     &descriptor_table_hexz_2eproto_once,
@@ -6263,18 +6260,8 @@ void ModelKey::InternalSwap(ModelKey* other) {
 
 class AddTrainingExamplesRequest::_Internal {
  public:
-  using HasBits = decltype(std::declval<AddTrainingExamplesRequest>()._impl_._has_bits_);
-  static constexpr ::int32_t kHasBitsOffset =
-    8 * PROTOBUF_FIELD_OFFSET(AddTrainingExamplesRequest, _impl_._has_bits_);
-  static const ::hexzpb::ModelKey& model_key(const AddTrainingExamplesRequest* msg);
-  static void set_has_model_key(HasBits* has_bits) {
-    (*has_bits)[0] |= 1u;
-  }
 };
 
-const ::hexzpb::ModelKey& AddTrainingExamplesRequest::_Internal::model_key(const AddTrainingExamplesRequest* msg) {
-  return *msg->_impl_.model_key_;
-}
 AddTrainingExamplesRequest::AddTrainingExamplesRequest(::google::protobuf::Arena* arena)
     : ::google::protobuf::Message(arena) {
   SharedCtor(arena);
@@ -6284,11 +6271,9 @@ AddTrainingExamplesRequest::AddTrainingExamplesRequest(const AddTrainingExamples
   AddTrainingExamplesRequest* const _this = this;
   (void)_this;
   new (&_impl_) Impl_{
-      decltype(_impl_._has_bits_){from._impl_._has_bits_},
-      /*decltype(_impl_._cached_size_)*/ {},
       decltype(_impl_.examples_){from._impl_.examples_},
       decltype(_impl_.execution_id_){},
-      decltype(_impl_.model_key_){nullptr},
+      /*decltype(_impl_._cached_size_)*/ {},
   };
   _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
       from._internal_metadata_);
@@ -6299,20 +6284,15 @@ AddTrainingExamplesRequest::AddTrainingExamplesRequest(const AddTrainingExamples
   if (!from._internal_execution_id().empty()) {
     _this->_impl_.execution_id_.Set(from._internal_execution_id(), _this->GetArenaForAllocation());
   }
-  if ((from._impl_._has_bits_[0] & 0x00000001u) != 0) {
-    _this->_impl_.model_key_ = new ::hexzpb::ModelKey(*from._impl_.model_key_);
-  }
 
   // @@protoc_insertion_point(copy_constructor:hexzpb.AddTrainingExamplesRequest)
 }
 inline void AddTrainingExamplesRequest::SharedCtor(::_pb::Arena* arena) {
   (void)arena;
   new (&_impl_) Impl_{
-      decltype(_impl_._has_bits_){},
-      /*decltype(_impl_._cached_size_)*/ {},
       decltype(_impl_.examples_){arena},
       decltype(_impl_.execution_id_){},
-      decltype(_impl_.model_key_){nullptr},
+      /*decltype(_impl_._cached_size_)*/ {},
   };
   _impl_.execution_id_.InitDefault();
   #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
@@ -6328,7 +6308,6 @@ inline void AddTrainingExamplesRequest::SharedDtor() {
   ABSL_DCHECK(GetArenaForAllocation() == nullptr);
   _impl_.examples_.~RepeatedPtrField();
   _impl_.execution_id_.Destroy();
-  if (this != internal_default_instance()) delete _impl_.model_key_;
 }
 void AddTrainingExamplesRequest::SetCachedSize(int size) const {
   _impl_._cached_size_.Set(size);
@@ -6342,12 +6321,6 @@ PROTOBUF_NOINLINE void AddTrainingExamplesRequest::Clear() {
 
   _internal_mutable_examples()->Clear();
   _impl_.execution_id_.ClearToEmpty();
-  cached_has_bits = _impl_._has_bits_[0];
-  if (cached_has_bits & 0x00000001u) {
-    ABSL_DCHECK(_impl_.model_key_ != nullptr);
-    _impl_.model_key_->Clear();
-  }
-  _impl_._has_bits_.Clear();
   _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
 }
 
@@ -6359,47 +6332,39 @@ const char* AddTrainingExamplesRequest::_InternalParse(
 
 
 PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
-const ::_pbi::TcParseTable<2, 3, 2, 54, 2> AddTrainingExamplesRequest::_table_ = {
+const ::_pbi::TcParseTable<1, 2, 1, 54, 2> AddTrainingExamplesRequest::_table_ = {
   {
-    PROTOBUF_FIELD_OFFSET(AddTrainingExamplesRequest, _impl_._has_bits_),
+    0,  // no _has_bits_
     0, // no _extensions_
-    3, 24,  // max_field_number, fast_idx_mask
+    2, 8,  // max_field_number, fast_idx_mask
     offsetof(decltype(_table_), field_lookup_table),
-    4294967288,  // skipmap
+    4294967292,  // skipmap
     offsetof(decltype(_table_), field_entries),
-    3,  // num_field_entries
-    2,  // num_aux_entries
+    2,  // num_field_entries
+    1,  // num_aux_entries
     offsetof(decltype(_table_), aux_entries),
     &_AddTrainingExamplesRequest_default_instance_._instance,
     ::_pbi::TcParser::GenericFallback,  // fallback
   }, {{
-    {::_pbi::TcParser::MiniParse, {}},
-    // .hexzpb.ModelKey model_key = 1;
-    {::_pbi::TcParser::FastMtS1,
-     {10, 0, 0, PROTOBUF_FIELD_OFFSET(AddTrainingExamplesRequest, _impl_.model_key_)}},
-    // repeated .hexzpb.TrainingExample examples = 2;
-    {::_pbi::TcParser::FastMtR1,
-     {18, 63, 1, PROTOBUF_FIELD_OFFSET(AddTrainingExamplesRequest, _impl_.examples_)}},
-    // string execution_id = 3;
+    // string execution_id = 2;
     {::_pbi::TcParser::FastUS1,
-     {26, 63, 0, PROTOBUF_FIELD_OFFSET(AddTrainingExamplesRequest, _impl_.execution_id_)}},
+     {18, 63, 0, PROTOBUF_FIELD_OFFSET(AddTrainingExamplesRequest, _impl_.execution_id_)}},
+    // repeated .hexzpb.TrainingExample examples = 1;
+    {::_pbi::TcParser::FastMtR1,
+     {10, 63, 0, PROTOBUF_FIELD_OFFSET(AddTrainingExamplesRequest, _impl_.examples_)}},
   }}, {{
     65535, 65535
   }}, {{
-    // .hexzpb.ModelKey model_key = 1;
-    {PROTOBUF_FIELD_OFFSET(AddTrainingExamplesRequest, _impl_.model_key_), _Internal::kHasBitsOffset + 0, 0,
-    (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
-    // repeated .hexzpb.TrainingExample examples = 2;
-    {PROTOBUF_FIELD_OFFSET(AddTrainingExamplesRequest, _impl_.examples_), -1, 1,
+    // repeated .hexzpb.TrainingExample examples = 1;
+    {PROTOBUF_FIELD_OFFSET(AddTrainingExamplesRequest, _impl_.examples_), 0, 0,
     (0 | ::_fl::kFcRepeated | ::_fl::kMessage | ::_fl::kTvTable)},
-    // string execution_id = 3;
-    {PROTOBUF_FIELD_OFFSET(AddTrainingExamplesRequest, _impl_.execution_id_), -1, 0,
+    // string execution_id = 2;
+    {PROTOBUF_FIELD_OFFSET(AddTrainingExamplesRequest, _impl_.execution_id_), 0, 0,
     (0 | ::_fl::kFcSingular | ::_fl::kUtf8String | ::_fl::kRepAString)},
   }}, {{
-    {::_pbi::TcParser::GetTable<::hexzpb::ModelKey>()},
     {::_pbi::TcParser::GetTable<::hexzpb::TrainingExample>()},
   }}, {{
-    "\41\0\0\14\0\0\0\0"
+    "\41\0\14\0\0\0\0\0"
     "hexzpb.AddTrainingExamplesRequest"
     "execution_id"
   }},
@@ -6412,28 +6377,20 @@ const ::_pbi::TcParseTable<2, 3, 2, 54, 2> AddTrainingExamplesRequest::_table_ =
   ::uint32_t cached_has_bits = 0;
   (void)cached_has_bits;
 
-  cached_has_bits = _impl_._has_bits_[0];
-  // .hexzpb.ModelKey model_key = 1;
-  if (cached_has_bits & 0x00000001u) {
-    target = ::google::protobuf::internal::WireFormatLite::
-      InternalWriteMessage(1, _Internal::model_key(this),
-        _Internal::model_key(this).GetCachedSize(), target, stream);
-  }
-
-  // repeated .hexzpb.TrainingExample examples = 2;
+  // repeated .hexzpb.TrainingExample examples = 1;
   for (unsigned i = 0,
       n = static_cast<unsigned>(this->_internal_examples_size()); i < n; i++) {
     const auto& repfield = this->_internal_examples().Get(i);
     target = ::google::protobuf::internal::WireFormatLite::
-        InternalWriteMessage(2, repfield, repfield.GetCachedSize(), target, stream);
+        InternalWriteMessage(1, repfield, repfield.GetCachedSize(), target, stream);
   }
 
-  // string execution_id = 3;
+  // string execution_id = 2;
   if (!this->_internal_execution_id().empty()) {
     const std::string& _s = this->_internal_execution_id();
     ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
         _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "hexzpb.AddTrainingExamplesRequest.execution_id");
-    target = stream->WriteStringMaybeAliased(3, _s, target);
+    target = stream->WriteStringMaybeAliased(2, _s, target);
   }
 
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
@@ -6453,24 +6410,16 @@ const ::_pbi::TcParseTable<2, 3, 2, 54, 2> AddTrainingExamplesRequest::_table_ =
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  // repeated .hexzpb.TrainingExample examples = 2;
+  // repeated .hexzpb.TrainingExample examples = 1;
   total_size += 1UL * this->_internal_examples_size();
   for (const auto& msg : this->_internal_examples()) {
     total_size +=
       ::google::protobuf::internal::WireFormatLite::MessageSize(msg);
   }
-  // string execution_id = 3;
+  // string execution_id = 2;
   if (!this->_internal_execution_id().empty()) {
     total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
                                     this->_internal_execution_id());
-  }
-
-  // .hexzpb.ModelKey model_key = 1;
-  cached_has_bits = _impl_._has_bits_[0];
-  if (cached_has_bits & 0x00000001u) {
-    total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::MessageSize(
-        *_impl_.model_key_);
   }
 
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
@@ -6495,10 +6444,6 @@ void AddTrainingExamplesRequest::MergeImpl(::google::protobuf::Message& to_msg, 
   if (!from._internal_execution_id().empty()) {
     _this->_internal_set_execution_id(from._internal_execution_id());
   }
-  if ((from._impl_._has_bits_[0] & 0x00000001u) != 0) {
-    _this->_internal_mutable_model_key()->::hexzpb::ModelKey::MergeFrom(
-        from._internal_model_key());
-  }
   _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(from._internal_metadata_);
 }
 
@@ -6518,11 +6463,9 @@ void AddTrainingExamplesRequest::InternalSwap(AddTrainingExamplesRequest* other)
   auto* lhs_arena = GetArenaForAllocation();
   auto* rhs_arena = other->GetArenaForAllocation();
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
-  swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
   _impl_.examples_.InternalSwap(&other->_impl_.examples_);
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.execution_id_, lhs_arena,
                                        &other->_impl_.execution_id_, rhs_arena);
-  swap(_impl_.model_key_, other->_impl_.model_key_);
 }
 
 ::google::protobuf::Metadata AddTrainingExamplesRequest::GetMetadata() const {
@@ -7509,6 +7452,10 @@ class TrainingExample::_Internal {
   static void set_has_model_predictions(HasBits* has_bits) {
     (*has_bits)[0] |= 4u;
   }
+  static const ::hexzpb::ModelKey& model_key(const TrainingExample* msg);
+  static void set_has_model_key(HasBits* has_bits) {
+    (*has_bits)[0] |= 8u;
+  }
   static const ::hexzpb::TrainingExample_Stats& stats(const TrainingExample* msg);
   static void set_has_stats(HasBits* has_bits) {
     (*has_bits)[0] |= 1u;
@@ -7520,6 +7467,9 @@ const ::hexzpb::GameEngineMove& TrainingExample::_Internal::move(const TrainingE
 }
 const ::hexzpb::TrainingExample_ModelPredictions& TrainingExample::_Internal::model_predictions(const TrainingExample* msg) {
   return *msg->_impl_.model_predictions_;
+}
+const ::hexzpb::ModelKey& TrainingExample::_Internal::model_key(const TrainingExample* msg) {
+  return *msg->_impl_.model_key_;
 }
 const ::hexzpb::TrainingExample_Stats& TrainingExample::_Internal::stats(const TrainingExample* msg) {
   return *msg->_impl_.stats_;
@@ -7541,6 +7491,7 @@ TrainingExample::TrainingExample(const TrainingExample& from) : ::google::protob
       decltype(_impl_.stats_){nullptr},
       decltype(_impl_.move_){nullptr},
       decltype(_impl_.model_predictions_){nullptr},
+      decltype(_impl_.model_key_){nullptr},
       decltype(_impl_.unix_micros_){},
       decltype(_impl_.result_){},
       decltype(_impl_.encoding_){},
@@ -7578,6 +7529,9 @@ TrainingExample::TrainingExample(const TrainingExample& from) : ::google::protob
   if ((from._impl_._has_bits_[0] & 0x00000004u) != 0) {
     _this->_impl_.model_predictions_ = new ::hexzpb::TrainingExample_ModelPredictions(*from._impl_.model_predictions_);
   }
+  if ((from._impl_._has_bits_[0] & 0x00000008u) != 0) {
+    _this->_impl_.model_key_ = new ::hexzpb::ModelKey(*from._impl_.model_key_);
+  }
   ::memcpy(&_impl_.unix_micros_, &from._impl_.unix_micros_,
     static_cast<::size_t>(reinterpret_cast<char*>(&_impl_.turn_) -
     reinterpret_cast<char*>(&_impl_.unix_micros_)) + sizeof(_impl_.turn_));
@@ -7595,6 +7549,7 @@ inline void TrainingExample::SharedCtor(::_pb::Arena* arena) {
       decltype(_impl_.stats_){nullptr},
       decltype(_impl_.move_){nullptr},
       decltype(_impl_.model_predictions_){nullptr},
+      decltype(_impl_.model_key_){nullptr},
       decltype(_impl_.unix_micros_){::int64_t{0}},
       decltype(_impl_.result_){0},
       decltype(_impl_.encoding_){0},
@@ -7626,6 +7581,7 @@ inline void TrainingExample::SharedDtor() {
   if (this != internal_default_instance()) delete _impl_.stats_;
   if (this != internal_default_instance()) delete _impl_.move_;
   if (this != internal_default_instance()) delete _impl_.model_predictions_;
+  if (this != internal_default_instance()) delete _impl_.model_key_;
 }
 void TrainingExample::SetCachedSize(int size) const {
   _impl_._cached_size_.Set(size);
@@ -7641,7 +7597,7 @@ PROTOBUF_NOINLINE void TrainingExample::Clear() {
   _impl_.move_probs_.ClearToEmpty();
   _impl_.action_mask_.ClearToEmpty();
   cached_has_bits = _impl_._has_bits_[0];
-  if (cached_has_bits & 0x00000007u) {
+  if (cached_has_bits & 0x0000000fu) {
     if (cached_has_bits & 0x00000001u) {
       ABSL_DCHECK(_impl_.stats_ != nullptr);
       _impl_.stats_->Clear();
@@ -7653,6 +7609,10 @@ PROTOBUF_NOINLINE void TrainingExample::Clear() {
     if (cached_has_bits & 0x00000004u) {
       ABSL_DCHECK(_impl_.model_predictions_ != nullptr);
       _impl_.model_predictions_->Clear();
+    }
+    if (cached_has_bits & 0x00000008u) {
+      ABSL_DCHECK(_impl_.model_key_ != nullptr);
+      _impl_.model_key_->Clear();
     }
   }
   ::memset(&_impl_.unix_micros_, 0, static_cast<::size_t>(
@@ -7670,16 +7630,16 @@ const char* TrainingExample::_InternalParse(
 
 
 PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
-const ::_pbi::TcParseTable<4, 10, 3, 0, 2> TrainingExample::_table_ = {
+const ::_pbi::TcParseTable<4, 11, 4, 0, 2> TrainingExample::_table_ = {
   {
     PROTOBUF_FIELD_OFFSET(TrainingExample, _impl_._has_bits_),
     0, // no _extensions_
-    10, 120,  // max_field_number, fast_idx_mask
+    11, 120,  // max_field_number, fast_idx_mask
     offsetof(decltype(_table_), field_lookup_table),
-    4294966272,  // skipmap
+    4294965248,  // skipmap
     offsetof(decltype(_table_), field_entries),
-    10,  // num_field_entries
-    3,  // num_aux_entries
+    11,  // num_field_entries
+    4,  // num_aux_entries
     offsetof(decltype(_table_), aux_entries),
     &_TrainingExample_default_instance_._instance,
     ::_pbi::TcParser::GenericFallback,  // fallback
@@ -7715,7 +7675,9 @@ const ::_pbi::TcParseTable<4, 10, 3, 0, 2> TrainingExample::_table_ = {
     // .hexzpb.TrainingExample.ModelPredictions model_predictions = 10;
     {::_pbi::TcParser::FastMtS1,
      {82, 2, 2, PROTOBUF_FIELD_OFFSET(TrainingExample, _impl_.model_predictions_)}},
-    {::_pbi::TcParser::MiniParse, {}},
+    // .hexzpb.ModelKey model_key = 11;
+    {::_pbi::TcParser::FastMtS1,
+     {90, 3, 3, PROTOBUF_FIELD_OFFSET(TrainingExample, _impl_.model_key_)}},
     {::_pbi::TcParser::MiniParse, {}},
     {::_pbi::TcParser::MiniParse, {}},
     {::_pbi::TcParser::MiniParse, {}},
@@ -7753,10 +7715,14 @@ const ::_pbi::TcParseTable<4, 10, 3, 0, 2> TrainingExample::_table_ = {
     // .hexzpb.TrainingExample.ModelPredictions model_predictions = 10;
     {PROTOBUF_FIELD_OFFSET(TrainingExample, _impl_.model_predictions_), _Internal::kHasBitsOffset + 2, 2,
     (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
+    // .hexzpb.ModelKey model_key = 11;
+    {PROTOBUF_FIELD_OFFSET(TrainingExample, _impl_.model_key_), _Internal::kHasBitsOffset + 3, 3,
+    (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
   }}, {{
     {::_pbi::TcParser::GetTable<::hexzpb::TrainingExample_Stats>()},
     {::_pbi::TcParser::GetTable<::hexzpb::GameEngineMove>()},
     {::_pbi::TcParser::GetTable<::hexzpb::TrainingExample_ModelPredictions>()},
+    {::_pbi::TcParser::GetTable<::hexzpb::ModelKey>()},
   }}, {{
   }},
 };
@@ -7841,6 +7807,13 @@ const ::_pbi::TcParseTable<4, 10, 3, 0, 2> TrainingExample::_table_ = {
         _Internal::model_predictions(this).GetCachedSize(), target, stream);
   }
 
+  // .hexzpb.ModelKey model_key = 11;
+  if (cached_has_bits & 0x00000008u) {
+    target = ::google::protobuf::internal::WireFormatLite::
+      InternalWriteMessage(11, _Internal::model_key(this),
+        _Internal::model_key(this).GetCachedSize(), target, stream);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target =
         ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
@@ -7877,7 +7850,7 @@ const ::_pbi::TcParseTable<4, 10, 3, 0, 2> TrainingExample::_table_ = {
   }
 
   cached_has_bits = _impl_._has_bits_[0];
-  if (cached_has_bits & 0x00000007u) {
+  if (cached_has_bits & 0x0000000fu) {
     // .hexzpb.TrainingExample.Stats stats = 5;
     if (cached_has_bits & 0x00000001u) {
       total_size += 1 +
@@ -7897,6 +7870,13 @@ const ::_pbi::TcParseTable<4, 10, 3, 0, 2> TrainingExample::_table_ = {
       total_size += 1 +
         ::google::protobuf::internal::WireFormatLite::MessageSize(
           *_impl_.model_predictions_);
+    }
+
+    // .hexzpb.ModelKey model_key = 11;
+    if (cached_has_bits & 0x00000008u) {
+      total_size += 1 +
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          *_impl_.model_key_);
     }
 
   }
@@ -7956,7 +7936,7 @@ void TrainingExample::MergeImpl(::google::protobuf::Message& to_msg, const ::goo
     _this->_internal_set_action_mask(from._internal_action_mask());
   }
   cached_has_bits = from._impl_._has_bits_[0];
-  if (cached_has_bits & 0x00000007u) {
+  if (cached_has_bits & 0x0000000fu) {
     if (cached_has_bits & 0x00000001u) {
       _this->_internal_mutable_stats()->::hexzpb::TrainingExample_Stats::MergeFrom(
           from._internal_stats());
@@ -7968,6 +7948,10 @@ void TrainingExample::MergeImpl(::google::protobuf::Message& to_msg, const ::goo
     if (cached_has_bits & 0x00000004u) {
       _this->_internal_mutable_model_predictions()->::hexzpb::TrainingExample_ModelPredictions::MergeFrom(
           from._internal_model_predictions());
+    }
+    if (cached_has_bits & 0x00000008u) {
+      _this->_internal_mutable_model_key()->::hexzpb::ModelKey::MergeFrom(
+          from._internal_model_key());
     }
   }
   if (from._internal_unix_micros() != 0) {

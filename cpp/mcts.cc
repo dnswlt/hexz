@@ -424,6 +424,15 @@ BatchedTorchModel::Prediction BatchedTorchModel::Predict(const Board& board,
   });
 }
 
+void BatchedTorchModel::UpdateModel(hexzpb::ModelKey key,
+                                    torch::jit::Module module) {
+  key_ = key;
+  batcher_.UpdateComputeT(
+      std::make_unique<BatchedTorchModel::ComputeT>(module, device_));
+}
+
+const hexzpb::ModelKey& BatchedTorchModel::Key() const { return key_; }
+
 inline void PlayoutRunner::Stats::Add(float result) noexcept {
   result_sum += result;
   runs++;
@@ -655,6 +664,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       example.mutable_action_mask()->assign(enc_mask.begin(), enc_mask.end());
       auto enc_pr = torch::pickle_save(root->NormVisitCounts());
       example.mutable_move_probs()->assign(enc_pr.begin(), enc_pr.end());
+      *example.mutable_model_key() = model_.Key();
       root->PopulateStats(*example.mutable_stats());
       examples.push_back(std::move(example));
     }

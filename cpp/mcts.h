@@ -245,6 +245,7 @@ class Model {
     float value;
   };
   virtual Prediction Predict(const Board& board, const Node& node) = 0;
+  virtual const hexzpb::ModelKey& Key() const = 0;
   virtual ~Model() = default;
 };
 
@@ -260,7 +261,7 @@ class TorchModel : public Model {
 
   // Returns the model key, if it was set during construction. Otherwise,
   // returns the "zero value" of ModelKey.
-  const hexzpb::ModelKey& Key() const { return key_; }
+  const hexzpb::ModelKey& Key() const override { return key_; }
   // Sets the device on which model predictions will be made.
   // The default is torch::kCPU and does not need to be set explicitly.
   void SetDevice(torch::DeviceType device);
@@ -298,16 +299,24 @@ class BatchedTorchModel : public Model {
                     torch::DeviceType device, int batch_size,
                     int64_t timeout_micros)
       : key_{key},
+        device_{device},
         batcher_{std::make_unique<ComputeT>(module, device), batch_size,
                  timeout_micros} {}
 
   Prediction Predict(const Board& board, const Node& node) override;
 
-  // Returns the model key.
-  const hexzpb::ModelKey& Key() const { return key_; }
+  // UpdateModel updates the model used
+  // Access to this method must be synchronized across threads by callers!
+  void UpdateModel(hexzpb::ModelKey key, torch::jit::Module module);
+
+  // Returns the key of the currently used model.
+  // Access to this method and the reference it returns must be synchronized
+  // across threads by callers!
+  const hexzpb::ModelKey& Key() const override;
 
  private:
   hexzpb::ModelKey key_;
+  torch::DeviceType device_;
   Batcher<ComputeT> batcher_;
 };
 

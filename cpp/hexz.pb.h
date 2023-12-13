@@ -4289,11 +4289,10 @@ class AddTrainingExamplesRequest final :
   // accessors -------------------------------------------------------
 
   enum : int {
-    kExamplesFieldNumber = 2,
-    kExecutionIdFieldNumber = 3,
-    kModelKeyFieldNumber = 1,
+    kExamplesFieldNumber = 1,
+    kExecutionIdFieldNumber = 2,
   };
-  // repeated .hexzpb.TrainingExample examples = 2;
+  // repeated .hexzpb.TrainingExample examples = 1;
   int examples_size() const;
   private:
   int _internal_examples_size() const;
@@ -4311,7 +4310,7 @@ class AddTrainingExamplesRequest final :
   ::hexzpb::TrainingExample* add_examples();
   const ::google::protobuf::RepeatedPtrField< ::hexzpb::TrainingExample >&
       examples() const;
-  // string execution_id = 3;
+  // string execution_id = 2;
   void clear_execution_id() ;
   const std::string& execution_id() const;
   template <typename Arg_ = const std::string&, typename... Args_>
@@ -4327,36 +4326,19 @@ class AddTrainingExamplesRequest final :
   std::string* _internal_mutable_execution_id();
 
   public:
-  // .hexzpb.ModelKey model_key = 1;
-  bool has_model_key() const;
-  void clear_model_key() ;
-  const ::hexzpb::ModelKey& model_key() const;
-  PROTOBUF_NODISCARD ::hexzpb::ModelKey* release_model_key();
-  ::hexzpb::ModelKey* mutable_model_key();
-  void set_allocated_model_key(::hexzpb::ModelKey* value);
-  void unsafe_arena_set_allocated_model_key(::hexzpb::ModelKey* value);
-  ::hexzpb::ModelKey* unsafe_arena_release_model_key();
-
-  private:
-  const ::hexzpb::ModelKey& _internal_model_key() const;
-  ::hexzpb::ModelKey* _internal_mutable_model_key();
-
-  public:
   // @@protoc_insertion_point(class_scope:hexzpb.AddTrainingExamplesRequest)
  private:
   class _Internal;
 
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<2, 3, 2, 54, 2> _table_;
+  static const ::google::protobuf::internal::TcParseTable<1, 2, 1, 54, 2> _table_;
   template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
   struct Impl_ {
-    ::google::protobuf::internal::HasBits<1> _has_bits_;
-    mutable ::google::protobuf::internal::CachedSize _cached_size_;
     ::google::protobuf::RepeatedPtrField< ::hexzpb::TrainingExample > examples_;
     ::google::protobuf::internal::ArenaStringPtr execution_id_;
-    ::hexzpb::ModelKey* model_key_;
+    mutable ::google::protobuf::internal::CachedSize _cached_size_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
   union { Impl_ _impl_; };
@@ -5212,6 +5194,7 @@ class TrainingExample final :
     kStatsFieldNumber = 5,
     kMoveFieldNumber = 9,
     kModelPredictionsFieldNumber = 10,
+    kModelKeyFieldNumber = 11,
     kUnixMicrosFieldNumber = 1,
     kResultFieldNumber = 4,
     kEncodingFieldNumber = 6,
@@ -5310,6 +5293,21 @@ class TrainingExample final :
   ::hexzpb::TrainingExample_ModelPredictions* _internal_mutable_model_predictions();
 
   public:
+  // .hexzpb.ModelKey model_key = 11;
+  bool has_model_key() const;
+  void clear_model_key() ;
+  const ::hexzpb::ModelKey& model_key() const;
+  PROTOBUF_NODISCARD ::hexzpb::ModelKey* release_model_key();
+  ::hexzpb::ModelKey* mutable_model_key();
+  void set_allocated_model_key(::hexzpb::ModelKey* value);
+  void unsafe_arena_set_allocated_model_key(::hexzpb::ModelKey* value);
+  ::hexzpb::ModelKey* unsafe_arena_release_model_key();
+
+  private:
+  const ::hexzpb::ModelKey& _internal_model_key() const;
+  ::hexzpb::ModelKey* _internal_mutable_model_key();
+
+  public:
   // int64 unix_micros = 1;
   void clear_unix_micros() ;
   ::int64_t unix_micros() const;
@@ -5355,7 +5353,7 @@ class TrainingExample final :
   class _Internal;
 
   friend class ::google::protobuf::internal::TcParser;
-  static const ::google::protobuf::internal::TcParseTable<4, 10, 3, 0, 2> _table_;
+  static const ::google::protobuf::internal::TcParseTable<4, 11, 4, 0, 2> _table_;
   template <typename T> friend class ::google::protobuf::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
@@ -5368,6 +5366,7 @@ class TrainingExample final :
     ::hexzpb::TrainingExample_Stats* stats_;
     ::hexzpb::GameEngineMove* move_;
     ::hexzpb::TrainingExample_ModelPredictions* model_predictions_;
+    ::hexzpb::ModelKey* model_key_;
     ::int64_t unix_micros_;
     float result_;
     int encoding_;
@@ -8350,103 +8349,7 @@ inline void ModelKey::_internal_set_checkpoint(::int32_t value) {
 
 // AddTrainingExamplesRequest
 
-// .hexzpb.ModelKey model_key = 1;
-inline bool AddTrainingExamplesRequest::has_model_key() const {
-  bool value = (_impl_._has_bits_[0] & 0x00000001u) != 0;
-  PROTOBUF_ASSUME(!value || _impl_.model_key_ != nullptr);
-  return value;
-}
-inline void AddTrainingExamplesRequest::clear_model_key() {
-  if (_impl_.model_key_ != nullptr) _impl_.model_key_->Clear();
-  _impl_._has_bits_[0] &= ~0x00000001u;
-}
-inline const ::hexzpb::ModelKey& AddTrainingExamplesRequest::_internal_model_key() const {
-  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
-  const ::hexzpb::ModelKey* p = _impl_.model_key_;
-  return p != nullptr ? *p : reinterpret_cast<const ::hexzpb::ModelKey&>(::hexzpb::_ModelKey_default_instance_);
-}
-inline const ::hexzpb::ModelKey& AddTrainingExamplesRequest::model_key() const {
-  // @@protoc_insertion_point(field_get:hexzpb.AddTrainingExamplesRequest.model_key)
-  return _internal_model_key();
-}
-inline void AddTrainingExamplesRequest::unsafe_arena_set_allocated_model_key(::hexzpb::ModelKey* value) {
-  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  if (GetArenaForAllocation() == nullptr) {
-    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.model_key_);
-  }
-  _impl_.model_key_ = reinterpret_cast<::hexzpb::ModelKey*>(value);
-  if (value != nullptr) {
-    _impl_._has_bits_[0] |= 0x00000001u;
-  } else {
-    _impl_._has_bits_[0] &= ~0x00000001u;
-  }
-  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:hexzpb.AddTrainingExamplesRequest.model_key)
-}
-inline ::hexzpb::ModelKey* AddTrainingExamplesRequest::release_model_key() {
-  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-
-  _impl_._has_bits_[0] &= ~0x00000001u;
-  ::hexzpb::ModelKey* released = _impl_.model_key_;
-  _impl_.model_key_ = nullptr;
-#ifdef PROTOBUF_FORCE_COPY_IN_RELEASE
-  auto* old = reinterpret_cast<::google::protobuf::MessageLite*>(released);
-  released = ::google::protobuf::internal::DuplicateIfNonNull(released);
-  if (GetArenaForAllocation() == nullptr) {
-    delete old;
-  }
-#else   // PROTOBUF_FORCE_COPY_IN_RELEASE
-  if (GetArenaForAllocation() != nullptr) {
-    released = ::google::protobuf::internal::DuplicateIfNonNull(released);
-  }
-#endif  // !PROTOBUF_FORCE_COPY_IN_RELEASE
-  return released;
-}
-inline ::hexzpb::ModelKey* AddTrainingExamplesRequest::unsafe_arena_release_model_key() {
-  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  // @@protoc_insertion_point(field_release:hexzpb.AddTrainingExamplesRequest.model_key)
-
-  _impl_._has_bits_[0] &= ~0x00000001u;
-  ::hexzpb::ModelKey* temp = _impl_.model_key_;
-  _impl_.model_key_ = nullptr;
-  return temp;
-}
-inline ::hexzpb::ModelKey* AddTrainingExamplesRequest::_internal_mutable_model_key() {
-  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  _impl_._has_bits_[0] |= 0x00000001u;
-  if (_impl_.model_key_ == nullptr) {
-    auto* p = CreateMaybeMessage<::hexzpb::ModelKey>(GetArenaForAllocation());
-    _impl_.model_key_ = reinterpret_cast<::hexzpb::ModelKey*>(p);
-  }
-  return _impl_.model_key_;
-}
-inline ::hexzpb::ModelKey* AddTrainingExamplesRequest::mutable_model_key() {
-  ::hexzpb::ModelKey* _msg = _internal_mutable_model_key();
-  // @@protoc_insertion_point(field_mutable:hexzpb.AddTrainingExamplesRequest.model_key)
-  return _msg;
-}
-inline void AddTrainingExamplesRequest::set_allocated_model_key(::hexzpb::ModelKey* value) {
-  ::google::protobuf::Arena* message_arena = GetArenaForAllocation();
-  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
-  if (message_arena == nullptr) {
-    delete reinterpret_cast<::hexzpb::ModelKey*>(_impl_.model_key_);
-  }
-
-  if (value != nullptr) {
-    ::google::protobuf::Arena* submessage_arena =
-        ::google::protobuf::Arena::InternalGetOwningArena(reinterpret_cast<::hexzpb::ModelKey*>(value));
-    if (message_arena != submessage_arena) {
-      value = ::google::protobuf::internal::GetOwnedMessage(message_arena, value, submessage_arena);
-    }
-    _impl_._has_bits_[0] |= 0x00000001u;
-  } else {
-    _impl_._has_bits_[0] &= ~0x00000001u;
-  }
-
-  _impl_.model_key_ = reinterpret_cast<::hexzpb::ModelKey*>(value);
-  // @@protoc_insertion_point(field_set_allocated:hexzpb.AddTrainingExamplesRequest.model_key)
-}
-
-// repeated .hexzpb.TrainingExample examples = 2;
+// repeated .hexzpb.TrainingExample examples = 1;
 inline int AddTrainingExamplesRequest::_internal_examples_size() const {
   return _internal_examples().size();
 }
@@ -8492,7 +8395,7 @@ AddTrainingExamplesRequest::_internal_mutable_examples() {
   return &_impl_.examples_;
 }
 
-// string execution_id = 3;
+// string execution_id = 2;
 inline void AddTrainingExamplesRequest::clear_execution_id() {
   _impl_.execution_id_.ClearToEmpty();
 }
@@ -9516,6 +9419,102 @@ inline void TrainingExample::set_allocated_model_predictions(::hexzpb::TrainingE
 
   _impl_.model_predictions_ = reinterpret_cast<::hexzpb::TrainingExample_ModelPredictions*>(value);
   // @@protoc_insertion_point(field_set_allocated:hexzpb.TrainingExample.model_predictions)
+}
+
+// .hexzpb.ModelKey model_key = 11;
+inline bool TrainingExample::has_model_key() const {
+  bool value = (_impl_._has_bits_[0] & 0x00000008u) != 0;
+  PROTOBUF_ASSUME(!value || _impl_.model_key_ != nullptr);
+  return value;
+}
+inline void TrainingExample::clear_model_key() {
+  if (_impl_.model_key_ != nullptr) _impl_.model_key_->Clear();
+  _impl_._has_bits_[0] &= ~0x00000008u;
+}
+inline const ::hexzpb::ModelKey& TrainingExample::_internal_model_key() const {
+  PROTOBUF_TSAN_READ(&_impl_._tsan_detect_race);
+  const ::hexzpb::ModelKey* p = _impl_.model_key_;
+  return p != nullptr ? *p : reinterpret_cast<const ::hexzpb::ModelKey&>(::hexzpb::_ModelKey_default_instance_);
+}
+inline const ::hexzpb::ModelKey& TrainingExample::model_key() const {
+  // @@protoc_insertion_point(field_get:hexzpb.TrainingExample.model_key)
+  return _internal_model_key();
+}
+inline void TrainingExample::unsafe_arena_set_allocated_model_key(::hexzpb::ModelKey* value) {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  if (GetArenaForAllocation() == nullptr) {
+    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.model_key_);
+  }
+  _impl_.model_key_ = reinterpret_cast<::hexzpb::ModelKey*>(value);
+  if (value != nullptr) {
+    _impl_._has_bits_[0] |= 0x00000008u;
+  } else {
+    _impl_._has_bits_[0] &= ~0x00000008u;
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:hexzpb.TrainingExample.model_key)
+}
+inline ::hexzpb::ModelKey* TrainingExample::release_model_key() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+
+  _impl_._has_bits_[0] &= ~0x00000008u;
+  ::hexzpb::ModelKey* released = _impl_.model_key_;
+  _impl_.model_key_ = nullptr;
+#ifdef PROTOBUF_FORCE_COPY_IN_RELEASE
+  auto* old = reinterpret_cast<::google::protobuf::MessageLite*>(released);
+  released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+  if (GetArenaForAllocation() == nullptr) {
+    delete old;
+  }
+#else   // PROTOBUF_FORCE_COPY_IN_RELEASE
+  if (GetArenaForAllocation() != nullptr) {
+    released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+  }
+#endif  // !PROTOBUF_FORCE_COPY_IN_RELEASE
+  return released;
+}
+inline ::hexzpb::ModelKey* TrainingExample::unsafe_arena_release_model_key() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  // @@protoc_insertion_point(field_release:hexzpb.TrainingExample.model_key)
+
+  _impl_._has_bits_[0] &= ~0x00000008u;
+  ::hexzpb::ModelKey* temp = _impl_.model_key_;
+  _impl_.model_key_ = nullptr;
+  return temp;
+}
+inline ::hexzpb::ModelKey* TrainingExample::_internal_mutable_model_key() {
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  _impl_._has_bits_[0] |= 0x00000008u;
+  if (_impl_.model_key_ == nullptr) {
+    auto* p = CreateMaybeMessage<::hexzpb::ModelKey>(GetArenaForAllocation());
+    _impl_.model_key_ = reinterpret_cast<::hexzpb::ModelKey*>(p);
+  }
+  return _impl_.model_key_;
+}
+inline ::hexzpb::ModelKey* TrainingExample::mutable_model_key() {
+  ::hexzpb::ModelKey* _msg = _internal_mutable_model_key();
+  // @@protoc_insertion_point(field_mutable:hexzpb.TrainingExample.model_key)
+  return _msg;
+}
+inline void TrainingExample::set_allocated_model_key(::hexzpb::ModelKey* value) {
+  ::google::protobuf::Arena* message_arena = GetArenaForAllocation();
+  PROTOBUF_TSAN_WRITE(&_impl_._tsan_detect_race);
+  if (message_arena == nullptr) {
+    delete reinterpret_cast<::hexzpb::ModelKey*>(_impl_.model_key_);
+  }
+
+  if (value != nullptr) {
+    ::google::protobuf::Arena* submessage_arena =
+        ::google::protobuf::Arena::InternalGetOwningArena(reinterpret_cast<::hexzpb::ModelKey*>(value));
+    if (message_arena != submessage_arena) {
+      value = ::google::protobuf::internal::GetOwnedMessage(message_arena, value, submessage_arena);
+    }
+    _impl_._has_bits_[0] |= 0x00000008u;
+  } else {
+    _impl_._has_bits_[0] &= ~0x00000008u;
+  }
+
+  _impl_.model_key_ = reinterpret_cast<::hexzpb::ModelKey*>(value);
+  // @@protoc_insertion_point(field_set_allocated:hexzpb.TrainingExample.model_key)
 }
 
 // .hexzpb.TrainingExample.Stats stats = 5;

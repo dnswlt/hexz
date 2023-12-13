@@ -261,7 +261,8 @@ class TrainingTask(threading.Thread):
         """
         req: hexz_pb2.AddTrainingExamplesRequest = msg["request"]
         reply_q = msg["reply_q"]
-        if not self.accept_model_key(req.model_key):
+        examples = [e for e in req.examples if self.accept_model_key(e.model_key)]
+        if len(examples) == 0:
             resp = hexz_pb2.AddTrainingExamplesResponse(
                 status=hexz_pb2.AddTrainingExamplesResponse.REJECTED_WRONG_MODEL,
                 latest_model=self.model_key,
@@ -271,7 +272,7 @@ class TrainingTask(threading.Thread):
         if self.capacity() == 0:
             # We are at capacity. Signal this to the client.
             self.logger.warning(
-                f"TrainingTask is at capacity. Rejecting {len(req.examples)} examples."
+                f"TrainingTask is at capacity. Rejecting {len(examples)} examples."
             )
             resp = hexz_pb2.AddTrainingExamplesResponse(
                 status=hexz_pb2.AddTrainingExamplesResponse.REJECTED_AT_CAPACITY,
@@ -287,7 +288,7 @@ class TrainingTask(threading.Thread):
 
         # Translate examples.
         new_batch = []
-        for ex in req.examples:
+        for ex in examples:
             # Update timing stats.
             self.timing_stats.count += 1
             duration_micros = ex.stats.duration_micros
@@ -314,8 +315,8 @@ class TrainingTask(threading.Thread):
         # Save examples (for on-demand SVG export).
         self.latest_request = req
 
-        self.stats["examples"] += len(req.examples)
-        lim = min(len(req.examples), self.capacity())
+        self.stats["examples"] += len(examples)
+        lim = min(len(examples), self.capacity())
         # Add translated examples to batch and trigger a training run if we have a full batch.
         batch_add, batch_buf = new_batch[:lim], new_batch[lim:]
         self.batch.extend(batch_add)

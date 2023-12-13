@@ -181,6 +181,9 @@ def create_app():
             req = hexz_pb2.AddTrainingExamplesRequest.FromString(request.data)
         except DecodeError as e:
             return "Invalid AddTrainingExamplesRequest protocol buffer", 400
+        if not req.examples:
+            return "No examples in request", 400
+        
         reply_q = queue.SimpleQueue()
         current_app.training_task_queue.put(
             {

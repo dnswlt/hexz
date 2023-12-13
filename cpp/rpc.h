@@ -23,7 +23,7 @@ class RPCClient {
   // Sends the given examples to the training server.
   // Note that the example vector should get moved into this method.
   absl::StatusOr<hexzpb::AddTrainingExamplesResponse> SendExamples(
-      const std::string& execution_id, const hexzpb::ModelKey& key,
+      const std::string& execution_id,
       std::vector<hexzpb::TrainingExample>&& examples);
 
  private:

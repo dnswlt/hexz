@@ -24,6 +24,16 @@ namespace fs = std::filesystem;
 using testing::ElementsAre;
 using testing::ElementsAreArray;
 
+const hexzpb::ModelKey& TestModelKey() {
+  static hexzpb::ModelKey* key = [] {
+    auto* k = new hexzpb::ModelKey();
+    k->set_name("test_model");
+    k->set_checkpoint(0);
+    return k;
+  }();
+  return *key;
+}
+
 class UniformFakeModel final : public Model {
  public:
   // Always returns uniform probabilities.
@@ -35,6 +45,7 @@ class UniformFakeModel final : public Model {
         .value = 0.0,
     };
   }
+  const hexzpb::ModelKey& Key() const override { return TestModelKey(); }
 };
 
 class ConstantFakeModel final : public Model {
@@ -51,6 +62,7 @@ class ConstantFakeModel final : public Model {
         .value = node.NextTurn() == 0 ? p0_value_ : -p0_value_,
     };
   }
+  const hexzpb::ModelKey& Key() const override { return TestModelKey(); }
 
  private:
   torch::Tensor move_probs_;
