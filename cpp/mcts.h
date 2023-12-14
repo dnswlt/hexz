@@ -314,6 +314,8 @@ class BatchedTorchModel : public Model {
   // across threads by callers!
   const hexzpb::ModelKey& Key() const override;
 
+  auto RegisterThread() { return batcher_.Register(); }
+
  private:
   hexzpb::ModelKey key_;
   torch::DeviceType device_;

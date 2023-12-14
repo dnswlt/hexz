@@ -4,6 +4,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <latch>
 #include <thread>
 
 #include "base.h"
@@ -11,6 +12,8 @@
 namespace hexz {
 
 namespace {
+
+using testing::ElementsAre;
 
 class Moveable {
  public:
@@ -59,10 +62,14 @@ class IntCompute {
   using input_t = int;
   using result_t = int;
 
-  explicit IntCompute(int& n_calls) : n_calls_{n_calls} {}
+  explicit IntCompute(int& n_calls, std::vector<int>* input_sizes = nullptr)
+      : n_calls_{n_calls}, input_sizes_{input_sizes} {}
 
   std::vector<int> ComputeAll(std::vector<int>&& inputs) {
     n_calls_++;
+    if (input_sizes_ != nullptr) {
+      input_sizes_->push_back(inputs.size());
+    }
     // Identity function.
     std::vector<int> results = std::move(inputs);
 
@@ -71,11 +78,10 @@ class IntCompute {
     return results;
   }
 
-  int n_calls() { return n_calls_; }
-
  private:
   // Using a reference here so we can view the updates from the "outside".
   int& n_calls_;
+  std::vector<int>* input_sizes_;
 };
 
 TEST(BatchTest, BatchSizeEqNumThreads) {
@@ -87,8 +93,13 @@ TEST(BatchTest, BatchSizeEqNumThreads) {
   int n_calls = 0;
   Batcher<IntCompute> batcher(std::make_unique<IntCompute>(n_calls),
                               kMaxBatchSize, kTimeoutMicros);
+  // Synchronize threads: ensure they first all register.
+  std::latch reg_sync{kNumThreads};
   for (int i = 0; i < kNumThreads; i++) {
-    ts.emplace_back([&batcher, i] {
+    ts.emplace_back([&, i] {
+      auto token = batcher.Register();
+      reg_sync.count_down();
+      reg_sync.wait();
       int sum = 0;
       for (int j = 0; j < kNumRounds; j++) {
         sum += batcher.ComputeValue(j);
@@ -117,8 +128,13 @@ TEST(BatchTest, BatchSizeOne) {
   int n_calls = 0;
   Batcher<IntCompute> batcher(std::make_unique<IntCompute>(n_calls),
                               kMaxBatchSize, kTimeoutMicros);
+  // Synchronize threads: ensure they first all register.
+  std::latch reg_sync{kNumThreads};
   for (int i = 0; i < kNumThreads; i++) {
-    ts.emplace_back([&batcher, i] {
+    ts.emplace_back([&, i] {
+      auto token = batcher.Register();
+      reg_sync.count_down();
+      reg_sync.wait();
       int sum = 0;
       for (int j = 0; j < kNumRounds; j++) {
         sum += batcher.ComputeValue(j);
@@ -148,8 +164,13 @@ TEST(BatchTest, BatchSizeHalf) {
   int n_calls = 0;
   Batcher<IntCompute> batcher(std::make_unique<IntCompute>(n_calls),
                               kMaxBatchSize, kTimeoutMicros);
+  // Synchronize threads: ensure they first all register.
+  std::latch reg_sync{kNumThreads};
   for (int i = 0; i < kNumThreads; i++) {
-    ts.emplace_back([&batcher, i] {
+    ts.emplace_back([&, i] {
+      auto token = batcher.Register();
+      reg_sync.count_down();
+      reg_sync.wait();
       int sum = 0;
       for (int j = 0; j < kNumRounds; j++) {
         sum += batcher.ComputeValue(j);
@@ -167,6 +188,39 @@ TEST(BatchTest, BatchSizeHalf) {
   // rely on timeouts to get their remaining computations done.
   // This is a very conservative upper bound.
   EXPECT_LE(n_calls, kNumRounds * 2 + (kMaxBatchSize - 1) * kNumRounds);
+}
+
+TEST(BatchTest, VaryingCallCounts) {
+  // N threads use the same batcher, but need different numbers of computations.
+  // Batcher's thread registration count should handle this.
+  constexpr int kNumThreads = 8;
+  constexpr int64_t kTimeoutMicros = 3'600'000'000;  // 1h
+  std::vector<std::thread> ts;
+  int n_calls = 0;
+  std::vector<int> input_sizes;
+  Batcher<IntCompute> batcher(
+      std::make_unique<IntCompute>(n_calls, &input_sizes), kNumThreads,
+      kTimeoutMicros);
+  std::latch reg_sync{kNumThreads};
+  for (int i = 0; i < kNumThreads; i++) {
+    ts.emplace_back([&, call_count = i + 1] {
+      auto token = batcher.Register();
+      reg_sync.count_down();
+      reg_sync.wait();
+      int sum = 0;
+      for (int j = 0; j < call_count; j++) {
+        sum += batcher.ComputeValue(j);
+      }
+      ASSERT_EQ(sum, (call_count * (call_count - 1)) / 2);
+    });
+  }
+  for (auto& t : ts) {
+    if (t.joinable()) {
+      t.join();
+    }
+  }
+  EXPECT_EQ(n_calls, kNumThreads);
+  EXPECT_THAT(input_sizes, ElementsAre(8, 7, 6, 5, 4, 3, 2, 1));
 }
 
 }  // namespace

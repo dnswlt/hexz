@@ -326,6 +326,7 @@ TEST(BatchedTorchModelTest, SmokeTestSingleThreaded) {
   constexpr int64_t timeout_micros = 1'000'000;
   BatchedTorchModel m(hexzpb::ModelKey(), scriptmodule, torch::kCPU, batch_size,
                       timeout_micros);
+  auto token = m.RegisterThread();
   // Prepare inputs.
   auto board = Board::RandomBoard();
   auto all_moves = board.NextMoves(0);
@@ -355,6 +356,7 @@ TEST(BatchedTorchModelTest, SmokeTestMultiThreaded) {
   std::mutex mut;
   for (int i = 0; i < batch_size; i++) {
     ts[i] = std::thread([&, i] {
+      auto token = m.RegisterThread();
       // Prepare inputs.
       auto board = Board::RandomBoard();
       auto all_moves = board.NextMoves(0);
