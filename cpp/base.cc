@@ -81,14 +81,16 @@ std::string str_to_upper(const std::string& s) {
 }
 }  // namespace
 
+
+absl::StatusOr<Config> Config::FromEnv() {
+  Config defaults{};
+
 #define GET_ENV(fld) .fld = GetEnv(str_to_upper("HEXZ_" #fld), defaults.fld)
 #define GET_ENV_INT(fld) \
   .fld = GetEnvAsInt(str_to_upper("HEXZ_" #fld), defaults.fld)
 #define GET_ENV_FLOAT(fld) \
   .fld = GetEnvAsFloat(str_to_upper("HEXZ_" #fld), defaults.fld)
 
-absl::StatusOr<Config> Config::FromEnv() {
-  Config defaults{};
   Config config{
       GET_ENV(training_server_url),
       GET_ENV(device),
@@ -107,6 +109,7 @@ absl::StatusOr<Config> Config::FromEnv() {
       GET_ENV_FLOAT(resign_threshold),
       GET_ENV_FLOAT(startup_delay_seconds),
       GET_ENV_INT(debug_memory_usage),
+      GET_ENV_INT(gpu_benchmark),
   };
   // Validate values
   const std::vector<std::string> valid_devices = {"cpu", "mps", "cuda"};
@@ -116,11 +119,13 @@ absl::StatusOr<Config> Config::FromEnv() {
         "Invalid device: %s. Must be one of (cpu, mps, cuda).", config.device));
   }
   return config;
-}
 
 #undef GET_ENV
 #undef GET_ENV_INT
 #undef GET_ENV_DOUBLE
+
+}
+
 
 std::string GetEnv(const std::string& name, const std::string& default_value) {
   const char* value = std::getenv(name.c_str());

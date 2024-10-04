@@ -286,6 +286,56 @@ void GenerateExamplesSingleThreaded(const Config& config) {
   }
 }
 
+void RunGPUBenchmark(const Config& config) {
+  RPCClient rpc(config);
+  auto keyed_model = rpc.FetchLatestModel();
+  if (!keyed_model.ok()) {
+    ABSL_LOG(ERROR) << "Failed to fetch model: " << keyed_model.status();
+    return;
+  }
+  auto model = keyed_model->model;
+  auto device = torch::kCPU;
+  if (config.device == "mps") {
+    device = torch::kMPS;
+  } else if (config.device == "cuda") {
+    device = torch::kCUDA;
+  }
+  model.to(device);
+  torch::NoGradGuard no_grad;
+  for (int batch_size = 1; batch_size <= 1024; batch_size *= 2) {
+    torch::Tensor tb =
+        torch::randn({batch_size, 11, 11, 10}, torch::dtype(torch::kFloat32))
+            .to(device);
+    torch::Tensor ta = (torch::rand({batch_size, 2, 11, 10}) < 0.5).to(device);
+    std::vector<torch::jit::IValue> inputs{tb, ta};
+    int64_t t_start = 0;
+    const int n_runs = 1000;
+    float sum = 0;
+    for (int i = 0; i < n_runs; i++) {
+      if (i == n_runs / 10) {
+        t_start = UnixMicros();
+      }
+      auto output = model.forward(inputs);
+      ABSL_CHECK(output.isTuple());
+      const auto output_tuple = output.toTuple();
+      ABSL_CHECK(output_tuple->size() == 2);
+      const auto logits =
+          output_tuple->elements()[0].toTensor().to(torch::kCPU);
+      const auto dim = logits.sizes();
+      ABSL_CHECK(dim.size() == 2 && dim[0] == batch_size &&
+                 dim[1] == 2 * 11 * 10);
+      const auto value =
+          torch::sum(output_tuple->elements()[1].toTensor()).item<float>();
+      sum += value;  // Just to avoid dead code pruning.
+    }
+    ABSL_DLOG(INFO) << "sum = " << sum;
+    int64_t duration = UnixMicros() - t_start;
+    ABSL_LOG(INFO) << "batch_size=" << batch_size << ": finished "
+                   << (n_runs - n_runs / 10) << " iterations in "
+                   << (duration / 1000) << "ms";
+  }
+}
+
 }  // namespace hexz
 
 namespace {
@@ -332,6 +382,11 @@ int main() {
   }
   hexz::InitializeFromConfig(*config);
 
+  if (config->gpu_benchmark) {
+    // Run GPU performance test and exit.
+    hexz::RunGPUBenchmark(*config);
+    return 0;
+  }
   // Execute
   ABSL_LOG(INFO) << "Worker started with " << config->String();
   std::thread memmon;

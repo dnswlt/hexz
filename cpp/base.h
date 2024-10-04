@@ -70,6 +70,10 @@ struct Config {
 
   // Set this to 1 to have /proc/self/status logged every N seconds.
   int debug_memory_usage = 0;
+
+  // Set this to 1 to run a GPU performance test and exit.
+  int gpu_benchmark = 0;
+
   static absl::StatusOr<Config> FromEnv();
   std::string String() const;
 };
