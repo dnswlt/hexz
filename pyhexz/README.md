@@ -17,6 +17,9 @@ conda env create -f environment.yml
 conda activate pyhexz
 ```
 
+(You might need to run `~/miniconda/bin/activate pyhexz` instead,
+depending on your conda setup.)
+
 ### Cython
 
 Now compile the Cython modules:
@@ -38,7 +41,7 @@ cd src
 DYLD_LIBRARY_PATH=$HOME/git/github.com/dnswlt/hexz/cpp/build python3 -c '
 from pyhexz.ccapi import CppMoveSuggester
 m = CppMoveSuggester("../../cpp/testdata/scriptmodule.pt")
-print(m.suggest_move(b"FOO"))'
+print(m.suggest_move(b"__HELLO__"))'
 ```
 
 It should print the following error: `ValueError: not a valid SuggestMoveRequest proto`.

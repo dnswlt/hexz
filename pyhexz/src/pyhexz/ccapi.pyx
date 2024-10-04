@@ -1,7 +1,6 @@
 from libcpp.string cimport string
 
 from pyhexz.hexz_pyapi cimport MoveSuggester
-from pyhexz import hexz_pb2
 
 cdef class CppMoveSuggester:
     cdef MoveSuggester _ms

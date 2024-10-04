@@ -134,8 +134,13 @@ class LocalModelRepository:
         return m_path
 
     def add_examples(self, req: hexz_pb2.AddTrainingExamplesRequest) -> None:
-        name = req.model_key.name
-        checkpoint = req.model_key.checkpoint
+        # Not all examples were necessarily generated using the same model key,
+        # since model updates can happen at any time. Store the request under the
+        # latest model that was used.
+        if len(req.examples) == 0:
+            return
+        name = req.examples[-1].model_key.name
+        checkpoint = req.examples[-1].model_key.checkpoint
         d = os.path.dirname(self._model_path(name, checkpoint))
         examples_dir = os.path.join(d, "examples")
         os.makedirs(examples_dir, exist_ok=True)

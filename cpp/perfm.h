@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <chrono>
+#include <mutex>
 #include <string>
 
 namespace hexz {
@@ -39,6 +40,7 @@ class Perfm {
     Scope(Perfm::Label label)
         : label{label}, started{std::chrono::high_resolution_clock::now()} {}
     ~Scope() {
+      std::unique_lock<std::mutex> lk(Perfm::mut);
       Perfm::stats_[label].count++;
       Perfm::stats_[label].elapsed_nanos +=
           std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -50,7 +52,7 @@ class Perfm {
   struct CumulativeStats {
     Perfm::Label label;
     int64_t count = 0;
-    int64_t elapsed_nanos;
+    int64_t elapsed_nanos = 0;
   };
 
   static const std::string& LabelName(Perfm::Label label) {
@@ -69,6 +71,7 @@ class Perfm {
 
  private:
   static CumulativeStats stats_[StatsSize];
+  static std::mutex mut;
 };
 
 }  // namespace hexz

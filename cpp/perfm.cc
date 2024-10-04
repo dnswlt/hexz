@@ -1,14 +1,16 @@
 #include "perfm.h"
 
+#include <inttypes.h>
+
 #include <algorithm>
 #include <chrono>
-#include <inttypes.h>
 #include <string>
 #include <vector>
 
 namespace hexz {
 
 Perfm::CumulativeStats Perfm::stats_[Perfm::StatsSize];
+std::mutex Perfm::mut;
 
 void Perfm::Init() {
   for (int i = 0; i < StatsSize; i++) {

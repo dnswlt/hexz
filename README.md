@@ -118,14 +118,20 @@ GOOS=js GOARCH=wasm go build -o ./resources/wasm/hexz.wasm cmd/wasm/main.go && g
 
 ### Protocol Buffers
 
-The generated sources of all `.proto` files are checked in to this repository,
-so users shouldn't need to regenerate them.
+The generated sources of all `.proto` files are **no longer** checked in to
+this repository, so users need to regenerate them.
 
-To do so anyway, run the following command in the root directory of this
-repository:
+Run the following command in the root directory of this repository:
 
 ```bash
 bash run_protoc.sh
+```
+
+If there are errors generating the protobuf sources for Go, you might need to install `protoc-gen-go`:
+
+```bash
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+env PATH=$PATH:$HOME/go/bin bash run_protoc.sh
 ```
 
 ### Cloud Logging

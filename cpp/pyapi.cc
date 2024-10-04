@@ -41,6 +41,11 @@ void MoveSuggester::LoadModel(const std::string& path) {
 std::string MoveSuggester::impl::SuggestMove(const std::string& request) {
   hexzpb::SuggestMoveRequest req;
   if (!req.ParseFromString(request)) {
+    if (request == "__HELLO__") {
+      // Used for testing the C++/Python binding.
+      ABSL_LOG(INFO) << "Hello from C++ MoveSuggester!";
+      return "__OLLEH__";     
+    }
     throw std::invalid_argument("not a valid SuggestMoveRequest proto");
   }
   if (req.max_think_time_ms() <= 0) {

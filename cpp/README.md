@@ -19,24 +19,28 @@ brew install protobuf
 
 All commands assume you are in the `cpp` subdirectory.
 
+Update Oct 2024: there are now official pre-built arm64 binaries for libtorch on pytorch.org.
+
+MacOS security policy might prevent from executing that library. In that case, run sth like
+
+```bash
+sudo xattr -r -d com.apple.quarantine $HOME/opt/libtorch/lib/*.dylib
+```
+
+Then build:
+
 ```bash
 mkdir build
 cd build
-cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="$HOME/miniconda3/pkgs/pytorch-2.1.0-py3.11_0/lib/python3.11/site-packages/torch/share/cmake" ..
+cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="$$HOME/opt/libtorch/share/cmake" ..
 cmake --build . --parallel 4
 ```
-
-As of Oct 2023 there are no official pre-built arm64 binaries for libtorch on pytorch.org,
-so the small example from <https://pytorch.org/cppdocs/installing.html> does not work.
-
-The easiest way to get libtorch for arm64 is by installing torch via Anaconda (or miniconda3),
-and then adding the path to the torch `cmake` folder to `CMAKE_PREFIX_PATH` (see above).
 
 ### Linux
 
 #### Protocol buffers
 
-Build protobuf as a shared library[^1]: (here we'll install it to the default `/usr/loca/` prefix)
+Build protobuf as a shared library[^1]: (here we'll install it to the default `/usr/local/` prefix)
 
 ```bash
 cd /tmp
@@ -57,7 +61,7 @@ ldconfig
     But since PyTorch is dynamically linked and the much larger lib anyway, we can go all-in
     on dylib, why not.
 
-```
+```text
 /usr/bin/ld: libhexzpb.a(hexz.pb.cc.o): warning: relocation against `_ZN6hexzpb46_AddTrainingExamplesResponse_default_instance_E' in read-only section `.text.startup'                
 /usr/bin/ld: libhexzpb.a(hexz.pb.cc.o): relocation R_X86_64_PC32 against symbol `descriptor_table_hexz_2eproto' can not be used when making a shared object; recompile with -fPIC     
 /usr/bin/ld: final link failed: bad value                                                                                                                                             
@@ -68,7 +72,7 @@ collect2: error: ld returned 1 exit status
 
 ```bash
 cd /tmp
-wget https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.1.0%2Bcpu.zip
+wget https://download.pytorch.org/libtorch/cu124/libtorch-cxx11-abi-shared-with-deps-2.4.1%2Bcu124.zip
 cd ~/opt
 unzip /tmp/libtorch-cxx11-abi-shared-with-deps-2.1.0+cpu.zip
 ```
@@ -81,7 +85,7 @@ To build the worker on Linux, now finally run:
 cd $HEXZ_REPO_DIR/cpp
 mkdir build
 cd build
-cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="$HOME/opt/libtorch/share/cmake;/usr/local/lib/cmake/protobuf" ..
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$HOME/opt/libtorch/share/cmake;/usr/local/lib/cmake/protobuf" ..
 cmake --build . --parallel 4
 ```
 
