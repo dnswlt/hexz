@@ -16,3 +16,9 @@ dump.rdb
 examples-*.html
 *.cred.txt
 main
+# Ignore generated proto files
+*.pb.h
+*.pb.cc
+*.pb.go
+*_pb2.py
+*_pb2.pyi
