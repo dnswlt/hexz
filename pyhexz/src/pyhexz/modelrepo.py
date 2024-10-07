@@ -7,9 +7,10 @@ from collections.abc import Iterable
 import datetime
 import gzip
 import os
+import threading
 import pytz
 import re
-from typing import Optional
+from typing import Any, Optional
 import torch
 
 from pyhexz import hexz_pb2
@@ -42,13 +43,11 @@ class ModelRepository:
         name: str,
         checkpoint: int,
         model: HexzNeuralNetwork,
-        overwrite=False,
         store_sm=True,
     ) -> str:
         """Stores the given model in the repository as a state_dict.
 
         Args:
-            overwrite: if True, overwrites any existing model with the same name and checkpoint.
             store_sm: if True, stores a torch.jit.ScriptModule in addition to the state_dict.
         """
         pass
@@ -63,6 +62,9 @@ class LocalModelRepository:
 
     def __init__(self, basedir: str):
         self.basedir = basedir
+        self.examples_lock = threading.Lock()
+        self.models_lock = threading.Lock()
+        self.model_cache: dict[str, Any] = {}  # Stores the latest model, keyed by /{name}/{checkpoint}/bytes={as_bytes?}/repr={repr}
 
     def _model_base(self, name: str):
         return os.path.join(self.basedir, "models", "flagz", name)
@@ -80,13 +82,14 @@ class LocalModelRepository:
     def get_latest_checkpoint(self, name: str) -> Optional[int]:
         cpdir = os.path.join(self._model_base(name), "checkpoints")
         regex = re.compile(r"^\d+$")
-        try:
-            return max(
-                (int(d) for d in os.listdir(cpdir) if regex.match(d)), default=None
-            )
-        except FileNotFoundError:
-            # Raised by os.listdir if cpdir does not exist.
-            return None
+        with self.models_lock:
+            try:
+                return max(
+                    (int(d) for d in os.listdir(cpdir) if regex.match(d)), default=None
+                )
+            except FileNotFoundError:
+                # Raised by os.listdir if cpdir does not exist.
+                return None
 
     def get_model(
         self,
@@ -96,21 +99,33 @@ class LocalModelRepository:
         as_bytes=False,
         repr="state_dict",
     ) -> HexzNeuralNetwork | torch.jit.ScriptModule | bytes:
-        if checkpoint is None:
-            checkpoint = self.get_latest_checkpoint(name)
-        if repr == "scriptmodule":
-            p = self._scriptmodule_path(name, checkpoint)
+        key = f"/{name}/{checkpoint}/bytes={as_bytes}/repr={repr}"
+        with self.models_lock:
+            res = self.model_cache.get(key)
+            if res:
+                return res
+        def _get_model(cp):
+            if cp is None:
+                cp = self.get_latest_checkpoint(name)
+            if repr == "scriptmodule":
+                p = self._scriptmodule_path(name, cp)
+                if as_bytes:
+                    with open(p, "rb") as f_in:
+                        return f_in.read()
+                return torch.jit.load(p)
+            # Treat as state_dict
+            p = self._model_path(name, cp)
             if as_bytes:
                 with open(p, "rb") as f_in:
                     return f_in.read()
-            return torch.jit.load(p)
-        # Treat as state_dict
-        p = self._model_path(name, checkpoint)
-        if as_bytes:
-            with open(p, "rb") as f_in:
-                return f_in.read()
-        model = HexzNeuralNetwork()
-        model.load_state_dict(torch.load(p, map_location=map_location))
+            model = HexzNeuralNetwork()
+            model.load_state_dict(torch.load(p, map_location=map_location))
+            return model
+        model = _get_model(checkpoint)
+        with self.models_lock:
+            # For now, only cache the last requested model.
+            self.model_cache.clear()
+            self.model_cache[key] = model
         return model
 
     def store_model(
@@ -118,19 +133,19 @@ class LocalModelRepository:
         name: str,
         checkpoint: int,
         model: HexzNeuralNetwork,
-        overwrite=False,
         store_sm=True,
     ) -> str:
         m_path = self._model_path(name, checkpoint)
-        if not overwrite and os.path.exists(m_path):
-            raise IOError(f"Model already exists at {m_path}")
-        os.makedirs(os.path.dirname(m_path), exist_ok=True)
-        torch.save(model.state_dict(), m_path)
-        if store_sm:
-            # Generate and store a ScriptModule as well.
-            sm_path = self._scriptmodule_path(name, checkpoint)
-            sm = torch.jit.script(model)
-            sm.save(sm_path)
+        with self.models_lock:
+            if os.path.exists(m_path):
+                raise IOError(f"Model already exists at {m_path}")
+            os.makedirs(os.path.dirname(m_path), exist_ok=True)
+            torch.save(model.state_dict(), m_path)
+            if store_sm:
+                # Generate and store a ScriptModule as well.
+                sm_path = self._scriptmodule_path(name, checkpoint)
+                sm = torch.jit.script(model)
+                sm.save(sm_path)
         return m_path
 
     def add_examples(self, req: hexz_pb2.AddTrainingExamplesRequest) -> None:
@@ -143,7 +158,10 @@ class LocalModelRepository:
         checkpoint = req.examples[-1].model_key.checkpoint
         d = os.path.dirname(self._model_path(name, checkpoint))
         examples_dir = os.path.join(d, "examples")
-        os.makedirs(examples_dir, exist_ok=True)
+        with self.examples_lock:
+            # Only synchronize the directory creation. Files can be
+            # written concurrently, as their names differ.
+            os.makedirs(examples_dir, exist_ok=True)
         now = datetime.datetime.now(tz=pytz.UTC).strftime("%Y%m%d_%H%M%S_%f")
         filename = os.path.join(examples_dir, f"{now}.gz")
         with gzip.open(filename, "wb") as f:

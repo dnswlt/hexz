@@ -272,3 +272,12 @@ RandomPlayout       15.291s    1980000   129486.310
 NextMoves            0.162s      41200   254693.001
 MakeMove             0.133s     239363  1804754.206
 MaxPuctChild         0.086s     228045  2643199.103
+
+## 2024-10-05
+
+~30'000 predictions per game (at 0.5 fast move prob).
+On M1 Pro, 16 threads, MPS: Games finish after ~180s
+==> 30'000 / 180 ~= 170 predictions/s per thread
+==> 30'000 * 16 / 180 ~= 2700 predictions /s overall
+
+8 threads take 176s, so 16 threads is almost 2x as fast.

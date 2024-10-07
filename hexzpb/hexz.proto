@@ -205,7 +205,7 @@ message AddTrainingExamplesResponse {
 }
 
 // TrainingExample is used to send training examples across the wire and store
-// them on disk in the Python implementation.
+// them on disk in the Python and C++ implementations.
 message TrainingExample {
     // Timestamp at which this example was generated.
     int64 unix_micros = 1;

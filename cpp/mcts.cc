@@ -508,6 +508,7 @@ bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
   n->CreateChildren(moves);
   n->ShuffleChildren();  // Avoid selection bias.
   auto pred = model_.Predict(board, *n);
+  predictions_count_++;
   n->SetMoveProbs(pred.move_probs);
   if (add_noise && n == &root) {
     // root has been expanded for the first time.
@@ -517,6 +518,7 @@ bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
   if (run_playouts) {
     auto stats =
         playout_runner_->Run(board, n->NextTurn(), config_.random_playouts);
+    random_playouts_count_++;
     // 50% weight for model predictions and 50% for random playouts.
     float playout_value = (n->NextTurn() == 0 ? 1 : -1) * stats.Avg();
     value = (value + playout_value) / 2;
@@ -639,7 +641,9 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
                                 1e6)
                      << " and " << n << " moves. Final score: " << board.Score()
                      << ". Result: " << result
-                     << ". Examples: " << examples.size();
+                     << ". Examples: " << examples.size()
+                     << ". Predictions: " << PredictionsCount()
+                     << ". RandomPlayouts: " << RandomPlayoutsCount();
       game_over = true;
       break;
     }

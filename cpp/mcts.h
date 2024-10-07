@@ -388,12 +388,19 @@ class NeuralMCTS {
                                                     const Board& board,
                                                     int think_time_millis);
 
+  int PredictionsCount() const { return predictions_count_; }
+  int RandomPlayoutsCount() const { return random_playouts_count_; }
+
  private:
   Config config_;
   // Not owned.
   Model& model_;
   // Used for refining model predictions with random playouts.
   std::unique_ptr<PlayoutRunner> playout_runner_;
+
+  // Stats
+  int predictions_count_ = 0;
+  int random_playouts_count_ = 0;
 };
 
 }  // namespace hexz

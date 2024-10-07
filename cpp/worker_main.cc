@@ -118,7 +118,6 @@ void GenerateExamplesMultiThreaded(const Config& config) {
             config.max_runtime_seconds - (now - started_micros) / 1'000'000;
 
         auto examples = mcts.PlayGame(b, max_runtime_seconds);
-
         if (!examples.ok()) {
           if (absl::IsDeadlineExceeded(examples.status())) {
             break;
