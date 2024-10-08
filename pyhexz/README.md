@@ -65,10 +65,9 @@ env HEXZ_BATCH_SIZE=1024 \
   gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.training_server:create_app()'
 ```
 
-To only run the CPU player engine (use $DYLD_LIBRARY_PATH on macos):
-
 ```bash
-LD_LIBRARY_PATH=$HOME/git/github.com/dnswlt/hexz/cpp/build \
+# macos version. For Linux, use LD_LIBRARY_PATH
+DYLD_LIBRARY_PATH=$HOME/git/github.com/dnswlt/hexz/cpp/build \
   HEXZ_LOCAL_MODEL_PATH=$HOME/git/github.com/dnswlt/hexz-models/models/flagz/seth/checkpoints/60/scriptmodule.pt \
   gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.cpu_server:create_app()'
 ```
@@ -81,7 +80,7 @@ docker build . -f Dockerfile.server --tag europe-west6-docker.pkg.dev/hexz-cloud
 docker push europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/server:latest
 ```
 
-Running these images locally:
+Running the image locally:
 
 ```bash
 # server
@@ -95,35 +94,7 @@ PORT=8080 && docker run -p 8080:${PORT} -e PORT=${PORT} \
   europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/server:latest
 ```
 
-## Training and self-play in the Cloud
+## Python game implementation
 
-### OUTDATED SECTION
-
-The architecture is as follows:
-
-* A single `server` running in a Docker container on a GCE VM is responsible for training and
-  distributing model updates.
-  * It holds the latest checkpoint of the configured model in memory (specified by the `MODEL_NAME` and
-    loaded from GCS).
-  * It accepts `http POST` requests for `AddTrainingExamplesRequest` protobuf messages at `/examples`.
-    These are sent from workers, see below.
-  * Once enough (configurable via `HEXZ_BATCH_SIZE`) examples have been posted, it trains the
-    current model with the collected examples, resulting in an updated model.
-  * The new model is stored in memory and on local disk as the next checkpoint.
-    Workers are informed about the new model in the `AddTrainingExamplesResponse`. They can also poll
-    the training server (`/models/current`) to obtain the current model version.
-
-* Multiple `worker` jobs running as batch jobs on Cloud Run generate training examples via self-play
-  and send them to the server.
-  * Workers expect the server to be present.
-  * They query the training server for the latest model version (`/models/current`), download this
-    model (`/models/{model_name}/checkpoints/{checkpoint}`), and use it for self-play. On delivering
-    examples to the training server (`/examples`) they learn about model updates and download a new
-    model as necessary.
-  * Workers run for a configurable amount of time, before they quit.
-
-Models and examples are stored by the `server` on local disk using the following folder structure:
-
-* `$HEXZ_MODEL_REPO_BASE_DIR/models/flagz/{model_name}/checkpoints/{checkpoint_num}/`
-  * `model.pt`
-  * `examples/{example_batch}.zip`  (not implemented yet)
+If you wonder where the Python game engine code is:
+it was removed in <https://github.com/dnswlt/hexz/commit/cdc83f6e098d3ab7dfc99439b824b8857ac70abe>.
