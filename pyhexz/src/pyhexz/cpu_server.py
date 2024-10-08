@@ -2,16 +2,18 @@ from contextlib import contextmanager
 import datetime
 import queue
 from flask import Flask, current_app, make_response, request
-from google.protobuf.message import DecodeError
 import logging
 import pytz
 
-from pyhexz import hexz_pb2
 from pyhexz.ccapi import CppMoveSuggester
 from pyhexz.config import CPUEngineConfig
 
 
 def create_app():
+    """Creates the Flask server for Hexz CPU players.
+    
+    This server relies on the C++ shared lib containing the MoveSuggester class.
+    """
     app = Flask(__name__)
     app.logger.setLevel(logging.INFO)
     app.cpu_engine_config = CPUEngineConfig.from_env()
@@ -52,7 +54,7 @@ def create_app():
     @app.get("/")
     def index():
         now = datetime.datetime.now(tz=pytz.UTC).isoformat()
-        resp = make_response(f"Hello from Python hexz at {now}!\n")
+        resp = make_response(f"Hello from the Python/C++ hexz CPU player server at {now}!\n")
         resp.headers["Content-Type"] = "text/plain"
         return resp
 

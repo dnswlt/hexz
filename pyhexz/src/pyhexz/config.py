@@ -27,7 +27,10 @@ class TrainingConfig(typing.NamedTuple):
     # examples are collected. Set to 0 to only accept examples
     # for the current model.
     max_checkpoint_diff: int = 1
+    # batch size to use for training
     batch_size: int = 4096
+    # Train a new model after this many new examples were received:
+    training_trigger_threshold: int = 100
     num_epochs: int = 7
     learning_rate: float = 1e-3
     adam_weight_decay: float = 1e-4

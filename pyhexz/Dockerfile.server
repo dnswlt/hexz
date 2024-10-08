@@ -26,7 +26,7 @@ COPY entrypoint.sh setup.py ./
 COPY ./src/pyhexz/*.py ./src/pyhexz/*.pyx ./src/pyhexz/
 RUN chmod +x ./entrypoint.sh
 
-RUN source ~/.bashrc && HEXZ_SKIP_BUILD_CCAPI=1 python3 setup.py build_ext --build-lib=src
+RUN source ~/.bashrc && python3 setup.py build_ext --build-lib=src
 
 #
 # BEGIN server specific stuff. Everything above this line should be identical to the
@@ -34,13 +34,10 @@ RUN source ~/.bashrc && HEXZ_SKIP_BUILD_CCAPI=1 python3 setup.py build_ext --bui
 # TODO: use a common base image.
 #
 
-# Ensures that entrypoint.sh launches gunicorn.
-ENV HEXZ_ENTRYPOINT_MODE=gunicorn
-
 # The code to run when the container is started, taken from
 # https://cloud.google.com/run/docs/tips/python
 # For environments with multiple CPU cores, increase the number of workers
 # to be equal to the cores available.
 # Timeout is set to 0 to disable the timeouts of the workers to allow Cloud Run to handle instance scaling.
 ENTRYPOINT ["./entrypoint.sh"]
-CMD ["--workers=1", "--threads=8", "--timeout=0", "pyhexz.server:create_app()"]
+CMD ["--workers=1", "--threads=8", "--timeout=0", "pyhexz.training_server:create_app()"]

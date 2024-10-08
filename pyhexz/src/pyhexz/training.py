@@ -1,443 +1,265 @@
-"""Classes used for training in a training server."""
 
-from collections import defaultdict
-from collections.abc import Mapping
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass
+import dataclasses
 import logging
-import io
-import typing
-import numpy as np
-import queue
 import threading
 import time
+from typing import Any
+import h5py
 import torch
-from torch import nn
-from typing import Any, Optional
-from pyhexz.config import TrainingConfig
+
 from pyhexz import hexz_pb2
-from pyhexz.errors import HexzError
-from pyhexz.modelrepo import ModelRepository
+from pyhexz.config import TrainingConfig
+from pyhexz.modelrepo import LocalModelRepository, ModelRepository
 
 
-class InMemoryDataset(torch.utils.data.Dataset):
-    def __init__(self):
-        self.examples = []
+@dataclass
+class TrainingStats:
+    example_requests: int = 0
+    examples: int = 0
+    training_runs: int = 0
+
+    
+class HDF5Dataset(torch.utils.data.Dataset):
+    """PyTorch Dataset implementation to read Hexz examples from HDF5."""
+
+    def __init__(self, h5_file: h5py.File):
+        """Builds a new dataset that reads from the .h5 file pointed to by path.
+        
+        The dataset will only read examples that existed at the time of instantiation.
+        If more examples get added while this dataset is in use, they will be ignored
+        by the dataset.
+        """
+        self.h5_file = h5_file
+        self.size = len(self.h5_file["boards"])
 
     def __getitem__(self, k):
-        return self.examples[k]
+        """Returns a tuple of inputs and labels: ((board, action_mask), (move_probs, value)).
+        
+        The collation function of the PyTorch DataLoader handles this properly and returns a tuple
+        of batches for the labels.
+        """
+        h = self.h5_file
+        return ((h["boards"][k], h["action_masks"][k]), (h["move_probs"][k], h["values"][k]))
 
     def __len__(self):
-        return len(self.examples)
-
-    def append(self, example):
-        self.examples.append(example)
-
-    def extend(self, examples):
-        self.examples.extend(examples)
+        return self.size
 
 
-class TrainingRunnerTask(threading.Thread):
-    def __init__(
-        self,
-        repo: ModelRepository,
-        model_key: hexz_pb2.ModelKey,
-        config: TrainingConfig,
-        batch: InMemoryDataset,
-        done_queue: queue.SimpleQueue,
-        logger: logging.Logger,
-    ):
-        super().__init__()
-        self.repo = repo
-        self.model_key = model_key
-        self.done_queue = done_queue
-        self.config = config
-        self.batch = batch
-        self.logger = logger
 
-    def run(self):
-        reply = {
-            "type": "TrainingRunnerTask",
-            "status": "ERROR",
-        }
-        try:
-            started = time.perf_counter()
-            self.run_training()
-            reply["status"] = "OK"
-            reply["model_key"] = self.model_key
-        except Exception as e:
-            reply["error"] = str(e)
-        finally:
-            elapsed = time.perf_counter() - started
-            reply["elapsed"] = elapsed
-            self.done_queue.put(reply)
+# TODO: move this into TrainingTask.
+# class TrainingRunnerTask(threading.Thread):
+#     def __init__(
+#         self,
+#         repo: ModelRepository,
+#         model_key: hexz_pb2.ModelKey,
+#         config: TrainingConfig,
+#         batch: InMemoryDataset,
+#         done_queue: queue.SimpleQueue,
+#         logger: logging.Logger,
+#     ):
+#         super().__init__()
+#         self.repo = repo
+#         self.model_key = model_key
+#         self.done_queue = done_queue
+#         self.config = config
+#         self.batch = batch
+#         self.logger = logger
 
-    def run_training(self):
-        batch = self.batch
-        device = self.config.device
-        model = self.repo.get_model(self.model_key.name, self.model_key.checkpoint)
-        model.train()
-        model = model.to(device)
-        num_epochs = self.config.num_epochs
-        batch_size = self.config.batch_size
-        loader = torch.utils.data.DataLoader(
-            dataset=batch,
-            batch_size=batch_size,
-            shuffle=self.config.shuffle,
-            pin_memory=self.config.pin_memory,
-        )
+#     def run(self):
+#         reply = {
+#             "type": "TrainingRunnerTask",
+#             "status": "ERROR",
+#         }
+#         try:
+#             started = time.perf_counter()
+#             self.run_training()
+#             reply["status"] = "OK"
+#             reply["model_key"] = self.model_key
+#         except Exception as e:
+#             reply["error"] = str(e)
+#         finally:
+#             elapsed = time.perf_counter() - started
+#             reply["elapsed"] = elapsed
+#             self.done_queue.put(reply)
 
-        pr_loss_fn = nn.CrossEntropyLoss()
-        val_loss_fn = nn.MSELoss()
+#     def run_training(self):
+#         batch = self.batch
+#         device = self.config.device
+#         model = self.repo.get_model(self.model_key.name, self.model_key.checkpoint)
+#         model.train()
+#         model = model.to(device)
+#         num_epochs = self.config.num_epochs
+#         batch_size = self.config.batch_size
+#         loader = torch.utils.data.DataLoader(
+#             dataset=batch,
+#             batch_size=batch_size,
+#             shuffle=self.config.shuffle,
+#             pin_memory=self.config.pin_memory,
+#         )
 
-        optimizer = torch.optim.Adam(
-            model.parameters(),
-            lr=self.config.learning_rate,
-            weight_decay=self.config.adam_weight_decay,
-        )
+#         pr_loss_fn = nn.CrossEntropyLoss()
+#         val_loss_fn = nn.MSELoss()
 
-        for epoch in range(num_epochs):
-            for i, ((X_board, X_action_mask), (y_pr, y_val)) in enumerate(loader):
-                # Send to device.
-                X_board = X_board.to(device)
-                X_action_mask = X_action_mask.to(device)
-                y_pr = y_pr.to(device)
-                y_val = y_val.to(device)
+#         optimizer = torch.optim.Adam(
+#             model.parameters(),
+#             lr=self.config.learning_rate,
+#             weight_decay=self.config.adam_weight_decay,
+#         )
 
-                optimizer.zero_grad(set_to_none=True)
+#         for epoch in range(num_epochs):
+#             for i, ((X_board, X_action_mask), (y_pr, y_val)) in enumerate(loader):
+#                 # Send to device.
+#                 X_board = X_board.to(device)
+#                 X_action_mask = X_action_mask.to(device)
+#                 y_pr = y_pr.to(device)
+#                 y_val = y_val.to(device)
 
-                # Predict
-                pred_pr, pred_val = model(X_board, X_action_mask)
+#                 optimizer.zero_grad(set_to_none=True)
 
-                # Compute loss
-                pr_loss = pr_loss_fn(pred_pr.flatten(1), y_pr.flatten(1))
-                val_loss = val_loss_fn(pred_val, y_val)
-                loss = pr_loss + val_loss
-                self.logger.info(
-                    f"Epoch {epoch}: pr_loss:{pr_loss.item():.3f} val_loss:{val_loss.item():.3f} loss: {loss.item():.3f}"
-                )
-                # Backpropagation
-                loss.backward()
-                optimizer.step()
+#                 # Predict
+#                 pred_pr, pred_val = model(X_board, X_action_mask)
 
-        # Training is done. Save model under incremented checkpoint.
-        self.model_key.checkpoint += 1
-        self.repo.store_model(
-            name=self.model_key.name,
-            checkpoint=self.model_key.checkpoint,
-            model=model,
-        )
+#                 # Compute loss
+#                 pr_loss = pr_loss_fn(pred_pr.flatten(1), y_pr.flatten(1))
+#                 val_loss = val_loss_fn(pred_val, y_val)
+#                 loss = pr_loss + val_loss
+#                 self.logger.info(
+#                     f"Epoch {epoch}: pr_loss:{pr_loss.item():.3f} val_loss:{val_loss.item():.3f} loss: {loss.item():.3f}"
+#                 )
+#                 # Backpropagation
+#                 loss.backward()
+#                 optimizer.step()
 
-
-class TimingStats:
-    def __init__(self):
-        self.sum_duration_micros: int = 0
-        self.sum_duration_sq: float = 0.0
-        self.min_duration_micros: int = 2**30
-        self.max_duration_micros: int = 0
-        self.count: int = 0
-
-    def summarize(self):
-        """Returns a dict with summary stats."""
-        if self.count == 0:
-            return {"count": 0}
-        avg_duration = self.sum_duration_micros / 1e6 / self.count
-        return {
-            "count": self.count,
-            "min_duration": self.min_duration_micros / 1e6,
-            "max_duration": self.max_duration_micros / 1e6,
-            "avg_duration": avg_duration,
-            "std_duration": np.sqrt(
-                self.sum_duration_sq / self.count - avg_duration**2
-            ),
-        }
+#         # Training is done. Save model under incremented checkpoint.
+#         self.model_key.checkpoint += 1
+#         self.repo.store_model(
+#             name=self.model_key.name,
+#             checkpoint=self.model_key.checkpoint,
+#             model=model,
+#         )
 
 
-class NumpyExample(typing.NamedTuple):
-    board: np.ndarray  # shape: (11, 11, 10)
-    action_mask: np.ndarray  # shape: (2, 11, 10)
-    move_probs: np.ndarray  # shape: (2, 11, 10)
-    value: np.ndarray  # shape: (1,)
-    priors: np.ndarray  # shape: (2, 11, 10)
+class TrainingTask:
+    """TrainingTask is responsible for training the model given the stored examples.
 
-    @classmethod
-    def decode(cls, ex: hexz_pb2.TrainingExample) -> "NumpyExample":
-        """Decodes the given TrainingExample and returns its data as a named tuple of np arrays."""
-        priors = None  # Optional.
-        if ex.encoding == hexz_pb2.TrainingExample.PYTORCH:
-            board = torch.load(io.BytesIO(ex.board)).numpy()
-            action_mask = torch.load(io.BytesIO(ex.action_mask)).numpy()
-            pr = torch.load(io.BytesIO(ex.move_probs)).numpy()
-            if ex.model_predictions.priors:
-                priors = torch.load(io.BytesIO(ex.model_predictions.priors)).numpy()
-        else:
-            board = np.load(io.BytesIO(ex.board))
-            action_mask = np.load(io.BytesIO(ex.action_mask))
-            pr = np.load(io.BytesIO(ex.move_probs))
-            if ex.model_predictions.priors:
-                priors = np.load(io.BytesIO(ex.model_predictions.priors))
-        if board.shape != (11, 11, 10):
-            raise ValueError(f"Wrong board shape: {board.shape}.")
-        if action_mask.shape != (2, 11, 10):
-            raise ValueError(f"Wrong action_mask shape: {pr.shape}.")
-        if pr.shape != (2, 11, 10):
-            raise ValueError(f"Wrong move_probs shape: {pr.shape}.")
-        if priors is not None and priors.shape != (2, 11, 10):
-            raise ValueError(f"Wrong model_predictions.priors shape: {priors.shape}.")
-        val = np.array([ex.result], dtype=np.float32)
-        return NumpyExample(
-            board=board,
-            action_mask=action_mask,
-            move_probs=pr,
-            value=val,
-            priors=priors,
-        )
-
-
-class TrainingTask(threading.Thread):
-    """TrainingTask runs as a separate thread, accepts training data and
-    spaws a separate thread or process to train the model and save new
-    checkpoints."""
-
-    _STATE_ACCEPTING = "ACCEPTING"
-    _STATE_TRAINING = "TRAINING"
+    Each task should be executed by an individual thread or in a thread pool.
+    """
 
     def __init__(
         self,
-        repo: ModelRepository,
-        config: TrainingConfig,
-        queue: queue.SimpleQueue,
+        model_name: str,
+        model_repo: LocalModelRepository,
         logger: logging.Logger,
     ):
-        super().__init__()
-        self.repo = repo
-        checkpoint = repo.get_latest_checkpoint(config.model_name)
-        self.model_key = hexz_pb2.ModelKey(
-            name=config.model_name,
-            checkpoint=checkpoint,
-        )
-        self.queue = queue
-        self.config = config
-        self.batch = InMemoryDataset()
-        self.training_runner_task: Optional[TrainingRunnerTask] = None
-        self.state = self._STATE_ACCEPTING
-        self.model_cache = {
-            "model_key": None,
-            "state_dict": None,
-            "scriptmodule": None,
-        }
+        self.model_name = model_name
+        self.model_repo = model_repo
         self.logger = logger
-        self.stats = defaultdict(lambda: 0)
-        self.timing_stats = TimingStats()
-        self.started = time.time()
-        self.training_time = 0
-        self.latest_request = None
 
-    def accept_model_key(self, model_key: hexz_pb2.ModelKey):
-        return (
-            model_key.name == self.model_key.name
-            and model_key.checkpoint <= self.model_key.checkpoint
-            and (self.model_key.checkpoint - model_key.checkpoint)
-            <= self.config.max_checkpoint_diff
-        )
-
-    def capacity(self) -> int:
-        return max(0, self.config.batch_size - len(self.batch))
-
-    def start_training_runner_task(self):
-        t = TrainingRunnerTask(
-            self.repo, self.model_key, self.config, self.batch, self.queue, self.logger
-        )
-        t.start()
-        self.logger.info("Started TrainingRunnerTask")
-        self.training_runner_task = t
-        self.state = self._STATE_TRAINING
-        # Start a new batch to be able to accept examples during training.
-        self.batch = InMemoryDataset()
-
-    def handle_training_examples(self, msg: Mapping[str, Any]):
-        """Expects a AddTrainingExamplesRequest and adds it to the current batch.
-
-        If the current batch is already full, and a training is still ongoing,
-        the TrainingTask is at capacity and will respond
-        """
-        req: hexz_pb2.AddTrainingExamplesRequest = msg["request"]
-        reply_q = msg["reply_q"]
-        examples = [e for e in req.examples if self.accept_model_key(e.model_key)]
-        if len(examples) == 0:
-            resp = hexz_pb2.AddTrainingExamplesResponse(
-                status=hexz_pb2.AddTrainingExamplesResponse.REJECTED_WRONG_MODEL,
-                latest_model=self.model_key,
-            )
-            reply_q.put(resp)
-            return
-        if self.capacity() == 0:
-            # We are at capacity. Signal this to the client.
-            self.logger.warning(
-                f"TrainingTask is at capacity. Rejecting {len(examples)} examples."
-            )
-            resp = hexz_pb2.AddTrainingExamplesResponse(
-                status=hexz_pb2.AddTrainingExamplesResponse.REJECTED_AT_CAPACITY,
-                error_message=f"Server is currently not able to accept more examples",
-            )
-            reply_q.put(resp)
-            return
-        resp = hexz_pb2.AddTrainingExamplesResponse(
-            status=hexz_pb2.AddTrainingExamplesResponse.ACCEPTED,
-            latest_model=self.model_key,
-        )
-        reply_q.put(resp)
-
-        # Translate examples.
-        new_batch = []
-        for ex in examples:
-            # Update timing stats.
-            self.timing_stats.count += 1
-            duration_micros = ex.stats.duration_micros
-            self.timing_stats.min_duration_micros = min(
-                self.timing_stats.min_duration_micros, duration_micros
-            )
-            self.timing_stats.max_duration_micros = max(
-                self.timing_stats.max_duration_micros, duration_micros
-            )
-            self.timing_stats.sum_duration_micros += duration_micros
-            self.timing_stats.sum_duration_sq += (duration_micros / 1e6) ** 2
-
-            try:
-                np_ex = NumpyExample.decode(ex)
-            except ValueError as e:
-                self.logger.error("Ignoring invalid example batch: ", str(e))
-                return
-            new_batch.append(
-                ((np_ex.board, np_ex.action_mask), (np_ex.move_probs, np_ex.value))
-            )
-
-        self.repo.add_examples(req)
-
-        # Save examples (for on-demand SVG export).
-        self.latest_request = req
-
-        self.stats["examples"] += len(examples)
-        lim = min(len(examples), self.capacity())
-        # Add translated examples to batch and trigger a training run if we have a full batch.
-        batch_add, batch_buf = new_batch[:lim], new_batch[lim:]
-        self.batch.extend(batch_add)
-        if (
-            len(self.batch) >= self.config.batch_size
-            and self.state != self._STATE_TRAINING
-        ):
-            # Only start a new training task if we're not already training.
-            self.start_training_runner_task()
-        cap = self.capacity()
-        if cap > 0:
-            # New capacity for the remaining batch_buf elements since we started a new training round.
-            if len(batch_buf) >= cap:
-                n_dropped = len(batch_buf) - (self.config.batch_size)
-                batch_buf = batch_buf[: self.config.batch_size]
-                self.logger.warning(
-                    f"Dropped {n_dropped} examples. Examples from request exceeded {self.config.batch_size=}."
-                )
-            self.batch.extend(batch_buf)
-
-    def handle_training_result(self, msg: Mapping[str, Any]):
-        # The training runner task must be done now.
-        self.training_runner_task.join()
-        self.stats["training_runs"] += 1
-        self.training_time += msg.get("elapsed", 0)
-        self.state = self._STATE_ACCEPTING
-        if msg["status"] == "OK":
-            self.model_key = msg["model_key"]
-            elapsed = msg["elapsed"]
-            self.logger.info(
-                f"Finished training batch of size {self.config.batch_size} for {self.config.num_epochs} epochs in {elapsed:.1f}s."
-            )
-            self.logger.info(
-                f"Updated model key to {self.model_key.name}:{self.model_key.checkpoint}."
-            )
-        else:
-            self.logger.info(f"Training failed: {msg.get('error')}")
-
-    def handle_get_model_key(self, msg):
-        reply_q = msg["reply_q"]
-        reply_q.put(self.model_key)
-
-    def handle_get_model(self, msg):
-        model_key = msg.get("model_key", self.model_key)
-        repr = msg["repr"]
-        reply_q = msg["reply_q"]
-
-        if model_key != self.model_key:
-            reply_q.put({"error": "requested wrong model key"})
-            return
-        # Create a copy and work with it, so we can return it safely.
-        model_key = hexz_pb2.ModelKey()
-        model_key.CopyFrom(self.model_key)
-        if self.model_cache["model_key"] != model_key:
-            # Invalidate cache.
-            self.model_cache.clear()
-            self.model_cache["model_key"] = model_key
-
-        cached = self.model_cache.get(repr)
-        if cached is not None:
-            reply_q.put({"data": cached, "model_key": model_key})
-            return
-        # Load from disk and cache.
-        try:
-            mbytes = self.repo.get_model(
-                model_key.name, model_key.checkpoint, as_bytes=True, repr=repr
-            )
-            self.model_cache[repr] = mbytes
-            reply_q.put({"data": mbytes, "model_key": model_key})
-        except FileNotFoundError as e:
-            self.logger.error(f"Cannot load model {model_key}: {e}")
-            reply_q.put({"error": f"Cannot load model {model_key}"})
-
-    def handle_get_training_info(self, msg):
-        reply_q = msg["reply_q"]
-        now = time.time()
-        info = {
-            "model_key": {
-                "name": self.model_key.name,
-                "checkpoint": self.model_key.checkpoint,
-            },
-            "config": self.config._asdict(),
-            "state": self.state,
-            "stats": dict(self.stats),
-            "example_timing_stats": self.timing_stats.summarize(),
-            "current_batch_size": len(self.batch),
-            "uptime_seconds": round(now - self.started, 3),
-            "training_time_pct": round(
-                self.training_time / (now - self.started) * 100, 2
-            ),
-        }
-        reply_q.put(info)
-
-    def handle_get_latest_request(self, msg):
-        reply_q = msg["reply_q"]
-        reply_q.put(self.latest_request)
-
-    def run(self):
-        """This is the main dispatcher loop of the TrainingTask.
-        All requests to this task must be sent via self.queue and are processed sequentially.
-        """
+    def execute(self):
         self.logger.info(
-            f"TrainingTask started. Using model {self.model_key.name}:{self.model_key.checkpoint}"
+            "Someone tried to run training. That's nice, but we don't have that implemented yet. I'll sleep for a bit, pretending to do work."
         )
-        while True:
-            # We use bytes as input and output in the communication with this
-            # TrainingTask to simplify serialization when running in a separate process.
-            msg = self.queue.get()
-            if msg["type"] == "TrainingRunnerTask":
-                self.handle_training_result(msg)
-            elif msg["type"] == "AddTrainingExamplesRequest":
-                self.handle_training_examples(msg)
-            elif msg["type"] == "GetModelKey":
-                self.handle_get_model_key(msg)
-            elif msg["type"] == "GetModel":
-                self.handle_get_model(msg)
-            elif msg["type"] == "GetTrainingInfo":
-                self.handle_get_training_info(msg)
-            elif msg["type"] == "GetLatestRequest":
-                self.handle_get_latest_request(msg)
-            else:
-                raise HexzError(
-                    f"TrainingTask: received unknown message type {msg['type']}"
-                )
+        t_start = time.time()
+        with self.model_repo.acquire_h5(self.model_name) as h:
+            dataset = HDF5Dataset(h)
+            self.logger.info(f"There are {len(dataset)} examples to process")
+            time.sleep(1)
+        self.logger.info(f"Training (fake) done after {time.time()-t_start:.3f}s")
+
+
+class TrainingState:
+    """TrainingState is the entry point for adding examples and training the model.
+
+    A training server should maintain a single instance of TrainingState.
+    Instances are thread-safe. All methods can be called from multiple threads.
+
+    Attributes:
+        training_examples (int): Number of examples to collect before starting a
+            new training run.
+    """
+
+    def __init__(
+        self,
+        model_repo: ModelRepository,
+        model_name: str,
+        logger: logging.Logger,
+        config: TrainingConfig,
+    ):
+        self.lock = threading.Lock()
+        self.model_repo = model_repo
+        self.model_name = model_name
+        self.logger = logger
+        self.config = config
+        self.latest_checkpoint = model_repo.get_latest_checkpoint(model_name)
+        self._stats = TrainingStats()
+        self._latest_request: hexz_pb2.AddTrainingExamplesRequest = None
+        self._executor = ThreadPoolExecutor(max_workers=8)
+        self.last_training = 0  # Example count when the last training was started.
+        self.is_training: bool = False
+
+    def model_key(self):
+        """Returns the latest model key."""
+        with self.lock:
+            return hexz_pb2.ModelKey(
+                name=self.model_name, checkpoint=self.latest_checkpoint
+            )
+
+    def _should_train(self) -> bool:
+        """Must only be called while holding the lock."""
+        return (
+            self._stats.examples >= self.last_training + self.config.training_trigger_threshold
+            and not self.is_training
+        )
+
+    def _start_training(self):
+        """Must only be called while holding the lock."""
+        task = TrainingTask(self.model_name, self.model_repo, logger=self.logger)
+        self.logger.info(
+            f"Starting a new TrainingTask at {self._stats.examples} examples"
+        )
+        fut = self._executor.submit(task.execute)
+        fut.add_done_callback(self.training_done)
+        self.is_training = True
+        self.last_training = self._stats.examples
+        self._stats.training_runs += 1
+
+    def _add_examples(self, req: hexz_pb2.AddTrainingExamplesRequest):
+        """Saves the examples from the given request in the repository.
+
+        If enough new examples have been collected, a new training is started,
+        unless one is already ongoing.
+        """
+        self.model_repo.add_examples(req)
+        with self.lock:
+            self._latest_request = req
+            self._stats.example_requests += 1
+            self._stats.examples += len(req.examples)
+            if self._should_train():
+                self._start_training()
+
+    def add_examples(self, req: hexz_pb2.AddTrainingExamplesRequest):
+        """Asynchronously saves the examples from the request in the repository."""
+        self._executor.submit(self._add_examples, req)
+
+    def stats(self):
+        """Returns a copy of the training stats."""
+        with self.lock:
+            return dataclasses.replace(self._stats)
+
+    def latest_request(self) -> hexz_pb2.AddTrainingExamplesRequest:
+        with self.lock:
+            return self._latest_request
+
+    def training_done(self, fut: Future[Any]):
+        """A callback that is called when a TrainingTask is done."""
+        self.logger.info("TrainingState.training_done")
+        if fut.exception():
+            self.logger.error(f"Training failed with exception: {fut.exception()}")
+        with self.lock:
+            self.is_training = False
+            # Trigger next training round immediately if there are enough
+            # examples already.
+            if self._should_train():
+                self._start_training()

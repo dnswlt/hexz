@@ -1,6 +1,6 @@
 # Hexz in Python
 
-This directory contains the Python implementation of the Flagz game.
+This directory contains the Python implementation of the Flagz server.
 
 ## Running it
 
@@ -30,8 +30,8 @@ python3 setup.py build_ext --build-lib=src
 
 **NOTE**: Building the `pyhexz.ccapi` extension assumes that
 the C++ libraries in ../cpp were already built. If you don't care about the
-Python `cpuserver` module (e.g. if you only want to run the training server),
-you can `export HEXZ_SKIP_BUILD_CCAPI=1` before running `setup.py`.
+Python `cpu_server` module (e.g. if you only want to run the training server),
+you can skip this step.
 
 Test the C++ bindings for the MoveSuggester by running:
 
@@ -44,7 +44,7 @@ m = CppMoveSuggester("../../cpp/testdata/scriptmodule.pt")
 print(m.suggest_move(b"__HELLO__"))'
 ```
 
-It should print the following error: `ValueError: not a valid SuggestMoveRequest proto`.
+It should print a friendly hello message.
 
 ### pytest
 
@@ -52,8 +52,8 @@ Just run `pytest` without any arguments. The `pytest.ini` file tells pytest wher
 
 ### Flask web server
 
-The Flask app runs behind a `gunicorn` WSGI web server, both locally and in a Docker container. To run
-locally:
+The Flask app runs behind a `gunicorn` WSGI web server, both locally and in a Docker container.
+To run the `training_server` locally:
 
 ```bash
 cd src
@@ -62,25 +62,15 @@ env HEXZ_BATCH_SIZE=1024 \
   HEXZ_MODEL_REPO_BASE_DIR=/tmp/hexz-models \
   HEXZ_NUM_EPOCHS=1 \
   HEXZ_MAX_CHECKPOINT_DIFF=2 \
-  gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.server:create_app()'
+  gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.training_server:create_app()'
 ```
 
-To only run the CPU player engine:
+To only run the CPU player engine (use $DYLD_LIBRARY_PATH on macos):
 
 ```bash
-DYLD_LIBRARY_PATH=$HOME/git/github.com/dnswlt/hexz/cpp/build \
+LD_LIBRARY_PATH=$HOME/git/github.com/dnswlt/hexz/cpp/build \
   HEXZ_LOCAL_MODEL_PATH=$HOME/git/github.com/dnswlt/hexz-models/models/flagz/seth/checkpoints/60/scriptmodule.pt \
-  gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.cpuserver:create_app()'
-```
-
-### Generating examples with a worker
-
-With a Flask training server up and running, run the following command to generate examples in
-a separate worker process and send them to the training server:
-
-```bash
-cd src
-HEXZ_RUNS_PER_MOVE=800 HEXZ_TRAINING_SERVER_URL=http://localhost:8080 python3 -m pyhexz.worker
+  gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.cpu_server:create_app()'
 ```
 
 ### Docker and Cloud Run
@@ -89,9 +79,6 @@ HEXZ_RUNS_PER_MOVE=800 HEXZ_TRAINING_SERVER_URL=http://localhost:8080 python3 -m
 # server
 docker build . -f Dockerfile.server --tag europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/server:latest
 docker push europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/server:latest
-# worker
-docker build . -f Dockerfile.worker --tag europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/worker:latest
-docker push europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/worker:latest
 ```
 
 Running these images locally:
@@ -108,16 +95,9 @@ PORT=8080 && docker run -p 8080:${PORT} -e PORT=${PORT} \
   europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/server:latest
 ```
 
-```bash
-# worker
-docker run \
-  --security-opt seccomp=unconfined \
-  -e HEXZ_TRAINING_SERVER_URL=http://nuc:8080 \
-  -e PYTHONUNBUFFERED=1 \
-  europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/worker:latest
-```
-
 ## Training and self-play in the Cloud
+
+### OUTDATED SECTION
 
 The architecture is as follows:
 
@@ -147,6 +127,3 @@ Models and examples are stored by the `server` on local disk using the following
 * `$HEXZ_MODEL_REPO_BASE_DIR/models/flagz/{model_name}/checkpoints/{checkpoint_num}/`
   * `model.pt`
   * `examples/{example_batch}.zip`  (not implemented yet)
-
-Models are stored in the standard PyTorch format using `torch.save`. Examples are stored as zip files
-containing binary protobuf messages of type `github.com.dnswlt.hexz.NumpyExample`.

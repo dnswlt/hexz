@@ -3,39 +3,39 @@
 import numpy as np
 import pytest
 
-from pyhexz.hexc import CBoard
+from pyhexz.board import Board
 
 class TestBoard:
 
     def test_create(self):
-        b = CBoard()
+        b = Board()
         assert b.flags(0) == 3
         assert b.flags(1) == 3
 
     def test_validate(self):
-        b = CBoard()
+        b = Board()
         b.validate()
 
     def test_copy(self):
-        b = CBoard()
-        c = CBoard(b)
+        b = Board()
+        c = Board(b)
         assert b.b is not c.b
         assert np.all(b.b == c.b)
 
     def test_from_numpy(self):
-        b = CBoard.from_numpy(np.zeros((11, 11, 10)))
+        b = Board.from_numpy(np.zeros((11, 11, 10)))
         with pytest.raises(ValueError):
             b.validate()  # Cannot be valid, it's all zeroes.
         
     def test_b_for(self):
-        b = CBoard()
+        b = Board()
         assert b.b_for(player=0) is b.b, "Should not copy for player 0"
-        c = CBoard.from_numpy(b.b_for(player=1)).b_for(player=1)
+        c = Board.from_numpy(b.b_for(player=1)).b_for(player=1)
         assert np.all(b.b == c), "Flipping twice should be the identity"
 
     def test_play_game(self):
         """Play one full game, always making the first of the possible next moves."""
-        b = CBoard()
+        b = Board()
         player = 0
         num_moves = 0
         moves = b.next_moves(player)
@@ -47,7 +47,7 @@ class TestBoard:
             if not moves:
                 player = 1 - player
                 moves = b.next_moves(player)
-        assert num_moves < 200
+        assert 5 < num_moves < 200
         s = b.score()
         assert isinstance(s, tuple)
         assert len(s) == 2

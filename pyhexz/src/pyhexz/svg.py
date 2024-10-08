@@ -1,11 +1,15 @@
 """SVG export of boards. Pretty much a direct translation of the svg.go code to Python."""
 
-import contextlib
+import io
 import math
-from typing import Optional
+from typing import Any, Optional
+import typing
 import numpy as np
 import time
 
+import torch
+
+from pyhexz import hexz_pb2
 from pyhexz.board import Board
 
 
@@ -118,67 +122,94 @@ def svg_hexagon(
     return f'<g transform="{transform}">{"".join(elems)}</g>'
 
 
+class NumpyExample(typing.NamedTuple):
+    board: np.ndarray  # shape: (11, 11, 10)
+    action_mask: np.ndarray  # shape: (2, 11, 10)
+    move_probs: np.ndarray  # shape: (2, 11, 10)
+    value: np.ndarray  # shape: (1,)
+    priors: np.ndarray  # shape: (2, 11, 10)
+
+    @classmethod
+    def decode(cls, ex: hexz_pb2.TrainingExample) -> "NumpyExample":
+        """Decodes the given TrainingExample and returns its data as a named tuple of np arrays."""
+        priors = None  # Optional.
+        if ex.encoding == hexz_pb2.TrainingExample.PYTORCH:
+            board = torch.load(io.BytesIO(ex.board)).numpy()
+            action_mask = torch.load(io.BytesIO(ex.action_mask)).numpy()
+            pr = torch.load(io.BytesIO(ex.move_probs)).numpy()
+            if ex.model_predictions.priors:
+                priors = torch.load(io.BytesIO(ex.model_predictions.priors)).numpy()
+        else:
+            board = np.load(io.BytesIO(ex.board))
+            action_mask = np.load(io.BytesIO(ex.action_mask))
+            pr = np.load(io.BytesIO(ex.move_probs))
+            if ex.model_predictions.priors:
+                priors = np.load(io.BytesIO(ex.model_predictions.priors))
+        if board.shape != (11, 11, 10):
+            raise ValueError(f"Wrong board shape: {board.shape}.")
+        if action_mask.shape != (2, 11, 10):
+            raise ValueError(f"Wrong action_mask shape: {pr.shape}.")
+        if pr.shape != (2, 11, 10):
+            raise ValueError(f"Wrong move_probs shape: {pr.shape}.")
+        if priors is not None and priors.shape != (2, 11, 10):
+            raise ValueError(f"Wrong model_predictions.priors shape: {priors.shape}.")
+        val = np.array([ex.result], dtype=np.float32)
+        return NumpyExample(
+            board=board,
+            action_mask=action_mask,
+            move_probs=pr,
+            value=val,
+            priors=priors,
+        )
+
+
 def export(
-    file_like: str,
-    boards: list[Board],
-    captions: list[str] = None,
-    move_probs: list[np.ndarray] = None,
-    header: Optional[str] = None,
+    file_like: Any,
+    req: hexz_pb2.AddTrainingExamplesRequest,
 ) -> None:
     side_length = 30.0
     width = 10 * math.sqrt(3) * side_length
     height = 17 * side_length
     viewbox = f"0 0 {width:.6f} {height:.6f}"
-    if move_probs is None:
-        move_probs = [None] * len(boards)
-    if not captions:
-        captions = [None] * len(boards)
-    should_close = False
-    if isinstance(file_like, str):
-        file_like = open(file_like, "w")
-        should_close = True
-    try:
-        f_out = file_like
-        f_out.write(
-            """<!DOCTYPE html>
-		<html>
-		<head>
-			<meta charset="utf-8" />
-			<title>Hexz SVG Export</title>
-			<style>
-				body {
-					background-color: #1e1e1e;
-					color: #cbcbcb;
-				}
-				body {
-					font-family: sans-serif;
-				}
-			</style>
-		</head>
-		<body>
-            <h1>Hexz SVG Export</h1>\n"""
+    f = file_like
+    f.write(
+        """<!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Hexz SVG Export</title>
+        <style>
+            body {
+                background-color: #1e1e1e;
+                color: #cbcbcb;
+            }
+            body {
+                font-family: sans-serif;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Hexz SVG Export</h1>\n"""
+    )
+    f.write(f"<p>Created: {time.strftime('%Y-%m-%d %H:%M:%S')}</p>\n")
+    f.write(f"<p>Execution ID: {req.execution_id}</p>")
+    for i, ex in enumerate(req.examples):
+        f.write(f"<h2>Board {i}</h2>\n")
+        n = NumpyExample.decode(ex)
+        board = Board.from_numpy(n.board)
+        p0, p1 = board.score()
+        f.write(f"<p>Score: {int(p0)} &ndash; {int(p1)}</p>\n")
+        f.write("<div>\n")
+        f.write(
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.6f}" height="{height:.6f}" viewBox="{viewbox}">\n'
         )
-        f_out.write(f"<p>Created: {time.strftime('%Y-%m-%d %H:%M:%S')}</p>\n")
-        if header:
-            f_out.write(f"<p>{header}</p>")
-        for i, board in enumerate(boards):
-            f_out.write(f"<h2>Board {i}</h2>\n")
-            p0, p1 = board.score()
-            f_out.write(f"<p>Score: {int(p0)} &ndash; {int(p1)}</p>\n")
-            f_out.write("<div>\n")
-            f_out.write(
-                f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.6f}" height="{height:.6f}" viewBox="{viewbox}">\n'
-            )
-            for r in range(11):
-                for c in range(10 - r % 2):
-                    hex = svg_hexagon(side_length, board, r, c, move_probs[i])
-                    f_out.write(hex + "\n")
-            f_out.write("</svg>\n")
-            if captions[i]:
-                f_out.write(f"<p>{captions[i]}</p>\n")
-            f_out.write("</div>\n")
-        f_out.write("</body>\n")
-        f_out.write("</html>\n")
-    finally:
-        if should_close:
-            file_like.close()
+        for r in range(11):
+            for c in range(10 - r % 2):
+                hex = svg_hexagon(side_length, board, r, c, n.move_probs)
+                f.write(hex + "\n")
+        f.write("</svg>\n")
+        caption = f"Move: {ex.move.move} &bull; Value: {n.value[0]:.3f} PredVal: {ex.model_predictions.value:.3f}"
+        f.write(f"<p>{caption}</p>\n")
+        f.write("</div>\n")
+    f.write("</body>\n")
+    f.write("</html>\n")

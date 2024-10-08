@@ -3,18 +3,23 @@ from local storage as well as from GCS. It also accepts uploads of new model che
 and example zip archives.
 """
 
-from collections.abc import Iterable
+from contextlib import contextmanager
 import datetime
 import gzip
+import io
+import queue
+import time
+import h5py
 import os
 import threading
+import numpy as np
 import pytz
 import re
 from typing import Any, Optional
 import torch
 
 from pyhexz import hexz_pb2
-from pyhexz.hexz import HexzNeuralNetwork
+from pyhexz.model import HexzNeuralNetwork
 
 
 class ModelRepository:
@@ -35,6 +40,8 @@ class ModelRepository:
 
         Args:
             as_bytes: If True, the raw serialized PyTorch model bytes are returned.
+            repr: Determines the model returned representation.
+                One of "state_dict" or "scriptmodule".
         """
         pass
 
@@ -64,7 +71,11 @@ class LocalModelRepository:
         self.basedir = basedir
         self.examples_lock = threading.Lock()
         self.models_lock = threading.Lock()
-        self.model_cache: dict[str, Any] = {}  # Stores the latest model, keyed by /{name}/{checkpoint}/bytes={as_bytes?}/repr={repr}
+        # Stores the latest model, keyed by /{name}/{checkpoint}/bytes={as_bytes?}/repr={repr}
+        self.model_cache: dict[str, Any] = {}
+        # Map of open HDF5 files, keyed by file name.
+        self.h5_files: dict[str, queue.SimpleQueue] = {}
+        self.h5_lock = threading.Lock()
 
     def _model_base(self, name: str):
         return os.path.join(self.basedir, "models", "flagz", name)
@@ -91,6 +102,44 @@ class LocalModelRepository:
                 # Raised by os.listdir if cpdir does not exist.
                 return None
 
+
+    @contextmanager
+    def acquire_h5(self, model_name):
+        """Acquires and returns an exlusive handle to the HDF5 file for the specified model. 
+        
+        The returned h5py.File is open in append ("a") mode and ready for reading and writing.
+        The call blocks until the file is available.
+        """
+        h5_file = os.path.join(self._model_base(model_name), "h5", "examples.h5")
+        with self.h5_lock:
+            q = self.h5_files.get(h5_file)
+            if q is None:
+                if not os.path.exists(h5_file):
+                    os.makedirs(os.path.dirname(h5_file), exist_ok=True)
+                h = h5py.File(h5_file, "a")
+                q = queue.SimpleQueue()
+                q.put(h)
+                self.h5_files[h5_file] = q
+        try:
+            h = q.get()
+            yield h
+        finally:
+            q.put(h)
+        return 
+
+    def close_all(self):
+        """Closes all open file / HDF5 handles. 
+        
+        The repository will remain usable and will re-open any relevant files as necessary.
+        """
+        with self.h5_lock:
+            # We hold the lock, so no other threads can open new files. Now wait for
+            # all handles to become available again (they are never used while also holding the h5_lock).
+            for q in self.h5_files.values():
+                h = q.get()
+                h.close()
+            self.h5_files.clear()
+
     def get_model(
         self,
         name: str,
@@ -104,6 +153,7 @@ class LocalModelRepository:
             res = self.model_cache.get(key)
             if res:
                 return res
+
         def _get_model(cp):
             if cp is None:
                 cp = self.get_latest_checkpoint(name)
@@ -121,6 +171,7 @@ class LocalModelRepository:
             model = HexzNeuralNetwork()
             model.load_state_dict(torch.load(p, map_location=map_location))
             return model
+
         model = _get_model(checkpoint)
         with self.models_lock:
             # For now, only cache the last requested model.
@@ -166,3 +217,35 @@ class LocalModelRepository:
         filename = os.path.join(examples_dir, f"{now}.gz")
         with gzip.open(filename, "wb") as f:
             f.write(req.SerializeToString())
+        with self.acquire_h5(name) as h:
+            # Add examples to HDF5. This must happen sequentially, as vanilla HDF5 does
+            # not support concurrent writes.
+            t_start = time.perf_counter_ns()
+            boards = [torch.load(io.BytesIO(e.board)).numpy() for e in req.examples]
+            action_masks = [
+                torch.load(io.BytesIO(e.action_mask)).numpy() for e in req.examples
+            ]
+            move_probs = [
+                torch.load(io.BytesIO(e.move_probs)).numpy() for e in req.examples
+            ]
+            values = [np.array([e.result]) for e in req.examples]
+            checkpoints = [np.array([e.model_key.checkpoint]) for e in req.examples]
+            for label, data in zip(
+                ["boards", "action_masks", "move_probs", "values", "checkpoints"],
+                [boards, action_masks, move_probs, values, checkpoints],
+            ):
+                if label not in h:
+                    h.create_dataset(
+                        label,
+                        data=data,
+                        compression="gzip",
+                        chunks=True,  # True means auto-chunking
+                        maxshape=(None, *data[0].shape),
+                    )
+                else:
+                    h[label].resize(h[label].shape[0] + len(data), axis=0)
+                    h[label][-len(data) :] = data
+            h.flush()  # Flush HDF5 file, since we keep it open.
+            print(
+                f"Wrote {len(req.examples)} examples to HDF5 in {(time.perf_counter_ns()-t_start)//1000}us"
+            )

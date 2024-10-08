@@ -5,7 +5,6 @@ See hexc.py for the Cython-based subclass that should be used instead.
 
 import numpy as np
 
-from pyhexz.timing import timing
 
 def _init_neighbors_map():
     """Returns a dict mapping all valid (r, c) indices to their neighbor indices.
@@ -183,7 +182,6 @@ class Board:
                 # the rest is exactly like playing a move.
                 self.make_move(player, (1, r, c, grass_val))
 
-    @timing
     def next_moves(self, player):
         """Returns all possible next moves.
 
