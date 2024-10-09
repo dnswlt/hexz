@@ -48,7 +48,7 @@ class ModelRepository:
     def store_model(
         self,
         name: str,
-        checkpoint: int,
+        checkpoint: int | None,
         model: HexzNeuralNetwork,
         store_sm=True,
     ) -> str:
@@ -102,11 +102,10 @@ class LocalModelRepository:
                 # Raised by os.listdir if cpdir does not exist.
                 return None
 
-
     @contextmanager
     def acquire_h5(self, model_name):
-        """Acquires and returns an exlusive handle to the HDF5 file for the specified model. 
-        
+        """Acquires and returns an exlusive handle to the HDF5 file for the specified model.
+
         The returned h5py.File is open in append ("a") mode and ready for reading and writing.
         The call blocks until the file is available.
         """
@@ -125,11 +124,11 @@ class LocalModelRepository:
             yield h
         finally:
             q.put(h)
-        return 
+        return
 
     def close_all(self):
-        """Closes all open file / HDF5 handles. 
-        
+        """Closes all open file / HDF5 handles.
+
         The repository will remain usable and will re-open any relevant files as necessary.
         """
         with self.h5_lock:
@@ -143,11 +142,14 @@ class LocalModelRepository:
     def get_model(
         self,
         name: str,
-        checkpoint: int = None,
+        checkpoint: int | None = None,
         map_location="cpu",
         as_bytes=False,
         repr="state_dict",
     ) -> HexzNeuralNetwork | torch.jit.ScriptModule | bytes:
+        if checkpoint is None:
+            checkpoint = self.get_latest_checkpoint(name)
+
         key = f"/{name}/{checkpoint}/bytes={as_bytes}/repr={repr}"
         with self.models_lock:
             res = self.model_cache.get(key)
@@ -155,8 +157,6 @@ class LocalModelRepository:
                 return res
 
         def _get_model(cp):
-            if cp is None:
-                cp = self.get_latest_checkpoint(name)
             if repr == "scriptmodule":
                 p = self._scriptmodule_path(name, cp)
                 if as_bytes:
@@ -182,10 +182,12 @@ class LocalModelRepository:
     def store_model(
         self,
         name: str,
-        checkpoint: int,
+        checkpoint: int | None,
         model: HexzNeuralNetwork,
         store_sm=True,
     ) -> str:
+        if checkpoint is None:
+            checkpoint = self.get_latest_checkpoint(name) + 1
         m_path = self._model_path(name, checkpoint)
         with self.models_lock:
             if os.path.exists(m_path):
@@ -220,7 +222,6 @@ class LocalModelRepository:
         with self.acquire_h5(name) as h:
             # Add examples to HDF5. This must happen sequentially, as vanilla HDF5 does
             # not support concurrent writes.
-            t_start = time.perf_counter_ns()
             boards = [torch.load(io.BytesIO(e.board)).numpy() for e in req.examples]
             action_masks = [
                 torch.load(io.BytesIO(e.action_mask)).numpy() for e in req.examples
@@ -228,7 +229,8 @@ class LocalModelRepository:
             move_probs = [
                 torch.load(io.BytesIO(e.move_probs)).numpy() for e in req.examples
             ]
-            values = [np.array([e.result]) for e in req.examples]
+            # Examples and model use float32, value must be of the same dtype.
+            values = [np.array([e.result], dtype=np.float32) for e in req.examples]
             checkpoints = [np.array([e.model_key.checkpoint]) for e in req.examples]
             for label, data in zip(
                 ["boards", "action_masks", "move_probs", "values", "checkpoints"],
@@ -246,6 +248,3 @@ class LocalModelRepository:
                     h[label].resize(h[label].shape[0] + len(data), axis=0)
                     h[label][-len(data) :] = data
             h.flush()  # Flush HDF5 file, since we keep it open.
-            print(
-                f"Wrote {len(req.examples)} examples to HDF5 in {(time.perf_counter_ns()-t_start)//1000}us"
-            )

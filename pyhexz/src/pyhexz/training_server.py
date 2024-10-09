@@ -1,15 +1,11 @@
 import datetime
 import io
-import typing
 from flask import Flask, make_response, request
 from google.protobuf.message import DecodeError
 from google.protobuf import json_format
 import logging
-import numpy as np
 import pytz
-import torch
 
-from pyhexz.board import Board
 from pyhexz.config import TrainingConfig
 from pyhexz.errors import HexzError
 from pyhexz.model import HexzNeuralNetwork

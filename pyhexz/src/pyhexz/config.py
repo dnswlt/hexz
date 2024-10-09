@@ -22,18 +22,17 @@ def _from_env(cls):
 class TrainingConfig(typing.NamedTuple):
     model_repo_base_dir: str
     model_name: str
-    # Maximum difference between the model that examples were
-    # generated with and the current model for which training
-    # examples are collected. Set to 0 to only accept examples
-    # for the current model.
-    max_checkpoint_diff: int = 1
     # batch size to use for training
     batch_size: int = 4096
     # Train a new model after this many new examples were received:
     training_trigger_threshold: int = 100
+    # Window size of (newest) examples to use when training a new model
+    training_examples_window_size: int = 2**20
+    # Training parameters
     num_epochs: int = 7
     learning_rate: float = 1e-3
     adam_weight_decay: float = 1e-4
+    
     device: str = "cpu"
     shuffle: bool = True
     pin_memory: bool = False

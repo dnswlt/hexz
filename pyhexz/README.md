@@ -61,7 +61,6 @@ env HEXZ_BATCH_SIZE=1024 \
   HEXZ_MODEL_NAME=edgar \
   HEXZ_MODEL_REPO_BASE_DIR=/tmp/hexz-models \
   HEXZ_NUM_EPOCHS=1 \
-  HEXZ_MAX_CHECKPOINT_DIFF=2 \
   gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.training_server:create_app()'
 ```
 
@@ -90,7 +89,6 @@ PORT=8080 && docker run -p 8080:${PORT} -e PORT=${PORT} \
   -e HEXZ_BATCH_SIZE=512 \
   -e HEXZ_MODEL_NAME=test \
   -e HEXZ_NUM_EPOCHS=1 \
-  -e HEXZ_MAX_CHECKPOINT_DIFF=2 \
   europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/server:latest
 ```
 
