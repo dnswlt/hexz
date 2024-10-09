@@ -134,11 +134,11 @@ class NumpyExample(typing.NamedTuple):
         """Decodes the given TrainingExample and returns its data as a named tuple of np arrays."""
         priors = None  # Optional.
         if ex.encoding == hexz_pb2.TrainingExample.PYTORCH:
-            board = torch.load(io.BytesIO(ex.board)).numpy()
-            action_mask = torch.load(io.BytesIO(ex.action_mask)).numpy()
-            pr = torch.load(io.BytesIO(ex.move_probs)).numpy()
+            board = torch.load(io.BytesIO(ex.board), weights_only=True).numpy()
+            action_mask = torch.load(io.BytesIO(ex.action_mask), weights_only=True).numpy()
+            pr = torch.load(io.BytesIO(ex.move_probs), weights_only=True).numpy()
             if ex.model_predictions.priors:
-                priors = torch.load(io.BytesIO(ex.model_predictions.priors)).numpy()
+                priors = torch.load(io.BytesIO(ex.model_predictions.priors), weights_only=True).numpy()
         else:
             board = np.load(io.BytesIO(ex.board))
             action_mask = np.load(io.BytesIO(ex.action_mask))

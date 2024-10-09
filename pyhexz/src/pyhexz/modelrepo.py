@@ -169,7 +169,7 @@ class LocalModelRepository:
                 with open(p, "rb") as f_in:
                     return f_in.read()
             model = HexzNeuralNetwork()
-            model.load_state_dict(torch.load(p, map_location=map_location))
+            model.load_state_dict(torch.load(p, map_location=map_location, weights_only=True))
             return model
 
         model = _get_model(checkpoint)
@@ -222,12 +222,12 @@ class LocalModelRepository:
         with self.acquire_h5(name) as h:
             # Add examples to HDF5. This must happen sequentially, as vanilla HDF5 does
             # not support concurrent writes.
-            boards = [torch.load(io.BytesIO(e.board)).numpy() for e in req.examples]
+            boards = [torch.load(io.BytesIO(e.board), weights_only=True).numpy() for e in req.examples]
             action_masks = [
-                torch.load(io.BytesIO(e.action_mask)).numpy() for e in req.examples
+                torch.load(io.BytesIO(e.action_mask), weights_only=True).numpy() for e in req.examples
             ]
             move_probs = [
-                torch.load(io.BytesIO(e.move_probs)).numpy() for e in req.examples
+                torch.load(io.BytesIO(e.move_probs), weights_only=True).numpy() for e in req.examples
             ]
             # Examples and model use float32, value must be of the same dtype.
             values = [np.array([e.result], dtype=np.float32) for e in req.examples]

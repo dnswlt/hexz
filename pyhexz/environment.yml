@@ -2,11 +2,13 @@ name: pyhexz
 channels:
   - defaults
   - pytorch
+  - nvidia
 dependencies:
   - pytest
   - numpy
   - h5py
-  - pytorch
+  - pytorch::pytorch
+  - pytorch::pytorch-cuda=12.4
   - cython
   - pytz
   - protobuf
