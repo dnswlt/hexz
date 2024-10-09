@@ -60,7 +60,6 @@ absl::StatusOr<std::unique_ptr<TorchModel>> FetchLatestModel(RPCClient& rpc) {
   if (!km.ok()) {
     return km.status();
   }
-  km->model.to(torch::kCPU);
   km->model.eval();
   return std::make_unique<TorchModel>(km->key, km->model);
 }

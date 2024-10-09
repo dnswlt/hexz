@@ -17,7 +17,7 @@ struct KeyedModel {
 class RPCClient {
  public:
   RPCClient(Config config) : training_server_url_{config.training_server_url} {}
-  // Fetches the latest model from the server.
+  // Fetches the latest model from the server. The model will be on the "cpu" device.
   absl::StatusOr<KeyedModel> FetchLatestModel();
 
   // Sends the given examples to the training server.

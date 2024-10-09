@@ -47,7 +47,7 @@ absl::StatusOr<KeyedModel> RPCClient::FetchLatestModel() {
                  << model_key.checkpoint();
   try {
     std::istringstream model_is(resp.text);
-    auto model = torch::jit::load(model_is);  // , torch::kCPU);
+    auto model = torch::jit::load(model_is, torch::kCPU);
     return KeyedModel{
         .key = model_key,
         .model = model,
