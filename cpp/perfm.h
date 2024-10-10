@@ -31,7 +31,14 @@ class Perfm {
   // Helper struct to use RAII for initialization and printing final results.
   struct InitScope {
     InitScope() { Perfm::Init(); }
-    ~InitScope() { Perfm::PrintStats(); }
+    ~InitScope() {
+      Perfm::AccumulateThreadLocalStats();
+      Perfm::PrintStats();
+    }
+  };
+  struct ThreadScope {
+    ThreadScope() = default;
+    ~ThreadScope() { Perfm::AccumulateThreadLocalStats(); }
   };
 
   struct Scope {
@@ -40,7 +47,6 @@ class Perfm {
     Scope(Perfm::Label label)
         : label{label}, started{std::chrono::high_resolution_clock::now()} {}
     ~Scope() {
-      std::unique_lock<std::mutex> lk(Perfm::mut);
       Perfm::stats_[label].count++;
       Perfm::stats_[label].elapsed_nanos +=
           std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -69,9 +75,20 @@ class Perfm {
 
   static void PrintStats();
 
+  // Adds the thread-local stats into the static accumulated stats.
+  static void AccumulateThreadLocalStats() {
+    std::unique_lock<std::mutex> lk(Perfm::mut_);
+    for (int i = 0; i < StatsSize; i++) {
+      cum_stats_[i].count += stats_[i].count;
+      cum_stats_[i].elapsed_nanos += stats_[i].elapsed_nanos;
+      stats_[i] = CumulativeStats{}; // Reset thread local values to 0;
+    }
+  }
+
  private:
-  static CumulativeStats stats_[StatsSize];
-  static std::mutex mut;
+  static CumulativeStats cum_stats_[StatsSize];
+  static thread_local CumulativeStats stats_[StatsSize];
+  static std::mutex mut_;
 };
 
 }  // namespace hexz

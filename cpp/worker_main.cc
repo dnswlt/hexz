@@ -92,6 +92,7 @@ void GenerateExamplesMultiThreaded(const Config& config) {
   std::vector<std::thread> worker_threads;
   for (int i = 0; i < config.worker_threads; i++) {
     worker_threads.emplace_back([&, thread_num = i] {
+      Perfm::ThreadScope perfm;
       auto token = model.RegisterThread();
       // Delay startup if requested.
       if (config.startup_delay_seconds > 0) {
