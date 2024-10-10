@@ -1,7 +1,6 @@
 """Test cases for the training.py module."""
 
 import logging
-import random
 import time
 import h5py
 import io
@@ -12,7 +11,7 @@ from pyhexz import hexz_pb2
 from pyhexz.config import TrainingConfig
 from pyhexz.model import HexzNeuralNetwork
 from pyhexz.modelrepo import LocalModelRepository
-from pyhexz.training import HDF5Dataset, HDF5IterableDataset, TrainingTask
+from pyhexz.training import HDF5Dataset, HDF5IterableDataset, TrainingTask, rchunks
 
 
 def _torch_bytes(tensor: torch.Tensor) -> bytes:
@@ -57,7 +56,7 @@ def _training_example(model_name="test", checkpoint=0):
     )
 
 
-def test_hdf5dataset_iter(tmp_path):
+def test_hdf5dataset(tmp_path):
     # Iterate over a HDF5Dataset.
     d = tmp_path / "repo"
     repo = LocalModelRepository(d)
@@ -88,6 +87,54 @@ def test_hdf5dataset_iter(tmp_path):
             assert value.shape == (1,)
             assert value.dtype == np.float32
     repo.close_all()
+
+
+def test_hdf5dataset_iter(tmp_path):
+    # Iterate over a HDF5Dataset.
+    d = tmp_path / "repo"
+    repo = LocalModelRepository(d)
+    model = HexzNeuralNetwork()
+    model_name = "testmodel"
+    repo.store_model(model_name, 0, model)
+    req = hexz_pb2.AddTrainingExamplesRequest(
+        examples=[
+            _training_example(model_name),
+            _training_example(model_name),
+        ]
+    )
+    repo.add_examples(req)
+    # Closing the repo is not strictly necessary here, but this way
+    # we also test that reading data after closing HDF5 handles is
+    # still possible (they get re-opened).
+    repo.close_all()
+    with repo.acquire_h5(model_name) as h:
+        dataset = HDF5IterableDataset(h, shuffle=True)
+        k = 0
+        for (board, action_mask), (move_probs, value) in dataset:
+            assert board.shape == (11, 11, 10)
+            assert board.dtype == np.float32
+            assert action_mask.shape == (2, 11, 10)
+            assert action_mask.dtype == bool
+            assert move_probs.shape == (2, 11, 10)
+            assert move_probs.dtype == np.float32
+            assert value.shape == (1,)
+            assert value.dtype == np.float32
+            k += 1
+        assert k == len(req.examples)
+    repo.close_all()
+
+
+def test_rev_chunks():
+    assert list(rchunks(0, 1, 1)) == [slice(0, 1)]
+    assert list(rchunks(0, 2, 1)) == [slice(0, 1), slice(1, 2)]
+    assert list(rchunks(0, 10, 5)) == [slice(0, 5), slice(5, 10)]
+    assert list(rchunks(0, 10, 3)) == [
+        slice(0, 1),
+        slice(1, 4),
+        slice(4, 7),
+        slice(7, 10),
+    ]
+    assert list(rchunks(0, 10, 1000)) == [slice(0, 10)]
 
 
 def test_training(tmp_path):

@@ -24,10 +24,16 @@ class TrainingStats:
     last_training: int = 0
 
 
+def rchunks(start: int, end: int, size: int) -> list[slice]:
+    return reversed([slice(max(start, i - size), i) for i in range(end, start, -size)])
+
+
 class HDF5IterableDataset(torch.utils.data.IterableDataset):
     """PyTorch iterable-style Dataset implementation to read Hexz examples from HDF5."""
 
-    def __init__(self, h5_file: h5py.File, window_size=0, shuffle=False):
+    def __init__(
+        self, h5_file: h5py.File, window_size=0, shuffle=False, shuffle_chunk_size=2**20
+    ):
         """Builds a new dataset that reads from the h5_file HDF5 file handle.
 
         Assumes that the dataset has exclusive access to the h5_file.
@@ -46,7 +52,7 @@ class HDF5IterableDataset(torch.utils.data.IterableDataset):
         super().__init__()
         self.h5_file = h5_file
         self.shuffle = shuffle
-        self.shuffle_batch_size = 2**20
+        self.shuffle_chunk_size = shuffle_chunk_size
         l = len(h5_file["boards"])
         if window_size == 0 or window_size >= l:
             self.start = 0
@@ -54,29 +60,23 @@ class HDF5IterableDataset(torch.utils.data.IterableDataset):
             self.start = l - window_size
         self.end = l
 
+    def __len__(self):
+        return self.end - self.start
+
     def __iter__(self):
-        if self.shuffle:
-            # Can only shuffle large batches; all data might not fit into memory.
-            c = self.shuffle_batch_size
-            rng = np.random.default_rng()
-            for i in range(self.end - 1, self.start - 1, -c):
-                bs = self.h5_file["boards"][i - c : i]
-                am = self.h5_file["action_masks"][i - c : i]
-                mp = self.h5_file["move_probs"][i - c : i]
-                vs = self.h5_file["values"][i - c : i]
-                for j in rng.permutation(len(bs)):
-                    yield ((bs[j], am[j]), (mp[j], vs[j]))
-        else:
-            # Sequential iteration w/out shuffling
-            # Still need to read chunks to avoid excessive disk accesses.
-            c = 4096
-            for i in range(self.start, self.end, c):
-                bs = self.h5_file["boards"][i : i + c]
-                am = self.h5_file["action_masks"][i : i + c]
-                mp = self.h5_file["move_probs"][i : i + c]
-                vs = self.h5_file["values"][i : i + c]
-                for j in range(len(bs)):
-                    yield ((bs[j], am[j]), (mp[j], vs[j]))
+        rng = np.random.default_rng()
+        size = self.shuffle_chunk_size if self.shuffle else 4096
+        for c in rchunks(self.start, self.end, size):
+            bs = self.h5_file["boards"][c]
+            am = self.h5_file["action_masks"][c]
+            mp = self.h5_file["move_probs"][c]
+            vs = self.h5_file["values"][c]
+            if self.shuffle:
+                js = rng.permutation(len(bs))
+            else:
+                js = np.arange(len(bs))
+            for j in js:
+                yield ((bs[j], am[j]), (mp[j], vs[j]))
 
 
 class HDF5Dataset(torch.utils.data.Dataset):
@@ -152,6 +152,8 @@ class TrainingTask:
                 window_size=self.config.training_examples_window_size,
                 shuffle=self.config.shuffle,
             )
+            self.logger.info(f"Training dataset size: {len(dataset)}")
+
             loader = torch.utils.data.DataLoader(
                 dataset=dataset,
                 batch_size=self.config.batch_size,
