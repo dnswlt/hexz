@@ -6,6 +6,7 @@ import threading
 import time
 from typing import Any
 import h5py
+import numpy as np
 import torch
 from torch import nn
 
@@ -21,6 +22,61 @@ class TrainingStats:
     training_runs_started: int = 0
     training_runs_completed: int = 0
     last_training: int = 0
+
+
+class HDF5IterableDataset(torch.utils.data.IterableDataset):
+    """PyTorch iterable-style Dataset implementation to read Hexz examples from HDF5."""
+
+    def __init__(self, h5_file: h5py.File, window_size=0, shuffle=False):
+        """Builds a new dataset that reads from the h5_file HDF5 file handle.
+
+        Assumes that the dataset has exclusive access to the h5_file.
+
+        Arguments:
+            h5_file: the HDF5 file to read data from. Must have datasets for
+                "boards", "action_masks", "move_probs", and "values" of the
+                expected shapes.
+            window_size: The maximum number of examples to use from the file.
+                Only the rightmost (newest) window_size examples are used.
+                None means that all examples in h5_file will be used.
+            shuffle: If True, examples are shuffled within large (2^20) chunks.
+                (We cannot shuffle the whole dataset unless it fits in memory.
+                 Shuffling large chunks independently should be good enough.)
+        """
+        super().__init__()
+        self.h5_file = h5_file
+        self.shuffle = shuffle
+        self.shuffle_batch_size = 2**20
+        l = len(h5_file["boards"])
+        if window_size == 0 or window_size >= l:
+            self.start = 0
+        else:
+            self.start = l - window_size
+        self.end = l
+
+    def __iter__(self):
+        if self.shuffle:
+            # Can only shuffle large batches; all data might not fit into memory.
+            c = self.shuffle_batch_size
+            rng = np.random.default_rng()
+            for i in range(self.end - 1, self.start - 1, -c):
+                bs = self.h5_file["boards"][i - c : i]
+                am = self.h5_file["action_masks"][i - c : i]
+                mp = self.h5_file["move_probs"][i - c : i]
+                vs = self.h5_file["values"][i - c : i]
+                for j in rng.permutation(len(bs)):
+                    yield ((bs[j], am[j]), (mp[j], vs[j]))
+        else:
+            # Sequential iteration w/out shuffling
+            # Still need to read chunks to avoid excessive disk accesses.
+            c = 4096
+            for i in range(self.start, self.end, c):
+                bs = self.h5_file["boards"][i : i + c]
+                am = self.h5_file["action_masks"][i : i + c]
+                mp = self.h5_file["move_probs"][i : i + c]
+                vs = self.h5_file["values"][i : i + c]
+                for j in range(len(bs)):
+                    yield ((bs[j], am[j]), (mp[j], vs[j]))
 
 
 class HDF5Dataset(torch.utils.data.Dataset):
@@ -84,20 +140,22 @@ class TrainingTask:
         self.config = config
         self.logger = logger
 
-    def run_training(self):
+    def _run_training(self):
         t_start = time.perf_counter_ns()
         device = self.config.device
         model = self.model_repo.get_model(self.model_name, self.checkpoint)
         model.train()
         model = model.to(device)
         with self.model_repo.acquire_h5(self.model_name) as h:
-            dataset = HDF5Dataset(
-                h, window_size=self.config.training_examples_window_size
+            dataset = HDF5IterableDataset(
+                h,
+                window_size=self.config.training_examples_window_size,
+                shuffle=self.config.shuffle,
             )
             loader = torch.utils.data.DataLoader(
                 dataset=dataset,
                 batch_size=self.config.batch_size,
-                shuffle=self.config.shuffle,
+                shuffle=False,  # Shuffling happens in the HDF5IterableDataset
                 pin_memory=self.config.pin_memory,
             )
 
@@ -147,7 +205,7 @@ class TrainingTask:
         )
         t_end = time.perf_counter_ns()
         self.logger.info(
-            f"run_training done in {(t_end-t_start)/1e9:.3f}s."
+            f"_run_training done in {(t_end-t_start)/1e9:.3f}s."
             f" setup time: {(t_iter_start-t_start)/1e9:.3f}s."
             f" training time: {training_ns/1e9:.3f}s."
         )
@@ -155,7 +213,7 @@ class TrainingTask:
 
     def execute(self):
         t_start = time.time()
-        next_cp = self.run_training()
+        next_cp = self._run_training()
         t_end = time.time()
         self.logger.info(
             f"Training done after {t_end-t_start:.3f}s. Stored new model {self.model_name}:{next_cp}"
@@ -234,7 +292,9 @@ class TrainingState:
         t_start = time.perf_counter_ns()
         self.model_repo.add_examples(req)
         t_end = time.perf_counter_ns()
-        self.logger.info(f"Stored {len(req.examples)} examples in the repo in {(t_end-t_start)/1e6:.0f}ms")
+        self.logger.info(
+            f"Stored {len(req.examples)} examples in the repo in {(t_end-t_start)/1e6:.0f}ms"
+        )
         with self.lock:
             self._latest_request = req
             self._stats.example_requests += 1

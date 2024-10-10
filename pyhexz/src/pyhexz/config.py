@@ -13,7 +13,9 @@ def _from_env(cls):
         typ = cls.__annotations__.get(f)
         v = os.getenv(f"HEXZ_{f.upper()}")
         if v is not None:
-            if typ:
+            if typ == bool:
+                v = v.lower() not in ['0', 'false', 'no', 'off', 'n', '']
+            elif typ:
                 v = typ(v)
             envvars[f] = v
     return cls(**envvars)
