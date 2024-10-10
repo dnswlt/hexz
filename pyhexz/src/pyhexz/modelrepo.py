@@ -232,6 +232,7 @@ class LocalModelRepository:
             # Examples and model use float32, value must be of the same dtype.
             values = [np.array([e.result], dtype=np.float32) for e in req.examples]
             checkpoints = [np.array([e.model_key.checkpoint]) for e in req.examples]
+            chunk_batch = 128  # add this many examples to each HDF5 chunk
             for label, data in zip(
                 ["boards", "action_masks", "move_probs", "values", "checkpoints"],
                 [boards, action_masks, move_probs, values, checkpoints],
@@ -241,7 +242,7 @@ class LocalModelRepository:
                         label,
                         data=data,
                         compression="gzip",
-                        chunks=True,  # True means auto-chunking
+                        chunks=(chunk_batch, *data[0].shape), # make sure to use efficient chunk sizes
                         maxshape=(None, *data[0].shape),
                     )
                 else:
