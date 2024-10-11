@@ -61,6 +61,8 @@ class Board:
     1-5 set.
     """
 
+    shape = (11, 11, 10)
+
     # Used to quickly get the indices of neighbor cells.
     neighbors = _init_neighbors_map()
 
@@ -72,7 +74,7 @@ class Board:
         if board is not None:
             self.b = board
             return
-        self.b = np.zeros((11, 11, 10), dtype=dtype)
+        self.b = np.zeros(self.shape, dtype=dtype)
         # 3 flags for each player
         self.b[4] = 3
         self.b[9] = 3
@@ -95,7 +97,7 @@ class Board:
 
     @classmethod
     def from_numpy(cls, board):
-        if board.shape != (11, 11, 10):
+        if board.shape != cls.shape:
             raise ValueError("Invalid board shape: " + str(board.shape))
         return cls(board=board)
 

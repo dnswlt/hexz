@@ -44,19 +44,6 @@ class TrainingConfig(typing.NamedTuple):
         return _from_env(cls)
 
 
-class WorkerConfig(typing.NamedTuple):
-    training_server_url: str
-    device: str = "cpu"
-    max_seconds: int = 60
-    runs_per_move: int = 800
-    # Timeout for http requests, in seconds.
-    http_client_timeout: float = 1.0
-
-    @classmethod
-    def from_env(cls):
-        return _from_env(cls)
-
-
 class CPUEngineConfig(typing.NamedTuple):
     local_model_path: str
 

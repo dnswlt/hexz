@@ -138,24 +138,27 @@ def test_rev_chunks():
 
 
 def test_training(tmp_path):
-    num_examples = 8
+    num_requests = 1
+    num_examples_per_request = 40
     d = tmp_path / "repo"
     repo = LocalModelRepository(d)
     model = HexzNeuralNetwork()
     model_name = "testmodel"
-    repo.store_model(model_name, 0, model)
-    req = hexz_pb2.AddTrainingExamplesRequest(
-        examples=[
-            _training_example(model_name, checkpoint=0) for i in range(num_examples)
-        ]
-    )
-    repo.add_examples(req)
     config = TrainingConfig(
         model_repo_base_dir=d,
         model_name=model_name,
         device="cpu",
         num_epochs=1,
     )
+    repo.store_model(model_name, 0, model)
+    for i in range(num_requests):
+        req = hexz_pb2.AddTrainingExamplesRequest(
+            examples=[
+                _training_example(model_name, checkpoint=0)
+                for i in range(num_examples_per_request)
+            ]
+        )
+        repo.add_examples(req)
     task = TrainingTask(
         model_name,
         checkpoint=0,
