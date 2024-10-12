@@ -55,6 +55,39 @@ std::string RandomUid() {
 
 }  // namespace
 
+class WorkerStats {
+ public:
+  struct Data {
+    Data() = default;
+    Data(const Data&) = default;
+    int examples = 0;
+    int games = 0;
+    // Unix micros
+    int64_t started = 0;
+  };
+
+  void start() {
+    std::unique_lock<std::mutex> lk(mut_);
+    data_.started = UnixMicros();
+  }
+  void increment_games(int n) {
+    std::unique_lock<std::mutex> lk(mut_);
+    data_.games += n;
+  }
+  void increment_examples(int n) {
+    std::unique_lock<std::mutex> lk(mut_);
+    data_.examples += n;
+  }
+  Data data() {
+    std::unique_lock<std::mutex> lk(mut_);
+    return data_;
+  }
+
+ private:
+  std::mutex mut_;
+  Data data_;
+};
+
 absl::StatusOr<std::unique_ptr<TorchModel>> FetchLatestModel(RPCClient& rpc) {
   auto km = rpc.FetchLatestModel();
   if (!km.ok()) {
@@ -65,12 +98,13 @@ absl::StatusOr<std::unique_ptr<TorchModel>> FetchLatestModel(RPCClient& rpc) {
 }
 
 void GenerateExamplesMultiThreaded(const Config& config) {
+  WorkerStats stats;
   const auto started_micros = UnixMicros();
   const std::string execution_id = RandomUid();
   ABSL_LOG(INFO) << "Generating examples using execution_id " << execution_id
                  << " and training server URL " << config.training_server_url;
 
-  RPCClient rpc(config);
+  RPCClient rpc(config.training_server_url);
   auto keyed_model = rpc.FetchLatestModel();
   if (!keyed_model.ok()) {
     ABSL_LOG(ERROR) << "Failed to fetch latest model: " << keyed_model.status();
@@ -89,6 +123,7 @@ void GenerateExamplesMultiThreaded(const Config& config) {
   // Mutex that protects updates to the model
   std::mutex model_update_mut;
 
+  stats.start();
   std::vector<std::thread> worker_threads;
   for (int i = 0; i < config.worker_threads; i++) {
     worker_threads.emplace_back([&, thread_num = i] {
@@ -165,6 +200,9 @@ void GenerateExamplesMultiThreaded(const Config& config) {
                          << " examples to training server at "
                          << config.training_server_url;
         }
+        // Update stats.
+        stats.increment_examples(n_examples);
+        stats.increment_games(1);
         // Check if we need to update to a new model.
         {
           std::scoped_lock<std::mutex> lk(model_update_mut);
@@ -189,6 +227,13 @@ void GenerateExamplesMultiThreaded(const Config& config) {
       t.join();
     }
   }
+  // Print stats.
+  auto stats_data = stats.data();
+  auto d = static_cast<double>(UnixMicros() - stats_data.started) / 1e6;
+  ABSL_LOG(INFO) << "Generated " << stats_data.games << " games and "
+                 << stats_data.examples << " examples in " << d << " seconds ("
+                 << (stats_data.examples / d) << " examples/s, "
+                 << (stats_data.games / d) << " games/s)";
 }
 
 void GenerateExamplesSingleThreaded(const Config& config) {
@@ -201,7 +246,7 @@ void GenerateExamplesSingleThreaded(const Config& config) {
   const std::string execution_id = RandomUid();
   ABSL_LOG(INFO) << "Generating examples using execution_id " << execution_id
                  << " and training server URL " << config.training_server_url;
-  RPCClient rpc(config);
+  RPCClient rpc(config.training_server_url);
   auto model_or = FetchLatestModel(rpc);
   if (!model_or.ok()) {
     ABSL_LOG(ERROR) << "FetchModule failed: " << model_or.status();
@@ -286,7 +331,7 @@ void GenerateExamplesSingleThreaded(const Config& config) {
 }
 
 void RunGPUBenchmark(const Config& config) {
-  RPCClient rpc(config);
+  RPCClient rpc(config.training_server_url);
   auto keyed_model = rpc.FetchLatestModel();
   if (!keyed_model.ok()) {
     ABSL_LOG(ERROR) << "Failed to fetch model: " << keyed_model.status();
