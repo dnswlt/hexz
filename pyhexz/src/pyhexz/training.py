@@ -79,47 +79,6 @@ class HDF5IterableDataset(torch.utils.data.IterableDataset):
                 yield ((bs[j], am[j]), (mp[j], vs[j]))
 
 
-class HDF5Dataset(torch.utils.data.Dataset):
-    """PyTorch Dataset implementation to read Hexz examples from HDF5."""
-
-    def __init__(self, h5_file: h5py.File, window_size=None):
-        """Builds a new dataset that reads from the .h5 file pointed to by path.
-
-        Assumes that the dataset has exclusive access to the h5_file.
-
-        Arguments:
-            h5_file: the HDF5 file to read data from. Must have datasets for
-                "boards", "action_masks", "move_probs", and "values" of the
-                expected shapes.
-            window_size: The maximum number of examples to use from the file.
-                Only the rightmost (newest) window_size examples are used.
-                None means that all examples in h5_file will be used.
-        """
-        self.h5_file = h5_file
-        l = len(h5_file["boards"])
-        if window_size is None or window_size >= l:
-            self.start = 0
-        else:
-            self.start = l - window_size
-        self.end = l
-
-    def __getitem__(self, k):
-        """Returns a tuple of inputs and labels: ((board, action_mask), (move_probs, value)).
-
-        The collation function of the PyTorch DataLoader handles this properly and returns a tuple
-        of batches for the labels.
-        """
-        h = self.h5_file
-        i = self.start + k
-        return (
-            (h["boards"][i], h["action_masks"][i]),
-            (h["move_probs"][i], h["values"][i]),
-        )
-
-    def __len__(self):
-        return self.end - self.start
-
-
 class TrainingTask:
     """TrainingTask is responsible for training the model given the stored examples.
 
