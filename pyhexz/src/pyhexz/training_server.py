@@ -1,19 +1,100 @@
+from concurrent import futures
 import datetime
+import grpc
+
 import io
 from flask import Flask, make_response, request
 from google.protobuf.message import DecodeError
 from google.protobuf import json_format
 import logging
 import pytz
+import signal
+import threading
 
 from pyhexz.config import TrainingConfig
 from pyhexz.errors import HexzError
 from pyhexz.model import HexzNeuralNetwork
 from pyhexz.training import TrainingState
 from pyhexz import hexz_pb2
+from pyhexz import hexz_pb2_grpc
 from pyhexz import svg
 from pyhexz.modelrepo import LocalModelRepository, ModelRepository
 from pyhexz import training
+
+
+class TrainingServicer(hexz_pb2_grpc.TrainingServiceServicer):
+
+    def __init__(
+        self,
+        logger: logging.Logger,
+        model_repo: LocalModelRepository,
+        training_state: TrainingState,
+    ):
+        self.logger = logger
+        self.model_repo = model_repo
+        self.training_state = training_state
+
+    def AddTrainingExamples(
+        self, request: hexz_pb2.AddTrainingExamplesRequest, ctx: grpc.ServicerContext
+    ):
+        self.logger.info(
+            f"Received AddTrainingExamplesRequest with {len(request.examples)} examples from {request.execution_id}."
+        )
+        return hexz_pb2.AddTrainingExamplesResponse(
+            status=hexz_pb2.AddTrainingExamplesResponse.ACCEPTED,
+            latest_model=self.training_state.model_key(),
+        )
+
+    def FetchModel(
+        self, request: hexz_pb2.FetchModelRequest, ctx: grpc.ServicerContext
+    ):
+        if request.HasField("model_key"):
+            model_key = request.model_key
+            self.logger.info(
+                f"Received FetchModelRequest for model {model_key.name}:{model_key.checkpoint}"
+            )
+        else:
+            model_key = self.training_state.model_key()
+            self.logger.info(
+                f"Received FetchModelRequest for latest model ({model_key.name}:{model_key.checkpoint})"
+            )
+        repr = "scriptmodule"
+        if request.encoding == hexz_pb2.ModelEncoding.STATE_DICT:
+            repr = "state_dict"
+        elif request.encoding == hexz_pb2.ModelEncoding.JIT_TRACE:
+            ctx.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                "Encoding JIT_TRACE not supported yet.",
+            )
+
+        model = self.model_repo.get_model(
+            model_key.name, model_key.checkpoint, as_bytes=True, repr=repr
+        )
+        return hexz_pb2.FetchModelResponse(
+            model_key=model_key, encoding=request.encoding, model_bytes=model
+        )
+
+
+_grpc_server = None
+def handle_shutdown(signum, frame):
+    print(f"Received signal %d. Stopping gRPC server.", signum)
+    _grpc_server.stop(0)
+
+
+def serve_grpc(
+    logger: logging.Logger,
+    model_repo: LocalModelRepository,
+    training_state: TrainingState,
+):
+    global _grpc_server
+
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    svc = TrainingServicer(logger, model_repo, training_state)
+    hexz_pb2_grpc.add_TrainingServiceServicer_to_server(svc, server)
+    server.add_insecure_port("[::]:50051")
+    server.start()
+    _grpc_server = server
+    server.wait_for_termination()
 
 
 def init_repo_if_missing(app: Flask) -> None:
@@ -27,6 +108,7 @@ def init_repo_if_missing(app: Flask) -> None:
 
 
 def create_app():
+    # Use the Flask app only for HTML status pages.
     app = Flask(__name__)
     app.logger.setLevel(logging.INFO)
     config = TrainingConfig.from_env()
@@ -43,9 +125,19 @@ def create_app():
     model_repo = LocalModelRepository(config.model_repo_base_dir)
     app.model_repo = model_repo
     init_repo_if_missing(app)
-    app.training_state = training.TrainingState(
+    training_state = training.TrainingState(
         model_repo, config.model_name, logger=app.logger, config=config
     )
+    app.training_state = training_state
+
+    # Start gRPC server in separate thread.
+    grpc_thread = threading.Thread(
+        target=serve_grpc, args=(app.logger, model_repo, training_state)
+    )
+    grpc_thread.start()
+    signal.signal(signal.SIGINT, handle_shutdown)
+    signal.signal(signal.SIGTERM, handle_shutdown)
+    app.grpc_thread = grpc_thread
 
     @app.get("/")
     def index():
@@ -114,11 +206,5 @@ def create_app():
             "Content-Type": "application/octet-stream",
             "X-Model-Key": json_format.MessageToJson(model_key, indent=None),
         }
-
-    # For debugging bad requests:
-    # @app.errorhandler(400)
-    # def handle_bad_request(e):
-    #     print("Really bad request!!!", e)
-    #     return 'bad request!', 400
 
     return app

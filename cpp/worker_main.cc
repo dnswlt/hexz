@@ -23,6 +23,7 @@
 
 #include "base.h"
 #include "board.h"
+#include "grpc_client.h"
 #include "hexz.pb.h"
 #include "mcts.h"
 #include "perfm.h"
@@ -31,6 +32,8 @@
 namespace hexz {
 
 namespace {
+using google::protobuf::RepeatedPtrFieldBackInserter;
+
 std::string ModelId(const hexzpb::ModelKey& key) {
   return absl::StrCat(key.name(), ":", key.checkpoint());
 }
@@ -104,12 +107,16 @@ void GenerateExamplesMultiThreaded(const Config& config) {
   ABSL_LOG(INFO) << "Generating examples using execution_id " << execution_id
                  << " and training server URL " << config.training_server_url;
 
-  RPCClient rpc(config.training_server_url);
-  auto keyed_model = rpc.FetchLatestModel();
-  if (!keyed_model.ok()) {
-    ABSL_LOG(ERROR) << "Failed to fetch latest model: " << keyed_model.status();
+  std::unique_ptr<TrainingServiceClient> client =
+      TrainingServiceClient::MustConnect(config.training_server_url);
+
+  // Leave model_name empty to fetch whatever the training server has available.
+  auto km = client->FetchLatestModel(/*model_name=*/"");
+  if (!km.ok()) {
+    ABSL_LOG(ERROR) << "Failed to fetch latest model: " << km.status();
     return;
   }
+  const auto& [initial_model_key, initial_model] = *km;
   torch::DeviceType device = torch::kCPU;
   if (config.device == "mps") {
     device = torch::kMPS;
@@ -118,7 +125,7 @@ void GenerateExamplesMultiThreaded(const Config& config) {
   }
   // Never let a thread wait for its prediction to run for more than a 1s.
   constexpr int64_t timeout_micros = 1'000'000;
-  BatchedTorchModel model(keyed_model->key, keyed_model->model, device,
+  BatchedTorchModel model(initial_model_key, initial_model, device,
                           config.worker_threads, timeout_micros);
   // Mutex that protects updates to the model
   std::mutex model_update_mut;
@@ -166,7 +173,11 @@ void GenerateExamplesMultiThreaded(const Config& config) {
             << "Played a game that yielded no examples?!";
         const std::string model_id = ModelId(examples->back().model_key());
 
-        auto resp = rpc.SendExamples(execution_id, *std::move(examples));
+        hexzpb::AddTrainingExamplesRequest req;
+        req.set_execution_id(execution_id);
+        std::move(examples->begin(), examples->end(),
+                  RepeatedPtrFieldBackInserter(req.mutable_examples()));
+        auto resp = client->AddTrainingExamples(req);
 
         if (!resp.ok()) {
           ABSL_LOG(ERROR) << "Failed to send examples: " << resp.status();
@@ -207,14 +218,16 @@ void GenerateExamplesMultiThreaded(const Config& config) {
         {
           std::scoped_lock<std::mutex> lk(model_update_mut);
           if (!SameOrNewer(resp->latest_model(), model.Key())) {
-            auto keyed_model = rpc.FetchLatestModel();
-            if (!keyed_model.ok()) {
+            auto old_key = model.Key();
+            auto km = client->FetchLatestModel(resp->latest_model().name());
+            if (!km.ok()) {
               ABSL_LOG(ERROR)
-                  << "Failed to fetch latest model: " << keyed_model.status();
+                  << "Failed to fetch latest model: " << km.status();
               return;
             }
-            model.UpdateModel(keyed_model->key, keyed_model->model);
-            ABSL_LOG(INFO) << "Updated model to " << ModelId(keyed_model->key);
+            const auto& [latest_key, latest_model] = *km;
+            model.UpdateModel(latest_key, latest_model);
+            ABSL_LOG(INFO) << "Updated model from " << ModelId(old_key) << " to " << ModelId(latest_key);
           }
         }
       }
@@ -410,10 +423,10 @@ void MemMon() {
 
 int main() {
   // Initialization
-  hexz::Perfm::InitScope perfm;
   // absl::SetMinLogLevel(absl::LogSeverityAtLeast::kInfo);
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
   absl::InitializeLog();
+  hexz::Perfm::InitScope perfm;
   // Config
   auto config = hexz::Config::FromEnv();
   if (!config.ok()) {

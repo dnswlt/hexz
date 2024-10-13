@@ -286,3 +286,34 @@ message TrainingExample {
     }
     Stats stats = 5;
 }
+
+message ModelEncoding {
+    enum Enum {
+        // Model's state_dict was saved using torch.save.
+        STATE_DICT = 0;
+        // Model was saved using torch.jit.script.
+        JIT_SCRIPT = 1;
+        // Model was saved using torch.jit.trace.
+        JIT_TRACE = 2;
+    }
+}
+
+message FetchModelRequest {
+    // Set model_key.checkpoint == -1 to request the latest checkpoint.
+    // Specify no model_key at all to fetch the latest model for training.
+    ModelKey model_key = 1;
+    ModelEncoding.Enum encoding = 2;
+}
+
+message FetchModelResponse {
+    ModelKey model_key = 1;
+    // Serialized PyTorch model. 
+    bytes model_bytes = 2;
+    // Encoding that was used to serializez the model.
+    ModelEncoding.Enum encoding = 3;
+}
+
+service TrainingService {
+    rpc AddTrainingExamples(AddTrainingExamplesRequest) returns (AddTrainingExamplesResponse) {}
+    rpc FetchModel(FetchModelRequest) returns (FetchModelResponse) {}
+}

@@ -147,7 +147,7 @@ class LocalModelRepository:
         as_bytes=False,
         repr="state_dict",
     ) -> HexzNeuralNetwork | torch.jit.ScriptModule | bytes:
-        if checkpoint is None:
+        if checkpoint in (-1, None):
             checkpoint = self.get_latest_checkpoint(name)
 
         key = f"/{name}/{checkpoint}/bytes={as_bytes}/repr={repr}"

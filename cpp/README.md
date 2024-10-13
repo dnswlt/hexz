@@ -162,3 +162,43 @@ env HEAPPROFILE=/tmp/worker.hprof LD_PRELOAD=$HOME/tmp/gperftools-2.13/.libs/lib
   <https://research.facebook.com/publications/elf-opengo-an-analysis-and-open-reimplementation-of-alphazero/>
 * KataGo: D. Wu, _Accelerating Self-Play Learning in Go_:
   <https://arxiv.org/pdf/1902.10565.pdf>
+
+
+## gRPC
+
+As of Oct 2024 we're migrating from http to gRPC for the communication between (C++) workers
+and (Python) training server.
+
+To build gRPC, follow <https://grpc.io/docs/languages/cpp/quickstart/>, which on Linux meant
+first installing gRPC, protobuf and absl to `$HOME/.local`:
+
+(Note that the `tmp/grpc` directory consumed a whopping 3.5G after running `make`!)
+
+```bash
+cd $HOME/tmp
+git clone --recurse-submodules -b v1.66.0 --depth 1 --shallow-submodules https://github.com/grpc/grpc
+
+export GRPC_INSTALL_DIR=$HOME/.local
+cd grpc
+mkdir -p cmake/build
+pushd cmake/build
+cmake -DgRPC_INSTALL=ON \
+      -DgRPC_BUILD_TESTS=OFF \
+      -DCMAKE_INSTALL_PREFIX=$GRPC_INSTALL_DIR \
+      ../..
+make -j 4
+make install
+popd
+```
+
+Then we can build our C++ code as usual:
+
+```bash
+# Create new build directory to start from a clean slate.
+rm -rf ./build
+mkdir build
+cd build
+# Build
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$HOME/.local/lib/cmake;$HOME/opt/libtorch/share/cmake" ..
+make -j 4
+```

@@ -25,8 +25,9 @@ FetchContent_MakeAvailable(cpr)
 # Need to use REQUIRED CONFIG to ensure CMake uses the protobuf-config.cmake file
 # that comes with the protobuf library, not its own outdated FindProtobuf package:
 # https://github.com/protocolbuffers/protobuf/issues/12292#issuecomment-1529680040
-find_package(protobuf REQUIRED CONFIG)
-find_package(absl REQUIRED CONFIG)
+find_package(absl CONFIG REQUIRED)
+find_package(protobuf CONFIG REQUIRED)
+find_package(gRPC CONFIG REQUIRED)
 
 #
 # libtorch
@@ -58,9 +59,14 @@ message(CMAKE_FIND_PACKAGE_REDIRECTS_DIR="${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}")
 #
 # Libraries and main binary
 #
+add_library(hexzpb_grpc hexz.grpc.pb.h hexz.grpc.pb.cc)
+target_link_libraries(hexzpb_grpc PUBLIC protobuf::libprotobuf gRPC::grpc++ gRPC::grpc++_reflection)
 
 add_library(hexzpb hexz.pb.h hexz.pb.cc)
 target_link_libraries(hexzpb PUBLIC protobuf::libprotobuf)
+
+add_library(grpc_client grpc_client.h grpc_client.cc)
+target_link_libraries(grpc_client PUBLIC hexzpb_grpc hexzpb absl::log absl::statusor "${TORCH_LIBRARIES}")
 
 add_library(mcts base.cc board.cc mcts.cc perfm.cc rpc.cc batch.h)
 target_link_libraries(mcts PUBLIC absl::statusor absl::strings absl::log cpr::cpr hexzpb "${TORCH_LIBRARIES}")
@@ -69,7 +75,7 @@ add_library(hexz_pyapi pyapi.cc)
 target_link_libraries(hexz_pyapi PUBLIC absl::strings absl::log hexzpb mcts)
 
 add_executable(worker worker_main.cc)
-target_link_libraries(worker PRIVATE mcts)
+target_link_libraries(worker PRIVATE mcts grpc_client)
 
 #
 # Testing
