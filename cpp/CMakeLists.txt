@@ -59,11 +59,11 @@ message(CMAKE_FIND_PACKAGE_REDIRECTS_DIR="${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}")
 #
 # Libraries and main binary
 #
-add_library(hexzpb_grpc hexz.grpc.pb.h hexz.grpc.pb.cc)
-target_link_libraries(hexzpb_grpc PUBLIC protobuf::libprotobuf gRPC::grpc++ gRPC::grpc++_reflection)
-
 add_library(hexzpb hexz.pb.h hexz.pb.cc)
 target_link_libraries(hexzpb PUBLIC protobuf::libprotobuf)
+
+add_library(hexzpb_grpc hexz.grpc.pb.h hexz.grpc.pb.cc)
+target_link_libraries(hexzpb_grpc PUBLIC hexzpb protobuf::libprotobuf gRPC::grpc++ gRPC::grpc++_reflection)
 
 add_library(grpc_client grpc_client.h grpc_client.cc)
 target_link_libraries(grpc_client PUBLIC hexzpb_grpc hexzpb absl::log absl::statusor "${TORCH_LIBRARIES}")
