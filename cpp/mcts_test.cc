@@ -34,7 +34,12 @@ const hexzpb::ModelKey& TestModelKey() {
   return *key;
 }
 
-class UniformFakeModel final : public Model {
+class FakeModel : public Model {
+  void UpdateModel(hexzpb::ModelKey key, torch::jit::Module module) override {}
+  const hexzpb::ModelKey& Key() const override { return TestModelKey(); }
+};
+
+class UniformFakeModel final : public FakeModel {
  public:
   // Always returns uniform probabilities.
   Prediction Predict(const Board& board, const Node& node) override {
@@ -45,10 +50,9 @@ class UniformFakeModel final : public Model {
         .value = 0.0,
     };
   }
-  const hexzpb::ModelKey& Key() const override { return TestModelKey(); }
 };
 
-class ConstantFakeModel final : public Model {
+class ConstantFakeModel final : public FakeModel {
  public:
   ConstantFakeModel(torch::Tensor move_probs, float p0_value)
       : move_probs_{move_probs}, p0_value_{p0_value} {
@@ -62,7 +66,6 @@ class ConstantFakeModel final : public Model {
         .value = node.NextTurn() == 0 ? p0_value_ : -p0_value_,
     };
   }
-  const hexzpb::ModelKey& Key() const override { return TestModelKey(); }
 
  private:
   torch::Tensor move_probs_;

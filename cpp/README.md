@@ -114,14 +114,26 @@ docker run \
 
 ### VS Code
 
-See `.vscode/c_cpp_properties.json`. Also add `CMAKE_PREFIX_PATH` under _Cmake: Configure Environment_.
+Install the CMake and C/C++ extensions.
+Add the following to your `.vscode/settings.json` (which is not under version control):
+Adjust the `CMAKE_PREFIX_PATH` directories depending on where you installed PyTorch and gRPC.
+
+```json
+    "cmake.sourceDirectory": "${workspaceFolder}/cpp",
+    "cmake.buildDirectory": "${workspaceFolder}/cpp/build",
+    "cmake.configureOnOpen": true,
+    "cmake.configureSettings": {
+        "CMAKE_PREFIX_PATH": ["${userHome}/opt/lib/cmake", "${userHome}/opt/libtorch/share/cmake"]
+    },
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
+```
 
 ## Run the binary
 
 To run the worker, first make sure the training server is up and running. Then:
 
 ```bash
-env HEXZ_TRAINING_SERVER_URL=http://localhost:8080 \
+env HEXZ_TRAINING_SERVER_URL=localhost:50051 \
   HEXZ_MAX_RUNTIME_SECONDS=60 \
   HEXZ_RUNS_PER_MOVE=800 \
   HEXZ_UCT_C=1.5 \
@@ -129,6 +141,7 @@ env HEXZ_TRAINING_SERVER_URL=http://localhost:8080 \
   HEXZ_DIRICHLET_CONCENTRATION=0.35 \
   HEXZ_FAST_MOVE_PROB=0.5 \
   HEXZ_RESIGN_THRESHOLD=0.999 \
+  HEXZ_WORKER_THREADS=1 \
   ./worker
 ```
 
@@ -162,7 +175,6 @@ env HEAPPROFILE=/tmp/worker.hprof LD_PRELOAD=$HOME/tmp/gperftools-2.13/.libs/lib
   <https://research.facebook.com/publications/elf-opengo-an-analysis-and-open-reimplementation-of-alphazero/>
 * KataGo: D. Wu, _Accelerating Self-Play Learning in Go_:
   <https://arxiv.org/pdf/1902.10565.pdf>
-
 
 ## gRPC
 

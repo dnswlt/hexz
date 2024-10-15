@@ -8,17 +8,6 @@ project(HexzWorker)
 include(FetchContent)
 
 #
-# cpr
-#
-# cpr is a nice wrapper around libcurl. We use it to make http requests to
-# the training server.
-#
-# The commit hash is for 1.10.5, found on https://github.com/libcpr/cpr/releases.
-FetchContent_Declare(cpr GIT_REPOSITORY https://github.com/libcpr/cpr.git
-                         GIT_TAG 3b15fa82ea74739b574d705fea44959b58142eb8)
-FetchContent_MakeAvailable(cpr)
-
-#
 # Protocol Buffers
 #
 # We use protocol buffers to communicate with the training server.
@@ -68,14 +57,14 @@ target_link_libraries(hexzpb_grpc PUBLIC hexzpb protobuf::libprotobuf gRPC::grpc
 add_library(grpc_client grpc_client.h grpc_client.cc)
 target_link_libraries(grpc_client PUBLIC hexzpb_grpc hexzpb absl::log absl::statusor "${TORCH_LIBRARIES}")
 
-add_library(mcts base.cc board.cc mcts.cc perfm.cc rpc.cc batch.h)
-target_link_libraries(mcts PUBLIC absl::statusor absl::strings absl::log cpr::cpr hexzpb "${TORCH_LIBRARIES}")
+add_library(mcts base.cc board.cc mcts.cc perfm.cc batch.h)
+target_link_libraries(mcts PUBLIC absl::statusor absl::strings absl::log hexzpb "${TORCH_LIBRARIES}")
 
 add_library(hexz_pyapi pyapi.cc)
 target_link_libraries(hexz_pyapi PUBLIC absl::strings absl::log hexzpb mcts)
 
-add_executable(worker worker_main.cc)
-target_link_libraries(worker PRIVATE mcts grpc_client)
+add_executable(worker worker.cc worker_main.cc)
+target_link_libraries(worker PRIVATE mcts absl::log absl::flags absl::flags_parse absl::flags_usage grpc_client)
 
 #
 # Testing

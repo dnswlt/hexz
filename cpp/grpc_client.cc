@@ -2,6 +2,7 @@
 
 #include <absl/log/absl_log.h>
 #include <absl/status/status.h>
+#include <absl/strings/str_cat.h>
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
 #include <torch/script.h>
@@ -14,7 +15,29 @@
 namespace hexz {
 
 absl::StatusOr<hexzpb::AddTrainingExamplesResponse>
-TrainingServiceClient::AddTrainingExamples(
+EmbeddedTrainingServiceClient::AddTrainingExamples(
+    const hexzpb::AddTrainingExamplesRequest& request) {
+  hexzpb::AddTrainingExamplesResponse response;
+  response.set_status(hexzpb::AddTrainingExamplesResponse::ACCEPTED);
+  return response;
+}
+
+absl::StatusOr<std::pair<hexzpb::ModelKey, torch::jit::Module>>
+EmbeddedTrainingServiceClient::FetchLatestModel(const std::string& model_name) {
+  hexzpb::ModelKey key;
+  key.set_name("embedded");
+  try {
+    auto model = torch::jit::load(path_, torch::kCPU);
+    return std::make_pair(key, model);
+
+  } catch (c10::Error& error) {
+    return absl::InternalError(
+        absl::StrCat("torch::jit::load failed: ", error.msg()));
+  }
+}
+
+absl::StatusOr<hexzpb::AddTrainingExamplesResponse>
+GRPCTrainingServiceClient::AddTrainingExamples(
     const hexzpb::AddTrainingExamplesRequest& request) {
   // Data we are sending to the server.
   hexzpb::AddTrainingExamplesResponse resp;
@@ -35,7 +58,7 @@ TrainingServiceClient::AddTrainingExamples(
 }
 
 absl::StatusOr<std::pair<hexzpb::ModelKey, torch::jit::Module>>
-TrainingServiceClient::FetchLatestModel(const std::string& model_name) {
+GRPCTrainingServiceClient::FetchLatestModel(const std::string& model_name) {
   hexzpb::FetchModelRequest request;
   if (model_name != "") {
     request.mutable_model_key()->set_name(model_name);
@@ -64,12 +87,12 @@ TrainingServiceClient::FetchLatestModel(const std::string& model_name) {
   }
 }
 
-std::unique_ptr<TrainingServiceClient> TrainingServiceClient::MustConnect(
+std::unique_ptr<GRPCTrainingServiceClient> GRPCTrainingServiceClient::Connect(
     const std::string& addr) {
   grpc::ChannelArguments channel_args;
   channel_args.SetCompressionAlgorithm(GRPC_COMPRESS_GZIP);
 
-  return std::make_unique<TrainingServiceClient>(grpc::CreateCustomChannel(
+  return std::make_unique<GRPCTrainingServiceClient>(grpc::CreateCustomChannel(
       addr, grpc::InsecureChannelCredentials(), channel_args));
 }
 

@@ -9,7 +9,8 @@
 namespace hexz {
 
 struct Config {
-  // URL of the training server, e.g. "http://localhost:8080".
+  // Address of the training server, e.g. "localhost:8080".
+  // Note: Since we migrated to gRPC this is now an address, not a URL.
   std::string training_server_url;
   // The device on which model predictions are made. Must be one of
   // {"cpu", "mps", "cuda"}.
@@ -71,9 +72,6 @@ struct Config {
   // Set this to 1 to have /proc/self/status logged every N seconds.
   int debug_memory_usage = 0;
 
-  // Set this to 1 to run a GPU performance test and exit.
-  int gpu_benchmark = 0;
-
   static absl::StatusOr<Config> FromEnv();
   std::string String() const;
 };
@@ -83,6 +81,39 @@ int GetEnvAsInt(const std::string& name, int default_value);
 float GetEnvAsFloat(const std::string& name, float default_value);
 
 int64_t UnixMicros();
+
+// Helper to implement RAII-style scope guards.
+// A ScopeGuard executes the function provided as a c'tor arg
+// once the guard object goes out of scope.
+class ScopeGuard {
+ public:
+  explicit ScopeGuard(std::function<void()> cleanup)
+      : cleanup_(std::move(cleanup)), active_(true) {}
+  ScopeGuard(const ScopeGuard& other) = delete;
+  ScopeGuard(ScopeGuard&& other)
+      : cleanup_(std::move(other.cleanup_)), active_(other.active_) {
+    other.Dismiss();
+  }
+  ScopeGuard& operator=(const ScopeGuard& other) = delete;
+  ScopeGuard& operator=(ScopeGuard&& other) {
+    if (this != &other) {
+      cleanup_ = std::move(other.cleanup_);
+      active_ = other.active_;
+      other.Dismiss();
+    }
+    return *this;
+  }
+  ~ScopeGuard() {
+    if (active_) {
+      cleanup_();
+    }
+  }
+  void Dismiss() { active_ = false; }
+
+ private:
+  bool active_;
+  std::function<void()> cleanup_;
+};
 
 namespace internal {
 extern thread_local std::mt19937 rng;

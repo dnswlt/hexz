@@ -109,7 +109,6 @@ absl::StatusOr<Config> Config::FromEnv() {
       GET_ENV_FLOAT(resign_threshold),
       GET_ENV_FLOAT(startup_delay_seconds),
       GET_ENV_INT(debug_memory_usage),
-      GET_ENV_INT(gpu_benchmark),
   };
   // Validate values
   const std::vector<std::string> valid_devices = {"cpu", "mps", "cuda"};

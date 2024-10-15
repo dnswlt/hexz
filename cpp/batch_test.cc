@@ -97,7 +97,7 @@ TEST(BatchTest, BatchSizeEqNumThreads) {
   std::latch reg_sync{kNumThreads};
   for (int i = 0; i < kNumThreads; i++) {
     ts.emplace_back([&, i] {
-      auto token = batcher.Register();
+      auto token = batcher.RegisterThread();
       reg_sync.count_down();
       reg_sync.wait();
       int sum = 0;
@@ -132,7 +132,7 @@ TEST(BatchTest, BatchSizeOne) {
   std::latch reg_sync{kNumThreads};
   for (int i = 0; i < kNumThreads; i++) {
     ts.emplace_back([&, i] {
-      auto token = batcher.Register();
+      auto token = batcher.RegisterThread();
       reg_sync.count_down();
       reg_sync.wait();
       int sum = 0;
@@ -168,7 +168,7 @@ TEST(BatchTest, BatchSizeHalf) {
   std::latch reg_sync{kNumThreads};
   for (int i = 0; i < kNumThreads; i++) {
     ts.emplace_back([&, i] {
-      auto token = batcher.Register();
+      auto token = batcher.RegisterThread();
       reg_sync.count_down();
       reg_sync.wait();
       int sum = 0;
@@ -204,7 +204,7 @@ TEST(BatchTest, VaryingCallCounts) {
   std::latch reg_sync{kNumThreads};
   for (int i = 0; i < kNumThreads; i++) {
     ts.emplace_back([&, call_count = i + 1] {
-      auto token = batcher.Register();
+      auto token = batcher.RegisterThread();
       reg_sync.count_down();
       reg_sync.wait();
       int sum = 0;

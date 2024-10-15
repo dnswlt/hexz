@@ -214,7 +214,7 @@ int Board::Flags(int player) const {
 }
 
 void Board::MakeMove(int player, const Move& move) {
-  Perfm::Scope ps(Perfm::MakeMove);
+  // Perfm::Scope ps(Perfm::MakeMove);
   auto b_acc = b_.accessor<float, 3>();
   ABSL_DCHECK_EQ(b_acc[I_BLOCKED(player)][move.r][move.c], 0)
       << "MakeMove on blocked field";

@@ -7,32 +7,15 @@
 #include <condition_variable>
 #include <mutex>
 
+#include "base.h"
+
+namespace hexz {
+
 template <typename ComputeT>
 class Batcher {
  public:
   using input_t = typename ComputeT::input_t;
   using result_t = typename ComputeT::result_t;
-  // Token is a RAII class used for registering and unregistering threads from
-  // the Batcher.
-  class Token {
-   public:
-    explicit Token(Batcher* b) : b_{b} {}
-    Token(const Token&) = delete;
-    Token& operator=(Token&) = delete;
-    Token(Token&& other) : b_{other.b_} { other.b_ = nullptr; };
-    Token& operator=(Token&& other) {
-      b_ = other.b_;
-      other.b_ = nullptr;
-    }
-    ~Token() {
-      if (b_ != nullptr) {
-        b_->Unregister();
-      }
-    }
-
-   private:
-    Batcher* b_;
-  };
   Batcher(std::unique_ptr<ComputeT> comp, int batch_size,
           int64_t timeout_micros)
       : comp_(std::move(comp)),
@@ -41,10 +24,10 @@ class Batcher {
         batch_ready_(false),
         waiting_(0) {}
 
-  Token Register() {
+  ScopeGuard RegisterThread() {
     std::scoped_lock<std::mutex> l(m_);
     registered_threads_++;
-    return Token(this);
+    return ScopeGuard([this] { this->UnregisterThread(); });
   }
 
   result_t ComputeValue(input_t v) {
@@ -104,7 +87,7 @@ class Batcher {
   }
 
  private:
-  void Unregister() {
+  void UnregisterThread() {
     std::scoped_lock<std::mutex> l(m_);
     ABSL_CHECK(registered_threads_ > 0);
     registered_threads_--;
@@ -186,5 +169,7 @@ class Batcher {
   std::condition_variable cv_enter_;
   std::condition_variable cv_ready_;
 };
+
+}  // namespace hexz
 
 #endif  // __HEXZ_BATCH_H__

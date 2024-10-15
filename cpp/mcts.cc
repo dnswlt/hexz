@@ -123,7 +123,7 @@ float Node::Puct() const noexcept {
 }
 
 Node* Node::MaxPuctChild() const {
-  Perfm::Scope ps(Perfm::MaxPuctChild);
+  //   Perfm::Scope ps(Perfm::MaxPuctChild);
   ABSL_CHECK(!children_.empty());
   Node* best = nullptr;
   float best_puct = std::numeric_limits<float>::lowest();
@@ -345,6 +345,11 @@ absl::Status WriteDotGraph(const Node& root, const std::string& path) {
 
 void TorchModel::SetDevice(torch::DeviceType device) {
   device_ = device;
+  module_.to(device_);
+}
+void TorchModel::UpdateModel(hexzpb::ModelKey key, torch::jit::Module module) {
+  key_ = key;
+  module_ = module;
   module_.to(device_);
 }
 

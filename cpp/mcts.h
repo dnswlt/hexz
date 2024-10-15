@@ -244,6 +244,28 @@ class Model {
     torch::Tensor move_probs;
     float value;
   };
+  // Updates the Model's underlying torch Module.
+  virtual void UpdateModel(hexzpb::ModelKey key, torch::jit::Module module) = 0;
+  // Models tend to be used in a multi-threaded environment. Each thread must
+  // register itself with the model by calling RegisterThread. The thread can
+  // assume that all necessary cleanup/unregistration is done by the d'tor of
+  // the returned ScopeGuard. This means that the Model MUST ONLY BE USED
+  // while the ScopeGuard is in scope. A typical usage looks thus:
+  //
+  // {
+  //   auto guard = model->RegisterThread();
+  //   // ...
+  //   auto prediction = model->Predict(board, node);
+  //   // ...
+  // }
+  //
+  // The ScopeGuard returned by the default implementation of RegisterThread
+  // does nothing.
+  virtual ScopeGuard RegisterThread() {
+    return ScopeGuard([] {});
+  }
+  // This is the core method of any model, that returns a model prediction
+  // for the given board and (MCTS search) node.
   virtual Prediction Predict(const Board& board, const Node& node) = 0;
   virtual const hexzpb::ModelKey& Key() const = 0;
   virtual ~Model() = default;
@@ -257,6 +279,9 @@ class TorchModel : public Model {
   explicit TorchModel(torch::jit::Module module) : module_{module} {}
   TorchModel(hexzpb::ModelKey key, torch::jit::Module module)
       : key_{key}, module_{module} {}
+
+  void UpdateModel(hexzpb::ModelKey key, torch::jit::Module model) override;
+
   Prediction Predict(const Board& board, const Node& node) override;
 
   // Returns the model key, if it was set during construction. Otherwise,
@@ -273,9 +298,8 @@ class TorchModel : public Model {
 };
 
 // Implementation of Model that uses an actual PyTorch ScriptModule.
-// This implementation is supposed to be used as the ComputeT in a
-// hexz::Batcher, so that model predictions are batched across several threads
-// working on independent search trees.
+// This implementation uses a hexz::Batcher, batching model predictions
+// across all threads working on independent MCTS search trees.
 class BatchedTorchModel : public Model {
  public:
   class ComputeT {
@@ -307,14 +331,14 @@ class BatchedTorchModel : public Model {
 
   // UpdateModel updates the model used
   // Access to this method must be synchronized across threads by callers!
-  void UpdateModel(hexzpb::ModelKey key, torch::jit::Module module);
+  void UpdateModel(hexzpb::ModelKey key, torch::jit::Module module) override;
 
   // Returns the key of the currently used model.
   // Access to this method and the reference it returns must be synchronized
   // across threads by callers!
   const hexzpb::ModelKey& Key() const override;
 
-  auto RegisterThread() { return batcher_.Register(); }
+  ScopeGuard RegisterThread() override { return batcher_.RegisterThread(); }
 
  private:
   hexzpb::ModelKey key_;
