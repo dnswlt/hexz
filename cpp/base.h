@@ -17,6 +17,8 @@ struct Config {
   std::string device = "cpu";
   // How many threads to use for self-play.
   int worker_threads = 1;
+  // Batch size to use in multi-threaded mode for GPU model predictions.
+  int prediction_batch_size = 16;
   // MCTS runs executed for each move. Can be further influenced by
   // runs_per_move_decay.
   int runs_per_move = 800;
