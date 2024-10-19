@@ -8,6 +8,7 @@
 #include <cctype>
 #include <chrono>
 #include <random>
+#include <sstream>
 #include <thread>
 
 namespace hexz {
@@ -47,11 +48,13 @@ std::string Config::String() const {
       "Config(",
       absl::StrJoin(
           {
-              absl::StrFormat("training_server_addr: '%s'", training_server_addr),
+              absl::StrFormat("training_server_addr: '%s'",
+                              training_server_addr),
               absl::StrFormat("device: '%s'", device),
               absl::StrFormat("worker_threads: %d", worker_threads),
               absl::StrFormat("fibers_per_thread: %d", fibers_per_thread),
-              absl::StrFormat("prediction_batch_size: %d", prediction_batch_size),
+              absl::StrFormat("prediction_batch_size: %d",
+                              prediction_batch_size),
               absl::StrFormat("runs_per_move: %d", runs_per_move),
               absl::StrFormat("runs_per_fast_move: %d", runs_per_fast_move),
               absl::StrFormat("fast_move_prob: %.3f", fast_move_prob),
@@ -82,7 +85,6 @@ std::string str_to_upper(const std::string& s) {
   return t;
 }
 }  // namespace
-
 
 absl::StatusOr<Config> Config::FromEnv() {
   Config defaults{};
@@ -126,9 +128,7 @@ absl::StatusOr<Config> Config::FromEnv() {
 #undef GET_ENV
 #undef GET_ENV_INT
 #undef GET_ENV_DOUBLE
-
 }
-
 
 std::string GetEnv(const std::string& name, const std::string& default_value) {
   const char* value = std::getenv(name.c_str());
@@ -164,6 +164,16 @@ int64_t UnixMicros() {
   return std::chrono::duration_cast<std::chrono::microseconds>(
              std::chrono::high_resolution_clock::now().time_since_epoch())
       .count();
+}
+
+std::string RandomUid() {
+  std::uniform_int_distribution<int> dis{0, 15};
+  std::ostringstream os;
+  os << std::hex;
+  for (int i = 0; i < 8; i++) {
+    os << dis(internal::rng);
+  }
+  return os.str();
 }
 
 }  // namespace hexz

@@ -21,7 +21,6 @@
 #include <mutex>
 #include <queue>
 #include <random>
-#include <sstream>
 #include <thread>
 #include <utility>
 
@@ -34,7 +33,6 @@
 #include "perfm.h"
 #include "worker.h"
 
-
 ABSL_FLAG(std::string, training_server_addr, "",
           "training server address (ex: \"localhost:50051\")");
 ABSL_FLAG(std::string, device, "", "PyTorch device (cpu, cuda, mps)");
@@ -45,6 +43,7 @@ ABSL_FLAG(int, gpu_benchmark_rounds, 0,
 ABSL_FLAG(std::string, local_model_path, "",
           "path to a torch::jit::load'able model (for benchmarks)");
 ABSL_FLAG(int, worker_threads, 0, "number of worker threads");
+ABSL_FLAG(int, fibers_per_thread, 0, "number of fibers per worker thread");
 ABSL_FLAG(int, prediction_batch_size, 0,
           "batch size for GPU model predictions");
 ABSL_FLAG(int, max_runtime_seconds, 0, "maximum runtime of the worker");
@@ -83,6 +82,9 @@ void UpdateConfigFromFlags(hexz::Config& config) {
   }
   if (int t = absl::GetFlag(FLAGS_worker_threads); t > 0) {
     config.worker_threads = t;
+  }
+  if (int t = absl::GetFlag(FLAGS_fibers_per_thread); t > 0) {
+    config.fibers_per_thread = t;
   }
   if (int s = absl::GetFlag(FLAGS_prediction_batch_size); s > 0) {
     config.prediction_batch_size = s;
@@ -145,7 +147,8 @@ int main(int argc, char* argv[]) {
         hexz::GRPCTrainingServiceClient::Connect(config->training_server_addr);
   }
 
-  hexz::GenerateExamplesMultiThreaded(*config, *client);
+  hexz::Worker worker(*config, *client);
+  worker.Run();
 
   return 0;
 }

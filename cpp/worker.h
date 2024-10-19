@@ -3,6 +3,7 @@
 
 #include "base.h"
 #include "grpc_client.h"
+#include "mcts.h"
 
 namespace hexz {
 
@@ -44,7 +45,25 @@ class WorkerStats {
   Data data_;
 };
 
-void GenerateExamplesMultiThreaded(const Config& config, TrainingServiceClient& client);
+class Worker {
+ public:
+  Worker(const Config& config, TrainingServiceClient& client)
+      : config_{config}, client_{client}, execution_id_{RandomUid()} {}
+
+  void Run();
+
+ private:
+  torch::DeviceType Device() const;
+  std::unique_ptr<Model> CreateModel(hexzpb::ModelKey model_key,
+                                     torch::jit::Module&& model);
+  std::string execution_id_;
+  TrainingServiceClient& client_;
+  const Config& config_;
+  WorkerStats stats_;
+};
+
+void GenerateExamplesMultiThreaded(const Config& config,
+                                   TrainingServiceClient& client);
 
 }  // namespace hexz
 

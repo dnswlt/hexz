@@ -3,10 +3,10 @@
 #include <absl/log/absl_log.h>
 #include <absl/status/statusor.h>
 #include <absl/strings/str_format.h>
-#include <boost/fiber/all.hpp>
 #include <torch/torch.h>
 
 #include <algorithm>
+#include <boost/fiber/all.hpp>
 #include <cassert>
 #include <cmath>
 #include <ostream>
@@ -461,10 +461,12 @@ Model::Prediction FiberTorchModel::Predict(const Board& board,
       .action_mask = node.ActionMask().flatten(),
       .result_promise = std::move(promise),
   });
-  return future.get();
+  auto result = future.get();
+  return result;
 }
 
 void FiberTorchModel::GPUPipeline() {
+  ABSL_LOG(INFO) << "FiberTorchModel::GPUPipeline started";
   std::vector<PredictionRequest> batch;
   batch.reserve(batch_size_);
   while (true) {
@@ -486,7 +488,6 @@ void FiberTorchModel::GPUPipeline() {
       boards.emplace_back(std::move(req.board));
       action_masks.emplace_back(std::move(req.action_mask));
     }
-    batch.clear();
 
     std::vector<torch::jit::IValue> model_inputs = {
         torch::stack(boards).to(device_),
@@ -508,6 +509,8 @@ void FiberTorchModel::GPUPipeline() {
           .value = values.index({i}).item<float>(),
       });
     }
+    batch.clear();
+
   }
 }
 

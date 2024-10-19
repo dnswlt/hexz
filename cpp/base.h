@@ -87,6 +87,8 @@ float GetEnvAsFloat(const std::string& name, float default_value);
 
 int64_t UnixMicros();
 
+std::string RandomUid();
+
 // Helper to implement RAII-style scope guards.
 // A ScopeGuard executes the function provided as a c'tor arg
 // once the guard object goes out of scope.
