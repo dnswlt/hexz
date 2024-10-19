@@ -61,7 +61,7 @@ add_library(grpc_client grpc_client.h grpc_client.cc)
 target_link_libraries(grpc_client PUBLIC hexzpb_grpc hexzpb absl::log absl::statusor "${TORCH_LIBRARIES}")
 
 add_library(mcts base.cc board.cc mcts.cc perfm.cc batch.h queue.h)
-target_link_libraries(mcts PUBLIC absl::statusor absl::strings absl::log hexzpb "${TORCH_LIBRARIES}")
+target_link_libraries(mcts PUBLIC absl::statusor absl::strings absl::log hexzpb Boost::fiber "${TORCH_LIBRARIES}")
 
 add_library(hexz_pyapi pyapi.cc)
 target_link_libraries(hexz_pyapi PUBLIC absl::strings absl::log hexzpb mcts)

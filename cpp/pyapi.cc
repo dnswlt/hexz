@@ -129,7 +129,7 @@ void MoveSuggester::impl::LoadModel(const std::string& path) {
     auto m = torch::jit::load(f_in);
     m.to(torch::kCPU);
     m.eval();
-    model_ = std::make_unique<TorchModel>(m);
+    model_ = std::make_unique<TorchModel>(std::move(m));
     ABSL_LOG(INFO)
         << "Model loaded successfully. Ready to serve SuggestMove requests!";
 

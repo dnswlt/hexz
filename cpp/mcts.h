@@ -6,6 +6,7 @@
 #include <torch/script.h>
 #include <torch/torch.h>
 
+#include <boost/fiber/all.hpp>
 #include <cassert>
 #include <ostream>
 #include <string_view>
@@ -16,6 +17,7 @@
 #include "board.h"
 #include "hexz.pb.h"
 #include "perfm.h"
+#include "queue.h"
 
 namespace hexz {
 
@@ -245,7 +247,8 @@ class Model {
     float value;
   };
   // Updates the Model's underlying torch Module.
-  virtual void UpdateModel(hexzpb::ModelKey key, torch::jit::Module module) = 0;
+  virtual void UpdateModel(hexzpb::ModelKey key,
+                           torch::jit::Module&& module) = 0;
   // Models tend to be used in a multi-threaded environment. Each thread must
   // register itself with the model by calling RegisterThread. The thread can
   // assume that all necessary cleanup/unregistration is done by the d'tor of
@@ -276,11 +279,12 @@ class Model {
 // immediately evaluated by the model.
 class TorchModel : public Model {
  public:
-  explicit TorchModel(torch::jit::Module module) : module_{module} {}
-  TorchModel(hexzpb::ModelKey key, torch::jit::Module module)
-      : key_{key}, module_{module} {}
+  explicit TorchModel(torch::jit::Module&& module)
+      : module_{std::move(module)} {}
+  TorchModel(hexzpb::ModelKey key, torch::jit::Module&& module)
+      : key_{std::move(key)}, module_{std::move(module)} {}
 
-  void UpdateModel(hexzpb::ModelKey key, torch::jit::Module model) override;
+  void UpdateModel(hexzpb::ModelKey key, torch::jit::Module&& model) override;
 
   Prediction Predict(const Board& board, const Node& node) override;
 
@@ -309,8 +313,8 @@ class BatchedTorchModel : public Model {
       torch::Tensor action_mask;
     };
     using result_t = Model::Prediction;
-    ComputeT(torch::jit::Module module, torch::DeviceType device)
-        : module_{module}, device_{device} {
+    ComputeT(torch::jit::Module&& module, torch::DeviceType device)
+        : module_{std::move(module)}, device_{device} {
       module_.to(device);
     }
     std::vector<result_t> ComputeAll(std::vector<input_t>&& inputs);
@@ -319,19 +323,19 @@ class BatchedTorchModel : public Model {
     torch::jit::Module module_;
     torch::DeviceType device_;
   };
-  BatchedTorchModel(hexzpb::ModelKey key, torch::jit::Module module,
+  BatchedTorchModel(hexzpb::ModelKey key, torch::jit::Module&& module,
                     torch::DeviceType device, int batch_size,
                     int64_t timeout_micros)
       : key_{key},
         device_{device},
-        batcher_{std::make_unique<ComputeT>(module, device), batch_size,
-                 timeout_micros} {}
+        batcher_{std::make_unique<ComputeT>(std::move(module), device),
+                 batch_size, timeout_micros} {}
 
   Prediction Predict(const Board& board, const Node& node) override;
 
   // UpdateModel updates the model used
   // Access to this method must be synchronized across threads by callers!
-  void UpdateModel(hexzpb::ModelKey key, torch::jit::Module module) override;
+  void UpdateModel(hexzpb::ModelKey key, torch::jit::Module&& module) override;
 
   // Returns the key of the currently used model.
   // Access to this method and the reference it returns must be synchronized
@@ -344,6 +348,41 @@ class BatchedTorchModel : public Model {
   hexzpb::ModelKey key_;
   torch::DeviceType device_;
   Batcher<ComputeT> batcher_;
+};
+
+// Implementation of Model that expects clients to run as independent fibers.
+class FiberTorchModel : public Model {
+ public:
+  struct PredictionRequest {
+    torch::Tensor board;
+    torch::Tensor action_mask;
+    // Promise to send the result back to the fiber.
+    boost::fibers::promise<Model::Prediction> result_promise;
+    // The final request sets this to true to terminate the GPU pipeline thread.
+    bool done = false;
+  };
+  FiberTorchModel(hexzpb::ModelKey key, torch::jit::Module module,
+                  torch::DeviceType device, int batch_size)
+      : key_{std::move(key)},
+        module_{std::move(module)},
+        device_{device},
+        batch_size_{batch_size} {}
+
+  void UpdateModel(hexzpb::ModelKey key, torch::jit::Module&& model) override;
+
+  Prediction Predict(const Board& board, const Node& node) override;
+
+  const hexzpb::ModelKey& Key() const override { return key_; }
+
+  void GPUPipeline();
+
+ private:
+  hexzpb::ModelKey key_;
+  torch::jit::Module module_;
+  std::mutex mut_;
+  int batch_size_;
+  torch::DeviceType device_;
+  ConcurrentQueue<PredictionRequest> request_queue_;
 };
 
 class PlayoutRunner {

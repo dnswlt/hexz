@@ -35,7 +35,8 @@ const hexzpb::ModelKey& TestModelKey() {
 }
 
 class FakeModel : public Model {
-  void UpdateModel(hexzpb::ModelKey key, torch::jit::Module module) override {}
+  void UpdateModel(hexzpb::ModelKey key, torch::jit::Module&& module) override {
+  }
   const hexzpb::ModelKey& Key() const override { return TestModelKey(); }
 };
 
@@ -327,8 +328,8 @@ TEST(BatchedTorchModelTest, SmokeTestSingleThreaded) {
   scriptmodule.eval();
   constexpr int batch_size = 4;
   constexpr int64_t timeout_micros = 1'000'000;
-  BatchedTorchModel m(hexzpb::ModelKey(), scriptmodule, torch::kCPU, batch_size,
-                      timeout_micros);
+  BatchedTorchModel m(hexzpb::ModelKey(), std::move(scriptmodule), torch::kCPU,
+                      batch_size, timeout_micros);
   auto token = m.RegisterThread();
   // Prepare inputs.
   auto board = Board::RandomBoard();
@@ -352,8 +353,8 @@ TEST(BatchedTorchModelTest, SmokeTestMultiThreaded) {
   scriptmodule.eval();
   constexpr int batch_size = 8;
   constexpr int64_t timeout_micros = 1'000'000;
-  BatchedTorchModel m(hexzpb::ModelKey(), scriptmodule, torch::kCPU, batch_size,
-                      timeout_micros);
+  BatchedTorchModel m(hexzpb::ModelKey(), std::move(scriptmodule), torch::kCPU,
+                      batch_size, timeout_micros);
   std::vector<std::thread> ts(batch_size);
   std::vector<float> sum_pr(ts.size(), 0);
   std::mutex mut;
@@ -492,7 +493,7 @@ TEST_F(MCTSScriptModuleTest, PlayGame) {
       .random_playouts = 10,
       .resign_threshold = std::numeric_limits<float>::max(),  // never resign
   };
-  TorchModel model(scriptmodule_);
+  TorchModel model(std::move(scriptmodule_));
   NeuralMCTS mcts(model, std::make_unique<RandomPlayoutRunner>(), config);
   auto b = Board::RandomBoard();
 
@@ -601,7 +602,7 @@ TEST(MCTSTest, PlayGameResign) {
 }
 
 TEST_F(MCTSScriptModuleTest, WriteDotGraph) {
-  TorchModel model(scriptmodule_);
+  TorchModel model(std::move(scriptmodule_));
   NeuralMCTS mcts(model, /*playout_runner=*/nullptr, Config{});
   auto b = Board::RandomBoard();
   auto dot_path =

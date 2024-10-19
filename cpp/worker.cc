@@ -43,10 +43,10 @@ std::string RandomUid() {
 
 constexpr absl::string_view kKillMessage = "__KILL_KILL_KILL__";
 
-// AsyncExampleSender is used to send examples to the training server asynchronously.
-// Its Run() method is supposed to be executed in a separate thread. 
-// Clients can then pass requests via the EnqueueRequest method from any other thread
-// without additional synchronization.
+// AsyncExampleSender is used to send examples to the training server
+// asynchronously. Its Run() method is supposed to be executed in a separate
+// thread. Clients can then pass requests via the EnqueueRequest method from any
+// other thread without additional synchronization.
 //
 // If the training server informs the sender that a newer model is available,
 // the sender will update the model.
@@ -93,8 +93,8 @@ class AsyncExampleSender {
  private:
   bool ProcessRequest(const hexzpb::AddTrainingExamplesRequest& req) {
     if (req.execution_id() == kKillMessage) {
-        ABSL_LOG(ERROR) << "AsyncExampleSender: received kill request";
-        return false;
+      ABSL_LOG(ERROR) << "AsyncExampleSender: received kill request";
+      return false;
     }
     auto resp = client_.AddTrainingExamples(req);
     if (!resp.ok()) {
@@ -143,8 +143,8 @@ class AsyncExampleSender {
         ABSL_LOG(ERROR) << "Failed to fetch latest model: " << km.status();
         return false;
       }
-      const auto& [latest_key, latest_model] = *km;
-      model_.UpdateModel(latest_key, latest_model);
+      auto& [latest_key, latest_model] = *km;
+      model_.UpdateModel(latest_key, std::move(latest_model));
       ABSL_LOG(INFO) << "Updated model from " << ModelId(old_key) << " to "
                      << ModelId(latest_key);
     }
@@ -175,7 +175,7 @@ void GenerateExamplesMultiThreaded(const Config& config,
     ABSL_LOG(ERROR) << "Failed to fetch latest model: " << km.status();
     return;
   }
-  const auto& [initial_model_key, initial_model] = *km;
+  auto& [initial_model_key, initial_model] = *km;
   torch::DeviceType device = torch::kCPU;
   if (config.device == "mps") {
     device = torch::kMPS;
@@ -190,12 +190,13 @@ void GenerateExamplesMultiThreaded(const Config& config,
     ABSL_LOG(INFO) << "Using BatchedTorchModel for " << config.worker_threads
                    << " threads on device " << config.device;
     model = std::make_unique<BatchedTorchModel>(
-        initial_model_key, initial_model, device, config.worker_threads,
-        timeout_micros);
+        initial_model_key, std::move(initial_model), device,
+        config.worker_threads, timeout_micros);
   } else {
     ABSL_LOG(INFO) << "Using TorchModel for " << config.worker_threads
                    << " threads on device " << config.device;
-    model = std::make_unique<TorchModel>(initial_model_key, initial_model);
+    model = std::make_unique<TorchModel>(initial_model_key,
+                                         std::move(initial_model));
   }
   // Used to send examples and update the model asynchronously.
   AsyncExampleSender sender(client, *model);
