@@ -69,12 +69,13 @@ target_link_libraries(worker PRIVATE mcts absl::log absl::flags absl::flags_pars
 add_executable(coro coro_main.cc)
 target_link_libraries(coro PRIVATE mcts absl::log grpc_client)
 
-add_executable(gpubench gpubench_main.cc)
-target_link_libraries(gpubench PRIVATE mcts absl::log absl::flags absl::flags_parse absl::flags_usage grpc_client)
-
-# Experiment: Boost and fibers
 set(Boost_USE_STATIC_LIBS ON)
 find_package(Boost REQUIRED COMPONENTS fiber)
+
+add_executable(gpubench gpubench_main.cc)
+target_link_libraries(gpubench PRIVATE mcts absl::log absl::flags absl::flags_parse absl::flags_usage grpc_client Boost::fiber)
+
+# Experiment: Boost and fibers
 add_executable(fiber fiber_main.cc)
 target_link_libraries(fiber PRIVATE Boost::fiber)
 # End Experiment

@@ -5,6 +5,7 @@
 #include <absl/log/globals.h>
 #include <absl/log/initialize.h>
 
+#include <boost/fiber/all.hpp>
 #include <iostream>
 #include <string>
 
@@ -162,6 +163,18 @@ class ConcurrentQueue {
     return item;
   }
 
+  // Moves up to n items from the queue into the given vector dst.
+  // Blocks if the queue is empty.
+  void pop_n(std::vector<T>& dst, int n) {
+    std::unique_lock<std::mutex> lock(mtx);
+    cv.wait(lock, [this] { return !q.empty(); });  // Wait until there's data
+    while (n > 0 && !q.empty()) {
+      dst.push_back(std::move(q.front()));
+      q.pop();
+      n--;
+    }
+  }
+
   // Tries to pop an element without blocking
   bool try_pop(T& item) {
     std::lock_guard<std::mutex> lock(mtx);
@@ -190,6 +203,10 @@ class ConcurrentQueue {
   mutable std::mutex mtx;      // Mutex for synchronizing access
   std::condition_variable cv;  // Condition variable to signal waiting threads
 };
+
+///////////////////////////////////////////////////////////////////////////////
+// TASK
+///////////////////////////////////////////////////////////////////////////////
 
 struct GPUPipelineInput {
   torch::Tensor board;
@@ -320,6 +337,10 @@ void RunGPUBenchmarkMultiTasked(Options options) {
                  << " ops/s). batch size:" << options.prediction_batch_size
                  << ", threads:" << options.worker_threads;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// BATCH
+///////////////////////////////////////////////////////////////////////////////
 
 class GPUBenchmarkFn {
  public:
@@ -464,6 +485,10 @@ void RunGPUBenchmarkBatch(Options options) {
                  << ", threads:" << options.worker_threads;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// SINGLE
+///////////////////////////////////////////////////////////////////////////////
+
 void RunGPUBenchmark(Options options) {
   EmbeddedTrainingServiceClient client(options.model_path);
   auto km = client.FetchLatestModel("");
@@ -524,6 +549,143 @@ void RunGPUBenchmark(Options options) {
   }
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// FIBER
+///////////////////////////////////////////////////////////////////////////////
+
+// Shared data structure for request queue
+struct FiberRequest {
+  // ID of the fiber making the request (only used for debugging).
+  int fiber_id;
+  torch::Tensor board;
+  torch::Tensor action_mask;
+  // Promise to send the result back to the fiber.
+  boost::fibers::promise<Model::Prediction> result_promise;
+  // The final request sets this to true to terminate the GPU pipeline thread.
+  bool done = false;
+};
+
+void GPUPipelineThread(torch::jit::Module& model,
+                       ConcurrentQueue<FiberRequest>& request_queue,
+                       Options options) {
+  const int batch_size = options.prediction_batch_size;
+  while (true) {
+    std::vector<FiberRequest> batch;
+
+    // Collect requests for batching
+    while (batch.size() < batch_size) {
+      request_queue.pop_n(batch, batch_size - batch.size());
+      if (batch.back().done) {
+        ABSL_LOG(INFO) << "GPU pipeline thread received final request "
+                          "(done=true). Exiting.\n";
+        return;
+      }
+    }
+
+    std::vector<torch::Tensor> boards;
+    boards.reserve(options.prediction_batch_size);
+    std::vector<torch::Tensor> action_masks;
+    action_masks.reserve(options.prediction_batch_size);
+    torch::NoGradGuard no_grad;
+
+    for (auto& req : batch) {
+      boards.emplace_back(std::move(req.board));
+      action_masks.emplace_back(std::move(req.action_mask));
+    }
+
+    std::vector<torch::jit::IValue> model_inputs = {
+        torch::stack(boards).to(options.device),
+        torch::stack(action_masks).to(options.device),
+    };
+    auto pred = model.forward(model_inputs);
+
+    const auto output_tuple = pred.toTuple();
+    // Read logits back to CPU / main memory.
+    const auto probs =
+        output_tuple->elements()[0].toTensor().exp().to(torch::kCPU);
+    const auto values = output_tuple->elements()[1].toTensor().to(torch::kCPU);
+
+    for (int i = 0; i < batch.size(); i++) {
+      batch[i].result_promise.set_value(Model::Prediction{
+          .move_probs = probs.index({i}).reshape({2, 11, 10}),
+          .value = values.index({i}).item<float>(),
+      });
+    }
+  }
+}
+
+void FiberWorker(int fiber_id, ConcurrentQueue<FiberRequest>& request_queue,
+                 Options options) {
+  torch::Tensor tb = torch::randn({11, 11, 10}, torch::dtype(torch::kFloat32));
+  torch::Tensor ta = (torch::rand({2, 11, 10}) < 0.5);
+
+  float sum = 0;
+  for (int i = 0; i < options.rounds; i++) {
+    boost::fibers::promise<Model::Prediction> promise;
+    auto result = promise.get_future();
+
+    request_queue.push(FiberRequest{
+        .fiber_id = fiber_id,
+        .board = tb,
+        .action_mask = ta,
+        .result_promise = std::move(promise),
+    });
+
+    Model::Prediction pred = result.get();
+    sum += pred.value;
+  }
+}
+
+void RunGPUBenchmarkFiber(Options options) {
+  EmbeddedTrainingServiceClient client(options.model_path);
+  auto km = client.FetchLatestModel("");
+  if (!km.ok()) {
+    ABSL_LOG(ERROR) << "Failed to fetch model: " << km.status();
+    return;
+  }
+  auto& [key, model] = *km;
+  auto device = torch::kCPU;
+  if (options.device == "mps") {
+    device = torch::kMPS;
+  } else if (options.device == "cuda") {
+    device = torch::kCUDA;
+  }
+  model.to(device);
+
+  ConcurrentQueue<FiberRequest> request_queue;
+
+  std::thread gpu_pipeline_thread(
+      [&] { GPUPipelineThread(model, request_queue, options); });
+
+  const int n_fibers = options.prediction_batch_size;
+
+  int64_t t_start = UnixMicros();
+  std::vector<boost::fibers::fiber> fibers;
+  for (int i = 0; i < n_fibers; ++i) {
+    int fiber_id = i;
+    fibers.emplace_back(FiberWorker, fiber_id, std::ref(request_queue),
+                        options);
+  }
+  for (auto& fiber : fibers) {
+    if (fiber.joinable()) {
+      fiber.join();
+    }
+  }
+  int64_t t_end = UnixMicros();
+  ABSL_LOG(INFO) << "Done with fibers";
+  request_queue.push(FiberRequest{.done = true});
+  if (gpu_pipeline_thread.joinable()) {
+    gpu_pipeline_thread.join();
+  }
+
+  int final_op_count = options.rounds * options.prediction_batch_size;
+  float ops_per_sec =
+      static_cast<float>(final_op_count) / (t_end - t_start) * 1e6;
+  ABSL_LOG(INFO) << "Performed " << final_op_count << " computations in "
+                 << (t_end - t_start) / 1000 << "ms (" << ops_per_sec
+                 << " ops/s). batch size:" << options.prediction_batch_size;
+}
+
 }  // namespace hexz
 
 int main(int argc, char** argv) {
@@ -540,6 +702,8 @@ int main(int argc, char** argv) {
     hexz::RunGPUBenchmarkMultiTasked(options);
   } else if (mode == "single") {
     hexz::RunGPUBenchmark(options);
+  } else if (mode == "fiber") {
+    hexz::RunGPUBenchmarkFiber(options);
   } else {
     ABSL_LOG(ERROR) << "Invalid mode: " << mode;
   }
@@ -547,12 +711,17 @@ int main(int argc, char** argv) {
 }
 
 /*
-I1019 12:32:20.550976 1818297 gpubench_main.cc:520] batch_size=1: finished 1000 iterations in 3107ms (321.845 ops/s)
-I1019 12:32:24.097025 1818297 gpubench_main.cc:520] batch_size=2: finished 1000 iterations in 3166ms (631.643 ops/s)
-I1019 12:32:27.473312 1818297 gpubench_main.cc:520] batch_size=4: finished 1000 iterations in 3014ms (1326.75 ops/s)
-I1019 12:32:31.608555 1818297 gpubench_main.cc:520] batch_size=8: finished 1000 iterations in 3707ms (2157.95 ops/s)
-I1019 12:32:36.850300 1818297 gpubench_main.cc:520] batch_size=16: finished 1000 iterations in 4707ms (3399.03 ops/s)
-I1019 12:32:43.119426 1818297 gpubench_main.cc:520] batch_size=32: finished 1000 iterations in 5751ms (5564.24 ops/s)
-I1019 12:32:50.745617 1818297 gpubench_main.cc:520] batch_size=64: finished 1000 iterations in 6930ms (9234.6 ops/s)
-I1019 12:33:01.024095 1818297 gpubench_main.cc:520] batch_size=128: finished 1000 iterations in 9284ms (13786.7 ops/s)
+I1019 12:32:20.550976 1818297 gpubench_main.cc:520] batch_size=1: finished 1000
+iterations in 3107ms (321.845 ops/s) I1019 12:32:24.097025 1818297
+gpubench_main.cc:520] batch_size=2: finished 1000 iterations in 3166ms (631.643
+ops/s) I1019 12:32:27.473312 1818297 gpubench_main.cc:520] batch_size=4:
+finished 1000 iterations in 3014ms (1326.75 ops/s) I1019 12:32:31.608555 1818297
+gpubench_main.cc:520] batch_size=8: finished 1000 iterations in 3707ms (2157.95
+ops/s) I1019 12:32:36.850300 1818297 gpubench_main.cc:520] batch_size=16:
+finished 1000 iterations in 4707ms (3399.03 ops/s) I1019 12:32:43.119426 1818297
+gpubench_main.cc:520] batch_size=32: finished 1000 iterations in 5751ms (5564.24
+ops/s) I1019 12:32:50.745617 1818297 gpubench_main.cc:520] batch_size=64:
+finished 1000 iterations in 6930ms (9234.6 ops/s) I1019 12:33:01.024095 1818297
+gpubench_main.cc:520] batch_size=128: finished 1000 iterations in 9284ms
+(13786.7 ops/s)
 */
