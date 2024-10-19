@@ -66,6 +66,19 @@ target_link_libraries(hexz_pyapi PUBLIC absl::strings absl::log hexzpb mcts)
 add_executable(worker worker.cc worker_main.cc)
 target_link_libraries(worker PRIVATE mcts absl::log absl::flags absl::flags_parse absl::flags_usage grpc_client)
 
+add_executable(coro coro_main.cc)
+target_link_libraries(coro PRIVATE mcts absl::log grpc_client)
+
+add_executable(gpubench gpubench_main.cc)
+target_link_libraries(gpubench PRIVATE mcts absl::log absl::flags absl::flags_parse absl::flags_usage grpc_client)
+
+# Experiment: Boost and fibers
+set(Boost_USE_STATIC_LIBS ON)
+find_package(Boost REQUIRED COMPONENTS fiber)
+add_executable(fiber fiber_main.cc)
+target_link_libraries(fiber PRIVATE Boost::fiber)
+# End Experiment
+
 #
 # Testing
 #
