@@ -47,7 +47,7 @@ std::string Config::String() const {
       "Config(",
       absl::StrJoin(
           {
-              absl::StrFormat("training_server_url: '%s'", training_server_url),
+              absl::StrFormat("training_server_addr: '%s'", training_server_addr),
               absl::StrFormat("device: '%s'", device),
               absl::StrFormat("worker_threads: %d", worker_threads),
               absl::StrFormat("prediction_batch_size: %d", prediction_batch_size),
@@ -93,7 +93,7 @@ absl::StatusOr<Config> Config::FromEnv() {
   .fld = GetEnvAsFloat(str_to_upper("HEXZ_" #fld), defaults.fld)
 
   Config config{
-      GET_ENV(training_server_url),
+      GET_ENV(training_server_addr),
       GET_ENV(device),
       GET_ENV_INT(worker_threads),
       GET_ENV_INT(prediction_batch_size),

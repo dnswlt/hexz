@@ -101,7 +101,7 @@ Run the Docker image locally:
 ```bash
 docker run \
   -e PYTHONUNBUFFERED=1 \
-  -e HEXZ_TRAINING_SERVER_URL=http://$HOSTNAME:8080 \
+  -e HEXZ_TRAINING_SERVER_ADDR=http://$HOSTNAME:8080 \
   -e HEXZ_MAX_RUNTIME_SECONDS=60 \
   -e HEXZ_RUNS_PER_MOVE=800 \
   -e HEXZ_UCT_C=1.5 \
@@ -133,7 +133,7 @@ Adjust the `CMAKE_PREFIX_PATH` directories depending on where you installed PyTo
 To run the worker, first make sure the training server is up and running. Then:
 
 ```bash
-env HEXZ_TRAINING_SERVER_URL=localhost:50051 \
+env HEXZ_TRAINING_SERVER_ADDR=localhost:50051 \
   HEXZ_MAX_RUNTIME_SECONDS=60 \
   HEXZ_RUNS_PER_MOVE=800 \
   HEXZ_UCT_C=1.5 \
@@ -151,7 +151,7 @@ Using gperftools:
 
 ```bash
 env HEAPPROFILE=/tmp/worker.hprof LD_PRELOAD=$HOME/tmp/gperftools-2.13/.libs/libtcmalloc.so \
-  HEXZ_TRAINING_SERVER_URL=http://localhost:8080 \
+  HEXZ_TRAINING_SERVER_ADDR=http://localhost:8080 \
   HEXZ_MAX_RUNTIME_SECONDS=60 \
   HEXZ_RUNS_PER_MOVE=800 \
   HEXZ_UCT_C=1.5 \

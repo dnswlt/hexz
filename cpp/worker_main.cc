@@ -76,7 +76,7 @@ void MemMon() {
 void UpdateConfigFromFlags(hexz::Config& config) {
   if (std::string addr = absl::GetFlag(FLAGS_training_server_addr);
       addr != "") {
-    config.training_server_url = addr;
+    config.training_server_addr = addr;
   }
   if (std::string device = absl::GetFlag(FLAGS_device); device != "") {
     config.device = device;
@@ -114,8 +114,8 @@ int main(int argc, char* argv[]) {
   UpdateConfigFromFlags(*config);
   hexz::InitializeFromConfig(*config);
   // Cannot run without a training server URL, so exit early if it is not set.
-  if (config->training_server_url.empty()) {
-    ABSL_LOG(ERROR) << "training_server_url must be set";
+  if (config->training_server_addr.empty()) {
+    ABSL_LOG(ERROR) << "training_server_addr must be set";
     return 1;
   }
   // Execute
@@ -142,7 +142,7 @@ int main(int argc, char* argv[]) {
     client = std::make_unique<hexz::EmbeddedTrainingServiceClient>(path);
   } else {
     client =
-        hexz::GRPCTrainingServiceClient::Connect(config->training_server_url);
+        hexz::GRPCTrainingServiceClient::Connect(config->training_server_addr);
   }
 
   hexz::GenerateExamplesMultiThreaded(*config, *client);

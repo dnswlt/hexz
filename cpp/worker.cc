@@ -136,7 +136,7 @@ void GenerateExamplesMultiThreaded(const Config& config, TrainingServiceClient& 
             // Happy path.
             ABSL_LOG(INFO) << "Successfully sent " << n_examples
                            << " examples to training server at "
-                           << config.training_server_url;
+                           << config.training_server_addr;
             break;
           case hexzpb::AddTrainingExamplesResponse::REJECTED_AT_CAPACITY:
             // For now, immediately exit if server is at capacity.
