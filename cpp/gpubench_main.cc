@@ -615,12 +615,12 @@ void GPUPipelineThread(torch::jit::Module& model,
 }
 
 void FiberWorker(int fiber_id, ConcurrentQueue<FiberRequest>& request_queue,
-                 Options options) {
+                 int n_rounds) {
   torch::Tensor tb = torch::randn({11, 11, 10}, torch::dtype(torch::kFloat32));
   torch::Tensor ta = (torch::rand({2, 11, 10}) < 0.5);
 
   float sum = 0;
-  for (int i = 0; i < options.rounds; i++) {
+  for (int i = 0; i < n_rounds; i++) {
     boost::fibers::promise<Model::Prediction> promise;
     auto result = promise.get_future();
 
@@ -637,6 +637,10 @@ void FiberWorker(int fiber_id, ConcurrentQueue<FiberRequest>& request_queue,
 }
 
 void RunGPUBenchmarkFiber(Options options) {
+  ABSL_CHECK(options.worker_threads <= options.prediction_batch_size);
+  ABSL_CHECK(options.prediction_batch_size % options.worker_threads == 0)
+      << "batch size must be an integer multiple of #threads";
+
   EmbeddedTrainingServiceClient client(options.model_path);
   auto km = client.FetchLatestModel("");
   if (!km.ok()) {
@@ -654,21 +658,32 @@ void RunGPUBenchmarkFiber(Options options) {
 
   ConcurrentQueue<FiberRequest> request_queue;
 
-  std::thread gpu_pipeline_thread(
-      [&] { GPUPipelineThread(model, request_queue, options); });
+  std::thread gpu_pipeline_thread(GPUPipelineThread, std::ref(model),
+                                  std::ref(request_queue), options);
 
-  const int n_fibers = options.prediction_batch_size;
-
+  const int n_threads = options.worker_threads;
+  const int fibers_per_thread = options.prediction_batch_size / n_threads;
+  const int rounds_per_fiber = options.rounds;
   int64_t t_start = UnixMicros();
-  std::vector<boost::fibers::fiber> fibers;
-  for (int i = 0; i < n_fibers; ++i) {
-    int fiber_id = i;
-    fibers.emplace_back(FiberWorker, fiber_id, std::ref(request_queue),
-                        options);
+  std::vector<std::thread> fiber_threads;
+  for (int k = 0; k < n_threads; k++) {
+    fiber_threads.emplace_back([&] {
+      std::vector<boost::fibers::fiber> fibers;
+      for (int i = 0; i < fibers_per_thread; ++i) {
+        int fiber_id = i;
+        fibers.emplace_back(FiberWorker, k * n_threads + fiber_id,
+                            std::ref(request_queue), rounds_per_fiber);
+      }
+      for (auto& fiber : fibers) {
+        if (fiber.joinable()) {
+          fiber.join();
+        }
+      }
+    });
   }
-  for (auto& fiber : fibers) {
-    if (fiber.joinable()) {
-      fiber.join();
+  for (auto& t : fiber_threads) {
+    if (t.joinable()) {
+      t.join();
     }
   }
   int64_t t_end = UnixMicros();
