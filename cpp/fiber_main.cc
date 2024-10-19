@@ -1,5 +1,6 @@
 #include <boost/fiber/all.hpp>
 #include <iostream>
+#include <queue>
 
 template <typename T>
 class ConcurrentQueue {
