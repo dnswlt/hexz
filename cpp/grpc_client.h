@@ -25,6 +25,8 @@ class TrainingServiceClient {
   // return.
   virtual absl::StatusOr<std::pair<hexzpb::ModelKey, torch::jit::Module>>
   FetchLatestModel(const std::string& model_name) = 0;
+
+  virtual std::string RemoteAddr() const = 0;
 };
 
 // A gRPC client used to communicate with a training server.
@@ -41,6 +43,8 @@ class EmbeddedTrainingServiceClient : public TrainingServiceClient {
   absl::StatusOr<std::pair<hexzpb::ModelKey, torch::jit::Module>>
   FetchLatestModel(const std::string& model_name) override;
 
+  std::string RemoteAddr() const override { return "<local>"; }
+
  private:
   std::string path_;
 };
@@ -48,8 +52,10 @@ class EmbeddedTrainingServiceClient : public TrainingServiceClient {
 // A gRPC client used to communicate with a training server.
 class GRPCTrainingServiceClient : public TrainingServiceClient {
  public:
-  GRPCTrainingServiceClient(std::shared_ptr<grpc::Channel> channel)
-      : stub_(hexzpb::TrainingService::NewStub(channel)) {}
+  GRPCTrainingServiceClient(std::shared_ptr<grpc::Channel> channel,
+                            std::string remote_addr)
+      : stub_(hexzpb::TrainingService::NewStub(channel)),
+        remote_addr_(std::move(remote_addr)) {}
 
   // Connects to the training service at the given address addr.
   static std::unique_ptr<GRPCTrainingServiceClient> Connect(
@@ -64,7 +70,10 @@ class GRPCTrainingServiceClient : public TrainingServiceClient {
   absl::StatusOr<std::pair<hexzpb::ModelKey, torch::jit::Module>>
   FetchLatestModel(const std::string& model_name) override;
 
+  std::string RemoteAddr() const override { return remote_addr_; }
+
  private:
+  std::string remote_addr_;
   std::unique_ptr<hexzpb::TrainingService::Stub> stub_;
 };
 

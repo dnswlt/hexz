@@ -93,7 +93,7 @@ std::unique_ptr<GRPCTrainingServiceClient> GRPCTrainingServiceClient::Connect(
   channel_args.SetCompressionAlgorithm(GRPC_COMPRESS_GZIP);
 
   return std::make_unique<GRPCTrainingServiceClient>(grpc::CreateCustomChannel(
-      addr, grpc::InsecureChannelCredentials(), channel_args));
+      addr, grpc::InsecureChannelCredentials(), channel_args), addr);
 }
 
 }  // namespace hexz

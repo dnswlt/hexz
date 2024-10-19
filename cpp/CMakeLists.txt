@@ -17,6 +17,9 @@ include(FetchContent)
 find_package(absl CONFIG REQUIRED)
 find_package(protobuf CONFIG REQUIRED)
 find_package(gRPC CONFIG REQUIRED)
+# Link Boost libraries statically.
+set(Boost_USE_STATIC_LIBS ON)
+find_package(Boost REQUIRED COMPONENTS fiber)
 
 #
 # libtorch
@@ -57,7 +60,7 @@ target_link_libraries(hexzpb_grpc PUBLIC hexzpb protobuf::libprotobuf gRPC::grpc
 add_library(grpc_client grpc_client.h grpc_client.cc)
 target_link_libraries(grpc_client PUBLIC hexzpb_grpc hexzpb absl::log absl::statusor "${TORCH_LIBRARIES}")
 
-add_library(mcts base.cc board.cc mcts.cc perfm.cc batch.h)
+add_library(mcts base.cc board.cc mcts.cc perfm.cc batch.h queue.h)
 target_link_libraries(mcts PUBLIC absl::statusor absl::strings absl::log hexzpb "${TORCH_LIBRARIES}")
 
 add_library(hexz_pyapi pyapi.cc)
@@ -69,16 +72,8 @@ target_link_libraries(worker PRIVATE mcts absl::log absl::flags absl::flags_pars
 add_executable(coro coro_main.cc)
 target_link_libraries(coro PRIVATE mcts absl::log grpc_client)
 
-set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost REQUIRED COMPONENTS fiber)
-
 add_executable(gpubench gpubench_main.cc)
 target_link_libraries(gpubench PRIVATE mcts absl::log absl::flags absl::flags_parse absl::flags_usage grpc_client Boost::fiber)
-
-# Experiment: Boost and fibers
-add_executable(fiber fiber_main.cc)
-target_link_libraries(fiber PRIVATE Boost::fiber)
-# End Experiment
 
 #
 # Testing

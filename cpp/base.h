@@ -16,6 +16,10 @@ struct Config {
   std::string device = "cpu";
   // How many threads to use for self-play.
   int worker_threads = 1;
+  // Number of fibers to run per thread. Each fiber self-plays games
+  // independently.
+  // Leave this at 0 to not use fibers at all.
+  int fibers_per_thread = 0;
   // Batch size to use in multi-threaded mode for GPU model predictions.
   int prediction_batch_size = 16;
   // MCTS runs executed for each move. Can be further influenced by
