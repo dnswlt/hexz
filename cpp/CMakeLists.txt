@@ -65,20 +65,29 @@ target_link_libraries(hexzpb_grpc PUBLIC hexzpb protobuf::libprotobuf gRPC::grpc
 add_library(grpc_client grpc_client.h grpc_client.cc)
 target_link_libraries(grpc_client PUBLIC hexzpb_grpc hexzpb absl::log absl::statusor "${TORCH_LIBRARIES}")
 
-add_library(mcts base.cc board.cc mcts.cc perfm.cc batch.h queue.h)
-target_link_libraries(mcts PUBLIC absl::statusor absl::strings absl::log hexzpb Boost::fiber "${TORCH_LIBRARIES}")
+add_library(base base.cc perfm.cc queue.h batch.h)
+target_link_libraries(base PUBLIC absl::statusor absl::strings absl::log)
+
+add_library(model model.cc)
+target_link_libraries(model PUBLIC base hexzpb Boost::fiber "${TORCH_LIBRARIES}")
+
+add_library(mcts base.cc board.cc mcts.cc perfm.cc)
+target_link_libraries(mcts PUBLIC base hexzpb model absl::statusor absl::strings absl::log)
 
 add_library(hexz_pyapi pyapi.cc)
-target_link_libraries(hexz_pyapi PUBLIC absl::strings absl::log hexzpb mcts)
+target_link_libraries(hexz_pyapi PUBLIC mcts absl::strings absl::log)
 
 add_executable(worker worker.cc worker_main.cc)
-target_link_libraries(worker PRIVATE mcts absl::log absl::flags absl::flags_parse absl::flags_usage grpc_client)
+target_link_libraries(worker PRIVATE grpc_client mcts absl::log absl::flags absl::flags_parse absl::flags_usage)
 
-add_executable(coro coro_main.cc)
-target_link_libraries(coro PRIVATE mcts absl::log grpc_client)
-
+# Benchmark for the different GPU pipelines.
 add_executable(gpubench gpubench_main.cc)
 target_link_libraries(gpubench PRIVATE mcts absl::log absl::flags absl::flags_parse absl::flags_usage grpc_client Boost::fiber)
+
+# Experiment: play around with Coroutines.
+# For now, fibers seem to do the job just as well.
+add_executable(coro coro_main.cc)
+target_link_libraries(coro PRIVATE mcts absl::log grpc_client)
 
 #
 # Testing
@@ -93,8 +102,8 @@ add_executable(pyapi_test pyapi_test.cc)
 
 target_link_libraries(mcts_test GTest::gmock_main mcts)
 target_link_libraries(board_test GTest::gmock_main mcts)
-target_link_libraries(batch_test GTest::gmock_main mcts)
-target_link_libraries(base_test GTest::gtest_main mcts)
+target_link_libraries(batch_test GTest::gmock_main base)
+target_link_libraries(base_test GTest::gtest_main base)
 target_link_libraries(pyapi_test GTest::gtest_main hexz_pyapi mcts)
 
 include(GoogleTest)

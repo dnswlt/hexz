@@ -12,6 +12,7 @@
 #include "board.h"
 #include "hexz.pb.h"
 #include "mcts.h"
+#include "model.h"
 
 namespace hexz {
 

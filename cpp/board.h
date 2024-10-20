@@ -53,9 +53,7 @@ struct Move {
   int c;
   float value;
   // Helper to create a Flag move.
-  static Move Flag(int r, int c) {
-    return Move{Typ::kFlag, r, c, 1.0};
-  }
+  static Move Flag(int r, int c) { return Move{Typ::kFlag, r, c, 1.0}; }
   std::string DebugString() const {
     return absl::StrCat("Move(", typ, ", ", r, ", ", c, ", ", value, ")");
   }
@@ -106,6 +104,8 @@ class Board {
   std::pair<float, float> Score() const;
   float Result() const;
 
+  // Returns a (11, 11, 10) tensor representing the current board state
+  // from the view of the given player.
   torch::Tensor Tensor(int player) const;
 
   int Flags(int player) const;
