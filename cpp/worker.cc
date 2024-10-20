@@ -4,6 +4,7 @@
 #include <absl/log/absl_log.h>
 #include <absl/strings/string_view.h>
 
+#include <boost/fiber/all.hpp>
 #include <mutex>
 #include <random>
 
@@ -142,7 +143,7 @@ bool AsyncExampleSender::ProcessRequest(
 
   // Update model if necessary.
   if (!SameOrNewer(resp->latest_model(), model_.Key())) {
-    auto old_key = model_.Key();
+    const auto old_key = model_.Key();
     auto km = client_.FetchLatestModel(resp->latest_model().name());
     if (!km.ok()) {
       ABSL_LOG(ERROR) << "Failed to fetch latest model: " << km.status();
@@ -158,6 +159,13 @@ bool AsyncExampleSender::ProcessRequest(
 
 void Worker::Run() {
   ABSL_LOG(INFO) << "Generating examples using execution_id " << execution_id_;
+
+  // Delay startup if requested.
+  if (config_.startup_delay_seconds > 0) {
+    float delay = config_.startup_delay_seconds * internal::UnitRandom();
+    ABSL_LOG(INFO) << "Delaying startup by " << delay << " seconds.";
+    std::this_thread::sleep_for(std::chrono::duration<float>(delay));
+  }
 
   // Leave model_name empty to fetch whatever the training server has
   // available.
@@ -180,8 +188,28 @@ void Worker::Run() {
   for (int i = 0; i < config_.worker_threads; i++) {
     worker_threads.emplace_back([this, &model, &sender, thread_num = i] {
       Perfm::ThreadScope perfm;
-      auto guard = model->RegisterThread();
-      RunSingle(*model, sender);
+      if (config_.fibers_per_thread > 0) {
+        // Run with fibers.
+        std::vector<boost::fibers::fiber> fibers;
+        fibers.reserve(config_.fibers_per_thread);
+        for (int j = 0; j < config_.fibers_per_thread; ++j) {
+          fibers.emplace_back([&, fiber_num = j] {
+            auto token = model->RegisterThread();
+            RunSingle(*model, sender);
+            ABSL_LOG(INFO) << "Fiber " << thread_num << ":" << fiber_num
+                           << " is done";
+          });
+        }
+        for (auto& fiber : fibers) {
+          if (fiber.joinable()) {
+            fiber.join();
+          }
+        }
+      } else {
+        // No fibers, run directly in thread.
+        auto guard = model->RegisterThread();
+        RunSingle(*model, sender);
+      }
       ABSL_LOG(INFO) << "Thread #" << thread_num << "("
                      << std::this_thread::get_id() << ") is done.";
     });
@@ -204,13 +232,6 @@ void Worker::RunSingle(Model& model, AsyncExampleSender& sender) {
   const int64_t started_micros = UnixMicros();
   const int64_t end_micros =
       started_micros + config_.max_runtime_seconds * 1'000'000;
-
-  // Delay startup if requested.
-  if (config_.startup_delay_seconds > 0) {
-    float delay = config_.startup_delay_seconds * internal::UnitRandom();
-    ABSL_LOG(INFO) << "Delaying startup by " << delay << " seconds.";
-    std::this_thread::sleep_for(std::chrono::duration<float>(delay));
-  }
 
   int max_games = config_.max_games > 0 ? config_.max_games
                                         : std::numeric_limits<int>::max();
@@ -266,19 +287,25 @@ std::unique_ptr<Model> Worker::CreateModel(hexzpb::ModelKey model_key,
   auto device = Device();
   if (config_.fibers_per_thread > 0) {
     // Use the fiber-based model.
+    ABSL_CHECK(config_.prediction_batch_size <=
+               config_.worker_threads * config_.fibers_per_thread)
+        << "FiberTorchModel would deadlock. Make sure to run with at least "
+           "prediction_batch_size fibers.";
     ABSL_LOG(INFO) << "Using FiberTorchModel for " << config_.worker_threads
                    << " threads and " << config_.fibers_per_thread
                    << " fibers per thread on device " << config_.device;
-    return std::make_unique<FiberTorchModel>(model_key, std::move(model),
-                                             device, config_.worker_threads);
+    return std::make_unique<FiberTorchModel>(
+        model_key, std::move(model), device, config_.prediction_batch_size);
   } else if (config_.worker_threads > 1 && device != torch::kCPU) {
     // Using the batched model is only useful if multiple threads use the GPU.
+    ABSL_CHECK(config_.prediction_batch_size <= config_.worker_threads)
+        << "BatchedTorchModel would deadlock";
     constexpr int64_t timeout_micros = 1'000'000;
     ABSL_LOG(INFO) << "Using BatchedTorchModel for " << config_.worker_threads
                    << " threads on device " << config_.device;
-    return std::make_unique<BatchedTorchModel>(model_key, std::move(model),
-                                               device, config_.worker_threads,
-                                               timeout_micros);
+    return std::make_unique<BatchedTorchModel>(
+        model_key, std::move(model), device, config_.prediction_batch_size,
+        timeout_micros);
   }
   // Use the ole' unbatched, one prediction at a time model.
   ABSL_LOG(INFO) << "Using TorchModel for " << config_.worker_threads

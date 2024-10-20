@@ -32,7 +32,8 @@ class TrainingServiceClient {
 // A gRPC client used to communicate with a training server.
 class EmbeddedTrainingServiceClient : public TrainingServiceClient {
  public:
-  EmbeddedTrainingServiceClient(std::string path) : path_(std::move(path)) {}
+  EmbeddedTrainingServiceClient(std::string path)
+      : path_(std::move(path)), model_key_(EmbeddedModelKey()) {}
 
   absl::StatusOr<hexzpb::AddTrainingExamplesResponse> AddTrainingExamples(
       const hexzpb::AddTrainingExamplesRequest& request) override;
@@ -46,7 +47,14 @@ class EmbeddedTrainingServiceClient : public TrainingServiceClient {
   std::string RemoteAddr() const override { return "<local>"; }
 
  private:
+  hexzpb::ModelKey EmbeddedModelKey() {
+    hexzpb::ModelKey key;
+    key.set_name("<embedded>");
+    key.set_checkpoint(0);
+    return key;
+  }
   std::string path_;
+  const hexzpb::ModelKey model_key_;
 };
 
 // A gRPC client used to communicate with a training server.

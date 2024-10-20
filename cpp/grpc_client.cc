@@ -19,16 +19,15 @@ EmbeddedTrainingServiceClient::AddTrainingExamples(
     const hexzpb::AddTrainingExamplesRequest& request) {
   hexzpb::AddTrainingExamplesResponse response;
   response.set_status(hexzpb::AddTrainingExamplesResponse::ACCEPTED);
+  *response.mutable_latest_model() = model_key_;
   return response;
 }
 
 absl::StatusOr<std::pair<hexzpb::ModelKey, torch::jit::Module>>
 EmbeddedTrainingServiceClient::FetchLatestModel(const std::string& model_name) {
-  hexzpb::ModelKey key;
-  key.set_name("embedded");
   try {
     auto model = torch::jit::load(path_, torch::kCPU);
-    return std::make_pair(key, model);
+    return std::make_pair(model_key_, model);
 
   } catch (c10::Error& error) {
     return absl::InternalError(

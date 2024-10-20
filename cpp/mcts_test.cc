@@ -37,7 +37,7 @@ const hexzpb::ModelKey& TestModelKey() {
 class FakeModel : public Model {
   void UpdateModel(hexzpb::ModelKey key, torch::jit::Module&& module) override {
   }
-  const hexzpb::ModelKey& Key() const override { return TestModelKey(); }
+  hexzpb::ModelKey Key() const override { return TestModelKey(); }
 };
 
 class UniformFakeModel final : public FakeModel {

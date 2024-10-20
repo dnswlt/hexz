@@ -21,7 +21,7 @@ struct Config {
   // Leave this at 0 to not use fibers at all.
   int fibers_per_thread = 0;
   // Batch size to use in multi-threaded mode for GPU model predictions.
-  int prediction_batch_size = 16;
+  int prediction_batch_size = 1;
   // MCTS runs executed for each move. Can be further influenced by
   // runs_per_move_decay.
   int runs_per_move = 800;

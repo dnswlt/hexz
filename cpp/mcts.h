@@ -9,7 +9,7 @@
 #include <boost/fiber/all.hpp>
 #include <cassert>
 #include <ostream>
-#include <string_view>
+#include <queue>
 #include <vector>
 
 #include "base.h"
@@ -17,7 +17,6 @@
 #include "board.h"
 #include "hexz.pb.h"
 #include "perfm.h"
-#include "queue.h"
 
 namespace hexz {
 
@@ -270,7 +269,7 @@ class Model {
   // This is the core method of any model, that returns a model prediction
   // for the given board and (MCTS search) node.
   virtual Prediction Predict(const Board& board, const Node& node) = 0;
-  virtual const hexzpb::ModelKey& Key() const = 0;
+  virtual hexzpb::ModelKey Key() const = 0;
   virtual ~Model() = default;
 };
 
@@ -290,7 +289,7 @@ class TorchModel : public Model {
 
   // Returns the model key, if it was set during construction. Otherwise,
   // returns the "zero value" of ModelKey.
-  const hexzpb::ModelKey& Key() const override { return key_; }
+  hexzpb::ModelKey Key() const override { return key_; }
   // Sets the device on which model predictions will be made.
   // The default is torch::kCPU and does not need to be set explicitly.
   void SetDevice(torch::DeviceType device);
@@ -338,9 +337,8 @@ class BatchedTorchModel : public Model {
   void UpdateModel(hexzpb::ModelKey key, torch::jit::Module&& module) override;
 
   // Returns the key of the currently used model.
-  // Access to this method and the reference it returns must be synchronized
-  // across threads by callers!
-  const hexzpb::ModelKey& Key() const override;
+  // Access to this method must be synchronized across threads by callers!
+  hexzpb::ModelKey Key() const override;
 
   ScopeGuard RegisterThread() override { return batcher_.RegisterThread(); }
 
@@ -370,7 +368,12 @@ class FiberTorchModel : public Model {
 
   Prediction Predict(const Board& board, const Node& node) override;
 
-  const hexzpb::ModelKey& Key() const override { return key_; }
+  hexzpb::ModelKey Key() const override;
+
+  // Each fiber using this model must call this method first and may only
+  // use the model while the returned ScopeGuard is alive.
+  // TODO: Rename to just Register, since here we don't expect threads, but fibers?
+  ScopeGuard RegisterThread() override;
 
   // Terminates the gpu_pipeline_thread_.
   ~FiberTorchModel();
@@ -380,14 +383,35 @@ class FiberTorchModel : public Model {
   // consumes requests from the request_queue_, and sends them
   // to the GPU in batches.
   void RunGPUPipeline();
+  // Called by the ScopeGuard returned by RegisterThread. Notifies
+  // the GPU pipeline thread.
+  void Unregister();
 
+  // Removes up to n elements from the request queue and adds them to buf.
+  // Returns the number of elements added.
+  // This method blocks until data is available or until a fiber has unregistered.
+  // Only in the latter case will it return 0.
+  int PopRequests(std::vector<PredictionRequest>& buf, int n);
+  
+  // Adds the given request to the queue, for consumption by the GPU pipeline.
+  void PushRequest(PredictionRequest&& request);
+
+  // Mutex for access to the request queue and associated cv and counters.
+  mutable std::mutex request_mut_;
   std::thread gpu_pipeline_thread_;
-  mutable std::mutex mut_;
-  hexzpb::ModelKey key_;
+  std::queue<PredictionRequest> request_queue_;
+  // Condition variable to notify the GPU pipeline thread.
+  std::condition_variable request_queue_cv_;
+  int active_fibers_ = 0;
+  // Used to signal that a fiber has left the building.
+  bool fiber_left_ = false;
+
+  // Mutex for the access to the model.
+  mutable std::mutex module_mut_;
   torch::jit::Module module_;
+  hexzpb::ModelKey key_;
   int batch_size_;
-  torch::DeviceType device_;
-  ConcurrentQueue<PredictionRequest> request_queue_;
+  const torch::DeviceType device_;
 };
 
 class PlayoutRunner {

@@ -4,6 +4,7 @@
 #include "base.h"
 #include "grpc_client.h"
 #include "mcts.h"
+#include "queue.h"
 
 namespace hexz {
 

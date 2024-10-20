@@ -438,7 +438,7 @@ void BatchedTorchModel::UpdateModel(hexzpb::ModelKey key,
       std::move(module), device_));
 }
 
-const hexzpb::ModelKey& BatchedTorchModel::Key() const { return key_; }
+hexzpb::ModelKey BatchedTorchModel::Key() const { return key_; }
 
 inline void PlayoutRunner::Stats::Add(float result) noexcept {
   result_sum += result;
@@ -452,13 +452,21 @@ FiberTorchModel::FiberTorchModel(hexzpb::ModelKey key,
       module_{std::move(module)},
       device_{device},
       batch_size_{batch_size} {
+  // Acquire lock to have a synchronization point for module_ before any access
+  // to it by other threads or fibers. (Necessary?)
+  std::scoped_lock<std::mutex> lk(module_mut_);
+  module_.to(device_);
   // Start the GPU thread only after this object has been
   // fully initialized.
   gpu_pipeline_thread_ = std::thread{&FiberTorchModel::RunGPUPipeline, this};
 }
 
 FiberTorchModel::~FiberTorchModel() {
-  request_queue_.push(PredictionRequest{.done = true});
+  {
+    std::scoped_lock<std::mutex> lk(request_mut_);
+    ABSL_CHECK(active_fibers_ == 0)
+        << "FiberTorchModel is being destroyed while fibers are active";
+  }
   if (gpu_pipeline_thread_.joinable()) {
     gpu_pipeline_thread_.join();
   }
@@ -466,22 +474,51 @@ FiberTorchModel::~FiberTorchModel() {
 
 void FiberTorchModel::UpdateModel(hexzpb::ModelKey key,
                                   torch::jit::Module&& module) {
-  std::scoped_lock<std::mutex> lk(mut_);
+  std::scoped_lock<std::mutex> lk(module_mut_);
   key_ = std::move(key);
   module_ = std::move(module);
+  module_.to(device_);
+}
+
+hexzpb::ModelKey FiberTorchModel::Key() const {
+  std::scoped_lock<std::mutex> lk(module_mut_);
+  return key_;
 }
 
 Model::Prediction FiberTorchModel::Predict(const Board& board,
                                            const Node& node) {
+  Perfm::Scope ps(Perfm::Predict);
   boost::fibers::promise<Model::Prediction> promise;
   auto future = promise.get_future();
-  request_queue_.push(PredictionRequest{
+  PushRequest(PredictionRequest{
       .board = board.Tensor(node.NextTurn()),
       .action_mask = node.ActionMask().flatten(),
       .result_promise = std::move(promise),
   });
-  auto result = future.get();
-  return result;
+  return future.get();
+}
+
+int FiberTorchModel::PopRequests(std::vector<PredictionRequest>& buf, int n) {
+  std::unique_lock<std::mutex> lock(request_mut_);
+  // Wait until there's data or a fiber has left.
+  request_queue_cv_.wait(
+      lock, [this] { return !request_queue_.empty() || fiber_left_; });
+  if (fiber_left_) {
+    fiber_left_ = false;
+    return 0;
+  }
+  int k;
+  for (k = 0; k < n && !request_queue_.empty(); k++) {
+    buf.push_back(std::move(request_queue_.front()));
+    request_queue_.pop();
+  }
+  return k;
+}
+
+void FiberTorchModel::PushRequest(PredictionRequest&& request) {
+  std::scoped_lock<std::mutex> lk(request_mut_);
+  request_queue_.push(std::move(request));
+  request_queue_cv_.notify_one();
 }
 
 void FiberTorchModel::RunGPUPipeline() {
@@ -491,13 +528,25 @@ void FiberTorchModel::RunGPUPipeline() {
   while (true) {
     // Collect requests for batching
     while (batch.size() < batch_size_) {
-      int k = request_queue_.pop_n(batch, batch_size_ - batch.size());
-      if (std::any_of(batch.end() - k, batch.end(),
-                      [](const auto& r) { return r.done; })) {
-        ABSL_LOG(INFO)
-            << "GPU pipeline thread received final request. Exiting.";
-        return;
+      int k = PopRequests(batch, batch_size_ - batch.size());
+      if (k == 0) {
+        std::scoped_lock<std::mutex> lk(request_mut_);
+        // Nothing was read => a fiber has left the building.
+        // Update expected batch size.
+
+        // ABSL_LOG(INFO) << "GPU pipelne: a fiber left. " << active_fibers_
+        //                << " remain";
+
+        if (batch_size_ > active_fibers_) {
+          // Avoid waiting for a larger batch size than fibers can produce.
+          batch_size_ = active_fibers_;
+          //   ABSL_LOG(INFO) << "Reduced batch size to " << batch_size_;
+        }
       }
+    }
+    if (batch.empty()) {
+      ABSL_LOG(INFO) << "Nothing left to read from the queue. Exiting.";
+      return;
     }
     const size_t n_inputs = batch.size();
     std::vector<torch::Tensor> boards;
@@ -513,7 +562,10 @@ void FiberTorchModel::RunGPUPipeline() {
         torch::stack(boards).to(device_),
         torch::stack(action_masks).to(device_),
     };
+    // Need to guard access to module_ b/c it might get updated concurrently.
+    std::unique_lock<std::mutex> lk(module_mut_);
     auto pred = module_.forward(model_inputs);
+    lk.unlock();
     ABSL_DCHECK(pred.isTuple());
     const auto output_tuple = pred.toTuple();
     ABSL_DCHECK(output_tuple->size() == 2);
@@ -531,6 +583,20 @@ void FiberTorchModel::RunGPUPipeline() {
     }
     batch.clear();
   }
+}
+
+ScopeGuard FiberTorchModel::RegisterThread() {
+  std::scoped_lock<std::mutex> lk(request_mut_);
+  active_fibers_++;
+  return ScopeGuard([this] { Unregister(); });
+}
+
+void FiberTorchModel::Unregister() {
+  std::scoped_lock<std::mutex> lk(request_mut_);
+  ABSL_CHECK(active_fibers_ > 0);
+  active_fibers_--;
+  fiber_left_ = true;
+  request_queue_cv_.notify_one();
 }
 
 std::string PlayoutRunner::Stats::DebugString() const noexcept {
@@ -773,11 +839,11 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     int child_idx = root->SampleChild();
     const auto& child = *root->children()[child_idx];
     const auto& move = child.move();
-    ABSL_LOG(INFO) << "#" << n << " " << move.DebugString()
-                   << (is_fast_run ? "[fast]" : "") << " (turn: " << turn
-                   << ") " << board.ShortDebugString() << " after "
-                   << (float)(UnixMicros() - started_micros) / 1000000
-                   << "s. Stats: " << stats;
+    // ABSL_LOG(INFO) << "#" << n << " " << move.DebugString()
+    //                << (is_fast_run ? "[fast]" : "") << " (turn: " << turn
+    //                << ") " << board.ShortDebugString() << " after "
+    //                << (float)(UnixMicros() - started_micros) / 1000000
+    //                << "s. Stats: " << stats;
 
     if (!is_fast_run) {
       // Update TrainingExample with information from selected child.
