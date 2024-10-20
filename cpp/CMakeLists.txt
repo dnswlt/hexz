@@ -1,6 +1,11 @@
 # Use C++20 at least.
 set (CMAKE_CXX_STANDARD 20)
 
+# Build static libraries by default.
+# Shared libs seem to be the default for CMake with g++/Linux,
+# and that does not play well with static Boost libraries.
+set(BUILD_SHARED_LIBS OFF)
+
 cmake_minimum_required(VERSION 3.10)
 
 project(HexzWorker)
