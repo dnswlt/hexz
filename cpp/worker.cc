@@ -31,159 +31,132 @@ bool SameOrNewer(const hexzpb::ModelKey& lhs, const hexzpb::ModelKey& rhs) {
 
 constexpr absl::string_view kKillMessage = "__KILL_KILL_KILL__";
 
-// AsyncExampleSender is used to send examples to the training server
-// asynchronously. Its Run() method is supposed to be executed in a separate
-// thread. Clients can then pass requests via the EnqueueRequest method from any
-// other thread without additional synchronization.
-//
-// If the training server informs the sender that a newer model is available,
-// the sender will update the model.
-class AsyncExampleSender {
- public:
-  enum class State { PENDING, ACTIVE, STOPPING, TERMINATED };
-  // Starts the background sender thread, which will be terminated on
-  // destruction of this object.
-  AsyncExampleSender(TrainingServiceClient& client, Model& model)
-      : client_{client}, model_{model}, state_{State::PENDING} {
-    StartSenderThread();
-  }
-  // Cannot copy instances.
-  AsyncExampleSender(const AsyncExampleSender&) = delete;
-  AsyncExampleSender& operator=(const AsyncExampleSender&) = delete;
-  ~AsyncExampleSender() { TerminateSenderThread(); }
-
-  // Enqueues another request to be sent to the training server.
-  bool EnqueueRequest(hexzpb::AddTrainingExamplesRequest&& req) {
-    {
-      std::scoped_lock<std::mutex> lk(mut_);
-      if (state_ != State::ACTIVE) {
-        return false;
-      }
-    }
-    request_queue_.push(std::move(req));
-    return true;
-  }
-
- private:
-  // Start the background thread that will process send requests.
-  void StartSenderThread() {
-    std::scoped_lock<std::mutex> lk(mut_);
-    ABSL_CHECK(state_ == State::PENDING)
-        << "AsyncExampleSender::Start must only be called once.";
-    sender_thread_ = std::thread([this] {
-      while (true) {
-        auto req = request_queue_.pop();
-        if (!ProcessRequest(req)) {
-          break;
-        }
-      }
-      {
-        std::scoped_lock<std::mutex> lk(mut_);
-        state_ = State::TERMINATED;
-      }
-      ABSL_LOG(INFO) << "AsyncExampleSender::Run() is done.";
-    });
-    state_ = State::ACTIVE;
-  }
-
-  // Put a "kill message" into the queue to shut down the processing thread.
-  void TerminateSenderThread() {
-    {
-      std::scoped_lock<std::mutex> lk(mut_);
-      if (state_ != State::ACTIVE) {
-        return;
-      }
-      state_ = State::STOPPING;
-    }
-    ABSL_LOG(INFO)
-        << "AsyncExampleSender: terminating sender thread";
-    // Send kill message to terminate sender thread.
-    hexzpb::AddTrainingExamplesRequest kill_req;
-    kill_req.set_execution_id(kKillMessage);
-    // Cannot call EnqueueRequest here anymore in state STOPPING.
-    request_queue_.push(std::move(kill_req));
-
-    if (sender_thread_.joinable()) {
-      sender_thread_.join();
-    }
-  }
-
-  bool ProcessRequest(const hexzpb::AddTrainingExamplesRequest& req) {
-    if (req.execution_id() == kKillMessage) {
-      ABSL_LOG(ERROR) << "AsyncExampleSender: received kill request";
-      return false;
-    }
-    auto resp = client_.AddTrainingExamples(req);
-    if (!resp.ok()) {
-      ABSL_LOG(ERROR) << "Failed to send examples: " << resp.status();
-      return false;
-    }
-    switch (resp->status()) {
-      case hexzpb::AddTrainingExamplesResponse::ACCEPTED:
-        // Happy path.
-        ABSL_LOG(INFO) << "Successfully sent " << req.examples_size()
-                       << " examples to training server at "
-                       << client_.RemoteAddr();
-        break;
-      case hexzpb::AddTrainingExamplesResponse::REJECTED_AT_CAPACITY:
-        // For now, immediately exit if server is at capacity.
-        // There are probably too many worker (threads) sending examples.
-        ABSL_LOG(ERROR) << "Server is at capacity: " << resp->error_message();
-        return false;
-      case hexzpb::AddTrainingExamplesResponse::REJECTED_WRONG_MODEL:
-        // Since the server should accept both the previous and the latest
-        // model version, this should be a rare event, and we should
-        // probably tune our batch size. Individual workers are not able to
-        // generate new examples before the model got updated twice.
-        {
-          const auto& model_id =
-              ModelId(req.examples(req.examples_size() - 1).model_key());
-          ABSL_LOG(ERROR)
-              << "Server rejected out examples due to an old model. Sent: "
-              << model_id << ", want: " << ModelId(resp->latest_model());
-          return false;
-        }
-      default:
-        // Unknown status code => exit.
-        ABSL_LOG(ERROR) << "Received unexpected response status: "
-                        << hexzpb::AddTrainingExamplesResponse::Status_Name(
-                               resp->status())
-                        << ": " << resp->error_message();
-        return false;
-    }
-
-    // Update model if necessary.
-    if (!SameOrNewer(resp->latest_model(), model_.Key())) {
-      auto old_key = model_.Key();
-      auto km = client_.FetchLatestModel(resp->latest_model().name());
-      if (!km.ok()) {
-        ABSL_LOG(ERROR) << "Failed to fetch latest model: " << km.status();
-        return false;
-      }
-      auto& [latest_key, latest_model] = *km;
-      model_.UpdateModel(latest_key, std::move(latest_model));
-      ABSL_LOG(INFO) << "Updated model from " << ModelId(old_key) << " to "
-                     << ModelId(latest_key);
-    }
-    return true;
-  }
-
-  mutable std::mutex mut_;
-  State state_;
-  std::thread sender_thread_;
-  // Not owned.
-  TrainingServiceClient& client_;
-  Model& model_;
-  ConcurrentQueue<hexzpb::AddTrainingExamplesRequest> request_queue_;
-};
-
 }  // namespace
 
+AsyncExampleSender::AsyncExampleSender(TrainingServiceClient& client,
+                                       Model& model)
+    : client_{client}, model_{model}, state_{State::PENDING} {
+  StartSenderThread();
+}
+AsyncExampleSender::~AsyncExampleSender() { TerminateSenderThread(); }
+
+// Enqueues another request to be sent to the training server.
+bool AsyncExampleSender::EnqueueRequest(
+    hexzpb::AddTrainingExamplesRequest&& req) {
+  {
+    std::scoped_lock<std::mutex> lk(mut_);
+    if (state_ != State::ACTIVE) {
+      return false;
+    }
+  }
+  request_queue_.push(std::move(req));
+  return true;
+}
+
+// Start the background thread that will process send requests.
+void AsyncExampleSender::StartSenderThread() {
+  std::scoped_lock<std::mutex> lk(mut_);
+  ABSL_CHECK(state_ == State::PENDING)
+      << "AsyncExampleSender::Start must only be called once.";
+  sender_thread_ = std::thread([this] {
+    while (true) {
+      auto req = request_queue_.pop();
+      if (!ProcessRequest(req)) {
+        break;
+      }
+    }
+    {
+      std::scoped_lock<std::mutex> lk(mut_);
+      state_ = State::TERMINATED;
+    }
+    ABSL_LOG(INFO) << "AsyncExampleSender sender thread is done.";
+  });
+  state_ = State::ACTIVE;
+}
+
+// Put a "kill message" into the queue to shut down the processing thread.
+void AsyncExampleSender::TerminateSenderThread() {
+  {
+    std::scoped_lock<std::mutex> lk(mut_);
+    if (state_ != State::ACTIVE) {
+      return;
+    }
+    state_ = State::STOPPING;
+  }
+  ABSL_LOG(INFO) << "AsyncExampleSender: terminating sender thread";
+  // Send kill message to terminate sender thread.
+  hexzpb::AddTrainingExamplesRequest kill_req;
+  kill_req.set_execution_id(kKillMessage);
+  // Cannot call EnqueueRequest here anymore in state STOPPING.
+  request_queue_.push(std::move(kill_req));
+
+  if (sender_thread_.joinable()) {
+    sender_thread_.join();
+  }
+}
+
+bool AsyncExampleSender::ProcessRequest(
+    const hexzpb::AddTrainingExamplesRequest& req) {
+  if (req.execution_id() == kKillMessage) {
+    ABSL_LOG(ERROR) << "AsyncExampleSender: received kill request";
+    return false;
+  }
+  auto resp = client_.AddTrainingExamples(req);
+  if (!resp.ok()) {
+    ABSL_LOG(ERROR) << "Failed to send examples: " << resp.status();
+    return false;
+  }
+  switch (resp->status()) {
+    case hexzpb::AddTrainingExamplesResponse::ACCEPTED:
+      // Happy path.
+      ABSL_LOG(INFO) << "Successfully sent " << req.examples_size()
+                     << " examples to training server at "
+                     << client_.RemoteAddr();
+      break;
+    case hexzpb::AddTrainingExamplesResponse::REJECTED_AT_CAPACITY:
+      // For now, immediately exit if server is at capacity.
+      // There are probably too many worker (threads) sending examples.
+      ABSL_LOG(ERROR) << "Server is at capacity: " << resp->error_message();
+      return false;
+    case hexzpb::AddTrainingExamplesResponse::REJECTED_WRONG_MODEL:
+      // Since the server should accept both the previous and the latest
+      // model version, this should be a rare event, and we should
+      // probably tune our batch size. Individual workers are not able to
+      // generate new examples before the model got updated twice.
+      {
+        const auto& model_id =
+            ModelId(req.examples(req.examples_size() - 1).model_key());
+        ABSL_LOG(ERROR)
+            << "Server rejected out examples due to an old model. Sent: "
+            << model_id << ", want: " << ModelId(resp->latest_model());
+        return false;
+      }
+    default:
+      // Unknown status code => exit.
+      ABSL_LOG(ERROR) << "Received unexpected response status: "
+                      << hexzpb::AddTrainingExamplesResponse::Status_Name(
+                             resp->status())
+                      << ": " << resp->error_message();
+      return false;
+  }
+
+  // Update model if necessary.
+  if (!SameOrNewer(resp->latest_model(), model_.Key())) {
+    auto old_key = model_.Key();
+    auto km = client_.FetchLatestModel(resp->latest_model().name());
+    if (!km.ok()) {
+      ABSL_LOG(ERROR) << "Failed to fetch latest model: " << km.status();
+      return false;
+    }
+    auto& [latest_key, latest_model] = *km;
+    model_.UpdateModel(latest_key, std::move(latest_model));
+    ABSL_LOG(INFO) << "Updated model from " << ModelId(old_key) << " to "
+                   << ModelId(latest_key);
+  }
+  return true;
+}
+
 void Worker::Run() {
-  const int64_t started_micros = UnixMicros();
-  const int64_t end_micros =
-      started_micros +
-      static_cast<int64_t>(config_.max_runtime_seconds) * 1'000'000;
   ABSL_LOG(INFO) << "Generating examples using execution_id " << execution_id_;
 
   // Leave model_name empty to fetch whatever the training server has
@@ -205,57 +178,10 @@ void Worker::Run() {
 
   std::vector<std::thread> worker_threads;
   for (int i = 0; i < config_.worker_threads; i++) {
-    worker_threads.emplace_back([this, &model, &sender, started_micros,
-                                 end_micros, thread_num = i] {
+    worker_threads.emplace_back([this, &model, &sender, thread_num = i] {
       Perfm::ThreadScope perfm;
       auto guard = model->RegisterThread();
-      // Delay startup if requested.
-      if (config_.startup_delay_seconds > 0) {
-        float delay = config_.startup_delay_seconds * internal::UnitRandom();
-        ABSL_LOG(INFO) << "Delaying startup by " << delay << " seconds.";
-        std::this_thread::sleep_for(std::chrono::duration<float>(delay));
-      }
-
-      int max_games = config_.max_games > 0 ? config_.max_games
-                                            : std::numeric_limits<int>::max();
-      for (int i = 0; i < max_games; i++) {
-        int64_t now = UnixMicros();
-        if (now >= end_micros) {
-          break;  // Time's up
-        }
-        NeuralMCTS mcts{*model, std::make_unique<RandomPlayoutRunner>(),
-                        config_};
-        Board b = Board::RandomBoard();
-        int64_t max_runtime_seconds =
-            config_.max_runtime_seconds - (now - started_micros) / 1'000'000;
-
-        auto examples = mcts.PlayGame(b, max_runtime_seconds);
-        if (!examples.ok()) {
-          if (!absl::IsDeadlineExceeded(examples.status())) {
-            ABSL_LOG(ERROR) << "Aborting: PlayGame returned an error: "
-                            << examples.status();
-          }
-          break;
-        }
-        const int n_examples = examples->size();
-
-        ABSL_CHECK(n_examples > 0)
-            << "Played a game that yielded no examples?!";
-        const std::string model_id = ModelId(examples->back().model_key());
-
-        hexzpb::AddTrainingExamplesRequest req;
-        req.set_execution_id(execution_id_);
-        std::move(examples->begin(), examples->end(),
-                  RepeatedPtrFieldBackInserter(req.mutable_examples()));
-        if (!sender.EnqueueRequest(std::move(req))) {
-          ABSL_LOG(ERROR) << "Aborting: could not enqueue examples for sending";
-          break;
-        }
-
-        // Update stats.
-        stats_.IncrementExamples(n_examples);
-        stats_.IncrementGames(1);
-      }
+      RunSingle(*model, sender);
       ABSL_LOG(INFO) << "Thread #" << thread_num << "("
                      << std::this_thread::get_id() << ") is done.";
     });
@@ -272,6 +198,58 @@ void Worker::Run() {
                  << stats_data.examples << " examples in " << d << " seconds ("
                  << (stats_data.examples / d) << " examples/s, "
                  << (stats_data.games / d) << " games/s)";
+}
+
+void Worker::RunSingle(Model& model, AsyncExampleSender& sender) {
+  const int64_t started_micros = UnixMicros();
+  const int64_t end_micros =
+      started_micros + config_.max_runtime_seconds * 1'000'000;
+
+  // Delay startup if requested.
+  if (config_.startup_delay_seconds > 0) {
+    float delay = config_.startup_delay_seconds * internal::UnitRandom();
+    ABSL_LOG(INFO) << "Delaying startup by " << delay << " seconds.";
+    std::this_thread::sleep_for(std::chrono::duration<float>(delay));
+  }
+
+  int max_games = config_.max_games > 0 ? config_.max_games
+                                        : std::numeric_limits<int>::max();
+  for (int i = 0; i < max_games; i++) {
+    int64_t now = UnixMicros();
+    if (now >= end_micros) {
+      break;  // Time's up
+    }
+    NeuralMCTS mcts{model, std::make_unique<RandomPlayoutRunner>(), config_};
+    Board b = Board::RandomBoard();
+    int64_t max_runtime_seconds =
+        config_.max_runtime_seconds - (now - started_micros) / 1'000'000;
+
+    auto examples = mcts.PlayGame(b, max_runtime_seconds);
+    if (!examples.ok()) {
+      if (!absl::IsDeadlineExceeded(examples.status())) {
+        ABSL_LOG(ERROR) << "Aborting: PlayGame returned an error: "
+                        << examples.status();
+      }
+      break;
+    }
+    const int n_examples = examples->size();
+
+    ABSL_CHECK(n_examples > 0) << "Played a game that yielded no examples?!";
+    const std::string model_id = ModelId(examples->back().model_key());
+
+    hexzpb::AddTrainingExamplesRequest req;
+    req.set_execution_id(execution_id_);
+    std::move(examples->begin(), examples->end(),
+              RepeatedPtrFieldBackInserter(req.mutable_examples()));
+    if (!sender.EnqueueRequest(std::move(req))) {
+      ABSL_LOG(ERROR) << "Aborting: could not enqueue examples for sending";
+      break;
+    }
+
+    // Update stats.
+    stats_.IncrementExamples(n_examples);
+    stats_.IncrementGames(1);
+  }
 }
 
 torch::DeviceType Worker::Device() const {
