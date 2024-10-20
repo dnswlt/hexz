@@ -445,6 +445,25 @@ inline void PlayoutRunner::Stats::Add(float result) noexcept {
   runs++;
 }
 
+FiberTorchModel::FiberTorchModel(hexzpb::ModelKey key,
+                                 torch::jit::Module module,
+                                 torch::DeviceType device, int batch_size)
+    : key_{std::move(key)},
+      module_{std::move(module)},
+      device_{device},
+      batch_size_{batch_size} {
+  // Start the GPU thread only after this object has been
+  // fully initialized.
+  gpu_pipeline_thread_ = std::thread{&FiberTorchModel::RunGPUPipeline, this};
+}
+
+FiberTorchModel::~FiberTorchModel() {
+  request_queue_.push(PredictionRequest{.done = true});
+  if (gpu_pipeline_thread_.joinable()) {
+    gpu_pipeline_thread_.join();
+  }
+}
+
 void FiberTorchModel::UpdateModel(hexzpb::ModelKey key,
                                   torch::jit::Module&& module) {
   std::scoped_lock<std::mutex> lk(mut_);
@@ -465,14 +484,20 @@ Model::Prediction FiberTorchModel::Predict(const Board& board,
   return result;
 }
 
-void FiberTorchModel::GPUPipeline() {
+void FiberTorchModel::RunGPUPipeline() {
   ABSL_LOG(INFO) << "FiberTorchModel::GPUPipeline started";
   std::vector<PredictionRequest> batch;
   batch.reserve(batch_size_);
   while (true) {
     // Collect requests for batching
     while (batch.size() < batch_size_) {
-      request_queue_.pop_n(batch, batch_size_ - batch.size());
+      int k = request_queue_.pop_n(batch, batch_size_ - batch.size());
+      if (std::any_of(batch.end() - k, batch.end(),
+                      [](const auto& r) { return r.done; })) {
+        ABSL_LOG(INFO)
+            << "GPU pipeline thread received final request. Exiting.";
+        return;
+      }
     }
     const size_t n_inputs = batch.size();
     std::vector<torch::Tensor> boards;
@@ -480,11 +505,6 @@ void FiberTorchModel::GPUPipeline() {
     std::vector<torch::Tensor> action_masks;
     action_masks.reserve(n_inputs);
     for (auto& req : batch) {
-      if (req.done) {
-        ABSL_LOG(INFO)
-            << "GPU pipeline thread received final request. Exiting.";
-        return;
-      }
       boards.emplace_back(std::move(req.board));
       action_masks.emplace_back(std::move(req.action_mask));
     }
@@ -510,7 +530,6 @@ void FiberTorchModel::GPUPipeline() {
       });
     }
     batch.clear();
-
   }
 }
 

@@ -20,12 +20,12 @@ class WorkerStats {
     int examples = 0;
     int games = 0;
     // Unix micros
-    int64_t started = 0;
+    int64_t started_micros = 0;
   };
 
-  void Start() {
+  void SetStartedMicros(int64_t started_micros) {
     std::unique_lock<std::mutex> lk(mut_);
-    data_.started = UnixMicros();
+    data_.started_micros = started_micros;
   }
   void IncrementGames(int n) {
     std::unique_lock<std::mutex> lk(mut_);
@@ -35,7 +35,7 @@ class WorkerStats {
     std::unique_lock<std::mutex> lk(mut_);
     data_.examples += n;
   }
-  Data data() {
+  Data GetData() {
     std::unique_lock<std::mutex> lk(mut_);
     return data_;
   }

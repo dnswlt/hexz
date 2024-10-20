@@ -40,30 +40,23 @@ constexpr absl::string_view kKillMessage = "__KILL_KILL_KILL__";
 // the sender will update the model.
 class AsyncExampleSender {
  public:
-  explicit AsyncExampleSender(TrainingServiceClient& client, Model& model)
-      : client_{client}, model_{model} {}
+  enum class State { PENDING, ACTIVE, STOPPING, TERMINATED };
+  // Starts the background sender thread, which will be terminated on
+  // destruction of this object.
+  AsyncExampleSender(TrainingServiceClient& client, Model& model)
+      : client_{client}, model_{model}, state_{State::PENDING} {
+    StartSenderThread();
+  }
   // Cannot copy instances.
   AsyncExampleSender(const AsyncExampleSender&) = delete;
   AsyncExampleSender& operator=(const AsyncExampleSender&) = delete;
+  ~AsyncExampleSender() { TerminateSenderThread(); }
 
-  void Run() {
-    while (true) {
-      auto req = request_queue_.pop();
-      if (!ProcessRequest(req)) {
-        break;
-      }
-    }
-    {
-      std::scoped_lock<std::mutex> lk(mut_);
-      done_ = true;
-    }
-    ABSL_LOG(INFO) << "AsyncExampleSender::Run() is done.";
-  }
-
+  // Enqueues another request to be sent to the training server.
   bool EnqueueRequest(hexzpb::AddTrainingExamplesRequest&& req) {
     {
       std::scoped_lock<std::mutex> lk(mut_);
-      if (done_) {
+      if (state_ != State::ACTIVE) {
         return false;
       }
     }
@@ -71,14 +64,50 @@ class AsyncExampleSender {
     return true;
   }
 
-  // Put a "kill message" into the queue to  shut down the  processing thread.
-  void Terminate() {
-    hexzpb::AddTrainingExamplesRequest kill_req;
-    kill_req.set_execution_id(kKillMessage);
-    EnqueueRequest(std::move(kill_req));
+ private:
+  // Start the background thread that will process send requests.
+  void StartSenderThread() {
+    std::scoped_lock<std::mutex> lk(mut_);
+    ABSL_CHECK(state_ == State::PENDING)
+        << "AsyncExampleSender::Start must only be called once.";
+    sender_thread_ = std::thread([this] {
+      while (true) {
+        auto req = request_queue_.pop();
+        if (!ProcessRequest(req)) {
+          break;
+        }
+      }
+      {
+        std::scoped_lock<std::mutex> lk(mut_);
+        state_ = State::TERMINATED;
+      }
+      ABSL_LOG(INFO) << "AsyncExampleSender::Run() is done.";
+    });
+    state_ = State::ACTIVE;
   }
 
- private:
+  // Put a "kill message" into the queue to shut down the processing thread.
+  void TerminateSenderThread() {
+    {
+      std::scoped_lock<std::mutex> lk(mut_);
+      if (state_ != State::ACTIVE) {
+        return;
+      }
+      state_ = State::STOPPING;
+    }
+    ABSL_LOG(INFO)
+        << "AsyncExampleSender: terminating sender thread";
+    // Send kill message to terminate sender thread.
+    hexzpb::AddTrainingExamplesRequest kill_req;
+    kill_req.set_execution_id(kKillMessage);
+    // Cannot call EnqueueRequest here anymore in state STOPPING.
+    request_queue_.push(std::move(kill_req));
+
+    if (sender_thread_.joinable()) {
+      sender_thread_.join();
+    }
+  }
+
   bool ProcessRequest(const hexzpb::AddTrainingExamplesRequest& req) {
     if (req.execution_id() == kKillMessage) {
       ABSL_LOG(ERROR) << "AsyncExampleSender: received kill request";
@@ -139,11 +168,12 @@ class AsyncExampleSender {
     return true;
   }
 
+  mutable std::mutex mut_;
+  State state_;
+  std::thread sender_thread_;
   // Not owned.
   TrainingServiceClient& client_;
   Model& model_;
-  mutable std::mutex mut_;
-  bool done_ = false;
   ConcurrentQueue<hexzpb::AddTrainingExamplesRequest> request_queue_;
 };
 
@@ -168,19 +198,11 @@ void Worker::Run() {
   std::unique_ptr<Model> model =
       CreateModel(initial_model_key, std::move(initial_model));
 
-  // std::thread gpu_pipeline_thread{&FiberTorchModel::GPUPipeline,
-  // fiber_model.get()}; absl::Cleanup gpu_pipeline_cleanup =
-  // [&gpu_pipeline_thread] {
-  //   if (gpu_pipeline_thread.joinable()) {
-  //     gpu_pipeline_thread.join();
-  //   }
-  // };
-
   // Used to send examples and update the model asynchronously.
   AsyncExampleSender sender(client_, *model);
-  std::thread sender_thread(&AsyncExampleSender::Run, &sender);
 
-  stats_.Start();
+  stats_.SetStartedMicros(UnixMicros());
+
   std::vector<std::thread> worker_threads;
   for (int i = 0; i < config_.worker_threads; i++) {
     worker_threads.emplace_back([this, &model, &sender, started_micros,
@@ -243,13 +265,9 @@ void Worker::Run() {
       t.join();
     }
   }
-  sender.Terminate();
-  if (sender_thread.joinable()) {
-    sender_thread.join();
-  }
   // Print stats.
-  auto stats_data = stats_.data();
-  auto d = static_cast<double>(UnixMicros() - stats_data.started) / 1e6;
+  auto stats_data = stats_.GetData();
+  auto d = static_cast<double>(UnixMicros() - stats_data.started_micros) / 1e6;
   ABSL_LOG(INFO) << "Generated " << stats_data.games << " games and "
                  << stats_data.examples << " examples in " << d << " seconds ("
                  << (stats_data.examples / d) << " examples/s, "

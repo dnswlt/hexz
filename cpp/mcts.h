@@ -361,25 +361,30 @@ class FiberTorchModel : public Model {
     // The final request sets this to true to terminate the GPU pipeline thread.
     bool done = false;
   };
-  FiberTorchModel(hexzpb::ModelKey key, torch::jit::Module module,
-                  torch::DeviceType device, int batch_size)
-      : key_{std::move(key)},
-        module_{std::move(module)},
-        device_{device},
-        batch_size_{batch_size} {}
 
+  FiberTorchModel(hexzpb::ModelKey key, torch::jit::Module module,
+                  torch::DeviceType device, int batch_size);
+  FiberTorchModel(const FiberTorchModel&) = delete;
+  FiberTorchModel& operator=(const FiberTorchModel&) = delete;
   void UpdateModel(hexzpb::ModelKey key, torch::jit::Module&& model) override;
 
   Prediction Predict(const Board& board, const Node& node) override;
 
   const hexzpb::ModelKey& Key() const override { return key_; }
 
-  void GPUPipeline();
+  // Terminates the gpu_pipeline_thread_.
+  ~FiberTorchModel();
 
  private:
+  // Executed by the gpu_pipeline_thread_, RunGPUPipeline
+  // consumes requests from the request_queue_, and sends them
+  // to the GPU in batches.
+  void RunGPUPipeline();
+
+  std::thread gpu_pipeline_thread_;
+  mutable std::mutex mut_;
   hexzpb::ModelKey key_;
   torch::jit::Module module_;
-  std::mutex mut_;
   int batch_size_;
   torch::DeviceType device_;
   ConcurrentQueue<PredictionRequest> request_queue_;

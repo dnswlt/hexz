@@ -113,14 +113,16 @@ class ConcurrentQueue {
 
   // Moves up to n items from the queue into the given vector dst.
   // Blocks if the queue is empty.
-  void pop_n(std::vector<T>& dst, int n) {
+  // Returns the number of items added to dst.
+  int pop_n(std::vector<T>& dst, int n) {
     std::unique_lock<std::mutex> lock(mtx);
     cv.wait(lock, [this] { return !q.empty(); });  // Wait until there's data
-    while (n > 0 && !q.empty()) {
+    int k;
+    for (k = 0; k < n && !q.empty(); k++) {
       dst.push_back(std::move(q.front()));
       q.pop();
-      n--;
     }
+    return k;
   }
 
   // Tries to pop an element without blocking
