@@ -102,7 +102,7 @@ void BatchedTorchModel::UpdateModel(hexzpb::ModelKey key,
 hexzpb::ModelKey BatchedTorchModel::Key() const { return key_; }
 
 FiberTorchModel::FiberTorchModel(hexzpb::ModelKey key,
-                                 torch::jit::Module module,
+                                 torch::jit::Module&& module,
                                  torch::DeviceType device, int batch_size)
     : key_{std::move(key)},
       module_{std::move(module)},

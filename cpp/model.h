@@ -140,7 +140,7 @@ class FiberTorchModel : public Model {
     bool done = false;
   };
 
-  FiberTorchModel(hexzpb::ModelKey key, torch::jit::Module module,
+  FiberTorchModel(hexzpb::ModelKey key, torch::jit::Module&& module,
                   torch::DeviceType device, int batch_size);
   FiberTorchModel(const FiberTorchModel&) = delete;
   FiberTorchModel& operator=(const FiberTorchModel&) = delete;
