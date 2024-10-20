@@ -1,5 +1,4 @@
-#ifndef __HEXZ_PYLIB_H__
-#define __HEXZ_PYLIB_H__
+#pragma once
 
 #include <memory>
 #include <string>
@@ -41,5 +40,3 @@ class MoveSuggester {
 };
 
 }  // namespace hexz
-
-#endif  // __HEXZ_PYLIB_H__

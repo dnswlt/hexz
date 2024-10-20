@@ -1,5 +1,4 @@
-#ifndef __HEXZ_BATCH_H__
-#define __HEXZ_BATCH_H__
+#pragma once
 
 #include <absl/log/absl_check.h>
 #include <absl/log/absl_log.h>
@@ -171,5 +170,3 @@ class Batcher {
 };
 
 }  // namespace hexz
-
-#endif  // __HEXZ_BATCH_H__

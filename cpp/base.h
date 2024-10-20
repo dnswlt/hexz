@@ -1,5 +1,4 @@
-#ifndef __HEXZ_CONFIG_H__
-#define __HEXZ_CONFIG_H__
+#pragma once
 
 #include <absl/status/statusor.h>
 
@@ -139,4 +138,3 @@ std::vector<float> Dirichlet(int n, float concentration);
 }  // namespace internal
 
 }  // namespace hexz
-#endif  // __HEXZ_CONFIG_H__

@@ -1,5 +1,4 @@
-#ifndef __HEXZ_MCTS_H__
-#define __HEXZ_MCTS_H__
+#pragma once
 
 #include <absl/status/status.h>
 #include <absl/status/statusor.h>
@@ -496,4 +495,3 @@ class NeuralMCTS {
 };
 
 }  // namespace hexz
-#endif  // __HEXZ_MCTS_H__

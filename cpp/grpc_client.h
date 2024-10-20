@@ -1,5 +1,4 @@
-#ifndef __HEXZ_GRPC_CLIENT_H__
-#define __HEXZ_GRPC_CLIENT_H__
+#pragma once
 
 #include <torch/torch.h>
 
@@ -86,5 +85,3 @@ class GRPCTrainingServiceClient : public TrainingServiceClient {
 };
 
 }  // namespace hexz
-
-#endif  // __HEXZ_GRPC_CLIENT_H__

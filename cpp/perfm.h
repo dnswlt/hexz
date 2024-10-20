@@ -1,5 +1,4 @@
-#ifndef __HEXZ_UTIL_H__
-#define __HEXZ_UTIL_H__
+#pragma once
 
 #include <cassert>
 #include <chrono>
@@ -92,4 +91,3 @@ class Perfm {
 };
 
 }  // namespace hexz
-#endif  // __HEXZ_UTIL_H__

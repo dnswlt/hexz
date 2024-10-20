@@ -522,6 +522,8 @@ void FiberTorchModel::PushRequest(PredictionRequest&& request) {
 }
 
 void FiberTorchModel::RunGPUPipeline() {
+  // Ensure this thread's perfm stats are accumulated into total stats.
+  Perfm::ThreadScope perfm_thread_scope;
   ABSL_LOG(INFO) << "FiberTorchModel::GPUPipeline started";
   std::vector<PredictionRequest> batch;
   batch.reserve(batch_size_);
@@ -562,26 +564,31 @@ void FiberTorchModel::RunGPUPipeline() {
         torch::stack(boards).to(device_),
         torch::stack(action_masks).to(device_),
     };
-    // Need to guard access to module_ b/c it might get updated concurrently.
-    std::unique_lock<std::mutex> lk(module_mut_);
-    auto pred = module_.forward(model_inputs);
-    lk.unlock();
-    ABSL_DCHECK(pred.isTuple());
-    const auto output_tuple = pred.toTuple();
-    ABSL_DCHECK(output_tuple->size() == 2);
-    // Read logits back to CPU / main memory.
-    const auto probs =
-        output_tuple->elements()[0].toTensor().exp().to(torch::kCPU);
-    const auto dim = probs.sizes();
-    ABSL_DCHECK(dim.size() == 2 && dim[0] == n_inputs && dim[1] == 2 * 11 * 10);
-    const auto values = output_tuple->elements()[1].toTensor().to(torch::kCPU);
-    for (int i = 0; i < n_inputs; i++) {
-      batch[i].result_promise.set_value(Model::Prediction{
-          .move_probs = probs.index({i}).reshape({2, 11, 10}),
-          .value = values.index({i}).item<float>(),
-      });
+    {
+      Perfm::Scope perfm(Perfm::PredictBatch);
+      // Need to guard access to module_ b/c it might get updated concurrently.
+      std::unique_lock<std::mutex> lk(module_mut_);
+      auto pred = module_.forward(model_inputs);
+      lk.unlock();
+      ABSL_DCHECK(pred.isTuple());
+      const auto output_tuple = pred.toTuple();
+      ABSL_DCHECK(output_tuple->size() == 2);
+      // Read logits back to CPU / main memory.
+      const auto probs =
+          output_tuple->elements()[0].toTensor().exp().to(torch::kCPU);
+      const auto dim = probs.sizes();
+      ABSL_DCHECK(dim.size() == 2 && dim[0] == n_inputs &&
+                  dim[1] == 2 * 11 * 10);
+      const auto values =
+          output_tuple->elements()[1].toTensor().to(torch::kCPU);
+      for (int i = 0; i < n_inputs; i++) {
+        batch[i].result_promise.set_value(Model::Prediction{
+            .move_probs = probs.index({i}).reshape({2, 11, 10}),
+            .value = values.index({i}).item<float>(),
+        });
+      }
+      batch.clear();
     }
-    batch.clear();
   }
 }
 

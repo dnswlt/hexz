@@ -1,5 +1,4 @@
-#ifndef __HEXZ_WORKER_H__
-#define __HEXZ_WORKER_H__
+#pragma once
 
 #include "base.h"
 #include "grpc_client.h"
@@ -109,5 +108,3 @@ void GenerateExamplesMultiThreaded(const Config& config,
                                    TrainingServiceClient& client);
 
 }  // namespace hexz
-
-#endif  // __HEXZ_WORKER_H__

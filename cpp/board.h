@@ -1,5 +1,4 @@
-#ifndef __HEXZ_BOARD_H__
-#define __HEXZ_BOARD_H__
+#pragma once
 
 #include <absl/status/statusor.h>
 #include <absl/strings/str_cat.h>
@@ -136,4 +135,3 @@ class Board {
 float FastRandomPlayout(int turn, const Board& board);
 
 }  // namespace hexz
-#endif  // __HEXZ_BOARD_H__
