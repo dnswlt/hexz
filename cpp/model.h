@@ -163,17 +163,19 @@ class FiberTorchModel : public Model {
   // Executed by the gpu_pipeline_thread_, RunGPUPipeline
   // consumes requests from the request_queue_, and sends them
   // to the GPU in batches.
+  // The GPU pipeline thread is terminated when there are no fibers left.
   void RunGPUPipeline();
   // Called by the ScopeGuard returned by RegisterThread. Notifies
   // the GPU pipeline thread.
   void Unregister();
 
-  // Removes up to n elements from the request queue and adds them to buf.
-  // Returns the number of elements added.
-  // This method blocks until data is available or until a fiber has
-  // unregistered. Only in the latter case will it return 0.
-  int PopRequests(std::vector<PredictionRequest>& buf, int n);
-
+  // Moves up to max_batch_size_ elements from the request queue into buf.
+  // This method takes the number of active threads into account and 
+  // blocks until data for the maximum allowed batch size, i.e.
+  // min(active_fibers, max_batch_size_) have been read.
+  // It returns the number of items moved into batch. This can only
+  // be zero if there are no more active fibers.
+  int ReadBatch(std::vector<PredictionRequest>& batch);
   // Adds the given request to the queue, for consumption by the GPU pipeline.
   void PushRequest(PredictionRequest&& request);
 
@@ -191,7 +193,7 @@ class FiberTorchModel : public Model {
   mutable std::mutex module_mut_;
   torch::jit::Module module_;
   hexzpb::ModelKey key_;
-  int batch_size_;
+  const int max_batch_size_;
   const torch::DeviceType device_;
 };
 

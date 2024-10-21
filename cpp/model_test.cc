@@ -8,11 +8,28 @@ namespace hexz {
 
 namespace {
 
-TEST(FiberTorchModelTest, SmokeTestSingleFiber) {
+TEST(FiberTorchModelTest, FiberTorchModelRegisterUnregister) {
+  // Register a fiber, but never make any calls. GPU pipeline thread should shut
+  // down cleanly.
   auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
   scriptmodule.to(torch::kCPU);
   scriptmodule.eval();
   const int batch_size = 1;
+  FiberTorchModel model(hexzpb::ModelKey(), std::move(scriptmodule),
+                        torch::kCPU, batch_size);
+  {
+    auto token = model.RegisterThread();
+  }
+}
+
+TEST(FiberTorchModelTest, SmokeTestSingleFiber) {
+  auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
+  scriptmodule.to(torch::kCPU);
+  scriptmodule.eval();
+  // Even if the batch size is large, a single fiber should be able
+  // to retrieve a result, since the GPU pipeline thread keeps track
+  // of the number of active fibers.
+  const int batch_size = 16;
   FiberTorchModel model(hexzpb::ModelKey(), std::move(scriptmodule),
                         torch::kCPU, batch_size);
   auto token = model.RegisterThread();
@@ -23,6 +40,24 @@ TEST(FiberTorchModelTest, SmokeTestSingleFiber) {
   auto sizes = pred.move_probs.sizes();
   EXPECT_THAT(sizes, testing::ElementsAre(2, 11, 10));
   EXPECT_TRUE(std::abs(pred.move_probs.sum().item<float>() - 1.0) < 0.01);
+}
+
+TEST(FiberTorchModelDeathTest, CheckFailIfNotRegistered) {
+  ASSERT_DEATH(
+      {
+        auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
+        scriptmodule.to(torch::kCPU);
+        scriptmodule.eval();
+        const int batch_size = 1;
+        FiberTorchModel model(hexzpb::ModelKey(), std::move(scriptmodule),
+                              torch::kCPU, batch_size);
+        // Not calling RegisterThread here. This should lead to a failure.
+        // auto token = model.RegisterThread();
+        auto board = torch::randn({11, 11, 10});
+        auto action_mask = torch::rand({2, 11, 10}) < 0.5;
+        auto pred = model.Predict(board, action_mask);
+      },
+      "RegisterThread");
 }
 
 TEST(FiberTorchModelTest, SmokeTestMultipleFibers) {

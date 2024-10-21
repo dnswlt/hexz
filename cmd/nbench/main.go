@@ -47,7 +47,7 @@ func playGame() error {
 	nMoves := 0
 	// Skip moves, if requested. The idea is that the neural network should learn
 	// good end game moves first, because in some sense the feedback obtained from
-	// the final outcome of the game is move closely connected to the final moves
+	// the final outcome of the game is more closely connected to the final moves
 	// than with the initial ones, especially for networks that haven't seen many
 	// games yet.
 	for i := 0; i < *skipMoves; i++ {

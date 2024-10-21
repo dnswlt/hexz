@@ -313,7 +313,20 @@ message FetchModelResponse {
     ModelEncoding.Enum encoding = 3;
 }
 
+message ControlRequest {
+    string execution_id = 1;
+}
+message ControlEvent {
+    message Pause {}
+    message Resume {}
+    oneof event_type {
+        Pause pause = 1;
+        Resume resume = 2;
+    }
+}
+
 service TrainingService {
     rpc AddTrainingExamples(AddTrainingExamplesRequest) returns (AddTrainingExamplesResponse) {}
     rpc FetchModel(FetchModelRequest) returns (FetchModelResponse) {}
+    rpc ControlEvents(ControlRequest) returns (stream ControlEvent) {}
 }

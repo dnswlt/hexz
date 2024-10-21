@@ -287,13 +287,10 @@ std::unique_ptr<Model> Worker::CreateModel(hexzpb::ModelKey model_key,
   auto device = Device();
   if (config_.fibers_per_thread > 0) {
     // Use the fiber-based model.
-    ABSL_CHECK(config_.prediction_batch_size <=
-               config_.worker_threads * config_.fibers_per_thread)
-        << "FiberTorchModel would deadlock. Make sure to run with at least "
-           "prediction_batch_size fibers.";
     ABSL_LOG(INFO) << "Using FiberTorchModel for " << config_.worker_threads
                    << " threads and " << config_.fibers_per_thread
-                   << " fibers per thread on device " << config_.device;
+                   << " fibers per thread on device " << config_.device
+                   << " with batch size " << config_.prediction_batch_size;
     return std::make_unique<FiberTorchModel>(
         model_key, std::move(model), device, config_.prediction_batch_size);
   } else if (config_.worker_threads > 1 && device != torch::kCPU) {

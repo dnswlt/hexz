@@ -78,7 +78,7 @@ class TrainingServicer(hexz_pb2_grpc.TrainingServiceServicer):
 _grpc_server = None
 def handle_shutdown(signum, frame):
     print(f"Received signal %d. Stopping gRPC server.", signum)
-    _grpc_server.stop(0)
+    _grpc_server.stop(None)
 
 
 def serve_grpc(
@@ -135,8 +135,8 @@ def create_app():
         target=serve_grpc, args=(app.logger, model_repo, training_state)
     )
     grpc_thread.start()
-    signal.signal(signal.SIGINT, handle_shutdown)
-    signal.signal(signal.SIGTERM, handle_shutdown)
+    # signal.signal(signal.SIGINT, handle_shutdown)
+    # signal.signal(signal.SIGTERM, handle_shutdown)
     app.grpc_thread = grpc_thread
 
     @app.get("/")

@@ -107,7 +107,7 @@ FiberTorchModel::FiberTorchModel(hexzpb::ModelKey key,
     : key_{std::move(key)},
       module_{std::move(module)},
       device_{device},
-      batch_size_{batch_size} {
+      max_batch_size_{batch_size} {
   // Acquire lock to have a synchronization point for module_ before any access
   // to it by other threads or fibers. (Necessary?)
   std::scoped_lock<std::mutex> lk(module_mut_);
@@ -154,27 +154,35 @@ Model::Prediction FiberTorchModel::Predict(torch::Tensor board,
   return future.get();
 }
 
-int FiberTorchModel::PopRequests(std::vector<PredictionRequest>& buf, int n) {
-  std::unique_lock<std::mutex> lock(request_mut_);
-  // Wait until there's data or a fiber has left.
-  request_queue_cv_.wait(
-      lock, [this] { return !request_queue_.empty() || fiber_left_; });
-  if (fiber_left_) {
-    fiber_left_ = false;
-    return 0;
-  }
-  int k;
-  for (k = 0; k < n && !request_queue_.empty(); k++) {
-    buf.push_back(std::move(request_queue_.front()));
-    request_queue_.pop();
-  }
-  return k;
-}
-
 void FiberTorchModel::PushRequest(PredictionRequest&& request) {
   std::scoped_lock<std::mutex> lk(request_mut_);
+  ABSL_CHECK(active_fibers_ > 0)
+      << "Called PushRequest with zero active fibers. Must call RegisterThread "
+         "for each fiber first.";
   request_queue_.push(std::move(request));
   request_queue_cv_.notify_one();
+}
+
+int FiberTorchModel::ReadBatch(std::vector<PredictionRequest>& batch) {
+  std::unique_lock<std::mutex> lock(request_mut_);
+  int batch_size = std::min(active_fibers_, max_batch_size_);
+  int k = 0;
+  while (batch.size() < batch_size) {
+    request_queue_cv_.wait(
+        lock, [this] { return !request_queue_.empty() || fiber_left_; });
+    if (fiber_left_) {
+      fiber_left_ = false;
+      if (active_fibers_ < batch_size) {
+        batch_size = active_fibers_;
+      }
+    }
+    while (batch.size() < batch_size && !request_queue_.empty()) {
+      batch.push_back(std::move(request_queue_.front()));
+      request_queue_.pop();
+      k++;
+    }
+  }
+  return k;
 }
 
 void FiberTorchModel::RunGPUPipeline() {
@@ -182,26 +190,21 @@ void FiberTorchModel::RunGPUPipeline() {
   Perfm::ThreadScope perfm_thread_scope;
   ABSL_LOG(INFO) << "FiberTorchModel::GPUPipeline started";
   std::vector<PredictionRequest> batch;
-  batch.reserve(batch_size_);
+  batch.reserve(max_batch_size_);
+  {
+    // Wait for initial fiber to join
+    std::unique_lock<std::mutex> init_lk(request_mut_);
+    request_queue_cv_.wait(
+        init_lk, [this] { return active_fibers_ > 0 || fiber_left_; });
+    if (fiber_left_) {
+      ABSL_LOG(ERROR) << "Fiber registered and unregistered from GPU pipeline "
+                         "without ever calling Predict. Terminating.";
+      return;
+    }
+  }
   while (true) {
     // Collect requests for batching
-    while (batch.size() < batch_size_) {
-      int k = PopRequests(batch, batch_size_ - batch.size());
-      if (k == 0) {
-        std::scoped_lock<std::mutex> lk(request_mut_);
-        // Nothing was read => a fiber has left the building.
-        // Update expected batch size.
-
-        // ABSL_LOG(INFO) << "GPU pipelne: a fiber left. " << active_fibers_
-        //                << " remain";
-
-        if (batch_size_ > active_fibers_) {
-          // Avoid waiting for a larger batch size than fibers can produce.
-          batch_size_ = active_fibers_;
-          //   ABSL_LOG(INFO) << "Reduced batch size to " << batch_size_;
-        }
-      }
-    }
+    ReadBatch(batch);
     if (batch.empty()) {
       ABSL_LOG(INFO) << "Nothing left to read from the queue. Exiting.";
       return;
@@ -251,6 +254,7 @@ void FiberTorchModel::RunGPUPipeline() {
 ScopeGuard FiberTorchModel::RegisterThread() {
   std::scoped_lock<std::mutex> lk(request_mut_);
   active_fibers_++;
+  request_queue_cv_.notify_one();
   return ScopeGuard([this] { Unregister(); });
 }
 
