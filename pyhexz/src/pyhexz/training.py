@@ -2,9 +2,11 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 import dataclasses
 import logging
+import queue
 import threading
 import time
-from typing import Any
+from typing import Iterator
+import grpc
 import h5py
 import numpy as np
 import torch
@@ -210,6 +212,7 @@ class TrainingState:
         self._latest_request: hexz_pb2.AddTrainingExamplesRequest = None
         self._executor = ThreadPoolExecutor(max_workers=8)
         self.is_training: bool = False
+        self._subscriptions: list[queue.SimpleQueue] = []
 
     def model_key(self):
         """Returns the latest model key."""
@@ -235,14 +238,41 @@ class TrainingState:
             config=self.config,
             logger=self.logger,
         )
+        if self._subscriptions:
+            self.logger.info(f"Sending Pause control event to subscribed workers")
+            for q in self._subscriptions:
+                q.put(
+                    hexz_pb2.ControlEvent(
+                        pause=hexz_pb2.ControlEvent.Pause(),
+                    )
+                )
         self.logger.info(
             f"Starting a new TrainingTask at {self._stats.examples} examples"
         )
         fut = self._executor.submit(task.execute)
-        fut.add_done_callback(self.training_done)
+        fut.add_done_callback(self._training_done)
         self.is_training = True
         self._stats.last_training = self._stats.examples
         self._stats.training_runs_started += 1
+
+    def _training_done(self, fut: Future[int]):
+        """A callback that is called when a TrainingTask is done."""
+        with self.lock:
+            self._stats.training_runs_completed += 1
+            self.is_training = False
+            self.latest_checkpoint = fut.result()
+            # Trigger next training round immediately if there are enough
+            # examples already.
+            if self._should_train():
+                self._start_training()
+            else:
+                # Notify workers to resume.
+                for q in self._subscriptions:
+                    q.put(
+                        hexz_pb2.ControlEvent(
+                            resume=hexz_pb2.ControlEvent.Resume(),
+                        )
+                    )
 
     def _add_examples(self, req: hexz_pb2.AddTrainingExamplesRequest):
         """Saves the examples from the given request in the repository.
@@ -276,13 +306,40 @@ class TrainingState:
         with self.lock:
             return self._latest_request
 
-    def training_done(self, fut: Future[int]):
-        """A callback that is called when a TrainingTask is done."""
+    # Sentinel used in subscription queues to signal end-of-stream.
+    _END_OF_STREAM = object()
+
+    def _unsubscribe_events(self, q: queue.SimpleQueue):
         with self.lock:
-            self._stats.training_runs_completed += 1
-            self.is_training = False
-            self.latest_checkpoint = fut.result()
-            # Trigger next training round immediately if there are enough
-            # examples already.
-            if self._should_train():
-                self._start_training()
+            try:
+                q.put(self._END_OF_STREAM)
+                self._subscriptions.remove(q)
+            except ValueError:
+                pass
+
+    def subscribe_events(
+        self, ctx: grpc.ServicerContext
+    ) -> Iterator[hexz_pb2.ControlEvent]:
+        """Called by gRPC clients to subscribe to training events.
+
+        Arguments:
+            ctx: the streaming RPC context of the caller. This method will register
+              a callback to unsubscribe the caller when its RPC gets terminated.
+        """
+        q = queue.SimpleQueue()
+        send_pause = False
+        with self.lock:
+            self._subscriptions.append(q)
+            if self.is_training:
+                send_pause = True
+        ctx.add_callback(lambda: self._unsubscribe_events(q))
+        if send_pause:
+            # Send an initial Pause event since we are in the middle of training.
+            yield hexz_pb2.ControlEvent(
+                pause=hexz_pb2.ControlEvent.Pause(),
+            )
+        while ctx.is_active():
+            event = q.get()
+            if event is self._END_OF_STREAM:
+                return
+            yield event

@@ -179,6 +179,39 @@ void Worker::Run() {
   std::unique_ptr<Model> model =
       CreateModel(initial_model_key, std::move(initial_model));
 
+  // Subscribe to server's ControlEvents.
+  grpc::ClientContext grpc_client_context;
+  std::thread control_events_thread([this, &grpc_client_context, &model] {
+    hexzpb::ControlRequest request;
+    request.set_execution_id(execution_id_);
+    FiberTorchModel* fiber_torch_model = nullptr;
+    if (config_.suspend_while_training) {
+      fiber_torch_model = dynamic_cast<FiberTorchModel*>(model.get());
+    }
+    absl::Status status = client_.StreamControlEvents(
+        grpc_client_context, request,
+        [&model, fiber_torch_model](hexzpb::ControlEvent event) {
+          if (!fiber_torch_model) {
+            // Suspension is only supported by FiberTorchModel.
+            return;
+          }
+          if (event.has_pause()) {
+            fiber_torch_model->Suspend();
+          } else if (event.has_resume()) {
+            fiber_torch_model->Resume();
+          }
+        });
+    ABSL_LOG(INFO) << "ControlEvent streaming RPC finished with status "
+                   << status;
+  });
+  absl::Cleanup cleanup_grpc = [&control_events_thread, &grpc_client_context] {
+    ABSL_LOG(INFO) << "Cancelling ControlEvent streaming RPC";
+    grpc_client_context.TryCancel();
+    if (control_events_thread.joinable()) {
+      control_events_thread.join();
+    }
+  };
+
   // Used to send examples and update the model asynchronously.
   AsyncExampleSender sender(client_, *model);
 
@@ -291,8 +324,11 @@ std::unique_ptr<Model> Worker::CreateModel(hexzpb::ModelKey model_key,
                    << " threads and " << config_.fibers_per_thread
                    << " fibers per thread on device " << config_.device
                    << " with batch size " << config_.prediction_batch_size;
+    // TODO: Only enable suspension when running on same machine as training
+    // server.
     return std::make_unique<FiberTorchModel>(
-        model_key, std::move(model), device, config_.prediction_batch_size);
+        model_key, std::move(model), device, config_.prediction_batch_size,
+        true);
   } else if (config_.worker_threads > 1 && device != torch::kCPU) {
     // Using the batched model is only useful if multiple threads use the GPU.
     ABSL_CHECK(config_.prediction_batch_size <= config_.worker_threads)

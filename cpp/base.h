@@ -74,7 +74,11 @@ struct Config {
   float startup_delay_seconds = 0.0;
 
   // Set this to 1 to have /proc/self/status logged every N seconds.
-  int debug_memory_usage = 0;
+  bool debug_memory_usage = 0;
+  // Suspend the worker when the training server signals that it is training.
+  // This is only useful when worker and training server run on the same
+  // machine.
+  bool suspend_while_training = false;
 
   static absl::StatusOr<Config> FromEnv();
   std::string String() const;
@@ -83,6 +87,7 @@ struct Config {
 std::string GetEnv(const std::string& name, const std::string& default_value);
 int GetEnvAsInt(const std::string& name, int default_value);
 float GetEnvAsFloat(const std::string& name, float default_value);
+bool GetEnvAsBool(const std::string& name, bool default_value);
 
 int64_t UnixMicros();
 

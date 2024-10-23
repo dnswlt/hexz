@@ -141,7 +141,8 @@ class FiberTorchModel : public Model {
   };
 
   FiberTorchModel(hexzpb::ModelKey key, torch::jit::Module&& module,
-                  torch::DeviceType device, int batch_size);
+                  torch::DeviceType device, int batch_size,
+                  bool support_suspension);
   FiberTorchModel(const FiberTorchModel&) = delete;
   FiberTorchModel& operator=(const FiberTorchModel&) = delete;
   void UpdateModel(hexzpb::ModelKey key, torch::jit::Module&& model) override;
@@ -159,6 +160,12 @@ class FiberTorchModel : public Model {
   // Terminates the gpu_pipeline_thread_.
   ~FiberTorchModel();
 
+  // When a worker runs on the same machine as the training server,
+  // the Suspend and Resume methods can be used to keep the worker
+  // from concurrently using the GPU.
+  void Suspend();
+  void Resume();
+
  private:
   // Executed by the gpu_pipeline_thread_, RunGPUPipeline
   // consumes requests from the request_queue_, and sends them
@@ -170,7 +177,7 @@ class FiberTorchModel : public Model {
   void Unregister();
 
   // Moves up to max_batch_size_ elements from the request queue into buf.
-  // This method takes the number of active threads into account and 
+  // This method takes the number of active threads into account and
   // blocks until data for the maximum allowed batch size, i.e.
   // min(active_fibers, max_batch_size_) have been read.
   // It returns the number of items moved into batch. This can only
@@ -188,6 +195,10 @@ class FiberTorchModel : public Model {
   int active_fibers_ = 0;
   // Used to signal that a fiber has left the building.
   bool fiber_left_ = false;
+  const bool support_suspension_;
+  bool suspended_ = false;
+  // CV for suspending the GPU pipeline thread.
+  std::condition_variable suspension_cv_;
 
   // Mutex for the access to the model.
   mutable std::mutex module_mut_;

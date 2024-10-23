@@ -16,7 +16,7 @@ TEST(FiberTorchModelTest, FiberTorchModelRegisterUnregister) {
   scriptmodule.eval();
   const int batch_size = 1;
   FiberTorchModel model(hexzpb::ModelKey(), std::move(scriptmodule),
-                        torch::kCPU, batch_size);
+                        torch::kCPU, batch_size, false);
   {
     auto token = model.RegisterThread();
   }
@@ -31,7 +31,7 @@ TEST(FiberTorchModelTest, SmokeTestSingleFiber) {
   // of the number of active fibers.
   const int batch_size = 16;
   FiberTorchModel model(hexzpb::ModelKey(), std::move(scriptmodule),
-                        torch::kCPU, batch_size);
+                        torch::kCPU, batch_size, false);
   auto token = model.RegisterThread();
   auto board = torch::randn({11, 11, 10});
   auto action_mask = torch::rand({2, 11, 10}) < 0.5;
@@ -50,7 +50,7 @@ TEST(FiberTorchModelDeathTest, CheckFailIfNotRegistered) {
         scriptmodule.eval();
         const int batch_size = 1;
         FiberTorchModel model(hexzpb::ModelKey(), std::move(scriptmodule),
-                              torch::kCPU, batch_size);
+                              torch::kCPU, batch_size, false);
         // Not calling RegisterThread here. This should lead to a failure.
         // auto token = model.RegisterThread();
         auto board = torch::randn({11, 11, 10});
@@ -68,7 +68,7 @@ TEST(FiberTorchModelTest, SmokeTestMultipleFibers) {
   const int n_threads = 2;
   const int fibers_per_thread = 4;
   FiberTorchModel model(hexzpb::ModelKey(), std::move(scriptmodule),
-                        torch::kCPU, batch_size);
+                        torch::kCPU, batch_size, false);
   std::vector<float> sum_pr;
   std::mutex mut;
   std::vector<std::thread> threads;

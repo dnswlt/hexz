@@ -14,6 +14,61 @@
 
 namespace hexz {
 
+namespace {
+#include <grpcpp/grpcpp.h>
+
+#include "absl/status/status.h"
+
+// Helper function to translate grpc::StatusCode to absl::StatusCode
+absl::StatusCode AbslStatusCode(grpc::StatusCode grpc_code) {
+  switch (grpc_code) {
+    case grpc::StatusCode::OK:
+      return absl::StatusCode::kOk;
+    case grpc::StatusCode::CANCELLED:
+      return absl::StatusCode::kCancelled;
+    case grpc::StatusCode::UNKNOWN:
+      return absl::StatusCode::kUnknown;
+    case grpc::StatusCode::INVALID_ARGUMENT:
+      return absl::StatusCode::kInvalidArgument;
+    case grpc::StatusCode::DEADLINE_EXCEEDED:
+      return absl::StatusCode::kDeadlineExceeded;
+    case grpc::StatusCode::NOT_FOUND:
+      return absl::StatusCode::kNotFound;
+    case grpc::StatusCode::ALREADY_EXISTS:
+      return absl::StatusCode::kAlreadyExists;
+    case grpc::StatusCode::PERMISSION_DENIED:
+      return absl::StatusCode::kPermissionDenied;
+    case grpc::StatusCode::UNAUTHENTICATED:
+      return absl::StatusCode::kUnauthenticated;
+    case grpc::StatusCode::RESOURCE_EXHAUSTED:
+      return absl::StatusCode::kResourceExhausted;
+    case grpc::StatusCode::FAILED_PRECONDITION:
+      return absl::StatusCode::kFailedPrecondition;
+    case grpc::StatusCode::ABORTED:
+      return absl::StatusCode::kAborted;
+    case grpc::StatusCode::OUT_OF_RANGE:
+      return absl::StatusCode::kOutOfRange;
+    case grpc::StatusCode::UNIMPLEMENTED:
+      return absl::StatusCode::kUnimplemented;
+    case grpc::StatusCode::INTERNAL:
+      return absl::StatusCode::kInternal;
+    case grpc::StatusCode::UNAVAILABLE:
+      return absl::StatusCode::kUnavailable;
+    case grpc::StatusCode::DATA_LOSS:
+      return absl::StatusCode::kDataLoss;
+    default:
+      return absl::StatusCode::kUnknown;
+  }
+}
+
+// Function to translate grpc::Status to absl::Status
+absl::Status AbslStatus(const grpc::Status& grpc_status) {
+  absl::StatusCode code = AbslStatusCode(grpc_status.error_code());
+  return absl::Status(code, grpc_status.error_message());
+}
+
+}  // namespace
+
 absl::StatusOr<hexzpb::AddTrainingExamplesResponse>
 EmbeddedTrainingServiceClient::AddTrainingExamples(
     const hexzpb::AddTrainingExamplesRequest& request) {
@@ -86,13 +141,28 @@ GRPCTrainingServiceClient::FetchLatestModel(const std::string& model_name) {
   }
 }
 
+absl::Status GRPCTrainingServiceClient::StreamControlEvents(
+    grpc::ClientContext& context,
+    const hexzpb::ControlRequest& request,
+    StreamCallback<hexzpb::ControlEvent> callback) {
+  std::unique_ptr<grpc::ClientReader<hexzpb::ControlEvent>> reader(
+      stub_->ControlEvents(&context, request));
+  hexzpb::ControlEvent event;
+  while (reader->Read(&event)) {
+    callback(event);
+  }
+  return AbslStatus(reader->Finish());
+}
+
 std::unique_ptr<GRPCTrainingServiceClient> GRPCTrainingServiceClient::Connect(
     const std::string& addr) {
   grpc::ChannelArguments channel_args;
   channel_args.SetCompressionAlgorithm(GRPC_COMPRESS_GZIP);
 
-  return std::make_unique<GRPCTrainingServiceClient>(grpc::CreateCustomChannel(
-      addr, grpc::InsecureChannelCredentials(), channel_args), addr);
+  return std::make_unique<GRPCTrainingServiceClient>(
+      grpc::CreateCustomChannel(addr, grpc::InsecureChannelCredentials(),
+                                channel_args),
+      addr);
 }
 
 }  // namespace hexz

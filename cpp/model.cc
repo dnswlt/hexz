@@ -103,11 +103,13 @@ hexzpb::ModelKey BatchedTorchModel::Key() const { return key_; }
 
 FiberTorchModel::FiberTorchModel(hexzpb::ModelKey key,
                                  torch::jit::Module&& module,
-                                 torch::DeviceType device, int batch_size)
+                                 torch::DeviceType device, int batch_size,
+                                 bool support_suspension)
     : key_{std::move(key)},
       module_{std::move(module)},
       device_{device},
-      max_batch_size_{batch_size} {
+      max_batch_size_{batch_size},
+      support_suspension_{support_suspension} {
   // Acquire lock to have a synchronization point for module_ before any access
   // to it by other threads or fibers. (Necessary?)
   std::scoped_lock<std::mutex> lk(module_mut_);
@@ -165,6 +167,10 @@ void FiberTorchModel::PushRequest(PredictionRequest&& request) {
 
 int FiberTorchModel::ReadBatch(std::vector<PredictionRequest>& batch) {
   std::unique_lock<std::mutex> lock(request_mut_);
+  if (support_suspension_) {
+    suspension_cv_.wait(lock, [this] { return !suspended_; });
+  }
+
   int batch_size = std::min(active_fibers_, max_batch_size_);
   int k = 0;
   while (batch.size() < batch_size) {
@@ -266,4 +272,17 @@ void FiberTorchModel::Unregister() {
   request_queue_cv_.notify_one();
 }
 
+void FiberTorchModel::Suspend() {
+  ABSL_CHECK(support_suspension_) << "Suspension not enabled";
+  ABSL_LOG(INFO) << "Suspending GPU pipeline thread";
+  std::scoped_lock lk(request_mut_);
+  suspended_ = true;
+}
+void FiberTorchModel::Resume() {
+  ABSL_CHECK(support_suspension_) << "Suspension not enabled";
+  ABSL_LOG(INFO) << "Resuming GPU pipeline thread";
+  std::scoped_lock lk(request_mut_);
+  suspended_ = false;
+  suspension_cv_.notify_one();
+}
 }  // namespace hexz

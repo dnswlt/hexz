@@ -1,7 +1,9 @@
 #pragma once
 
+#include <absl/status/status.h>
 #include <torch/torch.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -15,6 +17,8 @@ namespace hexz {
 // Virtual base class for training service clients.
 class TrainingServiceClient {
  public:
+  template <typename T>
+  using StreamCallback = std::function<void(T)>;
   virtual ~TrainingServiceClient() = default;
   virtual absl::StatusOr<hexzpb::AddTrainingExamplesResponse>
   AddTrainingExamples(const hexzpb::AddTrainingExamplesRequest& request) = 0;
@@ -24,6 +28,14 @@ class TrainingServiceClient {
   // return.
   virtual absl::StatusOr<std::pair<hexzpb::ModelKey, torch::jit::Module>>
   FetchLatestModel(const std::string& model_name) = 0;
+
+  // Makes a streaming RPC call to the training server using the provided
+  // context. Each streamed response will be
+  virtual absl::Status StreamControlEvents(
+      grpc::ClientContext& context, const hexzpb::ControlRequest& request,
+      StreamCallback<hexzpb::ControlEvent> callback) {
+    return absl::UnimplementedError("StreamControlEvents not implemented");
+  }
 
   virtual std::string RemoteAddr() const = 0;
 };
@@ -76,6 +88,15 @@ class GRPCTrainingServiceClient : public TrainingServiceClient {
   // return.
   absl::StatusOr<std::pair<hexzpb::ModelKey, torch::jit::Module>>
   FetchLatestModel(const std::string& model_name) override;
+
+  // Starts a server-side streaming RPC and calls the provided callback
+  // with each received ControlEvent.
+  // This method blocks until all events have been received or the
+  // RPC has been terminated. Callers should call TryCancel on the
+  // context to cancel the RPC prematurely.
+  absl::Status StreamControlEvents(
+      grpc::ClientContext& context, const hexzpb::ControlRequest& request,
+      StreamCallback<hexzpb::ControlEvent> callback) override;
 
   std::string RemoteAddr() const override { return remote_addr_; }
 

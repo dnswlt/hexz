@@ -40,6 +40,7 @@ class TrainingServicer(hexz_pb2_grpc.TrainingServiceServicer):
         self.logger.info(
             f"Received AddTrainingExamplesRequest with {len(request.examples)} examples from {request.execution_id}."
         )
+        self.training_state.add_examples(request)
         return hexz_pb2.AddTrainingExamplesResponse(
             status=hexz_pb2.AddTrainingExamplesResponse.ACCEPTED,
             latest_model=self.training_state.model_key(),
@@ -74,8 +75,21 @@ class TrainingServicer(hexz_pb2_grpc.TrainingServiceServicer):
             model_key=model_key, encoding=request.encoding, model_bytes=model
         )
 
+    def ControlEvents(
+        self, request: hexz_pb2.ControlRequest, ctx: grpc.ServicerContext
+    ):
+        self.logger.info(
+            f"Worker with execution_id {request.execution_id} subscribed to control events."
+        )
+        yield from self.training_state.subscribe_events(ctx)
+        self.logger.info(
+            f"Worker with execution_id {request.execution_id} disconnected."
+        )
+
 
 _grpc_server = None
+
+
 def handle_shutdown(signum, frame):
     print(f"Received signal %d. Stopping gRPC server.", signum)
     _grpc_server.stop(None)

@@ -72,6 +72,8 @@ std::string Config::String() const {
               absl::StrFormat("startup_delay_seconds: %.3f",
                               startup_delay_seconds),
               absl::StrFormat("debug_memory_usage: %d", debug_memory_usage),
+              absl::StrFormat("suspend_while_training: %d",
+                              suspend_while_training),
           },
           ", "),
       ")");
@@ -94,6 +96,8 @@ absl::StatusOr<Config> Config::FromEnv() {
   .fld = GetEnvAsInt(str_to_upper("HEXZ_" #fld), defaults.fld)
 #define GET_ENV_FLOAT(fld) \
   .fld = GetEnvAsFloat(str_to_upper("HEXZ_" #fld), defaults.fld)
+#define GET_ENV_BOOL(fld) \
+  .fld = GetEnvAsBool(str_to_upper("HEXZ_" #fld), defaults.fld)
 
   Config config{
       GET_ENV(training_server_addr),
@@ -114,7 +118,8 @@ absl::StatusOr<Config> Config::FromEnv() {
       GET_ENV_INT(random_playouts),
       GET_ENV_FLOAT(resign_threshold),
       GET_ENV_FLOAT(startup_delay_seconds),
-      GET_ENV_INT(debug_memory_usage),
+      GET_ENV_BOOL(debug_memory_usage),
+      GET_ENV_BOOL(suspend_while_training),
   };
   // Validate values
   const std::vector<std::string> valid_devices = {"cpu", "mps", "cuda"};
@@ -128,6 +133,7 @@ absl::StatusOr<Config> Config::FromEnv() {
 #undef GET_ENV
 #undef GET_ENV_INT
 #undef GET_ENV_DOUBLE
+#undef GET_ENV_BOOL
 }
 
 std::string GetEnv(const std::string& name, const std::string& default_value) {
@@ -144,6 +150,17 @@ int GetEnvAsInt(const std::string& name, int default_value) {
     return default_value;
   }
   return std::atoi(value);
+}
+
+bool GetEnvAsBool(const std::string& name, bool default_value) {
+  const char* value = std::getenv(name.c_str());
+  if (value == nullptr) {
+    return default_value;
+  }
+  std::string s(value);
+  std::transform(s.begin(), s.end(), s.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+  return s == "true" || s == "1" || s == "yes" || s == "on";
 }
 
 float GetEnvAsFloat(const std::string& name, float default_value) {
