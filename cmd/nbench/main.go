@@ -17,29 +17,18 @@ import (
 )
 
 var (
-	player1URL       = flag.String("p1-url", "", "URL for player 1 (empty for the built-in CPU layer).")
-	player2URL       = flag.String("p2-url", "http://localhost:8080", "URL for player 2 (empty for the built-in CPU layer).")
-	p1ThinkTime      = flag.Duration("p1-think-time", 1*time.Second, "Maximum thinking time per move.")
-	p2ThinkTime      = flag.Duration("p2-think-time", 1*time.Second, "Maximum thinking time per move for remote player.")
+	player1URL       = flag.String("p1-addr", "", "Address for player 1 (empty for the built-in CPU player).")
+	player2URL       = flag.String("p2-addr", "localhost:50051", "Address for player 2 (empty for the built-in CPU player).")
+	p1ThinkTime      = flag.Duration("p1-think-time", 1*time.Second, "Maximum thinking time per move for P1.")
+	p2ThinkTime      = flag.Duration("p2-think-time", 1*time.Second, "Maximum thinking time per move for P2.")
 	svgMoveScoreKind = flag.String("score-kind", "FINAL", "Kind of move scores to add to the SVG output.")
 	svgOutputFile    = flag.String("svg-file", "/tmp/nbench.html", "File to which SVG output is written.")
 	skipMoves        = flag.Int("skip-moves", 0, "Number of initial moves to make randomly before using the suggestions")
 )
 
-func makePlayer(id string, url string, thinkTime time.Duration) hexz.CPUPlayer {
-	if url == "" {
-		return hexz.NewLocalCPUPlayer(hexz.PlayerId(id), thinkTime)
-	} else {
-		return hexz.NewRemoteCPUPlayer(hexz.PlayerId(id), url, thinkTime)
-	}
-}
-
-func playGame() error {
+func playGame(p1, p2 hexz.CPUPlayer) error {
 	ge := hexz.NewGameEngineFlagz()
-	cpuPlayers := []hexz.CPUPlayer{
-		makePlayer("P1", *player1URL, *p1ThinkTime),
-		makePlayer("P2", *player2URL, *p2ThinkTime),
-	}
+	cpuPlayers := []hexz.CPUPlayer{p1, p2}
 	scoreKind, found := pb.SuggestMoveStats_ScoreKind_value[*svgMoveScoreKind]
 	if !found {
 		return fmt.Errorf("invalid score kind: %s", *svgMoveScoreKind)
@@ -83,7 +72,7 @@ func playGame() error {
 		nMoves++
 		log.Printf("Score after %d moves: %v", nMoves, ge.B.Score)
 	}
-	fmt.Printf("Game ended after %d moves. Winner: %d. Final result: %v", nMoves, ge.Winner(), ge.B.Score)
+	fmt.Printf("Game ended after %d moves. Winner: %d. Final result: %v\n", nMoves, ge.Winner(), ge.B.Score)
 	return nil
 }
 
@@ -93,7 +82,28 @@ func main() {
 		fmt.Printf("Unexpected extra args: %v\n", flag.Args())
 		os.Exit(1)
 	}
-	if err := playGame(); err != nil {
+	var p1, p2 hexz.CPUPlayer
+	var err error
+	if *player1URL == "" {
+		p1 = hexz.NewLocalCPUPlayer(hexz.PlayerId("P1"), *p1ThinkTime)
+	} else {
+		p1, err = hexz.NewRemoteCPUPlayer(hexz.PlayerId("P1"), *player1URL, *p1ThinkTime)
+		if err != nil {
+			fmt.Printf("Failed to create P1 as remove player: %v", err)
+			os.Exit(1)
+		}
+	}
+	if *player2URL == "" {
+		p2 = hexz.NewLocalCPUPlayer(hexz.PlayerId("P2"), *p2ThinkTime)
+	} else {
+		p2, err = hexz.NewRemoteCPUPlayer(hexz.PlayerId("P2"), *player2URL, *p2ThinkTime)
+		if err != nil {
+			fmt.Printf("Failed to create P2 as remove player: %v", err)
+			os.Exit(1)
+		}
+	}
+
+	if err := playGame(p1, p2); err != nil {
 		fmt.Printf("playing game failed: %v\n", err)
 		os.Exit(1)
 	}

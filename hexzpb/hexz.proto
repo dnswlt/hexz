@@ -330,3 +330,7 @@ service TrainingService {
     rpc FetchModel(FetchModelRequest) returns (FetchModelResponse) {}
     rpc ControlEvents(ControlRequest) returns (stream ControlEvent) {}
 }
+
+service CPUPlayerService {
+    rpc SuggestMove(SuggestMoveRequest) returns (SuggestMoveResponse) {}
+}

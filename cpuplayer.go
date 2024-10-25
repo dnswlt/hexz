@@ -1,16 +1,15 @@
 package hexz
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
+	"net"
 	"time"
 
+	"github.com/dnswlt/hexz/hexzpb"
 	pb "github.com/dnswlt/hexz/hexzpb"
-	"google.golang.org/protobuf/proto"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type CPUPlayer interface {
@@ -79,187 +78,106 @@ func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz)
 }
 
 type RemoteCPUPlayer struct {
-	playerId             PlayerId
-	baseURL              string // Base URL of the remote CPU player server.
-	maxThinkTime         time.Duration
-	propagateRPCDeadline bool // Experimental: set to true to propagate the RPC deadline to the server.
+	playerId     PlayerId
+	addr         string // Address of the remote CPU player server, e.g. "localhost:50051"
+	maxThinkTime time.Duration
+	client       hexzpb.CPUPlayerServiceClient
 }
 
-func NewRemoteCPUPlayer(playerId PlayerId, baseURL string, maxThinkTime time.Duration) *RemoteCPUPlayer {
-	return &RemoteCPUPlayer{
-		playerId:             playerId,
-		baseURL:              baseURL,
-		maxThinkTime:         maxThinkTime,
-		propagateRPCDeadline: false,
+func NewRemoteCPUPlayer(playerId PlayerId, addr string, maxThinkTime time.Duration) (*RemoteCPUPlayer, error) {
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
+	conn, err := grpc.NewClient(addr, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create gRPC client: %w", err)
+	}
+	client := hexzpb.NewCPUPlayerServiceClient(conn)
+	return &RemoteCPUPlayer{
+		playerId:     playerId,
+		addr:         addr,
+		maxThinkTime: maxThinkTime,
+		client:       client,
+	}, nil
 }
 
 func (cpu *RemoteCPUPlayer) MaxThinkTime() time.Duration {
 	return cpu.maxThinkTime
 }
 
-const (
-	// URL path used by the CPU player server.
-	CpuSuggestMoveURLPath = "/hexz/cpu/suggest"
-	// Used to propagate deadlines from clients to the server.
-	HttpHeaderXRequestDeadline = "X-Request-Deadline"
-)
-
 func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz) (*GameEngineMove, *pb.SuggestMoveStats, error) {
-	st, err := ge.Encode()
+	state, err := ge.Encode()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("cannot encode GameEngineFlagz: %v", err)
 	}
-	data, err := proto.Marshal(&pb.SuggestMoveRequest{
+	req := &pb.SuggestMoveRequest{
 		MaxThinkTimeMs:  cpu.maxThinkTime.Milliseconds(),
-		GameEngineState: st,
-	})
+		GameEngineState: state,
+	}
+	// Allow the RPC at most the think time, plus some buffer.
+	ctx, cancel := context.WithTimeout(ctx, cpu.maxThinkTime+time.Duration(1)*time.Second)
+	defer cancel()
+	resp, err := cpu.client.SuggestMove(ctx, req)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("gRPC SuggestMove request failed: %v", err)
 	}
-	remoteURL, err := url.JoinPath(cpu.baseURL, CpuSuggestMoveURLPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("cannot build valid URL from %s and %s: %w", cpu.baseURL, CpuSuggestMoveURLPath, err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, remoteURL, bytes.NewReader(data))
-	if err != nil {
-		return nil, nil, err
-	}
-	req.Header.Set("Content-Type", "application/x-protobuf")
-	if requestDeadline, ok := ctx.Deadline(); ok && cpu.propagateRPCDeadline {
-		// Propagate deadline to the server. It will use this to limit the time it spends thinking.
-		req.Header.Set(HttpHeaderXRequestDeadline, requestDeadline.Format(time.RFC3339Nano))
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, nil, fmt.Errorf("unexpected status code: %s", resp.Status)
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, nil, fmt.Errorf("read response body: %w", err)
-	}
-	var response pb.SuggestMoveResponse
-	if err := proto.Unmarshal(body, &response); err != nil {
-		return nil, nil, fmt.Errorf("unmarshal response: %w", err)
-	}
-	var geMove GameEngineMove
-	geMove.DecodeProto(response.Move)
-	return &geMove, response.MoveStats, nil
+	geMove := &GameEngineMove{}
+	geMove.DecodeProto(resp.Move)
+	return geMove, resp.MoveStats, nil
 }
 
-type CPUPlayerServer struct {
-	config *CPUPlayerServerConfig
-}
-
-type CPUPlayerServerConfig struct {
-	Addr         string // Same format as http.Server.Addr, e.g. "localhost:8085".
+type MoveSuggesterServerConfig struct {
+	Addr         string // e.g. "localhost:50051".
 	CpuThinkTime time.Duration
 	CpuMaxFlags  int
-	TlsCertChain string
-	TlsPrivKey   string
 }
 
-func NewCPUPlayerServer(config *CPUPlayerServerConfig) *CPUPlayerServer {
-	return &CPUPlayerServer{
+type MoveSuggesterServer struct {
+	// Needs to be embedded to have MoveSuggesterServer implement hexzpb.CPUPlayerServiceServer.
+	hexzpb.UnimplementedCPUPlayerServiceServer
+	config *MoveSuggesterServerConfig
+}
+
+func NewMoveSuggesterServer(config *MoveSuggesterServerConfig) *MoveSuggesterServer {
+	return &MoveSuggesterServer{
 		config: config,
 	}
 }
 
-func (s *CPUPlayerServer) handleSuggestMove(w http.ResponseWriter, r *http.Request) {
-	var req pb.SuggestMoveRequest
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "cannot read request", http.StatusInternalServerError)
-		return
-	}
-	if err := proto.Unmarshal(body, &req); err != nil {
-		http.Error(w, "invalid SuggestMoveRequest", http.StatusBadRequest)
-		return
-	}
+func (s *MoveSuggesterServer) SuggestMove(ctx context.Context, req *hexzpb.SuggestMoveRequest) (*hexzpb.SuggestMoveResponse, error) {
 	if req.GameEngineState == nil {
-		http.Error(w, "missing game engine", http.StatusBadRequest)
-		return
+		return nil, fmt.Errorf("missing game engine")
 	}
 	var ge *GameEngineFlagz
-	switch req.GameEngineState.State.(type) {
+	switch state := req.GameEngineState.State.(type) {
 	case *pb.GameEngineState_Flagz:
 		ge = NewGameEngineFlagz()
 		if err := ge.Decode(req.GameEngineState); err != nil {
-			http.Error(w, "invalid game engine state", http.StatusBadRequest)
-			return
+			return nil, fmt.Errorf("invalid game engine state")
 		}
 	default:
-		http.Error(w, "unsupported game type", http.StatusBadRequest)
-		return
+		return nil, fmt.Errorf("unsupported game type: %T", state)
 	}
 	mcts := NewMCTS()
 	thinkTime := time.Duration(req.MaxThinkTimeMs) * time.Millisecond
 	if s.config.CpuThinkTime > 0 && thinkTime > s.config.CpuThinkTime {
 		thinkTime = s.config.CpuThinkTime
 	}
-	// If the request has a deadline, don't run longer than that.
-	if deadline, ok := r.Context().Deadline(); ok {
-		timeLeft := time.Until(deadline)
-		if timeLeft < thinkTime {
-			thinkTime = timeLeft
-		}
-	}
 	mv, _ := mcts.SuggestMove(ge, thinkTime)
-
-	w.Header().Set("Content-Type", "application/x-protobuf")
-	data, err := proto.Marshal(&pb.SuggestMoveResponse{
+	return &hexzpb.SuggestMoveResponse{
 		Move: mv.Proto(),
-		// TODO: add Stats back
-	})
+		// TODO: add stats
+	}, nil
+}
+
+func (s *MoveSuggesterServer) Serve() error {
+	lis, err := net.Listen("tcp", s.config.Addr)
 	if err != nil {
-		http.Error(w, "failed to marshal response", http.StatusInternalServerError)
-		return
+		return fmt.Errorf("failed to listen: %w", err)
 	}
-	w.Write(data)
-	if err != nil {
-		errorLog.Printf("failed to encode response: %s", err)
-		http.Error(w, "failed to encode response", http.StatusInternalServerError)
-	}
-}
-
-// requestDeadlineHandler sets the request deadline based on the X-Request-Deadline header, if present.
-func requestDeadlineHandler(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		d := r.Header.Get(HttpHeaderXRequestDeadline)
-		if d == "" {
-			next.ServeHTTP(w, r) // No deadline specified.
-			return
-		}
-		deadline, err := time.Parse(time.RFC3339Nano, d)
-		if err != nil {
-			errorLog.Printf("invalid deadline: %s", err)
-			http.Error(w, "invalid deadline", http.StatusBadRequest)
-			return
-		}
-		ctx, cancel := context.WithDeadline(r.Context(), deadline)
-		defer cancel()
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-func (s *CPUPlayerServer) createMux() *http.ServeMux {
-	mux := http.NewServeMux()
-	mux.Handle(CpuSuggestMoveURLPath, requestDeadlineHandler(http.HandlerFunc(s.handleSuggestMove)))
-	return mux
-}
-
-func (s *CPUPlayerServer) Serve() {
-	srv := &http.Server{
-		Addr:    s.config.Addr,
-		Handler: s.createMux(),
-	}
-	infoLog.Print("Listening on ", srv.Addr)
-	if s.config.TlsCertChain != "" && s.config.TlsPrivKey != "" {
-		errorLog.Fatal(srv.ListenAndServeTLS(s.config.TlsCertChain, s.config.TlsPrivKey))
-	}
-	errorLog.Fatal(srv.ListenAndServe())
+	infoLog.Printf("MoveSuggesterServer listening on %s", s.config.Addr)
+	var opts []grpc.ServerOption
+	grpcServer := grpc.NewServer(opts...)
+	hexzpb.RegisterCPUPlayerServiceServer(grpcServer, s)
+	return grpcServer.Serve(lis)
 }

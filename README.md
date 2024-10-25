@@ -131,6 +131,7 @@ If there are errors generating the protobuf sources for Go, you might need to in
 
 ```bash
 go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 env PATH=$PATH:$HOME/go/bin bash run_protoc.sh
 ```
 
