@@ -121,6 +121,9 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz
 	if err != nil {
 		return nil, nil, fmt.Errorf("gRPC SuggestMove request failed: %v", err)
 	}
+	if resp.Move == nil {
+		return nil, nil, fmt.Errorf("SuggestMoveResponse contains no move")
+	}
 	geMove := &GameEngineMove{}
 	geMove.DecodeProto(resp.Move)
 	return geMove, resp.MoveStats, nil

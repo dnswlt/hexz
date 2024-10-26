@@ -419,7 +419,7 @@ bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
   n->CreateChildren(moves);
   n->ShuffleChildren();  // Avoid selection bias.
   auto pred =
-      model_.Predict(board.Tensor(n->NextTurn()), n->ActionMask().flatten());
+      model_.Predict(board.Tensor(n->NextTurn()), n->ActionMask());
   predictions_count_++;
   n->SetMoveProbs(pred.move_probs);
   if (add_noise && n == &root) {
@@ -449,15 +449,12 @@ bool NeuralMCTS::Run(Node& root, const Board& b) {
   Perfm::Scope ps(Perfm::NeuralMCTS_Run);
   Node* n = &root;
 
-  // Move to leaf node.
+  // Find leaf node
   auto t_start = UnixMicros();
-  {
-    Perfm::Scope ps(Perfm::FindLeaf);
-    while (!n->IsLeaf()) {
-      Node* child = n->MaxPuctChild();
-      board.MakeMove(child->MoveTurn(), child->move());
-      n = child;
-    }
+  while (!n->IsLeaf()) {
+    Node* child = n->MaxPuctChild();
+    board.MakeMove(child->MoveTurn(), child->move());
+    n = child;
   }
   // Expand leaf node. Usually it's the turn as indicated by the node.
   int next_turn = n->NextTurn();
@@ -476,8 +473,7 @@ bool NeuralMCTS::Run(Node& root, const Board& b) {
   }
   n->CreateChildren(moves);
   n->ShuffleChildren();  // Avoid selection bias.
-  auto pred =
-      model_.Predict(board.Tensor(n->NextTurn()), n->ActionMask());
+  auto pred = model_.Predict(board.Tensor(n->NextTurn()), n->ActionMask());
   n->SetMoveProbs(pred.move_probs);
   n->SetValue(pred.value);
   n->Backpropagate(n->ValueP0());

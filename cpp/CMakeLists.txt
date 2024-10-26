@@ -80,6 +80,9 @@ target_link_libraries(hexz_pyapi PUBLIC mcts absl::strings absl::log)
 add_executable(worker worker.cc worker_main.cc)
 target_link_libraries(worker PRIVATE grpc_client mcts absl::log absl::flags absl::flags_parse absl::flags_usage)
 
+add_executable(cpuserver cpuserver.cc cpuserver_main.cc)
+target_link_libraries(cpuserver PRIVATE mcts absl::log absl::flags absl::flags_parse absl::flags_usage hexzpb_grpc)
+
 # Benchmark for the different GPU pipelines.
 add_executable(gpubench gpubench_main.cc)
 target_link_libraries(gpubench PRIVATE mcts absl::log absl::flags absl::flags_parse absl::flags_usage grpc_client Boost::fiber)

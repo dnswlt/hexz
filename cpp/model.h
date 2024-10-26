@@ -47,6 +47,8 @@ class Model {
   }
   // This is the core method of any model, that returns a model prediction
   // for the given board and (MCTS search) node.
+  // board must be a (11, 11, 10) tensor.
+  // action_mask must be a (2, 11, 10) boolean tensor.
   virtual Prediction Predict(torch::Tensor board,
                              torch::Tensor action_mask) = 0;
   virtual hexzpb::ModelKey Key() const = 0;
