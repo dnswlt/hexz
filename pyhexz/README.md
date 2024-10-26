@@ -20,32 +20,6 @@ conda activate pyhexz
 (You might need to run `~/miniconda/bin/activate pyhexz` instead,
 depending on your conda setup.)
 
-### Cython
-
-Now compile the Cython modules:
-
-```bash
-python3 setup.py build_ext --build-lib=src
-```
-
-**NOTE**: Building the `pyhexz.ccapi` extension assumes that
-the C++ libraries in ../cpp were already built. If you don't care about the
-Python `cpu_server` module (e.g. if you only want to run the training server),
-you can skip this step.
-
-Test the C++ bindings for the MoveSuggester by running:
-
-```bash
-cd src
-# macos version. For Linux, use LD_LIBRARY_PATH
-DYLD_LIBRARY_PATH=$HOME/git/github.com/dnswlt/hexz/cpp/build python3 -c '
-from pyhexz.ccapi import CppMoveSuggester
-m = CppMoveSuggester("../../cpp/testdata/scriptmodule.pt")
-print(m.suggest_move(b"__HELLO__"))'
-```
-
-It should print a friendly hello message.
-
 ### pytest
 
 Just run `pytest` without any arguments. The `pytest.ini` file tells pytest where to find stuff.

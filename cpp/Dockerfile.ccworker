@@ -1,11 +1,10 @@
-FROM debian:bookworm-slim
+# Stage 1: build
+FROM debian:bookworm-slim AS builder
 
-WORKDIR /app
+WORKDIR /build
 
-# Usually we'd do the compilation in a separate stage to keep the container slim
-# (https://docs.docker.com/build/building/multi-stage/), but since Pytorch libs
-# are the major contributor to Docker image size, the additional ~200 MB for gcc
-# are just a drop in the ocean.
+# Build gRPC separately. PyTorch libraries blow up the image size substantially
+# already (~ 1G IIRC), but (uncleaned) gRPC build artifacts are a whopping 3G.
 RUN apt-get update && apt-get install -y \
     cmake \
     build-essential \
@@ -16,53 +15,55 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && apt-get clean
 
-# Build protocol buffers.
-# We could probably just as well do 
-#   apt-get install libprotobuf-dev
-# but currently our CMakeLists.txt depends on the protobuf-config.cmake file, which
-# is not included in that package.
-# TODO: figure out a way to configure CMakeLists.txt s.t. it doesn't need the .cmake file.
-# Update 2023-11-01: We also use absl::StatusOr and friends now, so compiling this is
-# is probably OK.
-#
-# Running ldconfig is required b/c otherwise not all absl .so files ended up in the
-# /etc/ld.so.cache (e.g. libabsl_strings.so.0 was there, but libabsl_base.so.0 was missing).
-RUN curl -L -o protobuf-24.4.tar.gz https://github.com/protocolbuffers/protobuf/releases/download/v24.4/protobuf-24.4.tar.gz \
-    && tar xzf protobuf-24.4.tar.gz \
-    && rm protobuf-24.4.tar.gz \
-    && cd protobuf-24.4 \
-    && git clone https://github.com/abseil/abseil-cpp.git third_party/abseil-cpp \
-    && cmake -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_SHARED_LIBS=ON -Dprotobuf_BUILD_TESTS=OFF -Dprotobuf_BUILD_PROTOC_BINARIES=OFF . \
-    && cmake --build . --parallel 4 \
-    && cmake --install . \
-    && cd .. \
-    && rm -rf protobuf-24.4 \
-    && ldconfig
+# Build gRPC.
 
-RUN curl -L -o libtorch.zip https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.1.0%2Bcpu.zip \
-    && unzip libtorch.zip \
-    && rm libtorch.zip
+RUN git clone --recurse-submodules -b v1.66.0 --depth 1 --shallow-submodules https://github.com/grpc/grpc
+
+RUN cd grpc \
+  && mkdir -p cmake/build \
+  && cd cmake/build \
+  && cmake -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/opt ../.. \
+  && make -j4 \
+  && make install
+
+RUN curl -L -O https://archives.boost.io/release/1.86.0/source/boost_1_86_0.tar.bz2 \
+&& tar xjf boost_1_86_0.tar.bz2 \
+&& cd boost_1_86_0/ \
+&& ./bootstrap.sh --prefix=/opt \
+&& ./b2 install
 
 RUN curl -L -O https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2 \
     && tar xjf jemalloc-5.3.0.tar.bz2 \
     && rm jemalloc-5.3.0.tar.bz2 \
     && cd jemalloc-5.3.0 \
-    && ./configure \
+    && ./configure --prefix=/opt \
     && make \
     && make install \
     && cd .. \
-    && rm -rf jemalloc-5.3.0 \
-    && ldconfig
+    && ldconfig /opt/lib
+
+RUN curl -L -o libtorch.zip https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.1.0%2Bcpu.zip \
+    && unzip -d /opt libtorch.zip \
+    && rm libtorch.zip
 
 # Copy source files. Do this after required libraries were installed to avoid repeating that
 # each time a source changes.
-COPY . ./
+COPY ./cpp/ ./
+COPY ./hexzpb/hexz.proto ./hexzpb/
+
+RUN /opt/bin/protoc -Ihexzpb --cpp_out=. --grpc_out=. --plugin=protoc-gen-grpc=/opt/bin/grpc_cpp_plugin hexzpb/hexz.proto
 
 RUN mkdir build \
     && cd build \
-    && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="/app/libtorch/share/cmake;/usr/local/lib/cmake/protobuf" .. \
+    && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="/opt/libtorch/share/cmake;/opt/lib/cmake" .. \
     && cmake --build . --parallel 4
 
-WORKDIR /app/build
+# Stage 2: final image
+FROM debian:bookworm-slim
 
-ENTRYPOINT ["/usr/bin/env", "LD_PRELOAD=/usr/local/lib/libjemalloc.so", "./worker"]
+WORKDIR /app
+
+COPY --from=builder /opt /opt
+COPY --from=builder /build/build/worker /app/
+
+ENTRYPOINT ["/usr/bin/env", "LD_PRELOAD=/opt/lib/libjemalloc.so", "./worker"]

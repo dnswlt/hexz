@@ -8,25 +8,12 @@ WORKDIR /app
 # Create the conda environment. This will download all required Python modules
 RUN conda env create -f /app/environment.yml
 
-# Make sure conda is activated in the subsequent RUN commands
-RUN echo "conda activate pyhexz" >> ~/.bashrc
-
-# Usually we'd do the compilation in a separate stage to keep the container slim
-# (https://docs.docker.com/build/building/multi-stage/), but since we're at
-# 2.83 GB for the whole numpy/pytorch/h5py/cython conda environment already,
-# the additional ~200 MB for gcc are just a drop in the ocean.
-RUN apt-get update && apt-get install -y gcc && apt-get clean
-
-SHELL ["/bin/bash", "-c"]
-
 # Now copy source files required to build the app.
 # Avoid copying other stuff so that the Docker layer is only rebuilt
 # if there are actual source code changes.
-COPY entrypoint.sh setup.py ./
+COPY entrypoint.sh ./
 COPY ./src/pyhexz/*.py ./src/pyhexz/*.pyx ./src/pyhexz/
 RUN chmod +x ./entrypoint.sh
-
-RUN source ~/.bashrc && python3 setup.py build_ext --build-lib=src
 
 #
 # BEGIN server specific stuff. Everything above this line should be identical to the

@@ -74,9 +74,6 @@ target_link_libraries(model PUBLIC base hexzpb Boost::fiber "${TORCH_LIBRARIES}"
 add_library(mcts base.cc board.cc mcts.cc perfm.cc)
 target_link_libraries(mcts PUBLIC base hexzpb model absl::statusor absl::strings absl::log)
 
-add_library(hexz_pyapi pyapi.cc)
-target_link_libraries(hexz_pyapi PUBLIC mcts absl::strings absl::log)
-
 add_executable(worker worker.cc worker_main.cc)
 target_link_libraries(worker PRIVATE grpc_client mcts absl::log absl::flags absl::flags_parse absl::flags_usage)
 
@@ -102,14 +99,12 @@ add_executable(batch_test batch_test.cc)
 add_executable(mcts_test mcts_test.cc)
 add_executable(model_test model_test.cc)
 add_executable(base_test base_test.cc)
-add_executable(pyapi_test pyapi_test.cc)
 
 target_link_libraries(mcts_test GTest::gmock_main mcts)
 target_link_libraries(model_test GTest::gmock_main model)
 target_link_libraries(board_test GTest::gmock_main mcts)
 target_link_libraries(batch_test GTest::gmock_main base)
 target_link_libraries(base_test GTest::gtest_main base)
-target_link_libraries(pyapi_test GTest::gtest_main hexz_pyapi mcts)
 
 include(GoogleTest)
 gtest_discover_tests(mcts_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -117,4 +112,3 @@ gtest_discover_tests(model_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 gtest_discover_tests(board_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 gtest_discover_tests(batch_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 gtest_discover_tests(base_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-gtest_discover_tests(pyapi_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

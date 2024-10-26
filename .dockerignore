@@ -1,3 +1,6 @@
 .dockerignore
 .gcloudignore
 .gitignore
+./cpp/build/
+./cpp/worker
+./cpp/hexz.*

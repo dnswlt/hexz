@@ -1,7 +1,4 @@
-"""Pure Python implementation of the Flagz board game.
-
-See hexc.py for the Cython-based subclass that should be used instead.
-"""
+"""Pure Python implementation of the Flagz board game."""
 
 import numpy as np
 
