@@ -56,14 +56,16 @@ RUN /opt/bin/protoc -Ihexzpb --cpp_out=. --grpc_out=. --plugin=protoc-gen-grpc=/
 RUN mkdir build \
     && cd build \
     && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="/opt/libtorch/share/cmake;/opt/lib/cmake" .. \
-    && cmake --build . --parallel 4
+    && make -j4 worker
 
 # Stage 2: final image
 FROM debian:bookworm-slim
 
 WORKDIR /app
 
-COPY --from=builder /opt /opt
-COPY --from=builder /build/build/worker /app/
+# Only copy relevant dynamic libs and the application binary.
+COPY --from=builder /opt/lib/libjemalloc.so /opt/lib/libjemalloc.so
+COPY --from=builder /opt/libtorch/lib /opt/libtorch/lib
+COPY --from=builder /build/build/worker /app/worker
 
 ENTRYPOINT ["/usr/bin/env", "LD_PRELOAD=/opt/lib/libjemalloc.so", "./worker"]

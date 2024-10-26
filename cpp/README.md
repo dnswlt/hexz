@@ -104,7 +104,7 @@ Run the Docker image locally:
 ```bash
 docker run \
   -e PYTHONUNBUFFERED=1 \
-  -e HEXZ_TRAINING_SERVER_ADDR=http://$HOSTNAME:8080 \
+  -e HEXZ_TRAINING_SERVER_ADDR=$HOSTNAME:8080 \
   -e HEXZ_MAX_RUNTIME_SECONDS=60 \
   -e HEXZ_RUNS_PER_MOVE=800 \
   -e HEXZ_UCT_C=1.5 \
