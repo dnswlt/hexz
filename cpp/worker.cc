@@ -195,9 +195,9 @@ void Worker::Run() {
             // Suspension is only supported by FiberTorchModel.
             return;
           }
-          if (event.has_pause()) {
+          if (event.has_training_started()) {
             fiber_torch_model->Suspend();
-          } else if (event.has_resume()) {
+          } else if (event.has_training_done()) {
             fiber_torch_model->Resume();
           }
         });
@@ -263,8 +263,10 @@ void Worker::Run() {
 
 void Worker::RunSingle(Model& model, AsyncExampleSender& sender) {
   const int64_t started_micros = UnixMicros();
+  // Need to cast here to avoid int overflow.
   const int64_t end_micros =
-      started_micros + config_.max_runtime_seconds * 1'000'000;
+      started_micros +
+      static_cast<int64_t>(config_.max_runtime_seconds) * 1'000'000;
 
   int max_games = config_.max_games > 0 ? config_.max_games
                                         : std::numeric_limits<int>::max();

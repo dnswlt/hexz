@@ -317,11 +317,11 @@ message ControlRequest {
     string execution_id = 1;
 }
 message ControlEvent {
-    message Pause {}
-    message Resume {}
+    message TrainingStarted {}
+    message TrainingDone {}
     oneof event_type {
-        Pause pause = 1;
-        Resume resume = 2;
+        TrainingStarted training_started = 1;
+        TrainingDone training_done = 2;
     }
 }
 

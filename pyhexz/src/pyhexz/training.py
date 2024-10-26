@@ -1,11 +1,12 @@
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 import dataclasses
+from datetime import datetime
 import logging
 import queue
 import threading
 import time
-from typing import Iterator
+from typing import Iterator, Tuple
 import grpc
 import h5py
 import numpy as np
@@ -18,12 +19,33 @@ from pyhexz.modelrepo import LocalModelRepository, ModelRepository
 
 
 @dataclass
+class ModelInfo:
+    """Same as hexz_pb2.ModelKey. Only used for info messages, logging, and such."""
+
+    name: str
+    checkpoint: int
+
+
+@dataclass
+class TrainingResultInfo:
+    started: str  # YYYY-MM-DD HH:MM:SSZ
+    done: str  # YYYY-MM-DD HH:MM:SSZ
+    model: ModelInfo
+    num_epochs: int
+    training_time: float
+    total_time: float
+    examples_window: Tuple[int, int]
+
+
+@dataclass
 class TrainingStats:
+    # Number of example requests received.
     example_requests: int = 0
     examples: int = 0
     training_runs_started: int = 0
     training_runs_completed: int = 0
-    last_training: int = 0
+    last_training_ex_count: int = 0
+    last_training_info: TrainingResultInfo | None = None
 
 
 def rchunks(start: int, end: int, size: int) -> list[slice]:
@@ -101,8 +123,8 @@ class TrainingTask:
         self.config = config
         self.logger = logger
 
-    def _run_training(self):
-        t_start = time.perf_counter_ns()
+    def execute(self) -> TrainingResultInfo:
+        t_start = time.time()
         device = self.config.device
         model = self.model_repo.get_model(self.model_name, self.checkpoint)
         model.train()
@@ -130,7 +152,7 @@ class TrainingTask:
                 lr=self.config.learning_rate,
                 weight_decay=self.config.adam_weight_decay,
             )
-            t_iter_start = time.perf_counter_ns()
+            t_iter_start = time.time()
             training_ns = 0
             for epoch in range(self.config.num_epochs):
                 for (X_board, X_action_mask), (y_pr, y_val) in loader:
@@ -166,22 +188,21 @@ class TrainingTask:
             checkpoint=next_cp,
             model=model,
         )
-        t_end = time.perf_counter_ns()
-        self.logger.info(
-            f"_run_training done in {(t_end-t_start)/1e9:.3f}s."
-            f" setup time: {(t_iter_start-t_start)/1e9:.3f}s."
-            f" training time: {training_ns/1e9:.3f}s."
-        )
-        return next_cp
-
-    def execute(self):
-        t_start = time.time()
-        next_cp = self._run_training()
         t_end = time.time()
         self.logger.info(
-            f"Training done after {t_end-t_start:.3f}s. Stored new model {self.model_name}:{next_cp}"
+            f"_run_training done in {(t_end-t_start):.3f}s."
+            f" setup time: {(t_iter_start-t_start):.3f}s."
+            f" training time: {training_ns/1e9:.3f}s."
         )
-        return next_cp
+        return TrainingResultInfo(
+            model=ModelInfo(self.model_name, next_cp),
+            started=datetime.fromtimestamp(t_start).isoformat(),
+            done=datetime.fromtimestamp(t_end).isoformat(),
+            total_time=t_end - t_start,
+            num_epochs=self.config.num_epochs,
+            training_time=training_ns / 1e9,
+            examples_window=(dataset.start, dataset.end),
+        )
 
 
 class TrainingState:
@@ -225,7 +246,8 @@ class TrainingState:
         """Must only be called while holding the lock."""
         return (
             self._stats.examples
-            >= self._stats.last_training + self.config.training_trigger_threshold
+            >= self._stats.last_training_ex_count
+            + self.config.training_trigger_threshold
             and not self.is_training
         )
 
@@ -239,11 +261,13 @@ class TrainingState:
             logger=self.logger,
         )
         if self._subscriptions:
-            self.logger.info(f"Sending Pause control event to subscribed workers")
+            self.logger.info(
+                f"Sending TrainingStarted control event to subscribed workers"
+            )
             for q in self._subscriptions:
                 q.put(
                     hexz_pb2.ControlEvent(
-                        pause=hexz_pb2.ControlEvent.Pause(),
+                        training_started=hexz_pb2.ControlEvent.TrainingStarted(),
                     )
                 )
         self.logger.info(
@@ -252,15 +276,18 @@ class TrainingState:
         fut = self._executor.submit(task.execute)
         fut.add_done_callback(self._training_done)
         self.is_training = True
-        self._stats.last_training = self._stats.examples
+        self._stats.last_training_ex_count = self._stats.examples
         self._stats.training_runs_started += 1
 
-    def _training_done(self, fut: Future[int]):
+    def _training_done(self, fut: Future[TrainingResultInfo]):
         """A callback that is called when a TrainingTask is done."""
         with self.lock:
             self._stats.training_runs_completed += 1
             self.is_training = False
-            self.latest_checkpoint = fut.result()
+            res = fut.result()
+            self.latest_checkpoint = res.model.checkpoint
+            self._stats.last_training_info = res
+            self.logger.info(f"Training done: {res}")
             # Trigger next training round immediately if there are enough
             # examples already.
             if self._should_train():
@@ -270,7 +297,7 @@ class TrainingState:
                 for q in self._subscriptions:
                     q.put(
                         hexz_pb2.ControlEvent(
-                            resume=hexz_pb2.ControlEvent.Resume(),
+                            training_done=hexz_pb2.ControlEvent.TrainingDone(),
                         )
                     )
 
@@ -297,7 +324,7 @@ class TrainingState:
         """Asynchronously saves the examples from the request in the repository."""
         self._executor.submit(self._add_examples, req)
 
-    def stats(self):
+    def stats(self) -> TrainingStats:
         """Returns a copy of the training stats."""
         with self.lock:
             return dataclasses.replace(self._stats)
@@ -327,16 +354,16 @@ class TrainingState:
               a callback to unsubscribe the caller when its RPC gets terminated.
         """
         q = queue.SimpleQueue()
-        send_pause = False
+        send_started = False
         with self.lock:
             self._subscriptions.append(q)
             if self.is_training:
-                send_pause = True
+                send_started = True
         ctx.add_callback(lambda: self._unsubscribe_events(q))
-        if send_pause:
+        if send_started:
             # Send an initial Pause event since we are in the middle of training.
             yield hexz_pb2.ControlEvent(
-                pause=hexz_pb2.ControlEvent.Pause(),
+                training_started=hexz_pb2.ControlEvent.TrainingStarted(),
             )
         while ctx.is_active():
             event = q.get()

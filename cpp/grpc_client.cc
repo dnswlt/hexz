@@ -116,6 +116,7 @@ GRPCTrainingServiceClient::FetchLatestModel(const std::string& model_name) {
   hexzpb::FetchModelRequest request;
   if (model_name != "") {
     request.mutable_model_key()->set_name(model_name);
+    request.mutable_model_key()->set_checkpoint(-1);  // Always get the lastest.
   }
   request.set_encoding(hexzpb::ModelEncoding::JIT_SCRIPT);
 

@@ -36,12 +36,9 @@
 ABSL_FLAG(std::string, training_server_addr, "",
           "training server address (ex: \"localhost:50051\")");
 ABSL_FLAG(std::string, device, "", "PyTorch device (cpu, cuda, mps)");
-ABSL_FLAG(std::string, run_gpu_benchmark, "",
-          "set to \"single\" or \"multi\" a GPU benchmark");
-ABSL_FLAG(int, gpu_benchmark_rounds, 0,
-          "number of rounds to run in a GPU benchmark");
 ABSL_FLAG(std::string, local_model_path, "",
           "path to a torch::jit::load'able model (for benchmarks)");
+ABSL_FLAG(int, runs_per_move, 0, "number of MCTS runs per move");
 ABSL_FLAG(int, worker_threads, 0, "number of worker threads");
 ABSL_FLAG(int, fibers_per_thread, 0, "number of fibers per worker thread");
 ABSL_FLAG(int, prediction_batch_size, 0,
@@ -81,6 +78,9 @@ void UpdateConfigFromFlags(hexz::Config& config) {
   }
   if (std::string device = absl::GetFlag(FLAGS_device); device != "") {
     config.device = device;
+  }
+  if (int n = absl::GetFlag(FLAGS_runs_per_move); n > 0) {
+    config.runs_per_move = n;
   }
   if (int t = absl::GetFlag(FLAGS_worker_threads); t > 0) {
     config.worker_threads = t;

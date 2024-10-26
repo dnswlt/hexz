@@ -21,8 +21,7 @@ struct Config {
   int fibers_per_thread = 0;
   // Batch size to use in multi-threaded mode for GPU model predictions.
   int prediction_batch_size = 1;
-  // MCTS runs executed for each move. Can be further influenced by
-  // runs_per_move_decay.
+  // MCTS runs executed for each move.
   int runs_per_move = 800;
   // A variation of KataGo's playout cap randomization
   // (https://arxiv.org/abs/1902.10565, section 3.1):
@@ -59,10 +58,12 @@ struct Config {
   // to imitate AlphaZero:
   // https://stats.stackexchange.com/questions/322831/purpose-of-dirichlet-noise-in-the-alphazero-paper
   // or 0.3 to use the setting that was used for chess.
+  // Set this to zero to disable Dirichlet noise.
   float dirichlet_concentration = 0;
   // Number of random playouts to play at each leaf node to improve the
   // (initially totally useless) model value predictions. Random playouts
   // are also used to resign early.
+  // Set this to zero to disable random playouts.
   int random_playouts = 0;
   // Threshold Q value above which a game will be resigned, to speed up
   // self-play. Currently this is only used for random playouts.
