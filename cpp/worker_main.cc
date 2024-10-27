@@ -46,6 +46,8 @@ ABSL_FLAG(int, prediction_batch_size, 0,
 ABSL_FLAG(int, max_runtime_seconds, 0, "maximum runtime of the worker");
 ABSL_FLAG(bool, suspend_while_training, false,
           "if true, the worker is suspended during training");
+ABSL_FLAG(bool, dry_run, false,
+          "if true, the worker will not send examples to the training server");
 
 namespace {
 std::condition_variable cv_memmon;
@@ -96,6 +98,9 @@ void UpdateConfigFromFlags(hexz::Config& config) {
   }
   if (bool b = absl::GetFlag(FLAGS_suspend_while_training); b) {
     config.suspend_while_training = b;
+  }
+  if (bool b = absl::GetFlag(FLAGS_dry_run); b) {
+    config.dry_run = b;
   }
 }
 

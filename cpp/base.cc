@@ -74,6 +74,7 @@ std::string Config::String() const {
               absl::StrFormat("debug_memory_usage: %d", debug_memory_usage),
               absl::StrFormat("suspend_while_training: %d",
                               suspend_while_training),
+              absl::StrFormat("dry_run: %d", dry_run),
           },
           ", "),
       ")");
@@ -120,6 +121,7 @@ absl::StatusOr<Config> Config::FromEnv() {
       GET_ENV_FLOAT(startup_delay_seconds),
       GET_ENV_BOOL(debug_memory_usage),
       GET_ENV_BOOL(suspend_while_training),
+      GET_ENV_BOOL(dry_run),
   };
   // Validate values
   const std::vector<std::string> valid_devices = {"cpu", "mps", "cuda"};

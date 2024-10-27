@@ -189,16 +189,39 @@ Adjust the `CMAKE_PREFIX_PATH` directories depending on where you installed PyTo
 
 To run the worker, first make sure the training server is up and running. Then:
 
+For a test run to see if everything works (this will not send any training examples
+to the training server):
+
+```bash
+./worker \
+--worker_threads=1 \
+--training_server_addr=localhost:50051 \
+--max_runtime_seconds=60 \
+--device=cuda \
+--fibers_per_thread=1 \
+--prediction_batch_size=256 \
+--suspend_while_training=true \
+--runs_per_move=8 \
+--dry_run
+```
+
+For a proper run, use the following config (using docker style env vars instead of flags):
+
 ```bash
 env HEXZ_TRAINING_SERVER_ADDR=localhost:50051 \
-  HEXZ_MAX_RUNTIME_SECONDS=60 \
+  HEXZ_MAX_RUNTIME_SECONDS=120 \
+  HEXZ_DEVICE=cuda \
+  HEXZ_WORKER_THREADS=16 \
+  HEXZ_FIBERS_PER_THREAD=32 \
+  HEXZ_PREDICTION_BATCH_SIZE=512 \
   HEXZ_RUNS_PER_MOVE=800 \
-  HEXZ_UCT_C=1.5 \
   HEXZ_RUNS_PER_FAST_MOVE=100 \
-  HEXZ_DIRICHLET_CONCENTRATION=0.35 \
   HEXZ_FAST_MOVE_PROB=0.5 \
-  HEXZ_RESIGN_THRESHOLD=0.999 \
-  HEXZ_WORKER_THREADS=1 \
+  HEXZ_UCT_C=1.5 \
+  HEXZ_DIRICHLET_CONCENTRATION=0.35 \
+  HEXZ_RANDOM_PLAYOUTS=0 \
+  HEXZ_STARTUP_DELAY_SECONDS=5 \
+  HEXZ_SUSPEND_WHILE_TRAINING=true \
   ./worker
 ```
 

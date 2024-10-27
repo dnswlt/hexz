@@ -81,6 +81,11 @@ struct Config {
   // machine.
   bool suspend_while_training = false;
 
+  // Set this to true to avoid sending examples to training server.
+  // Useful if you want to test the worker against a real model, but
+  // not taint it with low-quality examples.
+  bool dry_run = false;
+
   static absl::StatusOr<Config> FromEnv();
   std::string String() const;
 };

@@ -45,7 +45,6 @@ class WorkerStats {
   Data data_;
 };
 
-
 // AsyncExampleSender is used to send examples to the training server
 // asynchronously. Its Run() method is supposed to be executed in a separate
 // thread. Clients can then pass requests via the EnqueueRequest method from any
@@ -58,7 +57,7 @@ class AsyncExampleSender {
   enum class State { PENDING, ACTIVE, STOPPING, TERMINATED };
   // Starts the background sender thread, which will be terminated on
   // destruction of this object.
-  AsyncExampleSender(TrainingServiceClient& client, Model& model);
+  AsyncExampleSender(TrainingServiceClient& client, Model& model, bool dry_run);
   // Cannot copy instances.
   AsyncExampleSender(const AsyncExampleSender&) = delete;
   AsyncExampleSender& operator=(const AsyncExampleSender&) = delete;
@@ -77,6 +76,7 @@ class AsyncExampleSender {
 
   bool ProcessRequest(const hexzpb::AddTrainingExamplesRequest& req);
 
+  const bool dry_run_;
   mutable std::mutex mut_;
   State state_;
   std::thread sender_thread_;

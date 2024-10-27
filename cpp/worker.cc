@@ -35,8 +35,11 @@ constexpr absl::string_view kKillMessage = "__KILL_KILL_KILL__";
 }  // namespace
 
 AsyncExampleSender::AsyncExampleSender(TrainingServiceClient& client,
-                                       Model& model)
-    : client_{client}, model_{model}, state_{State::PENDING} {
+                                       Model& model, bool dry_run)
+    : client_{client},
+      model_{model},
+      state_{State::PENDING},
+      dry_run_{dry_run} {
   StartSenderThread();
 }
 AsyncExampleSender::~AsyncExampleSender() { TerminateSenderThread(); }
@@ -101,6 +104,11 @@ bool AsyncExampleSender::ProcessRequest(
   if (req.execution_id() == kKillMessage) {
     ABSL_LOG(ERROR) << "AsyncExampleSender: received kill request";
     return false;
+  }
+  if (dry_run_) {
+    ABSL_LOG(INFO) << "AsyncExampleSender is in dry_run mode. Ignoring "
+                   << req.examples_size() << " examples";
+    return true;
   }
   auto resp = client_.AddTrainingExamples(req);
   if (!resp.ok()) {
@@ -175,6 +183,8 @@ void Worker::Run() {
     return;
   }
   auto& [initial_model_key, initial_model] = *km;
+  ABSL_LOG(INFO) << "Fetched latest model: " << initial_model_key.name() << ":"
+                 << initial_model_key.checkpoint();
 
   std::unique_ptr<Model> model =
       CreateModel(initial_model_key, std::move(initial_model));
@@ -213,7 +223,7 @@ void Worker::Run() {
   };
 
   // Used to send examples and update the model asynchronously.
-  AsyncExampleSender sender(client_, *model);
+  AsyncExampleSender sender(client_, *model, config_.dry_run);
 
   stats_.SetStartedMicros(UnixMicros());
 
