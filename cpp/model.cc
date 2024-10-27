@@ -6,10 +6,6 @@
 
 namespace hexz {
 
-void TorchModel::SetDevice(torch::DeviceType device) {
-  device_ = device;
-  module_.to(device_);
-}
 void TorchModel::UpdateModel(hexzpb::ModelKey key,
                              torch::jit::Module&& module) {
   key_ = std::move(key);

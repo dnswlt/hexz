@@ -62,8 +62,11 @@ class TorchModel : public Model {
  public:
   explicit TorchModel(torch::jit::Module&& module)
       : module_{std::move(module)} {}
-  TorchModel(hexzpb::ModelKey key, torch::jit::Module&& module)
-      : key_{std::move(key)}, module_{std::move(module)} {}
+  TorchModel(hexzpb::ModelKey key, torch::jit::Module&& module,
+             torch::Device device)
+      : key_{std::move(key)}, module_{std::move(module)}, device_(device) {
+    module_.to(device_);
+  }
 
   void UpdateModel(hexzpb::ModelKey key, torch::jit::Module&& model) override;
 
@@ -72,14 +75,11 @@ class TorchModel : public Model {
   // Returns the model key, if it was set during construction. Otherwise,
   // returns the "zero value" of ModelKey.
   hexzpb::ModelKey Key() const override { return key_; }
-  // Sets the device on which model predictions will be made.
-  // The default is torch::kCPU and does not need to be set explicitly.
-  void SetDevice(torch::DeviceType device);
 
  private:
   hexzpb::ModelKey key_;
   torch::jit::Module module_;
-  torch::DeviceType device_ = torch::kCPU;
+  torch::Device device_ = torch::kCPU;
 };
 
 // Implementation of Model that uses an actual PyTorch ScriptModule.

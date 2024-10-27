@@ -82,7 +82,7 @@ class TrainingServicer(hexz_pb2_grpc.TrainingServiceServicer):
         self, request: hexz_pb2.ControlRequest, ctx: grpc.ServicerContext
     ):
         self.logger.info(
-            f"Worker with execution_id {request.execution_id} subscribed to control events."
+            f"Worker {ctx.peer()} with execution_id {request.execution_id} subscribed to control events."
         )
         yield from self.training_state.subscribe_events(ctx)
         self.logger.info(

@@ -15,7 +15,9 @@ namespace hexz {
 namespace {}  // namespace
 
 CPUPlayerServiceImpl::CPUPlayerServiceImpl(CPUPlayerServiceConfig config)
-    : config_{config}, model_{torch::jit::load(config.model_path)} {}
+    : config_{config},
+      model_{config.model_key, torch::jit::load(config.model_path),
+             config.device} {}
 
 grpc::Status CPUPlayerServiceImpl::SuggestMove(
     grpc::ServerContext* context, const hexzpb::SuggestMoveRequest* request,
@@ -54,8 +56,12 @@ grpc::Status CPUPlayerServiceImpl::SuggestMove(
     think_time = config_.max_think_time_ms;
   }
   int64_t t_started = UnixMicros();
-  absl::StatusOr<std::unique_ptr<Node>> node =
-      mcts.SuggestMove(turn, *board, think_time);
+  absl::StatusOr<std::unique_ptr<Node>> node;
+  try {
+    node = mcts.SuggestMove(turn, *board, think_time);
+  } catch (c10::Error& error) {
+    ABSL_LOG(ERROR) << "Exception when calling SuggestMove: " << error.msg();
+  }
   if (!node.ok()) {
     return grpc::Status(
         grpc::INTERNAL,
