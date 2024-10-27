@@ -49,8 +49,8 @@ DYLD_LIBRARY_PATH=$HOME/git/github.com/dnswlt/hexz/cpp/build \
 
 ```bash
 # server
-docker build . -f Dockerfile.server --tag europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/server:latest
-docker push europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/server:latest
+docker build . -f Dockerfile.server --tag europe-west4-docker.pkg.dev/hexz-cloud-run/hexz/server:latest
+docker push europe-west4-docker.pkg.dev/hexz-cloud-run/hexz/server:latest
 ```
 
 Running the image locally:
@@ -63,7 +63,7 @@ PORT=8080 && docker run -p 8080:${PORT} -e PORT=${PORT} \
   -e HEXZ_BATCH_SIZE=512 \
   -e HEXZ_MODEL_NAME=test \
   -e HEXZ_NUM_EPOCHS=1 \
-  europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/server:latest
+  europe-west4-docker.pkg.dev/hexz-cloud-run/hexz/server:latest
 ```
 
 ## Python game implementation

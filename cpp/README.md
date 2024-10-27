@@ -1,24 +1,32 @@
 # Hexz in C++
 
 To generate training examples as efficiently as possible,
-we need to implement the MCTS search using PyTorch in C++.
+we need to implement the MCTS search using PyTorch (`libtorch`) in C++.
 The Python version is too slow for this task.
 
-## Install dependencies
+## Build the binary
+
+**NOTE**: Make sure you are NOT inside a conda environment when building the C++ libs.
+
+**TIP**: See the Docker section below if you just want to run the workers, not build them.
+
+All commands assume you are in the `cpp` subdirectory.
+
+### Dependencies
+
+#### cmake
+
+On Linux:
+
+```bash
+sudo apt install cmake
+```
 
 On macos:
 
 ```bash
 brew install cmake
 ```
-
-## Build the binary
-
-**NOTE:** Make sure you are NOT inside a conda environment when building the C++ libs.
-
-All commands assume you are in the `cpp` subdirectory.
-
-### Dependencies
 
 #### libtorch
 
@@ -76,9 +84,7 @@ cd boost_1_86_0/
 ./b2 install
 ```
 
-### Finally: Build it
-
-Build the worker:
+### Finally: Build the worker
 
 ```bash
 # Create new build directory to start from a clean slate.
@@ -90,11 +96,13 @@ cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$HOME/.local/lib/cmake;$HO
 make -j4
 ```
 
-### Docker
+## Docker
 
-Build from the base directory, not from `cpp`, because docker needs access to the `.proto` files.
+For clients that just want to run the workers (and not develop them), Docker is probably the easiest way:
 
-Install the NVIDIA Container Toolkit
+### NVIDIA Container Toolkit
+
+To enable NVIDIA on docker, install the NVIDIA Container Toolkit:
 
 ```bash
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
@@ -111,32 +119,53 @@ sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 ```
 
-To find relevant nvidia docker images: <https://gitlab.com/nvidia/container-images/cuda/-/blob/master/doc/supported-tags.md>
+### Build the docker image
 
-Now build the Docker image:
+**NOTE**: Run `docker build` from the base directory, not from `cpp`,
+because docker needs access to the `.proto` files.
 
 ```bash
-docker build . -f cpp/Dockerfile.ccworker --tag europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/ccworker:latest
-docker push europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/ccworker:latest
+docker build . -f cpp/Dockerfile.worker-cuda --tag europe-west4-docker.pkg.dev/hexz-cloud-run/hexz/worker-cuda:latest
 ```
 
-Run the Docker image locally:
+(Note to a future me updating the Dockerfile: relevant nvidia docker images can be found here:
+<https://gitlab.com/nvidia/container-images/cuda/-/blob/master/doc/supported-tags.md>)
+
+Push to GCP (only possible for the project owner :) ):
+
+```bash
+docker push europe-west4-docker.pkg.dev/hexz-cloud-run/hexz/worker-cuda:latest
+```
+
+### Run the docker image
+
+To run the Docker image locally (remove `--gpus all` when running the CPU-only container):
+
+Adjust `HEXZ_MAX_RUNTIME_SECONDS`, `HEXZ_WORKER_THREADS`, `HEXZ_FIBERS_PER_THREAD` as needed
+to optimize GPU utilization. `HEXZ_PREDICTION_BATCH_SIZE` should be at most #threads * #fibers.
+
+Set `HEXZ_TRAINING_SERVER_ADDR` to the address of a running training server (see
+[../pyhexz/README.md](../pyhexz/README.md)).
 
 ```bash
 docker run \
-  -e PYTHONUNBUFFERED=1 \
-  -e HEXZ_TRAINING_SERVER_ADDR=$HOSTNAME:8080 \
-  -e HEXZ_MAX_RUNTIME_SECONDS=60 \
+  -e HEXZ_TRAINING_SERVER_ADDR=$HOSTNAME:50051 \
+  -e HEXZ_DEVICE=cuda \
+  -e HEXZ_MAX_RUNTIME_SECONDS=120 \
+  -e HEXZ_WORKER_THREADS=8 \
+  -e HEXZ_FIBERS_PER_THREAD=16 \
+  -e HEXZ_PREDICTION_BATCH_SIZE=128 \
   -e HEXZ_RUNS_PER_MOVE=800 \
   -e HEXZ_UCT_C=1.5 \
   -e HEXZ_RUNS_PER_FAST_MOVE=100 \
   -e HEXZ_DIRICHLET_CONCENTRATION=0.35 \
   -e HEXZ_FAST_MOVE_PROB=0.5 \
   -e HEXZ_STARTUP_DELAY_SECONDS=0 \
-  europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/ccworker:latest
+  --gpus all \
+  europe-west4-docker.pkg.dev/hexz-cloud-run/hexz/worker-cuda:latest
 ```
 
-### VS Code
+## VS Code
 
 Install the CMake and C/C++ extensions.
 Add the following to your `.vscode/settings.json` (which is not under version control):

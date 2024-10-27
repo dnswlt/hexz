@@ -89,20 +89,20 @@ the schema. TODO: create Dockerfile to simplify this.
 Build and deploy Docker image:
 
 ```bash
-docker build . --tag europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/hexz:latest
-docker push europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/hexz:latest
+docker build . --tag europe-west4-docker.pkg.dev/hexz-cloud-run/hexz/hexz:latest
+docker push europe-west4-docker.pkg.dev/hexz-cloud-run/hexz/hexz:latest
 ```
 
 Run the Artifact Registry image locally:
 
 ```bash
-PORT=8080 && docker run -p 8080:${PORT} -e PORT=${PORT} europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/hexz:latest
+PORT=8080 && docker run -p 8080:${PORT} -e PORT=${PORT} europe-west4-docker.pkg.dev/hexz-cloud-run/hexz/hexz:latest
 ```
 
 Deploy to Cloud Run:
 
 ```bash
-gcloud run deploy hexz --image=europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/hexz:latest --region=europe-west6 --project=hexz-cloud-run  && \
+gcloud run deploy hexz --image=europe-west4-docker.pkg.dev/hexz-cloud-run/hexz/hexz:latest --region=europe-west4 --project=hexz-cloud-run  && \
   gcloud run services update-traffic hexz --to-latest
 ```
 

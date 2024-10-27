@@ -9,7 +9,6 @@ WORKDIR /build
 # Build gRPC separately. PyTorch libraries blow up the image size substantially
 # already (~ 1G IIRC), but (uncleaned) gRPC build artifacts are a whopping 3G.
 RUN apt-get update && apt-get install -y \
-    cmake \
     build-essential \
     curl \
     unzip \
@@ -18,29 +17,46 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && apt-get clean
 
+# Build cmake.
+#
+# We need a recent version of it for C++20 support and to avoid the
+# Target []...] requires the language dialect "CUDA20" (with compiler                                                                          
+# extensions), but CMake does not know the compile flags to use to enable it.
+# https://stackoverflow.com/questions/75010206/cuda-12-c20-support-with-cmake-not-working
+
+RUN curl -L -O https://github.com/Kitware/CMake/releases/download/v3.30.5/cmake-3.30.5.tar.gz \
+    && tar xzf cmake-3.30.5.tar.gz \
+    && cd cmake-3.30.5 \
+    && ./bootstrap --prefix=/opt \
+    && make -j$(($(nproc) < 8 ? $(nproc) : 8)) \
+    && make install
+
+# Ensure cmake (and protoc, once built) are visible.
+ENV PATH="${PATH}:/opt/bin"
+
 # Build gRPC.
 
 RUN git clone --recurse-submodules -b v1.66.0 --depth 1 --shallow-submodules https://github.com/grpc/grpc
 
 RUN cd grpc \
-  && mkdir -p cmake/build \
-  && cd cmake/build \
-  && cmake -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/opt ../.. \
-  && make -j4 \
-  && make install
+    && mkdir -p cmake/build \
+    && cd cmake/build \
+    && cmake -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/opt ../.. \
+    && make -j$(($(nproc) < 8 ? $(nproc) : 8)) \
+    && make install
 
 RUN curl -L -O https://archives.boost.io/release/1.86.0/source/boost_1_86_0.tar.bz2 \
-&& tar xjf boost_1_86_0.tar.bz2 \
-&& cd boost_1_86_0/ \
-&& ./bootstrap.sh --prefix=/opt \
-&& ./b2 install
+    && tar xjf boost_1_86_0.tar.bz2 \
+    && cd boost_1_86_0/ \
+    && ./bootstrap.sh --prefix=/opt \
+    && ./b2 install
 
 RUN curl -L -O https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2 \
     && tar xjf jemalloc-5.3.0.tar.bz2 \
     && rm jemalloc-5.3.0.tar.bz2 \
     && cd jemalloc-5.3.0 \
     && ./configure --prefix=/opt \
-    && make \
+    && make -j$(($(nproc) < 8 ? $(nproc) : 8)) \
     && make install \
     && cd .. \
     && ldconfig /opt/lib
@@ -54,9 +70,8 @@ RUN curl -L -o libtorch.zip https://download.pytorch.org/libtorch/cpu/libtorch-c
 COPY ./cpp/ ./
 COPY ./hexzpb/hexz.proto ./hexzpb/
 
-RUN /opt/bin/protoc -Ihexzpb --cpp_out=. --grpc_out=. --plugin=protoc-gen-grpc=/opt/bin/grpc_cpp_plugin hexzpb/hexz.proto
-
-RUN mkdir build \
+RUN protoc -Ihexzpb --cpp_out=. --grpc_out=. --plugin=protoc-gen-grpc=$(which grpc_cpp_plugin) hexzpb/hexz.proto \
+    && mkdir build \
     && cd build \
     && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="/opt/libtorch/share/cmake;/opt/lib/cmake" .. \
     && make -j4 worker
