@@ -1,3 +1,6 @@
+# This is the CPU-only Docker image.
+# See Dockerfile.worker-cuda for the version with CUDA support.
+
 # Stage 1: build
 FROM debian:bookworm-slim AS builder
 
