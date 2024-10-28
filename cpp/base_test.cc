@@ -27,8 +27,8 @@ TEST(BaseTest, GetEnvAsFloat) {
 }
 
 TEST(BaseTest, DefaultConfig) {
-    Config def{};
-    EXPECT_EQ(def.max_games, -1);
+  Config def{};
+  EXPECT_EQ(def.max_games, -1);
 }
 
 TEST(DirichletTest, ValuesInExpectedRange) {
@@ -40,6 +40,27 @@ TEST(DirichletTest, ValuesInExpectedRange) {
   EXPECT_FLOAT_EQ(sum, 1);
   EXPECT_GE(min, 0);
   EXPECT_LE(max, 1);
+}
+
+TEST(Xoshiro256PlusTest, IsUniform) {
+  internal::Xoshiro256Plus rnd;
+  constexpr size_t N = 100;
+  int hist[N] = {0};
+  for (int i = 0; i < N * 100; i++) {
+    double x = rnd.Uniform();
+    size_t j = static_cast<size_t>(x * N);
+    hist[j]++;
+  }
+  for (int i = 0; i < std::size(hist); i++) {
+    EXPECT_GE(hist[i], N/2);
+    EXPECT_LE(hist[i], (N*3)/2);
+  }
+}
+
+TEST(Xoshiro256PlusTest, UsesRandomSeed) {
+  internal::Xoshiro256Plus rnd1;
+  internal::Xoshiro256Plus rnd2;
+  EXPECT_NE(rnd1.Uniform(), rnd2.Uniform());
 }
 
 }  // namespace hexz

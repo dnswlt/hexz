@@ -318,7 +318,7 @@ void Worker::RunSingle(Model& model, AsyncExampleSender& sender) {
   }
 }
 
-torch::DeviceType Worker::Device() const {
+torch::DeviceType Worker::DeviceType() const {
   if (config_.device == "mps") {
     return torch::kMPS;
   } else if (config_.device == "cuda") {
@@ -329,7 +329,7 @@ torch::DeviceType Worker::Device() const {
 
 std::unique_ptr<Model> Worker::CreateModel(hexzpb::ModelKey model_key,
                                            torch::jit::Module&& model) {
-  auto device = Device();
+  torch::DeviceType device = DeviceType();
   if (config_.fibers_per_thread > 0) {
     // Use the fiber-based model.
     ABSL_LOG(INFO) << "Using FiberTorchModel for " << config_.worker_threads
@@ -355,7 +355,7 @@ std::unique_ptr<Model> Worker::CreateModel(hexzpb::ModelKey model_key,
   // Use the ole' unbatched, one prediction at a time model.
   ABSL_LOG(INFO) << "Using TorchModel for " << config_.worker_threads
                  << " threads on device " << config_.device;
-  return std::make_unique<TorchModel>(model_key, std::move(model));
+  return std::make_unique<TorchModel>(model_key, std::move(model), device);
 }
 
 }  // namespace hexz

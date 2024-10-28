@@ -5,6 +5,7 @@
 #include <absl/strings/str_format.h>
 #include <absl/strings/str_join.h>
 
+#include <array>
 #include <cctype>
 #include <chrono>
 #include <random>

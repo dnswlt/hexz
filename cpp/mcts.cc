@@ -377,6 +377,11 @@ bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
                              bool run_playouts) {
   Board board(b);
   Node* n = &root;
+  // XXX HERE: When at a leaf node, we should randomly selected a child
+  // weighted by its prior probability. Right now, we select it based
+  // on MaxPuctChild (like all nodes on the way to the leaf), which reduces
+  // exploration.
+  // https://github.com/google-deepmind/open_spiel/blob/2228e1c2ba4314a4aa54d9650ab663c3d0550582/open_spiel/algorithms/mcts.cc#L303
   if (add_noise && !n->IsLeaf()) {
     // root has already been expanded before, so we can add the noise
     // directly. If this is the first time we expand root, noise is added

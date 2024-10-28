@@ -43,6 +43,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(googletest)
 
+#
+# Google benchmark
+#
+FetchContent_Declare(googlebenchmark
+        GIT_REPOSITORY https://github.com/google/benchmark.git
+        GIT_TAG main) # live at HEAD
+FetchContent_MakeAvailable(googlebenchmark)
+
 
 # Debug output for some vars that were relevant getting this whole mess to work:
 message(CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}")
@@ -112,3 +120,9 @@ gtest_discover_tests(model_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 gtest_discover_tests(board_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 gtest_discover_tests(batch_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 gtest_discover_tests(base_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+#
+# Benchmarking
+#
+add_executable(base_bench base_bench.cc)
+target_link_libraries(base_bench base benchmark::benchmark absl::random_random)

@@ -95,7 +95,7 @@ class Worker {
 
  private:
   void RunSingle(Model& model, AsyncExampleSender& sender);
-  torch::DeviceType Device() const;
+  torch::DeviceType DeviceType() const;
   std::unique_ptr<Model> CreateModel(hexzpb::ModelKey model_key,
                                      torch::jit::Module&& model);
   std::string execution_id_;

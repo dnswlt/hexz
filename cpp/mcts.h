@@ -68,8 +68,11 @@ class Node {
 
   // Returns this node's PUCT value.
   float Puct() const noexcept;
-  // Returns a non-owned pointer to the child with the greatest PUCT value.
+  // Returns a non-owning pointer to the child with the greatest PUCT value.
   Node* MaxPuctChild() const;
+  // Returns a non-owning pointer to a randomly sampled child node.
+  // The probability of selecting each child is proportional to its PUCT value.
+  Node* SelectChild() const;
 
   // Selects a child node with a probability
   // proportional to its relative visit count.
