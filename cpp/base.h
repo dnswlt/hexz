@@ -143,6 +143,12 @@ float UnitRandom();
 // https://prng.di.unimi.it/
 class Xoshiro256Plus {
  public:
+  // "implement" UniformRandomBitGenerator:
+  using result_type = uint64_t;
+  static constexpr result_type min() { return std::numeric_limits<result_type>::min(); }
+  static constexpr result_type max() { return std::numeric_limits<result_type>::max(); }
+  result_type operator()() { return Next(); }
+
   Xoshiro256Plus() {
     std::uniform_int_distribution<uint64_t> dis{
         0, std::numeric_limits<uint64_t>::max()};

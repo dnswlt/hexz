@@ -16,7 +16,10 @@ static void BM_Xoshiro256Plus(benchmark::State& state) {
   hexz::internal::Xoshiro256Plus rnd;
   double sum = 0;
   for (auto _ : state) {
-    sum += rnd.Uniform();
+    double d = rnd.Uniform();
+    if (d > 0.5) {
+      sum += d;
+    }
   }
   assert(sum > 0);
 }
@@ -40,5 +43,30 @@ static void BM_UnitRandom(benchmark::State& state) {
   assert(sum > 0);
 }
 BENCHMARK(BM_UnitRandom);
+
+
+static void BM_Xoshiro256PlusShuffle(benchmark::State& state) {
+  hexz::internal::Xoshiro256Plus rnd;
+  std::vector<int> v(100);
+  for (int i = 0; i < v.size(); i++) {
+    v[i] = i;
+  }
+  for (auto _ : state) {
+    std::shuffle(v.begin(), v.end(), rnd);
+  }
+}
+BENCHMARK(BM_Xoshiro256PlusShuffle);
+
+static void BM_MersenneShuffle(benchmark::State& state) {
+  std::vector<int> v(100);
+  for (int i = 0; i < v.size(); i++) {
+    v[i] = i;
+  }
+  for (auto _ : state) {
+    std::shuffle(v.begin(), v.end(), hexz::internal::rng);
+  }
+}
+BENCHMARK(BM_MersenneShuffle);
+
 
 BENCHMARK_MAIN();

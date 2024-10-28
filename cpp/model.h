@@ -94,7 +94,7 @@ class BatchedTorchModel : public Model {
       torch::Tensor action_mask;
     };
     using result_t = Model::Prediction;
-    ComputeT(torch::jit::Module&& module, torch::Device device)
+    ComputeT(torch::jit::Module&& module, torch::DeviceType device)
         : module_{std::move(module)}, device_{device} {
       module_.to(device);
     }
