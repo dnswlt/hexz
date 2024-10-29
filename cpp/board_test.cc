@@ -286,10 +286,11 @@ TEST(BoardTest, FromProtoValid) {
 }
 
 TEST(RolloutTest, FastRandomPlayout) {
+    internal::RNG rng;
   hexz::Perfm::InitScope perfm;
   for (int i = 0; i < 1000; i++) {
     Board b = Board::RandomBoard();
-    auto result = FastRandomPlayout(0, b);
+    auto result = FastRandomPlayout(0, b, rng);
     EXPECT_TRUE(result == 0 || result == -1 || result == 1);
   }
 }

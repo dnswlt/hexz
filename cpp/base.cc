@@ -16,32 +16,6 @@ namespace hexz {
 
 namespace internal {
 thread_local std::mt19937 rng{std::random_device{}()};
-
-float UnitRandom() {
-  std::uniform_real_distribution<float> unif(0, 1);
-  return unif(rng);
-}
-
-int RandomInt(int lower, int upper) {
-  ABSL_DCHECK(lower <= upper);
-  std::uniform_int_distribution<int> dis{lower, upper};
-  return dis(rng);
-}
-
-std::vector<float> Dirichlet(int n, float concentration) {
-  std::gamma_distribution<float> gamma;
-  std::vector<float> v(n);
-  float sum = 0;
-  for (int i = 0; i < n; i++) {
-    v[i] = gamma(rng);
-    sum += v[i];
-  }
-  for (int i = 0; i < n; i++) {
-    v[i] /= sum;
-  }
-  return v;
-}
-
 }  // namespace internal
 
 std::string Config::String() const {

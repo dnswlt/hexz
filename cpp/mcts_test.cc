@@ -46,7 +46,7 @@ class UniformFakeModel final : public FakeModel {
  public:
   // Always returns uniform probabilities.
   Prediction Predict(torch::Tensor board, torch::Tensor action_mask) override {
-    auto t = torch::ones({2, 11, 10});
+    auto t = torch::ones({2, 11, 10}).where(action_mask, 0);
     t = t / t.sum();
     return Prediction{
         .move_probs = t,
@@ -64,8 +64,10 @@ class ConstantFakeModel final : public FakeModel {
     ABSL_CHECK(dim[0] == 2 && dim[1] == 11 && dim[2] == 10);
   }
   Prediction Predict(torch::Tensor board, torch::Tensor action_mask) override {
+    auto t = move_probs_.where(action_mask, 0);
+    t /= t.sum();
     return Prediction{
-        .move_probs = move_probs_,
+        .move_probs = t,
         .value = value_,
     };
   }
@@ -266,6 +268,7 @@ TEST(NodeTest, FlatIndex) {
 }
 
 TEST(NodeTest, AddDirichletNoise) {
+  internal::RNG rng;
   Node root(nullptr, 0, Move{});
   std::vector<Move> moves{
       // Use the moves that come first in the flat representation of
@@ -287,7 +290,7 @@ TEST(NodeTest, AddDirichletNoise) {
   }
   float prior_sum = std::accumulate(prior.begin(), prior.end(), 0.0);
   ASSERT_FLOAT_EQ(prior_sum, 1.0);
-  root.AddDirichletNoise(0.5, 0.3);
+  root.AddDirichletNoise(0.5, 0.3, rng);
   std::vector<float> posterior;
   for (const auto& c : root.children()) {
     posterior.push_back(c->prior());
@@ -471,6 +474,7 @@ TEST(MCTSTest, RemainingFlagsAreNotNegative) {
   Config config{
       .runs_per_move = 10,
   };
+  internal::RNG rng;
   UniformFakeModel fake_model;
   NeuralMCTS mcts(fake_model, /*playout_runner=*/nullptr, config);
   Board b = Board::RandomBoard();
@@ -480,7 +484,7 @@ TEST(MCTSTest, RemainingFlagsAreNotNegative) {
     ASSERT_GE(b.Flags(0), 0);
     ASSERT_GE(b.Flags(1), 0);
     int turn = root->NextTurn();
-    root = root->SelectChildAsRoot(root->SampleChild());
+    root = root->SelectChildAsRoot(root->SelectChildForNextMove(rng));
     ASSERT_TRUE(b.Flags(turn) > 0 || root->move().typ != Move::Typ::kFlag)
         << "Failed in move " << i;
     b.MakeMove(turn, root->move());

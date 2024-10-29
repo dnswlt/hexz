@@ -405,17 +405,17 @@ class FastGameState {
     }
   }
 
-  bool FastNextMove(int turn, Move& m) const {
+  bool FastNextMove(int turn, Move& m, internal::RNG& rng) const {
     int moves_cnt = 0;
     float j = 0;
     bool can_place_flag = nflags[turn] > 0 && free_cells[turn] > 0;
     bool pick_flag =
         can_place_flag &&
         (nmoves[turn] == 0 ||
-         internal::UnitRandom() <=
+         rng.Uniform() <=
              nflags[turn] / static_cast<float>(nmoves[turn] + nflags[turn]));
     if (pick_flag) {
-      int n = internal::RandomInt(0, free_cells[turn] - 1);
+      int n = rng.Intn(free_cells[turn]);
       int k = 0;
       for (int r = 0; r < 11; r++) {
         for (int c = 0; c < 10 - (r & 1); c++) {
@@ -431,7 +431,7 @@ class FastGameState {
     }
     if (nmoves[turn] > 0) {
       // No flag picked. Try a normal move.
-      int n = internal::RandomInt(0, nmoves[turn] - 1);
+      int n = rng.Intn(nmoves[turn]);
       int k = 0;
       for (int r = 0; r < 11; r++) {
         for (int c = 0; c < 10 - (r & 1); c++) {
@@ -535,15 +535,15 @@ class FastGameState {
 
 }  // namespace
 
-float FastRandomPlayout(int turn, const Board& board) {
+float FastRandomPlayout(int turn, const Board& board, internal::RNG& rng) {
   FastGameState s(board);
   int n_moves = 0;
   while (n_moves < 200) {
     // Find random next move.
     Move m;
-    if (!s.FastNextMove(turn, m)) {
+    if (!s.FastNextMove(turn, m, rng)) {
       turn = 1 - turn;
-      if (!s.FastNextMove(turn, m)) {
+      if (!s.FastNextMove(turn, m, rng)) {
         // Game over.
         return s.Result();
       }

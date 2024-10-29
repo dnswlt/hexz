@@ -27,12 +27,17 @@ constexpr int kFirstFastMove = 6;
 // be added to this function.
 void InitializeFromConfig(const Config& config);
 
+// A node in the MCTS search tree.
 class Node {
  public:
+  // C'tor for the root node (no parent, no moves made).
   explicit Node(int turn) : Node(nullptr, turn, Move{}) {}
+  // C'tor for child nodes.
+  // turn indicates the player whose turn it is to make the given move.
   Node(Node* parent, int turn, Move move);
 
-  // Must be called at startup to initialize static configuration parameters.
+  // Must be called at program startup to initialize static configuration
+  // parameters.
   static void InitializeStaticMembers(const Config& config) {
     uct_c = config.uct_c;
     initial_root_q_value = config.initial_root_q_value;
@@ -46,6 +51,7 @@ class Node {
   const Node* parent() const noexcept { return parent_; }
   float wins() const noexcept { return wins_; }
   float value() const noexcept { return value_; }
+  // Returns the value of this node from the perspective of player 0.
   float ValueP0() const noexcept { return turn_ == 0 ? value_ : -value_; }
   bool terminal() const noexcept { return terminal_; }
   const std::vector<std::unique_ptr<Node>>& children() const {
@@ -71,12 +77,12 @@ class Node {
   // Returns a non-owning pointer to the child with the greatest PUCT value.
   Node* MaxPuctChild() const;
   // Returns a non-owning pointer to a randomly sampled child node.
-  // The probability of selecting each child is proportional to its PUCT value.
-  Node* SelectChild() const;
+  // The probability of selecting each child is proportional to its prior.
+  Node* SampleChildByPrior(internal::RNG& rng) const;
 
   // Selects a child node with a probability
   // proportional to its relative visit count.
-  int SampleChild() const;
+  int SelectChildForNextMove(internal::RNG& rng) const;
 
   // Returns the specified child and marks it as a root node (by
   // setting its parent_ to nullptr), and moves the child node out of the
@@ -99,7 +105,7 @@ class Node {
   // Adds children representing the given moves to this node.
   void CreateChildren(const std::vector<Move>& moves);
   // Shuffles children randomly. This can be used to avoid selection bias.
-  void ShuffleChildren();
+  void ShuffleChildren(internal::RNG& rng);
 
   // Returns the normalized visit counts (which sum to 1) as a (2, 11, 10)
   // tensor. This value should be used to update the move probs of the model.
@@ -116,7 +122,7 @@ class Node {
   torch::Tensor ActionMask() const;
 
   // Sets the initial move probabilities ("policy") obtained from the model
-  // prediction.
+  // prediction for all children of this node.
   void SetMoveProbs(torch::Tensor move_probs);
   // Returns the prior move probabilities as a (2, 11, 10) tensor.
   // The priors will include Dirichlet noise, if it was added.
@@ -131,7 +137,7 @@ class Node {
   // Adds Dirichlet noise to the (already set) move probs.
   // The weight parameter must be in the open interval (0, 1).
   // concentration is the Dirichlet concentration ("alpha") parameter.
-  void AddDirichletNoise(float weight, float concentration);
+  void AddDirichletNoise(float weight, float concentration, internal::RNG& rng);
 
   // Returns the number of children that had a nonzero visit_count.
   int NumVisitedChildren() const noexcept;
@@ -266,6 +272,7 @@ class RandomPlayoutRunner : public PlayoutRunner {
 
  private:
   Stats aggregated_stats_;
+  internal::RNG rng_;
 };
 
 class NeuralMCTS {
@@ -316,6 +323,8 @@ class NeuralMCTS {
   // Stats
   int predictions_count_ = 0;
   int random_playouts_count_ = 0;
+
+  mutable internal::Xoshiro256Plus rng_;
 };
 
 }  // namespace hexz

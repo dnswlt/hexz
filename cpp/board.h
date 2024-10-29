@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "base.h"
 #include "hexz.pb.h"
 
 namespace hexz {
@@ -132,6 +133,6 @@ class Board {
   torch::Tensor b_;
 };
 
-float FastRandomPlayout(int turn, const Board& board);
+float FastRandomPlayout(int turn, const Board& board, internal::RNG& rng);
 
 }  // namespace hexz

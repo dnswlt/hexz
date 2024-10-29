@@ -135,18 +135,19 @@ class ScopeGuard {
 namespace internal {
 extern thread_local std::mt19937 rng;
 
-// Returns a random number in the interval [0, 1) drawn from a uniform
-// distribution.
-float UnitRandom();
-
 // xoshiro256+ for fast uniform random numbers in the [0, 1) interval.
 // https://prng.di.unimi.it/
 class Xoshiro256Plus {
  public:
-  // "implement" UniformRandomBitGenerator:
+  // "Implement" UniformRandomBitGenerator, so that Xoshiro256Plus can be used
+  // by std::uniform_int_distribution and friends.
   using result_type = uint64_t;
-  static constexpr result_type min() { return std::numeric_limits<result_type>::min(); }
-  static constexpr result_type max() { return std::numeric_limits<result_type>::max(); }
+  static constexpr result_type min() {
+    return std::numeric_limits<result_type>::min();
+  }
+  static constexpr result_type max() {
+    return std::numeric_limits<result_type>::max();
+  }
   result_type operator()() { return Next(); }
 
   Xoshiro256Plus() {
@@ -157,9 +158,43 @@ class Xoshiro256Plus {
     }
   }
 
+  // Returns a random number in the interval [0, 1) drawn from a uniform
+  // distribution.
   double Uniform() {
     uint64_t x = Next();
     return (x >> 11) * 0x1.0p-53;
+  }
+
+#if defined(__SIZEOF_INT128__)
+  // Returns a random number in the open interval [0, n) drawn from a uniform
+  // distribution.f
+  int Intn(int n) {
+    uint64_t r = Next();
+    __uint128_t p = static_cast<__uint128_t>(r) * static_cast<__uint128_t>(n);
+    return static_cast<uint64_t>(p >> 64);  // Take the upper 64 bits
+  }
+#else
+  int Intn(int n) {
+    std::uniform_int_distribution<int> dis{0, n};
+    return dis(*this);
+  }
+#endif
+
+  // Libtorch does not have a Dirichlet (or any other nontrivial) distribution
+  // yet :( So let's roll our own, based on the gamma distribution:
+  // https://en.wikipedia.org/wiki/Dirichlet_distribution#Related_distributions
+  std::vector<float> Dirichlet(int n, float concentration) {
+    std::gamma_distribution<float> gamma;
+    std::vector<float> v(n);
+    float sum = 0;
+    for (int i = 0; i < n; i++) {
+      v[i] = gamma(*this);
+      sum += v[i];
+    }
+    for (int i = 0; i < n; i++) {
+      v[i] /= sum;
+    }
+    return v;
   }
 
  private:
@@ -187,15 +222,8 @@ class Xoshiro256Plus {
   uint64_t s[4];
 };
 
-void InitXoshiro();
-double XoshiroRandom();
-
-int RandomInt(int lower, int upper);
-
-// Libtorch does not have a Dirichlet (or any other nontrivial) distribution yet
-// :( So let's roll our own, based on the gamma distribution:
-// https://en.wikipedia.org/wiki/Dirichlet_distribution#Related_distributions
-std::vector<float> Dirichlet(int n, float concentration);
+// Alias for the random number generator to use.
+using RNG = Xoshiro256Plus;
 
 }  // namespace internal
 

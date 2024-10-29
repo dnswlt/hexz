@@ -32,7 +32,8 @@ TEST(BaseTest, DefaultConfig) {
 }
 
 TEST(DirichletTest, ValuesInExpectedRange) {
-  auto v = internal::Dirichlet(10, 0.3);
+  internal::RNG rng;
+  auto v = rng.Dirichlet(10, 0.3);
   ASSERT_EQ(v.size(), 10);
   float min = *std::min_element(v.begin(), v.end());
   float max = *std::max_element(v.begin(), v.end());
@@ -52,8 +53,28 @@ TEST(Xoshiro256PlusTest, IsUniform) {
     hist[j]++;
   }
   for (int i = 0; i < std::size(hist); i++) {
-    EXPECT_GE(hist[i], N/2);
-    EXPECT_LE(hist[i], (N*3)/2);
+    EXPECT_GE(hist[i], N / 2);
+    EXPECT_LE(hist[i], (N * 3) / 2);
+  }
+}
+
+TEST(Xoshiro256PlusTest, IntnOne) {
+  internal::Xoshiro256Plus rnd;
+  EXPECT_EQ(rnd.Intn(1), 0);
+}
+
+TEST(Xoshiro256PlusTest, IntnRange) {
+  internal::Xoshiro256Plus rnd;
+  constexpr size_t N = 10;
+  int hist[N] = {0};
+  for (int i = 0; i < N * 100; i++) {
+    int r = rnd.Intn(N);
+    ASSERT_GE(r, 0);
+    ASSERT_LT(r, N);
+    hist[r]++;
+  }
+  for (int i = 0; i < std::size(hist); i++) {
+    EXPECT_GE(hist[i], 0);
   }
 }
 

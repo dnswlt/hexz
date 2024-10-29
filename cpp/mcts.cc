@@ -138,6 +138,21 @@ Node* Node::MaxPuctChild() const {
   return best;
 }
 
+Node* Node::SampleChildByPrior(internal::RNG& rng) const {
+  float sum = 0;
+  float r = static_cast<float>(rng.Uniform());
+  for (const auto& c : children_) {
+    sum += c->prior_;
+    if (sum >= r) {
+      return c.get();
+    }
+  }
+  // We can only end up here due to rounding issues or b/c priors don't add
+  // up to 1.
+  ABSL_CHECK(std::abs(sum - 1.0) < 1e-3) << "Priors don't sum to one: " << sum;
+  return children_.back().get();
+}
+
 void Node::SetMoveProbs(torch::Tensor move_probs) {
   ABSL_DCHECK(move_probs.numel() == 2 * 11 * 10);
   ABSL_DCHECK(std::abs(move_probs.sum().item<float>() - 1.0) < 1e-3);
@@ -169,13 +184,12 @@ torch::Tensor Node::ActionMask() const {
   return action_mask;
 }
 
-void Node::ShuffleChildren() {
-  std::shuffle(children_.begin(), children_.end(), internal::rng);
+void Node::ShuffleChildren(internal::RNG& rng) {
+  std::shuffle(children_.begin(), children_.end(), rng);
 }
 
-void Node::AddDirichletNoise(float weight, float concentration) {
-  std::vector<float> diri =
-      internal::Dirichlet(children_.size(), concentration);
+void Node::AddDirichletNoise(float weight, float concentration, internal::RNG& rng) {
+  std::vector<float> diri = rng.Dirichlet(children_.size(), concentration);
   int i = 0;
   for (auto& c : children_) {
     c->prior_ = (1 - weight) * c->prior_ + weight * diri[i];
@@ -203,10 +217,10 @@ void Node::ResetTree() {
   }
 }
 
-int Node::SampleChild() const {
+int Node::SelectChildForNextMove(internal::RNG& rng) const {
   ABSL_CHECK(!children_.empty());
-  float r = internal::UnitRandom();
-  float s = 0;
+  double r = rng.Uniform();
+  double s = 0;
   // The sum of the children's visit counts should be equal
   // to visit_count_ - 1. But summing explicitly (hopefully)
   // makes this more robust and future proof.
@@ -214,10 +228,10 @@ int Node::SampleChild() const {
   for (const auto& c : children()) {
     sum_vc += c->visit_count_;
   }
-  float vc = static_cast<float>(sum_vc);
+  double vc = static_cast<double>(sum_vc);
   int i;
   for (i = 0; i < children_.size(); i++) {
-    s += static_cast<float>(children_[i]->visit_count_) / vc;
+    s += static_cast<double>(children_[i]->visit_count_) / vc;
     if (s >= r) {
       break;
     }
@@ -359,7 +373,7 @@ PlayoutRunner::Stats RandomPlayoutRunner::Run(const Board& board, int turn,
   PlayoutRunner::Stats stats;
   for (int i = 0; i < runs; i++) {
     Perfm::Scope perfm(Perfm::RandomPlayout);
-    float r = FastRandomPlayout(turn, board);
+    float r = FastRandomPlayout(turn, board, rng_);
     stats.Add(r);
   }
   aggregated_stats_.Merge(stats);
@@ -377,21 +391,27 @@ bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
                              bool run_playouts) {
   Board board(b);
   Node* n = &root;
-  // XXX HERE: When at a leaf node, we should randomly selected a child
-  // weighted by its prior probability. Right now, we select it based
-  // on MaxPuctChild (like all nodes on the way to the leaf), which reduces
-  // exploration.
-  // https://github.com/google-deepmind/open_spiel/blob/2228e1c2ba4314a4aa54d9650ab663c3d0550582/open_spiel/algorithms/mcts.cc#L303
   if (add_noise && !n->IsLeaf()) {
     // root has already been expanded before, so we can add the noise
     // directly. If this is the first time we expand root, noise is added
     // below once the predictions are available.
-    n->AddDirichletNoise(kNoiseWeight, config_.dirichlet_concentration);
+    n->AddDirichletNoise(kNoiseWeight, config_.dirichlet_concentration, rng_);
     add_noise = false;
   }
   // Find leaf node
   while (n->visit_count() > 0 && !n->IsLeaf()) {
-    Node* child = n->MaxPuctChild();
+    Node* child;
+    if (child->visit_count() == 1) {
+      // When visit count equals 1, we are at a parent node whose children have
+      // not been visited yet (it has to be a parent of leaf nodes).
+      // Randomly select a child weighted by its prior probability, to encourage
+      // exploration.
+      // https://github.com/google-deepmind/open_spiel/blob/2228e1c2ba4314a4aa54d9650ab663c3d0550582/open_spiel/algorithms/mcts.cc#L303
+      child = n->SampleChildByPrior(rng_);
+    } else {
+      // Once the node has been evaluated more than once, rely on PUCT.
+      child = n->MaxPuctChild();
+    }
     board.MakeMove(child->MoveTurn(), child->move());
     n = child;
   }
@@ -422,14 +442,13 @@ bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
     }
   }
   n->CreateChildren(moves);
-  n->ShuffleChildren();  // Avoid selection bias.
-  auto pred =
-      model_.Predict(board.Tensor(n->NextTurn()), n->ActionMask());
+  n->ShuffleChildren(rng_);  // Avoid selection bias.
+  auto pred = model_.Predict(board.Tensor(n->NextTurn()), n->ActionMask());
   predictions_count_++;
   n->SetMoveProbs(pred.move_probs);
   if (add_noise && n == &root) {
     // root has been expanded for the first time.
-    n->AddDirichletNoise(kNoiseWeight, config_.dirichlet_concentration);
+    n->AddDirichletNoise(kNoiseWeight, config_.dirichlet_concentration, rng_);
   }
   float value = pred.value;
   if (run_playouts) {
@@ -477,7 +496,7 @@ bool NeuralMCTS::Run(Node& root, const Board& b) {
     }
   }
   n->CreateChildren(moves);
-  n->ShuffleChildren();  // Avoid selection bias.
+  n->ShuffleChildren(rng_);  // Avoid selection bias.
   auto pred = model_.Predict(board.Tensor(n->NextTurn()), n->ActionMask());
   n->SetMoveProbs(pred.move_probs);
   n->SetValue(pred.value);
@@ -487,7 +506,7 @@ bool NeuralMCTS::Run(Node& root, const Board& b) {
 
 std::pair<int, bool> NeuralMCTS::NumRuns(int move) const noexcept {
   if (move >= kFirstFastMove && config_.fast_move_prob > 0) {
-    if (internal::UnitRandom() < config_.fast_move_prob) {
+    if (rng_.Uniform() < config_.fast_move_prob) {
       return std::make_pair(config_.runs_per_fast_move, true);
     }
   }
@@ -589,7 +608,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
 
     const std::string stats = root->Stats();
     int turn = root->NextTurn();
-    int child_idx = root->SampleChild();
+    int child_idx = root->SelectChildForNextMove(rng_);
     const auto& child = *root->children()[child_idx];
     const auto& move = child.move();
     // ABSL_LOG(INFO) << "#" << n << " " << move.DebugString()

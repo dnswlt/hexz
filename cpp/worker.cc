@@ -170,7 +170,8 @@ void Worker::Run() {
 
   // Delay startup if requested.
   if (config_.startup_delay_seconds > 0) {
-    float delay = config_.startup_delay_seconds * internal::UnitRandom();
+    internal::RNG rng;
+    float delay = config_.startup_delay_seconds * rng.Uniform();
     ABSL_LOG(INFO) << "Delaying startup by " << delay << " seconds.";
     std::this_thread::sleep_for(std::chrono::duration<float>(delay));
   }
