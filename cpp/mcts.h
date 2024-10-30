@@ -66,7 +66,8 @@ class Node {
   // in this node. MUST NOT be called on the root node.
   int MoveTurn() const noexcept;
   // Returns the player whose turn it is after the move stored
-  // in this node was made. This may be wrong ONLY in leaf nodes, b/c
+  // in this node was made (or the player making the first move, in the case
+  // of the root node). This may be wrong ONLY in leaf nodes, b/c
   // Flagz isn't strictly alternating (a player can run out of moves).
   int NextTurn() const { return turn_; }
   // Updates the turn.
@@ -196,30 +197,13 @@ class Node {
   | MoveTurn() = 0  // parent_->turn_
   +------------------------------------
 
-    Values interpreted as "before move":
-    * turn_
-        * The player whose turn it is to make the move.
-          Should be accessed using the NextTurn() method.
-          The MoveTurn() method yields the player whose turn it is to make the
-          move.
-    * prior_
-        The probability to make this move, compared to its siblings.
-
-    Values interpreted as "after move":
-    * wins_
-        * the accumulated results (or predicted results)
-          after the move was made.
-          *** We store this value from the perspective of MoveTurn()! ***
-    * value_
-        * the model's evaluation of the board after the move was made.
-        * The model outputs this value from the perspective of the
-          player that will make the next move, i.e. NextTurn(),
-          because this value is predicted together with the
-          move probabilities ("policy") for the NEXT move.
   */
 
   Node* parent_;
-  // The player whose turn it is to make the move stored in this node.
+  // The player whose turn it is to make the next move, i.e. the move
+  // *after* the move stored in this node was made.
+  // Use MoveTurn() (i.e. parent_->turn_) to get the player whose turn
+  // it is to make this->move_.
   int turn_;
   // The move to be made.
   Move move_;
@@ -228,11 +212,16 @@ class Node {
   float prior_ = 0.0;
   // The accumulated (predicted or actual) results obtained from playing
   // this move, evaluated from the perspective of the MoveTurn() player.
+  // This value is meaningless and always zero for the root node.
   float wins_ = 0.0;
   // Number of times this node was visited during MCTS.
   int visit_count_ = 0;
   // The model's predicted value of the board after the move_ was made,
   // from the perspective of the NextTurn() player.
+  // The model outputs this value from the perspective of the
+  // player that will make the next move, i.e. NextTurn(),
+  // because this value is predicted together with the
+  // move probabilities ("policy") for the *next* move.
   float value_ = 0.0;
   // True if this is a terminal node of the game.
   bool terminal_ = false;
@@ -266,7 +255,7 @@ class PlayoutRunner {
 };
 
 // RandomPlayoutRunner can run entirely random playouts. No MCTS or
-// other refinements, just one random move after the other. 
+// other refinements, just one random move after the other.
 class RandomPlayoutRunner : public PlayoutRunner {
  public:
   Stats Run(const Board& board, int turn, int runs) override;

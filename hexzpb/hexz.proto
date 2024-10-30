@@ -282,7 +282,11 @@ message TrainingExample {
         // The visit count of the selected child node.
         int32 selected_child_vc = 10;
         // Number of nodes per depth level in the tree.
+        // This should be a reasonable indicator of exploration.
         repeated int32 nodes_per_depth = 12;
+        // Maximum number of visit counts per depth level.
+        // This should be a reasonable indicator of exploitation.
+        repeated int32 max_visit_count_per_depth = 14;
     }
     Stats stats = 5;
 }

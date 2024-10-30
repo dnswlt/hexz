@@ -88,6 +88,7 @@ void Node::PopulateStats(hexzpb::TrainingExample::Stats& stats) const {
   std::vector<std::pair<const Node*, int>> q;
   q.emplace_back(this, 0);
   std::vector<int32_t> nodes_per_depth;
+  std::vector<int32_t> max_visit_count_per_depth;
   while (!q.empty()) {
     const auto [n, d] = q.back();
     q.pop_back();
@@ -95,11 +96,14 @@ void Node::PopulateStats(hexzpb::TrainingExample::Stats& stats) const {
     if (d > max_depth) {
       max_depth = d;
       nodes_per_depth.resize(max_depth + 1);
+      max_visit_count_per_depth.resize(max_depth + 1);
     }
     if (n->IsLeaf()) {
       continue;
     }
     nodes_per_depth[d]++;
+    max_visit_count_per_depth[d] =
+        std::max(max_visit_count_per_depth[d], n->visit_count());
     branch_nodes++;
     for (const auto& c : n->children()) {
       q.emplace_back(c.get(), d + 1);
@@ -115,6 +119,8 @@ void Node::PopulateStats(hexzpb::TrainingExample::Stats& stats) const {
   stats.set_max_child_vc(max_vc);
   stats.mutable_nodes_per_depth()->Assign(nodes_per_depth.begin(),
                                           nodes_per_depth.end());
+  stats.mutable_max_visit_count_per_depth()->Assign(
+      max_visit_count_per_depth.begin(), max_visit_count_per_depth.end());
 }
 
 float Node::Puct() const noexcept {
@@ -188,7 +194,8 @@ void Node::ShuffleChildren(internal::RNG& rng) {
   std::shuffle(children_.begin(), children_.end(), rng);
 }
 
-void Node::AddDirichletNoise(float weight, float concentration, internal::RNG& rng) {
+void Node::AddDirichletNoise(float weight, float concentration,
+                             internal::RNG& rng) {
   std::vector<float> diri = rng.Dirichlet(children_.size(), concentration);
   int i = 0;
   for (auto& c : children_) {

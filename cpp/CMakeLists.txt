@@ -93,7 +93,7 @@ target_link_libraries(cpuserver PRIVATE mcts absl::log absl::flags absl::flags_p
 
 # Benchmark for the different GPU pipelines.
 add_executable(gpubench gpubench_main.cc)
-target_link_libraries(gpubench PRIVATE mcts absl::log absl::flags absl::flags_parse absl::flags_usage grpc_client Boost::fiber)
+target_link_libraries(gpubench PRIVATE mcts absl::log absl::flags absl::flags_parse absl::flags_usage grpc_client)
 
 # Experiment: play around with Coroutines.
 # For now, fibers seem to do the job just as well.

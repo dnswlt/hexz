@@ -42,19 +42,29 @@ class FakeModel : public Model {
   hexzpb::ModelKey Key() const override { return TestModelKey(); }
 };
 
+// A test model that always returns uniform probabilities for all valid moves
+// (as determined by the action mask).
 class UniformFakeModel final : public FakeModel {
  public:
-  // Always returns uniform probabilities.
+  UniformFakeModel() = default;
+  explicit UniformFakeModel(float value) : value_{value} {}
+
   Prediction Predict(torch::Tensor board, torch::Tensor action_mask) override {
     auto t = torch::ones({2, 11, 10}).where(action_mask, 0);
     t = t / t.sum();
     return Prediction{
         .move_probs = t,
-        .value = 0.0,
+        .value = value_,
     };
   }
+
+ private:
+  float value_ = 0;
 };
 
+// A test model that always returns the provided move_probs and value.
+// Move probs are dynamically masked and normalized w.r.t. the action mask
+// provided in Predict calls.
 class ConstantFakeModel final : public FakeModel {
  public:
   ConstantFakeModel(torch::Tensor move_probs, float value)
@@ -196,6 +206,7 @@ TEST(NodeTest, Backpropagate) {
   };
   root.CreateChildren(root_moves);
   auto& n_1 = *root.children()[0];
+  auto& n_2 = *root.children()[1];
   std::vector<Move> n_1_moves{
       Move{Move::Typ::kNormal, 1, 0, 0},
   };
@@ -205,10 +216,14 @@ TEST(NodeTest, Backpropagate) {
   n_1_1.Backpropagate(1.0);
   EXPECT_EQ(root.visit_count(), 1);
   EXPECT_EQ(n_1.visit_count(), 1);
+  EXPECT_EQ(n_2.visit_count(), 0);
   EXPECT_EQ(n_1_1.visit_count(), 1);
   EXPECT_EQ(root.wins(), 0.0)
       << "Root wins should not get updated, they are meaningless";
+  // n_1 stores wins_ from the perspective of the player who made the move
+  // stored in n_1, i.e. Player 0.
   EXPECT_EQ(n_1.wins(), 1.0);
+  // Likewise, n_1_1 stores wins_ from player 1's perspective.
   EXPECT_EQ(n_1_1.wins(), -1.0);
 }
 
@@ -325,21 +340,6 @@ TEST(NodeTest, ActionMask) {
   EXPECT_TRUE(mask.index({1, 7, 3}).item<bool>());
 }
 
-class MCTSScriptModuleTest : public testing::Test {
- protected:
-  void SetUp() override {
-    // The file "testdata/scriptmodule.pt" is expected to be a ScriptModule of
-    // the right shape to be used by NeuralMCTS.
-    //
-    // It can be generated with the regenerate.sh sidecar script.
-    scriptmodule_ = torch::jit::load("testdata/scriptmodule.pt");
-    scriptmodule_.to(torch::kCPU);
-    scriptmodule_.eval();
-  }
-
-  torch::jit::Module scriptmodule_;
-};
-
 TEST(MCTSTest, TensorAsVector) {
   torch::Tensor t = torch::rand({2, 11, 10}, torch::kFloat32);
   std::vector<float> data(t.data_ptr<float>(), t.data_ptr<float>() + t.numel());
@@ -417,7 +417,7 @@ TEST(MCTSTest, RemainingFlagsAreNotNegative) {
   UniformFakeModel fake_model;
   NeuralMCTS mcts(fake_model, /*playout_runner=*/nullptr, config);
   Board b = Board::RandomBoard();
-  auto root = std::make_unique<Node>(nullptr, 0, Move{});
+  auto root = std::make_unique<Node>(0);
   for (int i = 0; i < 50; i++) {
     mcts.Run(*root, b);
     ASSERT_GE(b.Flags(0), 0);
@@ -429,6 +429,88 @@ TEST(MCTSTest, RemainingFlagsAreNotNegative) {
     b.MakeMove(turn, root->move());
   }
 }
+
+TEST(MCTSTest, SelfplayRun) {
+  Config config{
+      .fast_move_prob = 0.0,
+      .initial_root_q_value = -0.2,  // the default
+      .initial_q_penalty = 0.3,      // the default
+  };
+  Node::InitializeStaticMembers(config);
+  // The model thinks that the current player always wins.
+  UniformFakeModel fake_model(1.0);
+  NeuralMCTS mcts(fake_model, /*playout_runner=*/nullptr, config);
+  Board b = Board::RandomBoard();
+  auto root = std::make_unique<Node>(0);
+  // First run
+  bool reused =
+      mcts.SelfplayRun(*root, b, /*add_noise=*/false, /*run_playouts=*/false);
+  EXPECT_FALSE(reused);
+  EXPECT_EQ(root->visit_count(), 1);
+  EXPECT_GT(root->children().size(), 80);
+  EXPECT_TRUE(
+      std::all_of(root->children().begin(), root->children().end(),
+                  [](const auto& ch) { return ch->visit_count() == 0; }));
+  {
+    auto& c0 = root->children()[0];
+    EXPECT_FLOAT_EQ(c0->Q(), config.initial_root_q_value);
+    // PUCT should almost be equal to Q, since the prior is very small (~ 1/85)
+    float puct = c0->Puct();
+    EXPECT_LT(std::abs(puct - c0->Q()), 0.05);
+    // All children should have the same PUCT.
+    EXPECT_TRUE(std::all_of(root->children().begin(), root->children().end(),
+                            [puct](const auto& ch) { return ch->Puct() == puct; }));
+  }
+
+  // Second run
+  reused =
+      mcts.SelfplayRun(*root, b, /*add_noise=*/false, /*run_playouts=*/false);
+  EXPECT_FALSE(reused);
+
+  auto c_it =
+      std::find_if(root->children().begin(), root->children().end(),
+                   [](const auto& ch) { return ch->visit_count() == 1; });
+  ASSERT_TRUE(c_it != root->children().end());
+  auto& c = *c_it;
+  EXPECT_EQ(c->wins(), -1.0);
+  EXPECT_EQ(c->value(), 1.0);
+  EXPECT_EQ(c->ValueP0(), -1.0);
+  // Child turned out to be a bad choice as it led to a loss for P0.
+  // Its PUCT should reflect that, since its Q value will be -1.
+  EXPECT_LT(c->Puct(), -0.8);
+  EXPECT_EQ(root->wins(), 0.0);
+  // Third run
+  reused =
+      mcts.SelfplayRun(*root, b, /*add_noise=*/false, /*run_playouts=*/false);
+  EXPECT_FALSE(reused);
+  // The child chosen previously led to a loss from P0's perspective,
+  // so a different child should have been chosen in the third run.
+  EXPECT_EQ(c->visit_count(), 1);
+  c_it = std::find_if(root->children().begin(), root->children().end(),
+                      [&c](const auto& ch) {
+                        return ch.get() != c.get() && ch->visit_count() == 1;
+                      });
+  ASSERT_TRUE(c_it != root->children().end());
+  auto& c2 = *c_it;
+  EXPECT_EQ(c2->wins(), -1.0);
+  EXPECT_EQ(c2->value(), 1.0);
+  EXPECT_EQ(c2->ValueP0(), -1.0);
+}
+
+class MCTSScriptModuleTest : public testing::Test {
+ protected:
+  void SetUp() override {
+    // The file "testdata/scriptmodule.pt" is expected to be a ScriptModule of
+    // the right shape to be used by NeuralMCTS.
+    //
+    // It can be generated with the regenerate.sh sidecar script.
+    scriptmodule_ = torch::jit::load("testdata/scriptmodule.pt");
+    scriptmodule_.to(torch::kCPU);
+    scriptmodule_.eval();
+  }
+
+  torch::jit::Module scriptmodule_;
+};
 
 TEST_F(MCTSScriptModuleTest, PlayGame) {
   Perfm::InitScope perfm;
@@ -525,6 +607,9 @@ TEST(MCTSTest, PlayGameStats) {
   EXPECT_GT(stats.selected_child_vc(), 0);
   // At least nodes up to level 3 should have been visited
   EXPECT_GE(stats.nodes_per_depth().size(), 3);
+  EXPECT_GT(stats.nodes_per_depth(0), 0);
+  EXPECT_GE(stats.max_visit_count_per_depth().size(), 3);
+  EXPECT_GT(stats.max_visit_count_per_depth(0), 0);
 }
 
 TEST(MCTSTest, PlayGameResign) {

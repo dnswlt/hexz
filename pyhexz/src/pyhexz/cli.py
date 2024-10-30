@@ -2,13 +2,21 @@ import gzip
 import sys
 
 from pyhexz import hexz_pb2
+from google.protobuf import json_format
 
 
 def print_example(path):
     with gzip.open(path, "rb") as f:
         req = hexz_pb2.AddTrainingExamplesRequest()
         req.ParseFromString(f.read())
-    print(req.execution_id)
+    print(f"Execution ID: {req.execution_id}")
+    print(f"Examples: {len(req.examples)}")
+    if req.examples:
+        ex = req.examples[10]
+        print("Stats:", json_format.MessageToJson(ex.stats))
+        print("Move:", json_format.MessageToJson(ex.move))
+        print(f"Predicted value: {ex.model_predictions.value}")
+
 
 def main(argv) -> int:
     if len(argv) < 2:
