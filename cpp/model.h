@@ -144,7 +144,7 @@ class FiberTorchModel : public Model {
 
   FiberTorchModel(hexzpb::ModelKey key, torch::jit::Module&& module,
                   torch::DeviceType device, int batch_size,
-                  bool support_suspension);
+                  bool support_suspension = false);
   FiberTorchModel(const FiberTorchModel&) = delete;
   FiberTorchModel& operator=(const FiberTorchModel&) = delete;
   void UpdateModel(hexzpb::ModelKey key, torch::jit::Module&& model) override;
@@ -197,6 +197,8 @@ class FiberTorchModel : public Model {
   int active_fibers_ = 0;
   // Used to signal that a fiber has left the building.
   bool fiber_left_ = false;
+  // Whether the model supports being suspended. This is used to pause workers
+  // when training locally on the same machine as the training server.
   const bool support_suspension_;
   bool suspended_ = false;
   // CV for suspending the GPU pipeline thread.

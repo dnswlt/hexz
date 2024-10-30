@@ -24,7 +24,7 @@ find_package(protobuf CONFIG REQUIRED)
 find_package(gRPC CONFIG REQUIRED)
 # Link Boost libraries statically.
 set(Boost_USE_STATIC_LIBS ON)
-find_package(Boost REQUIRED COMPONENTS fiber)
+find_package(Boost CONFIG REQUIRED COMPONENTS fiber)
 
 #
 # libtorch
@@ -36,19 +36,22 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 #
 # GoogleTest
 #
-# f8d7d77c06936315286eb55f8de22cd23c188571 is v1.14.
 FetchContent_Declare(
   googletest
-  URL https://github.com/google/googletest/archive/f8d7d77c06936315286eb55f8de22cd23c188571.zip
+  GIT_REPOSITORY https://github.com/google/googletest.git
+  GIT_TAG v1.15.2
 )
+set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Disable testing for Google Benchmark" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 #
 # Google benchmark
 #
-FetchContent_Declare(googlebenchmark
-        GIT_REPOSITORY https://github.com/google/benchmark.git
-        GIT_TAG main) # live at HEAD
+FetchContent_Declare(
+    googlebenchmark
+    GIT_REPOSITORY https://github.com/google/benchmark.git
+    GIT_TAG v1.9.0
+)
 FetchContent_MakeAvailable(googlebenchmark)
 
 

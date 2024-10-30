@@ -240,9 +240,10 @@ class Node {
   std::vector<std::unique_ptr<Node>> children_;
 };
 
-// Writes the substree starting at root to path as a GraphViz .dot file.
+// Writes the subtree starting at root to path as a GraphViz .dot file.
 absl::Status WriteDotGraph(const Node& root, const std::string& path);
 
+// PlayoutRunner is an interface class for (typically random) playouts.
 class PlayoutRunner {
  public:
   struct Stats {
@@ -264,6 +265,8 @@ class PlayoutRunner {
   virtual ~PlayoutRunner() = default;
 };
 
+// RandomPlayoutRunner can run entirely random playouts. No MCTS or
+// other refinements, just one random move after the other. 
 class RandomPlayoutRunner : public PlayoutRunner {
  public:
   Stats Run(const Board& board, int turn, int runs) override;

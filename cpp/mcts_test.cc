@@ -325,67 +325,6 @@ TEST(NodeTest, ActionMask) {
   EXPECT_TRUE(mask.index({1, 7, 3}).item<bool>());
 }
 
-TEST(BatchedTorchModelTest, SmokeTestSingleThreaded) {
-  Perfm::InitScope perfm;
-  // Happy path for BatchedTorchModel.
-  auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
-  scriptmodule.to(torch::kCPU);
-  scriptmodule.eval();
-  constexpr int batch_size = 4;
-  constexpr int64_t timeout_micros = 1'000'000;
-  BatchedTorchModel m(hexzpb::ModelKey(), std::move(scriptmodule), torch::kCPU,
-                      batch_size, timeout_micros);
-  auto token = m.RegisterThread();
-  // Prepare inputs.
-  auto board = Board::RandomBoard();
-  auto all_moves = board.NextMoves(0);
-  Node root(0);
-  root.CreateChildren(all_moves);
-
-  // Execute.
-  auto pred = m.Predict(board.Tensor(root.NextTurn()), root.ActionMask());
-
-  // Validate.
-  auto sizes = pred.move_probs.sizes();
-  EXPECT_THAT(sizes, testing::ElementsAre(2, 11, 10));
-  EXPECT_TRUE(std::abs(pred.move_probs.sum().item<float>() - 1.0) < 0.01);
-}
-
-TEST(BatchedTorchModelTest, SmokeTestMultiThreaded) {
-  Perfm::InitScope perfm;
-  auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
-  scriptmodule.to(torch::kCPU);
-  scriptmodule.eval();
-  constexpr int batch_size = 8;
-  constexpr int64_t timeout_micros = 1'000'000;
-  BatchedTorchModel m(hexzpb::ModelKey(), std::move(scriptmodule), torch::kCPU,
-                      batch_size, timeout_micros);
-  std::vector<std::thread> ts(batch_size);
-  std::vector<float> sum_pr(ts.size(), 0);
-  std::mutex mut;
-  for (int i = 0; i < batch_size; i++) {
-    ts[i] = std::thread([&, i] {
-      auto token = m.RegisterThread();
-      // Prepare inputs.
-      auto board = Board::RandomBoard();
-      auto all_moves = board.NextMoves(0);
-      Node root(0);
-      root.CreateChildren(all_moves);
-
-      // Execute.
-      auto pred = m.Predict(board.Tensor(root.NextTurn()), root.ActionMask());
-
-      // Record results.
-      {
-        std::scoped_lock<std::mutex> lk(mut);
-        sum_pr[i] = pred.move_probs.sum().item<float>();
-      }
-    });
-  }
-  std::for_each(ts.begin(), ts.end(), [](auto& t) { t.join(); });
-  EXPECT_THAT(sum_pr, testing::Each(testing::FloatNear(1, 1e-2)));
-}
-
 class MCTSScriptModuleTest : public testing::Test {
  protected:
   void SetUp() override {
@@ -534,6 +473,25 @@ TEST_F(MCTSScriptModuleTest, PlayGame) {
   EXPECT_EQ(pr.sizes()[0], 2);
   EXPECT_EQ(pr.sizes()[1], 11);
   EXPECT_EQ(pr.sizes()[2], 10);
+}
+
+TEST_F(MCTSScriptModuleTest, PlayGameFiberTorchModel) {
+  // Smoke test to ensure NeuralMCTS works with the FiberTorchModel.
+  Config config{
+      .runs_per_move = 50,
+      .dirichlet_concentration = 0.3,
+      .random_playouts = 10,
+      .resign_threshold = std::numeric_limits<float>::max(),  // never resign
+  };
+  hexzpb::ModelKey key;
+  FiberTorchModel model(key, std::move(scriptmodule_), torch::kCPU, 1);
+  auto token = model.RegisterThread();
+  NeuralMCTS mcts(model, std::make_unique<RandomPlayoutRunner>(), config);
+  auto b = Board::RandomBoard();
+
+  auto examples = mcts.PlayGame(b, /*max_runtime_seconds=*/0);
+  EXPECT_TRUE(examples.ok());
+  EXPECT_GE(examples->size(), 2);
 }
 
 TEST(MCTSTest, PlayGameStats) {

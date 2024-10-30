@@ -8,6 +8,61 @@ namespace hexz {
 
 namespace {
 
+TEST(BatchedTorchModelTest, SmokeTestSingleThreaded) {
+  // Happy path for BatchedTorchModel.
+  auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
+  scriptmodule.to(torch::kCPU);
+  scriptmodule.eval();
+  constexpr int batch_size = 4;
+  constexpr int64_t timeout_micros = 1'000'000;
+  BatchedTorchModel m(hexzpb::ModelKey(), std::move(scriptmodule), torch::kCPU,
+                      batch_size, timeout_micros);
+  auto token = m.RegisterThread();
+  // Prepare inputs.
+  auto board = torch::randn({11, 11, 10});
+  auto action_mask = torch::rand({2, 11, 10}) < 0.5;
+
+  // Execute.
+  auto pred = m.Predict(board, action_mask);
+
+  // Validate.
+  auto sizes = pred.move_probs.sizes();
+  EXPECT_THAT(sizes, testing::ElementsAre(2, 11, 10));
+  EXPECT_TRUE(std::abs(pred.move_probs.sum().item<float>() - 1.0) < 0.01);
+}
+
+TEST(BatchedTorchModelTest, SmokeTestMultiThreaded) {
+  auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
+  scriptmodule.to(torch::kCPU);
+  scriptmodule.eval();
+  constexpr int batch_size = 8;
+  constexpr int64_t timeout_micros = 1'000'000;
+  BatchedTorchModel m(hexzpb::ModelKey(), std::move(scriptmodule), torch::kCPU,
+                      batch_size, timeout_micros);
+  std::vector<std::thread> ts(batch_size);
+  std::vector<float> sum_pr(ts.size(), 0);
+  std::mutex mut;
+  for (int i = 0; i < batch_size; i++) {
+    ts[i] = std::thread([&, i] {
+      auto token = m.RegisterThread();
+      // Prepare inputs.
+      auto board = torch::randn({11, 11, 10});
+      auto action_mask = torch::rand({2, 11, 10}) < 0.5;
+
+      // Execute.
+      auto pred = m.Predict(board, action_mask);
+
+      // Record results.
+      {
+        std::scoped_lock<std::mutex> lk(mut);
+        sum_pr[i] = pred.move_probs.sum().item<float>();
+      }
+    });
+  }
+  std::for_each(ts.begin(), ts.end(), [](auto& t) { t.join(); });
+  EXPECT_THAT(sum_pr, testing::Each(testing::FloatNear(1, 1e-2)));
+}
+
 TEST(FiberTorchModelTest, FiberTorchModelRegisterUnregister) {
   // Register a fiber, but never make any calls. GPU pipeline thread should shut
   // down cleanly.
@@ -17,9 +72,7 @@ TEST(FiberTorchModelTest, FiberTorchModelRegisterUnregister) {
   const int batch_size = 1;
   FiberTorchModel model(hexzpb::ModelKey(), std::move(scriptmodule),
                         torch::kCPU, batch_size, false);
-  {
-    auto token = model.RegisterThread();
-  }
+  { auto token = model.RegisterThread(); }
 }
 
 TEST(FiberTorchModelTest, SmokeTestSingleFiber) {

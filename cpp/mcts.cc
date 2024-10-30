@@ -401,9 +401,9 @@ bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
   // Find leaf node
   while (n->visit_count() > 0 && !n->IsLeaf()) {
     Node* child;
-    if (child->visit_count() == 1) {
+    if (n->visit_count() == 1) {
       // When visit count equals 1, we are at a parent node whose children have
-      // not been visited yet (it has to be a parent of leaf nodes).
+      // not been visited yet, i.e. at a parent of leaf nodes.
       // Randomly select a child weighted by its prior probability, to encourage
       // exploration.
       // https://github.com/google-deepmind/open_spiel/blob/2228e1c2ba4314a4aa54d9650ab663c3d0550582/open_spiel/algorithms/mcts.cc#L303
