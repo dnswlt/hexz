@@ -1,7 +1,6 @@
 #include <absl/random/random.h>
 #include <benchmark/benchmark.h>
 
-#include <cassert>
 #include <iostream>
 
 #include "base.h"
@@ -11,11 +10,7 @@ static void BM_Xoshiro256Plus(benchmark::State& state) {
   double sum = 0;
   for (auto _ : state) {
     double d = rnd.Uniform();
-    sum += d;
-  }
-  // Avoid that the benchmarked code gets optimized away.
-  if (sum == 17) {
-    std::cout << "BINGO\n";
+    benchmark::DoNotOptimize(sum += d);
   }
 }
 BENCHMARK(BM_Xoshiro256Plus);
@@ -26,12 +21,8 @@ static void BM_Xoshiro256PlusIntn(benchmark::State& state) {
   for (auto _ : state) {
     for (int i = 0; i < state.range(0); i++) {
       int d = rnd.Intn(i);
-      sum += d;
+      benchmark::DoNotOptimize(sum += d);
     }
-  }
-  // Avoid that the benchmarked code gets optimized away.
-  if (sum == 1 << 31) {
-    std::cout << "BINGO\n";
   }
 }
 BENCHMARK(BM_Xoshiro256PlusIntn)->Range(1, 1 << 10);
@@ -43,12 +34,8 @@ static void BM_XoshiroWithStdlibIntn(benchmark::State& state) {
     for (int i = 0; i < state.range(0); i++) {
       std::uniform_int_distribution<int> dis{0, i};
       int d = dis(rnd);
-      sum += d;
+      benchmark::DoNotOptimize(sum += d);
     }
-  }
-  // Avoid that the benchmarked code gets optimized away.
-  if (sum == 1 << 31) {
-    std::cout << "BINGO\n";
   }
 }
 BENCHMARK(BM_XoshiroWithStdlibIntn)->Range(1, 1 << 10);
@@ -60,12 +47,8 @@ static void BM_MersenneIntn(benchmark::State& state) {
     for (int i = 0; i < state.range(0); i++) {
       std::uniform_int_distribution<int> dis{0, i};
       int d = dis(rng);
-      sum += d;
+      benchmark::DoNotOptimize(sum += d);
     }
-  }
-  // Avoid that the benchmarked code gets optimized away.
-  if (sum == 1 << 31) {
-    std::cout << "BINGO\n";
   }
 }
 BENCHMARK(BM_MersenneIntn)->Range(1, 1 << 10);
@@ -74,9 +57,9 @@ static void BM_AbseilUniform(benchmark::State& state) {
   absl::BitGen bitgen;
   double sum = 0;
   for (auto _ : state) {
-    sum += absl::Uniform(bitgen, 0.0, 1.0);
+    double d = absl::Uniform(bitgen, 0.0, 1.0);
+    benchmark::DoNotOptimize(sum += d);
   }
-  assert(sum > 0);
 }
 BENCHMARK(BM_AbseilUniform);
 
@@ -86,9 +69,9 @@ static void BM_UnitRandom(benchmark::State& state) {
   float sum = 0;
   for (auto _ : state) {
     std::uniform_real_distribution<float> dis{0, 1.0};
-    sum += dis(rng);
+    float d = dis(rng);
+    benchmark::DoNotOptimize(sum += d);
   }
-  assert(sum > 0);
 }
 BENCHMARK(BM_UnitRandom);
 
