@@ -306,6 +306,7 @@ void Worker::RunSingle(Model& model, AsyncExampleSender& sender) {
 
     hexzpb::AddTrainingExamplesRequest req;
     req.set_execution_id(execution_id_);
+    PopulateWorkerConfig(*req.mutable_worker_config());
     std::move(examples->begin(), examples->end(),
               RepeatedPtrFieldBackInserter(req.mutable_examples()));
     if (!sender.EnqueueRequest(std::move(req))) {
@@ -317,6 +318,22 @@ void Worker::RunSingle(Model& model, AsyncExampleSender& sender) {
     stats_.IncrementExamples(n_examples);
     stats_.IncrementGames(1);
   }
+}
+
+void Worker::PopulateWorkerConfig(hexzpb::WorkerConfig& config) const {
+  config.set_device(torch::DeviceTypeName(DeviceType()));
+  config.set_worker_threads(config_.worker_threads);
+  config.set_fibers_per_thread(config_.fibers_per_thread);
+  config.set_prediction_batch_size(config_.prediction_batch_size);
+  config.set_runs_per_move(config_.runs_per_move);
+  config.set_dirichlet_concentration(config_.dirichlet_concentration);
+  config.set_fast_move_prob(config_.fast_move_prob);
+  config.set_runs_per_fast_move(config_.runs_per_fast_move);
+  // We could also take these values from config_, but since the Node::*
+  // values are what actually gets used, let's use those here, too.
+  config.set_uct_c(Node::uct_c);
+  config.set_initial_root_q_value(Node::initial_root_q_value);
+  config.set_initial_q_penalty(Node::initial_q_penalty);
 }
 
 torch::DeviceType Worker::DeviceType() const {

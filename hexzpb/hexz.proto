@@ -181,12 +181,29 @@ message ModelKey {
     int32 checkpoint = 2;
 }
 
+// A subset of configuration parameters from hexz::Config that
+// was used by the worker when generating examples.
+message WorkerConfig {
+    string device = 2;
+    int32 worker_threads = 3;
+    int32 fibers_per_thread = 4;
+    int32 prediction_batch_size = 5;
+    int32 runs_per_move = 6;
+    float uct_c = 7;
+    float initial_root_q_value = 8;
+    float initial_q_penalty = 9;
+    float dirichlet_concentration = 10;
+    float fast_move_prob = 11;
+    float runs_per_fast_move = 12;
+}
+
 // Used by workers to upload examples to the training server.
 message AddTrainingExamplesRequest {
     repeated TrainingExample examples = 1;
     // ID identifying the worker run that generated this example.
     // Typically a random UUID.
     string execution_id = 2;
+    WorkerConfig worker_config = 3;
 }
 
 message AddTrainingExamplesResponse {
@@ -278,7 +295,7 @@ message TrainingExample {
         int32 min_child_vc = 8;
         int32 max_child_vc = 9;
         // The Q-value of the selected child node, i.e. wins/visit_count.
-        int32 selected_child_q = 13;
+        float selected_child_q = 13;
         // The visit count of the selected child node.
         int32 selected_child_vc = 10;
         // Number of nodes per depth level in the tree.

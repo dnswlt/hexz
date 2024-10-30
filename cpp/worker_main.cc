@@ -44,6 +44,7 @@ ABSL_FLAG(int, fibers_per_thread, 0, "number of fibers per worker thread");
 ABSL_FLAG(int, prediction_batch_size, 0,
           "batch size for GPU model predictions");
 ABSL_FLAG(int, max_runtime_seconds, 0, "maximum runtime of the worker");
+ABSL_FLAG(int, max_games, 0, "maximum number of games to play");
 ABSL_FLAG(bool, suspend_while_training, false,
           "if true, the worker is suspended during training");
 ABSL_FLAG(bool, dry_run, false,
@@ -95,6 +96,9 @@ void UpdateConfigFromFlags(hexz::Config& config) {
   }
   if (int t = absl::GetFlag(FLAGS_max_runtime_seconds); t > 0) {
     config.max_runtime_seconds = t;
+  }
+  if (int n = absl::GetFlag(FLAGS_max_games); n > 0) {
+    config.max_games = n;
   }
   if (bool b = absl::GetFlag(FLAGS_suspend_while_training); b) {
     config.suspend_while_training = b;

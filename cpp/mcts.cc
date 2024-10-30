@@ -225,30 +225,26 @@ void Node::ResetTree() {
 }
 
 int Node::SelectChildForNextMove(internal::RNG& rng) const {
-  ABSL_CHECK(!children_.empty());
-  double r = rng.Uniform();
-  double s = 0;
   // The sum of the children's visit counts should be equal
   // to visit_count_ - 1. But summing explicitly (hopefully)
   // makes this more robust and future proof.
-  int sum_vc = 0;
+  int sum = 0;
   for (const auto& c : children()) {
-    sum_vc += c->visit_count_;
+    sum += c->visit_count_;
   }
-  double vc = static_cast<double>(sum_vc);
-  int i;
-  for (i = 0; i < children_.size(); i++) {
-    s += static_cast<double>(children_[i]->visit_count_) / vc;
-    if (s >= r) {
-      break;
+  if (__builtin_expect(sum == 0, 0)) {
+    // No children visited. In practice, this should not happen.
+    return rng.Intn(children_.size());
+  }
+  int r = rng.Intn(sum);
+  sum = 0;
+  for (int i = 0; i < children_.size(); i++) {
+    sum += children_[i]->visit_count_;
+    if (r < sum) {
+      return i;
     }
   }
-  // Due to floating-point rounding issues, we *might* end up here with i ==
-  // children_.size() if r ~= 1.0.
-  if (i == children_.size()) {
-    i--;
-  }
-  return i;
+  ABSL_LOG(FATAL) << "Program error: no child for next move found";
 }
 
 std::unique_ptr<Node> Node::SelectChildAsRoot(int i) {
@@ -634,7 +630,6 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       mv->set_row(move.r);
       mv->set_col(move.c);
       mv->set_player_num(turn + 1);  // 1-based
-
       ex.mutable_stats()->set_selected_child_q(child.Q());
       ex.mutable_stats()->set_selected_child_vc(child.visit_count());
     }
