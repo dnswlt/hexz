@@ -477,7 +477,6 @@ bool NeuralMCTS::Run(Node& root, const Board& b) {
   Node* n = &root;
 
   // Find leaf node
-  auto t_start = UnixMicros();
   while (!n->IsLeaf()) {
     Node* child = n->MaxPuctChild();
     board.MakeMove(child->MoveTurn(), child->move());

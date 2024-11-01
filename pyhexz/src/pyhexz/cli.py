@@ -1,10 +1,13 @@
 import gzip
 from io import BytesIO
+import os
 import sys
 import torch
 
 from pyhexz import hexz_pb2
 from google.protobuf import json_format
+
+from pyhexz.model import HexzNeuralNetwork
 
 
 def print_example(path):
@@ -27,6 +30,19 @@ def print_example(path):
         print(f"Nonzero prior quartiles (min/25/50/75/max): {quartiles}")
 
 
+def create_model(model_type: str, outfile: str) -> int:
+    if model_type == "conv2d":
+        model = HexzNeuralNetwork()
+        scriptmodule = torch.jit.script(model)
+        scriptmodule.save(outfile)
+        size = os.path.getsize(outfile)
+        print(f"Saved PyTorch scriptmodule ({size:,} bytes) to {outfile}")
+        return 0
+    else:
+        print(f"Invalid model type '{model_type}'")
+        return 1
+
+
 def main(argv) -> int:
     if len(argv) < 2:
         print("Need to specify a command")
@@ -36,6 +52,11 @@ def main(argv) -> int:
             print(f"Usage: {argv[0]} print_request <request.gz>")
             return 1
         print_example(argv[2])
+    elif argv[1] == "create_model":
+        if len(argv) != 4:
+            print(f"Usage: {argv[0]} create_model <conv2d|resnet> <outfile.pt>")
+            return 1
+        return create_model(argv[2], argv[3])
     else:
         print(f"Unknown command: {argv[1]}")
 
