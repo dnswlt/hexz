@@ -317,6 +317,7 @@ void Worker::RunSingle(Model& model, AsyncExampleSender& sender) {
     // Update stats.
     stats_.IncrementExamples(n_examples);
     stats_.IncrementGames(1);
+    apm_games->Increment(1);
   }
 }
 

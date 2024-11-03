@@ -51,14 +51,17 @@ ABSL_FLAG(bool, dry_run, false,
           "if true, the worker will not send examples to the training server");
 
 namespace {
-std::condition_variable cv_memmon;
-std::mutex cv_memmon_mut;
-bool stop_memmon = false;
 
-void MemMon() {
-  std::unique_lock<std::mutex> lk(cv_memmon_mut);
-  while (!cv_memmon.wait_for(lk, std::chrono::duration<float>(5.0),
-                             [] { return stop_memmon; })) {
+struct BackgroundThreadSignal {
+  std::condition_variable cv;
+  std::mutex mut;
+  bool stop = false;
+};
+
+void MemMon(BackgroundThreadSignal& sig) {
+  std::unique_lock<std::mutex> lk(sig.mut);
+  while (!sig.cv.wait_for(lk, std::chrono::duration<float>(5.0),
+                          [&sig] { return sig.stop; })) {
     std::ifstream infile("/proc/self/status");
     if (!infile.is_open()) {
       ABSL_LOG(ERROR)
@@ -71,6 +74,17 @@ void MemMon() {
         ABSL_LOG(INFO) << line;
       }
     }
+  }
+}
+
+void APMMon(BackgroundThreadSignal& sig) {
+  std::unique_lock<std::mutex> lk(sig.mut);
+  while (!sig.cv.wait_for(lk, std::chrono::duration<float>(5.0),
+                          [&sig] { return sig.stop; })) {
+    double examples_rate = hexz::apm_examples->Rate(60);
+    double games_rate = hexz::apm_games->Rate(60);
+    ABSL_LOG(INFO) << "APM(1m): examples/s: " << examples_rate
+                   << " games/s: " << games_rate;
   }
 }
 
@@ -134,24 +148,42 @@ int main(int argc, char* argv[]) {
     ABSL_LOG(ERROR) << "training_server_addr must be set";
     return 1;
   }
-  // Execute
   ABSL_LOG(INFO) << "Worker started with " << config->String();
+
+  // Memory usage monitoring, if requested.
   std::thread memmon;
-  absl::Cleanup thread_joiner = [&memmon] {
+  BackgroundThreadSignal memmon_sig;
+  absl::Cleanup thread_joiner = [&memmon, &memmon_sig] {
     if (memmon.joinable()) {
       ABSL_LOG(INFO) << "Joining memory monitoring thread.";
       {
-        std::lock_guard<std::mutex> lk(cv_memmon_mut);
-        stop_memmon = true;
+        std::lock_guard<std::mutex> lk(memmon_sig.mut);
+        memmon_sig.stop = true;
       }
-      cv_memmon.notify_one();
+      memmon_sig.cv.notify_all();
       memmon.join();
     }
   };
   if (config->debug_memory_usage) {
-    memmon = std::thread{MemMon};
+    memmon = std::thread{MemMon, std::ref(memmon_sig)};
   }
+  // Application performance monitoring.
+  std::thread apmmon;
+  BackgroundThreadSignal apmmon_sig;
+  absl::Cleanup apm_thread_joiner = [&apmmon, &apmmon_sig] {
+    if (apmmon.joinable()) {
+      ABSL_LOG(INFO) << "Joining memory monitoring thread.";
+      {
+        std::lock_guard<std::mutex> lk(apmmon_sig.mut);
+        apmmon_sig.stop = true;
+      }
+      apmmon_sig.cv.notify_all();
+      apmmon.join();
+    }
+  };
+  apmmon = std::thread{APMMon, std::ref(memmon_sig)};
 
+  // Execute
   std::unique_ptr<hexz::TrainingServiceClient> client;
   if (std::string path = absl::GetFlag(FLAGS_local_model_path); path != "") {
     ABSL_LOG(INFO) << "Using EmbeddedTrainingServiceClient(" << path << ")";

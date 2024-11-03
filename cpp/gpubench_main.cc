@@ -1,3 +1,25 @@
+/*
+This file contains a GPU "benchmark" tool that can be used to compare
+the GPU prediction throughput of different pipelining approaches.
+
+Example run (from the build/ subdirectory):
+
+./gpubench --model_path=../testdata/scriptmodule.pt \
+  --device=cuda \
+  --mode=fiber \
+  --prediction_batch_size=128 \
+  --worker_threads=4 \
+  --warmup_rounds=1000 \
+  --rounds=10000
+
+I1103 10:15:32.722977  874130 gpubench_main.cc:601] Performed 1280000 computations in 10940ms (116994 ops/s). batch size:128
+
+The tool was initially written to compare task-based, fiber-based, and Batcher-based
+approaches to GPU pipelining (i.e., sending multiple prediction requests to the model in batches).
+
+It can also be used to compare the execution time of different "shape compatible" models:
+Just pass different models via the --model_path flag, and leave all other parameters fixed.
+*/
 #include <absl/flags/flag.h>
 #include <absl/flags/parse.h>
 #include <absl/flags/usage.h>
@@ -18,12 +40,14 @@
 
 ABSL_FLAG(std::string, mode, "single",
           "GPU benchmark mode (single, batch, task, fiber)");
-ABSL_FLAG(std::string, device, "", "PyTorch device (cpu, cuda, mps)");
-ABSL_FLAG(int, rounds, 0, "number of rounds to run in a GPU benchmark");
+ABSL_FLAG(std::string, device, "cpu", "PyTorch device (cpu, cuda, mps)");
+ABSL_FLAG(int, warmup_rounds, 10,
+          "number of warm-up rounds to run in a GPU benchmark");
+ABSL_FLAG(int, rounds, 100, "number of rounds to run in a GPU benchmark");
 ABSL_FLAG(std::string, model_path, "",
           "path to a torch::jit::load'able model (for benchmarks)");
-ABSL_FLAG(int, worker_threads, 0, "number of threads");
-ABSL_FLAG(int, prediction_batch_size, 0,
+ABSL_FLAG(int, worker_threads, 1, "number of threads");
+ABSL_FLAG(int, prediction_batch_size, 1,
           "batch size for GPU model predictions");
 
 namespace hexz {
@@ -31,6 +55,7 @@ namespace hexz {
 struct Options {
   std::string device = "cpu";
   int rounds = 1;
+  int warmup_rounds = 0;
   std::string model_path;
   int worker_threads = 1;
   int prediction_batch_size = 1;
@@ -42,6 +67,10 @@ struct Options {
     }
     if (int rounds = absl::GetFlag(FLAGS_rounds); rounds > 0) {
       opts.rounds = rounds;
+    }
+    if (int warmup_rounds = absl::GetFlag(FLAGS_warmup_rounds);
+        warmup_rounds > 0) {
+      opts.warmup_rounds = warmup_rounds;
     }
     if (std::string model_path = absl::GetFlag(FLAGS_model_path);
         model_path != "") {
@@ -84,8 +113,6 @@ void RunGPUBenchmarkMultiTasked(Options options) {
     device = torch::kCUDA;
   }
   model.to(device);
-
-  const int n_rounds = options.rounds;
 
   BoundedConcurrentQueue<GPUPipelineInput> input_queue(
       options.prediction_batch_size * 2);
@@ -132,9 +159,8 @@ void RunGPUBenchmarkMultiTasked(Options options) {
   std::vector<std::thread> worker_threads;
   std::mutex mut;
   int op_count = 0;
-  const int n_warmups =
-      std::max(1024, options.rounds * options.prediction_batch_size / 10);
-  const int n_runs = n_warmups + n_rounds * options.prediction_batch_size;
+  const int n_warmups = options.warmup_rounds * options.prediction_batch_size;
+  const int n_runs = n_warmups + options.rounds * options.prediction_batch_size;
   float total_sum = 0;
   int64_t t_start = 0;
   for (int i = 0; i < options.worker_threads; i++) {
@@ -288,7 +314,7 @@ void RunGPUBenchmarkBatch(Options options) {
     torch::Tensor tb =
         torch::randn({11, 11, 10}, torch::dtype(torch::kFloat32));
     torch::Tensor ta = (torch::rand({2, 11, 10}) < 0.5);
-    for (int j = 0; j < n_rounds / 10; j++) {
+    for (int j = 0; j < options.warmup_rounds; j++) {
       auto result = fn.Compute(GPUBenchmarkFn::input_t{
           .board = tb,
           .action_mask = ta,
@@ -368,7 +394,7 @@ void RunGPUBenchmark(Options options) {
   const int n_rounds = options.rounds;
   for (int batch_size : batch_sizes) {
     int64_t t_start = 0;
-    const int n_warmups = std::max(10, n_rounds / 10);
+    const int n_warmups = options.warmup_rounds;
     const int n_runs = n_warmups + n_rounds;
     float sum = 0;
     torch::Tensor tb =
@@ -469,17 +495,48 @@ void GPUPipelineThread(torch::jit::Module& model,
   }
 }
 
-void FiberWorker(int fiber_id, ConcurrentQueue<FiberRequest>& request_queue,
-                 int n_rounds) {
+struct FiberWorkerArgs {
+  boost::fibers::barrier& barrier;
+  ConcurrentQueue<FiberRequest>& request_queue;
+  std::once_flag& start_time_flag;
+  int64_t& t_start;
+  int warmup_rounds;
+  int rounds;
+};
+
+void FiberWorker(int fiber_id, FiberWorkerArgs args) {
   torch::Tensor tb = torch::randn({11, 11, 10}, torch::dtype(torch::kFloat32));
   torch::Tensor ta = (torch::rand({2, 11, 10}) < 0.5);
+  {
+    // Warmup
+    float sum = 0;
+    for (int i = 0; i < args.rounds; i++) {
+      boost::fibers::promise<Model::Prediction> promise;
+      auto result = promise.get_future();
+
+      args.request_queue.push(FiberRequest{
+          .fiber_id = fiber_id,
+          .board = tb,
+          .action_mask = ta,
+          .result_promise = std::move(promise),
+      });
+
+      Model::Prediction pred = result.get();
+      sum += pred.value;
+    }
+    args.barrier.wait();
+    std::call_once(args.start_time_flag, [&args] {
+      args.t_start = UnixMicros();
+      ABSL_LOG(INFO) << "Warmup done.";
+    });
+  }
 
   float sum = 0;
-  for (int i = 0; i < n_rounds; i++) {
+  for (int i = 0; i < args.rounds; i++) {
     boost::fibers::promise<Model::Prediction> promise;
     auto result = promise.get_future();
 
-    request_queue.push(FiberRequest{
+    args.request_queue.push(FiberRequest{
         .fiber_id = fiber_id,
         .board = tb,
         .action_mask = ta,
@@ -518,16 +575,25 @@ void RunGPUBenchmarkFiber(Options options) {
 
   const int n_threads = options.worker_threads;
   const int fibers_per_thread = options.prediction_batch_size / n_threads;
-  const int rounds_per_fiber = options.rounds;
-  int64_t t_start = UnixMicros();
+  int64_t t_start = 0; // Will be set by a fiber once they all finished their warm-up.
+  boost::fibers::barrier warmup_barrier(n_threads * fibers_per_thread);
+  std::once_flag start_time_flag;
+  FiberWorkerArgs fiber_worker_args{
+      .barrier = warmup_barrier,
+      .request_queue = request_queue,
+      .start_time_flag = start_time_flag,
+      .t_start = t_start,
+      .warmup_rounds = options.warmup_rounds,
+      .rounds = options.rounds,
+  };
+  ABSL_CHECK(&fiber_worker_args.t_start == &t_start);
   std::vector<std::thread> fiber_threads;
   for (int k = 0; k < n_threads; k++) {
     fiber_threads.emplace_back([&] {
       std::vector<boost::fibers::fiber> fibers;
       for (int i = 0; i < fibers_per_thread; ++i) {
-        int fiber_id = i;
-        fibers.emplace_back(FiberWorker, k * n_threads + fiber_id,
-                            std::ref(request_queue), rounds_per_fiber);
+        int fiber_id = k * fibers_per_thread + i;
+        fibers.emplace_back(FiberWorker, fiber_id, fiber_worker_args);
       }
       for (auto& fiber : fibers) {
         if (fiber.joinable()) {

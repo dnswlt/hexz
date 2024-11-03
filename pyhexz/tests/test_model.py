@@ -1,24 +1,43 @@
+from typing import Tuple
 import pytest
 import torch
 from pyhexz.board import Board
-from pyhexz.model import HexzNeuralNetwork
+from pyhexz.model import CNNLayer, HexzNeuralNetwork, ResidualLayer
 import torch.nn.functional as F
 
 
-def test_model_shapes():
-    # Validate that inputs and outputs have the expected shapes.
-    model = HexzNeuralNetwork()
+def _random_inputs() -> Tuple[torch.Tensor, torch.Tensor]:
     board = torch.rand((1, 11, 11, 10), dtype=torch.float32)
     # Boolean tensor
     action_mask = torch.rand((1, 2, 11, 10)) > 0.5
-    policy, value = model(board, action_mask)
+    return (board, action_mask)
+
+
+def test_conv2d():
+    # Validate that inputs and outputs have the expected shapes.
+    model = HexzNeuralNetwork(model_type="conv2d")
+    assert isinstance(model._torso, CNNLayer)
+    policy, value = model(*_random_inputs())
     assert value.shape == (1, 1)
     v = value[0].item()
     assert -1 <= v <= 1
     assert policy.shape == (1, 2 * 11 * 10)
     p = F.softmax(policy, dim=1)
     s = torch.sum(p).item()
-    assert 0 <= s <= 1
+    assert 0 - 1e-4 <= s <= 1 + 1e-4
+
+
+def test_resnet():
+    model = HexzNeuralNetwork(model_type="resnet")
+    assert isinstance(model._torso, ResidualLayer)
+    policy, value = model(*_random_inputs())
+    assert value.shape == (1, 1)
+    v = value[0].item()
+    assert -1 <= v <= 1
+    assert policy.shape == (1, 2 * 11 * 10)
+    p = F.softmax(policy, dim=1)
+    s = torch.sum(p).item()
+    assert 0 - 1e-4 <= s <= 1 + 1e-4
 
 
 def test_script_model():

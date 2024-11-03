@@ -1,4 +1,4 @@
-
+import argparse
 import gzip
 from io import BytesIO
 import os
@@ -11,7 +11,8 @@ from google.protobuf import json_format
 from pyhexz.model import HexzNeuralNetwork
 
 
-def print_example(path):
+def print_request(args):
+    path = args.request_file
     with gzip.open(path, "rb") as f:
         req = hexz_pb2.AddTrainingExamplesRequest()
         req.ParseFromString(f.read())
@@ -27,39 +28,62 @@ def print_example(path):
         priors = torch.load(BytesIO(ex.model_predictions.priors))
         print(f"Chosen move prior: {priors[idx, ex.move.row, ex.move.col].item()}")
         nonzero_priors = priors[priors.nonzero(as_tuple=True)]
-        quartiles = torch.quantile(nonzero_priors, q=torch.tensor([0, 0.25, 0.5, 0.75, 1]))
+        quartiles = torch.quantile(
+            nonzero_priors, q=torch.tensor([0, 0.25, 0.5, 0.75, 1])
+        )
         print(f"Nonzero prior quartiles (min/25/50/75/max): {quartiles}")
 
 
-def create_model(model_type: str, outfile: str) -> int:
-    if model_type == "conv2d":
-        model = HexzNeuralNetwork()
-        scriptmodule = torch.jit.script(model)
-        scriptmodule.save(outfile)
-        size = os.path.getsize(outfile)
-        print(f"Saved PyTorch scriptmodule ({size:,} bytes) to {outfile}")
-        return 0
-    else:
-        print(f"Invalid model type '{model_type}'")
-        return 1
+def create_model(args) -> int:
+    network_args = {
+        key: getattr(args, key) for key in ['blocks', 'filters', 'model_type']
+    }
+    model = HexzNeuralNetwork(**network_args)
+    scriptmodule = torch.jit.script(model)
+    scriptmodule.save(args.outfile)
+    size = os.path.getsize(args.outfile)
+    print(f"Saved PyTorch scriptmodule {network_args} ({size:,} bytes) to {args.outfile}")
+    return 0
 
 
 def main(argv) -> int:
-    if len(argv) < 2:
-        print("Need to specify a command")
-        return 1
-    if argv[1] == "print_request":
-        if len(argv) != 3:
-            print(f"Usage: {argv[0]} print_request <request.gz>")
-            return 1
-        print_example(argv[2])
-    elif argv[1] == "create_model":
-        if len(argv) != 4:
-            print(f"Usage: {argv[0]} create_model <conv2d|resnet> <outfile.pt>")
-            return 1
-        return create_model(argv[2], argv[3])
-    else:
-        print(f"Unknown command: {argv[1]}")
+    parser = argparse.ArgumentParser(
+        prog="pyhexzx.cli", description="Utility CLI for pyhexz"
+    )
+
+    subparsers = parser.add_subparsers(title="Commands", dest="command")
+    subparsers.required = True
+
+    # Subcommand: create_model
+    create_parser = subparsers.add_parser("create_model", help="Create a model")
+    create_parser.add_argument(
+        "--model_type",
+        required=True,
+        choices=["conv2d", "resnet"],
+        help="Type of the model",
+    )
+    create_parser.add_argument(
+        "--filters", type=int, default=128, help="Number of CNN filters for the model"
+    )
+    create_parser.add_argument(
+        "--blocks",
+        type=int,
+        default=5,
+        help="Number of blocks (residual or CNN) for the model",
+    )
+    create_parser.add_argument("outfile", help="Path to write the scriptmodule to")
+    create_parser.set_defaults(func=create_model)
+
+    # Subcommand: print_model
+    print_parser = subparsers.add_parser(
+        "print_request", help="Print AddTrainingExamplesRequest details"
+    )
+    print_parser.add_argument("request_file", help="Path of the request to print")
+    print_parser.set_defaults(func=print_request)
+
+    # Parse and call the appropriate function based on the command
+    args = parser.parse_args()
+    args.func(args)
 
 
 if __name__ == "__main__":
