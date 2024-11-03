@@ -106,7 +106,7 @@ class HDF5IterableDataset(torch.utils.data.IterableDataset):
 class TrainingTask:
     """TrainingTask is responsible for training the model given the stored examples.
 
-    Each task should be executed by an individual thread or in a thread pool.
+    A task will typically be executed by an individual thread or in a thread pool.
     """
 
     def __init__(
@@ -169,7 +169,8 @@ class TrainingTask:
                     pred_pr, pred_val = model(X_board, X_action_mask)
 
                     # Compute loss
-                    pr_loss = pr_loss_fn(pred_pr.flatten(1), y_pr.flatten(1))
+                    # Need to flatten y_pr, which is stored in (2, 11, 10) form in HDF5.
+                    pr_loss = pr_loss_fn(pred_pr, y_pr.flatten(1))
                     val_loss = val_loss_fn(pred_val, y_val)
                     loss = pr_loss + val_loss
                     self.logger.info(

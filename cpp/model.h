@@ -16,6 +16,26 @@
 
 namespace hexz {
 
+
+// BatchPrediction is a container for batch model prediction results.
+struct BatchPrediction {
+  // A (N, 2, 11, 10) batch predition tensor for the move policy.
+  // This tensor has softmax already applied to each batch, i.e.
+  // the values of each tensor in the batch sum to 1 and represent
+  // move probabilities.
+  torch::Tensor policy;
+  // A (N, 1) tensor for the value predictions. Values lie between -1 and 1.
+  torch::Tensor values;
+};
+
+// PredictBatch forwards inputs to the provided PyTorch module and transforms
+// the model's output into the form required for making move predictions.
+//
+// See BatchPrediction's field comments for details about the result
+// structure.
+BatchPrediction PredictBatch(torch::jit::Module& module,
+                                    std::vector<torch::jit::IValue>&& inputs);
+
 // Interface class for a model than can make predictions for
 // move likelihoods and board evaluations.
 class Model {
@@ -24,6 +44,7 @@ class Model {
     torch::Tensor move_probs;
     float value;
   };
+
   // Updates the Model's underlying torch Module.
   virtual void UpdateModel(hexzpb::ModelKey key,
                            torch::jit::Module&& module) = 0;

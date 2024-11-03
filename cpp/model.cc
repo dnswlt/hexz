@@ -6,6 +6,19 @@
 
 namespace hexz {
 
+BatchPrediction PredictBatch(torch::jit::Module& module,
+                             std::vector<torch::jit::IValue>&& inputs) {
+  auto pred = module.forward(std::move(inputs)).toTuple();
+  const auto policy = torch::softmax(pred->elements()[0].toTensor(), 1)
+                          .to(torch::kCPU)
+                          .reshape({-1, 2, 11, 10});
+  const auto values = pred->elements()[1].toTensor().to(torch::kCPU);
+  return BatchPrediction{
+      .policy = policy,
+      .values = values,
+  };
+}
+
 void TorchModel::UpdateModel(hexzpb::ModelKey key,
                              torch::jit::Module&& module) {
   key_ = std::move(key);
@@ -18,27 +31,15 @@ Model::Prediction TorchModel::Predict(torch::Tensor board,
   Perfm::Scope ps(Perfm::Predict);
   torch::NoGradGuard no_grad;
   auto board_batch = board.unsqueeze(0).to(device_);
-  auto action_mask_batch = action_mask.flatten().unsqueeze(0).to(device_);
+  auto action_mask_batch = action_mask.unsqueeze(0).to(device_);
   std::vector<torch::jit::IValue> inputs{
       board_batch,
       action_mask_batch,
   };
-  auto output = module_.forward(inputs);
-
-  // The model should output two values: the move likelihoods as a [1, 220]
-  // tensor of logits (1 being the batch size), and a single float value
-  // prediction.
-  ABSL_DCHECK(output.isTuple());
-  const auto output_tuple = output.toTuple();
-  ABSL_DCHECK(output_tuple->size() == 2);
-  // Read logits back to CPU / main memory.
-  const auto logits = output_tuple->elements()[0].toTensor().to(torch::kCPU);
-  const auto dim = logits.sizes();
-  ABSL_DCHECK(dim.size() == 2 && dim[0] == 1 && dim[1] == 2 * 11 * 10);
-  const auto value = output_tuple->elements()[1].toTensor().item<float>();
+  BatchPrediction pred = PredictBatch(module_, std::move(inputs));
   return Prediction{
-      .move_probs = logits.reshape({2, 11, 10}).exp(),
-      .value = value,
+      .move_probs = pred.policy.index({0}).reshape({2, 11, 10}),
+      .value = pred.values.index({0}).item<float>(),
   };
 }
 
@@ -58,22 +59,13 @@ std::vector<Model::Prediction> BatchedTorchModel::ComputeT::ComputeAll(
       torch::stack(boards).to(device_),
       torch::stack(action_masks).to(device_),
   };
-  auto pred = module_.forward(model_inputs);
-  ABSL_DCHECK(pred.isTuple());
-  const auto output_tuple = pred.toTuple();
-  ABSL_DCHECK(output_tuple->size() == 2);
-  // Read logits back to CPU / main memory.
-  const auto probs =
-      output_tuple->elements()[0].toTensor().exp().to(torch::kCPU);
-  const auto dim = probs.sizes();
-  ABSL_DCHECK(dim.size() == 2 && dim[0] == n_inputs && dim[1] == 2 * 11 * 10);
-  const auto values = output_tuple->elements()[1].toTensor().to(torch::kCPU);
+  auto pred = PredictBatch(module_, std::move(model_inputs));
   std::vector<Model::Prediction> result;
   result.reserve(n_inputs);
   for (int i = 0; i < n_inputs; i++) {
     result.push_back(Model::Prediction{
-        .move_probs = probs.index({i}).reshape({2, 11, 10}),
-        .value = values.index({i}).item<float>(),
+        .move_probs = pred.policy.index({i}),
+        .value = pred.values.index({i}).item<float>(),
     });
   }
   return result;
@@ -84,7 +76,7 @@ Model::Prediction BatchedTorchModel::Predict(torch::Tensor board,
   Perfm::Scope ps(Perfm::Predict);
   return batcher_.ComputeValue(ComputeT::input_t{
       .board = board,
-      .action_mask = action_mask.flatten(),
+      .action_mask = action_mask,
   });
 }
 
@@ -146,7 +138,7 @@ Model::Prediction FiberTorchModel::Predict(torch::Tensor board,
   auto future = promise.get_future();
   PushRequest(PredictionRequest{
       .board = board,
-      .action_mask = action_mask.flatten(),
+      .action_mask = action_mask,
       .result_promise = std::move(promise),
   });
   return future.get();
@@ -229,23 +221,14 @@ void FiberTorchModel::RunGPUPipeline() {
       Perfm::Scope perfm(Perfm::PredictBatch);
       // Need to guard access to module_ b/c it might get updated concurrently.
       std::unique_lock<std::mutex> lk(module_mut_);
-      auto pred = module_.forward(model_inputs);
+      BatchPrediction pred = PredictBatch(module_, std::move(model_inputs));
       lk.unlock();
-      ABSL_DCHECK(pred.isTuple());
-      const auto output_tuple = pred.toTuple();
-      ABSL_DCHECK(output_tuple->size() == 2);
-      // Read logits back to CPU / main memory.
-      const auto probs =
-          output_tuple->elements()[0].toTensor().exp().to(torch::kCPU);
-      const auto dim = probs.sizes();
-      ABSL_DCHECK(dim.size() == 2 && dim[0] == n_inputs &&
-                  dim[1] == 2 * 11 * 10);
-      const auto values =
-          output_tuple->elements()[1].toTensor().to(torch::kCPU);
+      auto policies = pred.policy.unbind(0);
+      auto values = pred.values.unbind(0);
       for (int i = 0; i < n_inputs; i++) {
         batch[i].result_promise.set_value(Model::Prediction{
-            .move_probs = probs.index({i}).reshape({2, 11, 10}),
-            .value = values.index({i}).item<float>(),
+            .move_probs = policies[i],
+            .value = values[i].item<float>(),
         });
       }
       batch.clear();

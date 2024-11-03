@@ -1,22 +1,29 @@
 import pytest
 import torch
 from pyhexz.board import Board
-from pyhexz.model import HexzCNNBlocks, HexzNeuralNetwork
+from pyhexz.model import HexzNeuralNetwork
+import torch.nn.functional as F
 
 
-def test_cnnblocks_trace():
-    bs = HexzCNNBlocks()
-    trace_input = torch.randint(0, 1, (16, *Board.shape), dtype=torch.float32)
-    ts = torch.jit.trace(bs, trace_input)
-    # Traced and "normal" model should yield same results.
-    test_input = torch.randint(0, 1, (16, *Board.shape), dtype=torch.float32)
-    torch.testing.assert_close(bs(test_input), ts(test_input))
+def test_model_shapes():
+    # Validate that inputs and outputs have the expected shapes.
+    model = HexzNeuralNetwork()
+    board = torch.rand((1, 11, 11, 10), dtype=torch.float32)
+    # Boolean tensor
+    action_mask = torch.rand((1, 2, 11, 10)) > 0.5
+    policy, value = model(board, action_mask)
+    assert value.shape == (1, 1)
+    v = value[0].item()
+    assert -1 <= v <= 1
+    assert policy.shape == (1, 2 * 11 * 10)
+    p = F.softmax(policy, dim=1)
+    s = torch.sum(p).item()
+    assert 0 <= s <= 1
 
 
-@pytest.mark.parametrize("traced", [True, False])
-def test_script_model(traced: bool):
+def test_script_model():
     batch_size = 16
-    model = HexzNeuralNetwork(traced=traced)
+    model = HexzNeuralNetwork()
     scripted = torch.jit.script(model)
 
     input = torch.rand((16, *Board.shape))
@@ -29,26 +36,3 @@ def test_script_model(traced: bool):
     mp2, v2 = model(input, action_mask)
     torch.testing.assert_close(mp2, move_probs)
     torch.testing.assert_close(v2, value)
-
-
-def test_traced_model_perf():
-    if not torch.cuda.is_available():
-        pytest.skip("cuda not available")
-        return
-    iterations = 16
-    batch_size = 4096
-    device = "cuda"
-
-    model = torch.jit.script(HexzNeuralNetwork(traced=True))
-    model.to(device)
-    input = torch.rand((batch_size, *Board.shape)).to(device)
-    action_mask = (torch.rand((batch_size, 2, 11, 10)) < 0.5).to(device)
-    
-    for i in range(iterations):
-        move_probs, value = model(input, action_mask)
-    
-        assert move_probs.to("cpu").shape == (batch_size, 220)
-        assert move_probs.dtype == torch.float32
-        assert value.shape == (batch_size, 1)
-
-

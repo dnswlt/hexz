@@ -133,8 +133,8 @@ def test_training(tmp_path):
         config=config,
         logger=logging.getLogger(__name__),
     )
-    next_cp = task.execute()
-    assert next_cp == 1
-    assert repo.get_latest_checkpoint(model_name) == next_cp
-    m = repo.get_model(model_name, next_cp, repr="scriptmodule")
+    result = task.execute()
+    assert result.model.checkpoint == 1
+    assert repo.get_latest_checkpoint(model_name) == result.model.checkpoint
+    m = repo.get_model(model_name, result.model.checkpoint, repr="scriptmodule")
     assert m is not None
