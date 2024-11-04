@@ -77,7 +77,7 @@ add_library(grpc_client grpc_client.h grpc_client.cc)
 target_link_libraries(grpc_client PUBLIC hexzpb_grpc hexzpb absl::log absl::statusor "${TORCH_LIBRARIES}")
 
 add_library(base base.cc perfm.cc queue.h batch.h)
-target_link_libraries(base PUBLIC absl::statusor absl::strings absl::log)
+target_link_libraries(base PUBLIC absl::statusor absl::strings absl::base absl::log)
 
 add_library(model model.cc)
 target_link_libraries(model PUBLIC base hexzpb Boost::fiber "${TORCH_LIBRARIES}")

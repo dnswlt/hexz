@@ -30,11 +30,15 @@ The Flask app runs behind a `gunicorn` WSGI web server, both locally and in a Do
 To run the `training_server` locally:
 
 ```bash
-cd src
-env HEXZ_BATCH_SIZE=1024 \
-  HEXZ_MODEL_NAME=edgar \
-  HEXZ_MODEL_REPO_BASE_DIR=/tmp/hexz-models \
-  HEXZ_NUM_EPOCHS=1 \
+env HEXZ_MODEL_BLOCKS=10 \
+  HEXZ_MODEL_TYPE=resnet \
+  HEXZ_BATCH_SIZE=4096 \
+  HEXZ_TRAINING_TRIGGER_THRESHOLD=100000 \
+  HEXZ_MODEL_NAME=resus \
+  HEXZ_MODEL_REPO_BASE_DIR=$HOME/tmp/hexz-models \
+  HEXZ_NUM_EPOCHS=7 \
+  HEXZ_DEVICE=mps \
+  HEXZ_SHUFFLE=true \
   gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.training_server:create_app()'
 ```
 

@@ -159,6 +159,7 @@ std::unique_ptr<GRPCTrainingServiceClient> GRPCTrainingServiceClient::Connect(
     const std::string& addr) {
   grpc::ChannelArguments channel_args;
   channel_args.SetCompressionAlgorithm(GRPC_COMPRESS_GZIP);
+  channel_args.SetMaxReceiveMessageSize(256<<20); // 256MiB
 
   return std::make_unique<GRPCTrainingServiceClient>(
       grpc::CreateCustomChannel(addr, grpc::InsecureChannelCredentials(),

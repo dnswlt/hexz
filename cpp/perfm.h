@@ -1,5 +1,7 @@
 #pragma once
 
+#include <absl/base/no_destructor.h>
+
 #include <cassert>
 #include <chrono>
 #include <mutex>
@@ -104,34 +106,15 @@ class APM {
       : name_(std::move(name)),
         t_start_(std::chrono::high_resolution_clock::now()) {}
 
-  void Increment(int n) {
-    int64_t d = std::chrono::duration_cast<std::chrono::seconds>(
-                    std::chrono::high_resolution_clock::now() - t_start_)
-                    .count();
-    std::scoped_lock<std::mutex> lk(mut_);
-    if (d >= counts_.size()) {
-      counts_.resize(d + 1, 0);
-    }
-    counts_[d] += n;
-  }
+  // Increment the count of processed work items for the current second by n.
+  void Increment(int n);
 
   // Rate returns the rate of items processed per second, averaged over the
-  // given window (in seconds)
-  double Rate(int window_seconds) {
-    int64_t d = std::chrono::duration_cast<std::chrono::seconds>(
-                    std::chrono::high_resolution_clock::now() - t_start_)
-                    .count();
-    std::scoped_lock<std::mutex> lk(mut_);
-    if (d >= counts_.size()) {
-      counts_.resize(d + 1, 0);
-    }
-    size_t w = std::min(static_cast<size_t>(window_seconds), counts_.size());
-    if (w == 0) {
-      return 0;
-    }
-    int64_t sum = std::accumulate(counts_.end() - w, counts_.end(), 0);
-    return static_cast<double>(sum) / w;
-  }
+  // given window (in seconds). The "current" second (the one for which stats
+  // are still being collected), will be added to the window, so that this
+  // method returns the rate over a window_seconds +
+  // time-passed-in-current-second window.
+  double Rate(int window_seconds);
 
  private:
   std::vector<int64_t> counts_;
@@ -140,8 +123,10 @@ class APM {
   std::string name_;
 };
 
-// An APM to count the throughput w.r.t. examples generated.
-inline APM* apm_examples = new APM("/examples");
-inline APM* apm_games = new APM("/games");
+// Used by workers and MCTS code to count the throughput w.r.t. examples
+// generated.
+APM& APMExamples();
+// Used by workers and MCTS code to count the throughput w.r.t. games generated.
+APM& APMGames();
 
 }  // namespace hexz

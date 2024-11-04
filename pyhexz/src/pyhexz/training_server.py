@@ -116,10 +116,13 @@ def serve_grpc(
 
 def init_repo_if_missing(app: Flask) -> None:
     repo: ModelRepository = app.model_repo
-    name: str = app.hexz_config.model_name
+    config: TrainingConfig = app.hexz_config
+    name = config.model_name
     if repo.get_latest_checkpoint(name) is not None:
         return
-    model = HexzNeuralNetwork()
+    model_type = config.model_type
+    blocks = config.model_blocks
+    model = HexzNeuralNetwork(model_type=model_type, blocks=blocks)
     repo.store_model(name, 0, model)
     app.logger.info(f"Created new initial model in repo for model '{name}'")
 

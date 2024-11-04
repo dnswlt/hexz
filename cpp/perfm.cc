@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -45,6 +46,53 @@ void Perfm::PrintStats() {
                 double(s.elapsed_nanos) / 1e9, s.count,
                 s.count * 1e9 / s.elapsed_nanos);
   }
+}
+
+void APM::Increment(int n) {
+  int64_t d = std::chrono::duration_cast<std::chrono::seconds>(
+                  std::chrono::high_resolution_clock::now() - t_start_)
+                  .count();
+  std::scoped_lock<std::mutex> lk(mut_);
+  if (d >= counts_.size()) {
+    counts_.resize(d + 1, 0);
+  }
+  counts_[d] += n;
+}
+
+double APM::Rate(int window_seconds) {
+  int64_t us = std::chrono::duration_cast<std::chrono::microseconds>(
+                   std::chrono::high_resolution_clock::now() - t_start_)
+                   .count();
+  int64_t quot = us / 1'000'000;
+  int64_t rem = us % 1'000'000;
+
+  std::scoped_lock<std::mutex> lk(mut_);
+  if (quot >= counts_.size()) {
+    counts_.resize(quot + 1, 0);
+  }
+  size_t w = std::min(static_cast<size_t>(window_seconds + 1), counts_.size());
+  if (w == 0) {
+    return 0;
+  }
+  int64_t sum = std::accumulate(counts_.end() - w, counts_.end(), 0);
+  double t =
+      static_cast<double>(w) - static_cast<double>(1'000'000 - rem) / 1e6;
+  return static_cast<double>(sum) / t;
+}
+
+namespace {
+
+// Eager initialization, so time starts counting from program startup.
+absl::NoDestructor<APM> apm_examples("/examples");
+absl::NoDestructor<APM> apm_games("/examples");
+
+} // namespace
+
+APM& APMExamples() {
+  return *apm_examples;
+}
+APM& APMGames() {
+  return *apm_games;
 }
 
 }  // namespace hexz

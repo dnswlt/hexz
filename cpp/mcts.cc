@@ -606,7 +606,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
       *example.mutable_model_key() = model_.Key();
       root->PopulateStats(*example.mutable_stats());
       examples.push_back(std::move(example));
-      apm_examples->Increment(1);
+      APMExamples().Increment(1);
     }
 
     // const std::string stats = root->Stats();

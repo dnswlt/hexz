@@ -33,6 +33,9 @@
 #include "perfm.h"
 #include "worker.h"
 
+// In Docker, you should override conig defaults using HEXZ_* environment
+// variables. For convenience, we add flag overrides as well for the most
+// relevant configs for local testing.
 ABSL_FLAG(std::string, training_server_addr, "",
           "training server address (ex: \"localhost:50051\")");
 ABSL_FLAG(std::string, device, "", "PyTorch device (cpu, cuda, mps)");
@@ -77,14 +80,18 @@ void MemMon(BackgroundThreadSignal& sig) {
   }
 }
 
-void APMMon(BackgroundThreadSignal& sig) {
+void APMMon(BackgroundThreadSignal& sig, float period) {
   std::unique_lock<std::mutex> lk(sig.mut);
-  while (!sig.cv.wait_for(lk, std::chrono::duration<float>(5.0),
+  while (!sig.cv.wait_for(lk, std::chrono::duration<float>(period),
                           [&sig] { return sig.stop; })) {
-    double examples_rate = hexz::apm_examples->Rate(60);
-    double games_rate = hexz::apm_games->Rate(60);
-    ABSL_LOG(INFO) << "APM(1m): examples/s: " << examples_rate
-                   << " games/s: " << games_rate;
+    double examples_rate_1m = hexz::APMExamples().Rate(60);
+    double games_rate_1m = hexz::APMGames().Rate(60);
+    double examples_rate_10s = hexz::APMExamples().Rate(10);
+    double games_rate_10s = hexz::APMGames().Rate(10);
+    ABSL_LOG(INFO) << "APM(1m): examples/s: " << examples_rate_1m
+                   << " games/s: " << games_rate_1m
+                   << " -- APM(10s): examples/s: " << examples_rate_10s
+                   << " games/s: " << games_rate_10s;
   }
 }
 
@@ -172,7 +179,7 @@ int main(int argc, char* argv[]) {
   BackgroundThreadSignal apmmon_sig;
   absl::Cleanup apm_thread_joiner = [&apmmon, &apmmon_sig] {
     if (apmmon.joinable()) {
-      ABSL_LOG(INFO) << "Joining memory monitoring thread.";
+      ABSL_LOG(INFO) << "Joining performance monitoring thread.";
       {
         std::lock_guard<std::mutex> lk(apmmon_sig.mut);
         apmmon_sig.stop = true;
@@ -181,7 +188,7 @@ int main(int argc, char* argv[]) {
       apmmon.join();
     }
   };
-  apmmon = std::thread{APMMon, std::ref(memmon_sig)};
+  apmmon = std::thread{APMMon, std::ref(apmmon_sig), /*period=*/5.0};
 
   // Execute
   std::unique_ptr<hexz::TrainingServiceClient> client;

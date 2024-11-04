@@ -75,7 +75,7 @@ struct Config {
   float startup_delay_seconds = 0.0;
 
   // Set this to 1 to have /proc/self/status logged every N seconds.
-  bool debug_memory_usage = 0;
+  bool debug_memory_usage = false;
   // Suspend the worker when the training server signals that it is training.
   // This is only useful when worker and training server run on the same
   // machine.

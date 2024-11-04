@@ -24,6 +24,9 @@ def _from_env(cls):
 class TrainingConfig(typing.NamedTuple):
     model_repo_base_dir: str
     model_name: str
+    # Model type. One of (conv2d, resnet). Only relevant if a new model is created at startup.
+    model_type: str = "conv2d"
+    model_blocks: int = 5
     # batch size to use for training
     batch_size: int = 4096
     # Train a new model after this many new examples were received:
