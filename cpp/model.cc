@@ -29,7 +29,6 @@ void TorchModel::UpdateModel(hexzpb::ModelKey key,
 Model::Prediction TorchModel::Predict(torch::Tensor board,
                                       torch::Tensor action_mask) {
   Perfm::Scope ps(Perfm::Predict);
-  torch::NoGradGuard no_grad;
   auto board_batch = board.unsqueeze(0).to(device_);
   auto action_mask_batch = action_mask.unsqueeze(0).to(device_);
   std::vector<torch::jit::IValue> inputs{

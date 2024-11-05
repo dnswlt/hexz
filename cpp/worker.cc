@@ -231,6 +231,10 @@ void Worker::Run() {
   std::vector<std::thread> worker_threads;
   for (int i = 0; i < config_.worker_threads; i++) {
     worker_threads.emplace_back([this, &model, &sender, thread_num = i] {
+      // Don't calculate gradients: self-play only needs model evaluation.
+      torch::NoGradGuard no_grad;
+      // Ensure thread local performance metrics get aggregated into global
+      // metrics.
       Perfm::ThreadScope perfm;
       if (config_.fibers_per_thread > 0) {
         // Run with fibers.
