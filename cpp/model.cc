@@ -10,10 +10,9 @@ BatchPrediction PredictBatch(torch::jit::Module& module,
                              std::vector<torch::jit::IValue>&& inputs) {
   auto pred = module.forward(std::move(inputs)).toTuple();
   const auto policy = torch::softmax(pred->elements()[0].toTensor(), 1)
-                          .detach()
                           .to(torch::kCPU)
                           .reshape({-1, 2, 11, 10});
-  const auto values = pred->elements()[1].toTensor().detach().to(torch::kCPU);
+  const auto values = pred->elements()[1].toTensor().to(torch::kCPU);
   return BatchPrediction{
       .policy = policy,
       .values = values,
@@ -183,6 +182,8 @@ int FiberTorchModel::ReadBatch(std::vector<PredictionRequest>& batch) {
 }
 
 void FiberTorchModel::RunGPUPipeline() {
+  // Don't calculate gradients: self-play only needs model evaluation.
+  torch::NoGradGuard no_grad;
   // Ensure this thread's perfm stats are accumulated into total stats.
   Perfm::ThreadScope perfm_thread_scope;
   ABSL_LOG(INFO) << "FiberTorchModel::GPUPipeline started";
