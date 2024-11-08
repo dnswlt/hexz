@@ -16,7 +16,7 @@ def _random_inputs() -> Tuple[torch.Tensor, torch.Tensor]:
 def test_conv2d():
     # Validate that inputs and outputs have the expected shapes.
     model = HexzNeuralNetwork(model_type="conv2d")
-    assert isinstance(model.torso, CNNLayer)
+    assert isinstance(model._torso, CNNLayer)
     policy, value = model(*_random_inputs())
     assert value.shape == (1, 1)
     v = value[0].item()
@@ -29,7 +29,7 @@ def test_conv2d():
 
 def test_resnet():
     model = HexzNeuralNetwork(model_type="resnet")
-    assert isinstance(model.torso, ResidualLayer)
+    assert isinstance(model._torso, ResidualLayer)
     policy, value = model(*_random_inputs())
     assert value.shape == (1, 1)
     v = value[0].item()
