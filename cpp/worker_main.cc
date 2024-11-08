@@ -52,6 +52,8 @@ ABSL_FLAG(bool, suspend_while_training, false,
           "if true, the worker is suspended during training");
 ABSL_FLAG(bool, dry_run, false,
           "if true, the worker will not send examples to the training server");
+ABSL_FLAG(bool, pin_threads, false,
+          "if true, worker threads will be pinned to CPU cores.");
 
 namespace {
 
@@ -126,6 +128,9 @@ void UpdateConfigFromFlags(hexz::Config& config) {
   }
   if (bool b = absl::GetFlag(FLAGS_dry_run); b) {
     config.dry_run = b;
+  }
+  if (bool b = absl::GetFlag(FLAGS_pin_threads); b) {
+    config.pin_threads = b;
   }
 }
 

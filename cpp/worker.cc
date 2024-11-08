@@ -8,6 +8,12 @@
 #include <mutex>
 #include <random>
 
+#ifdef __linux__
+#include <pthread.h>
+#include <sched.h>
+#include <unistd.h>
+#endif
+
 #include "grpc_client.h"
 #include "hexz.pb.h"
 #include "mcts.h"
@@ -30,6 +36,8 @@ bool SameOrNewer(const hexzpb::ModelKey& lhs, const hexzpb::ModelKey& rhs) {
   return lhs.name() == rhs.name() && lhs.checkpoint() <= rhs.checkpoint();
 }
 
+// Execution ID used for a "kill" message that will shut down the
+// AsyncExampleSender thread.
 constexpr absl::string_view kKillMessage = "__KILL_KILL_KILL__";
 
 }  // namespace
@@ -198,6 +206,8 @@ void Worker::Run() {
     FiberTorchModel* fiber_torch_model = nullptr;
     if (config_.suspend_while_training) {
       fiber_torch_model = dynamic_cast<FiberTorchModel*>(model.get());
+      ABSL_CHECK(fiber_torch_model != nullptr)
+          << "suspend_while_training is only supported by the FiberTorchModel";
     }
     absl::Status status = client_.StreamControlEvents(
         grpc_client_context, request,
@@ -228,6 +238,23 @@ void Worker::Run() {
 
   stats_.SetStartedMicros(UnixMicros());
 
+#ifdef __linux__
+  bool pin_threads = config_.pin_threads;
+  if (pin_threads) {
+    long n_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+    if (n_cpus >= config_.worker_threads) {
+      ABSL_LOG(INFO)
+          << "We haz " << n_cpus
+          << " online CPUs on this machine. Enabling thread affinity for "
+          << config_.worker_threads << " worker threads.";
+    } else {
+      pin_threads = false;
+      ABSL_LOG(WARNING) << "Disabling thread affinity: more threads requested ("
+                        << config_.worker_threads << ") than there are CPUs ("
+                        << n_cpus << ")";
+    }
+  }
+#endif
   std::vector<std::thread> worker_threads;
   for (int i = 0; i < config_.worker_threads; i++) {
     worker_threads.emplace_back([this, &model, &sender, thread_num = i] {
@@ -261,6 +288,16 @@ void Worker::Run() {
       ABSL_LOG(INFO) << "Thread #" << thread_num << "("
                      << std::this_thread::get_id() << ") is done.";
     });
+#ifdef __linux__
+    if (pin_threads) {
+      cpu_set_t cpuset;
+      CPU_ZERO(&cpuset);
+      CPU_SET(i, &cpuset);
+      int rc = pthread_setaffinity_np(worker_threads.back().native_handle(),
+                                      sizeof(cpu_set_t), &cpuset);
+      ABSL_CHECK(rc == 0) << "Failed to set thread affinity for thread " << i;
+    }
+#endif
   }
   for (auto& t : worker_threads) {
     if (t.joinable()) {
@@ -359,11 +396,9 @@ std::unique_ptr<Model> Worker::CreateModel(hexzpb::ModelKey model_key,
                    << " threads and " << config_.fibers_per_thread
                    << " fibers per thread on device " << config_.device
                    << " with batch size " << config_.prediction_batch_size;
-    // TODO: Only enable suspension when running on same machine as training
-    // server.
     return std::make_unique<FiberTorchModel>(
         model_key, std::move(model), device, config_.prediction_batch_size,
-        true);
+        config_.suspend_while_training);
   } else if (config_.worker_threads > 1 && device != torch::kCPU) {
     // Using the batched model is only useful if multiple threads use the GPU.
     ABSL_CHECK(config_.prediction_batch_size <= config_.worker_threads)

@@ -74,7 +74,12 @@ struct Config {
   // to the training server at the same time.
   float startup_delay_seconds = 0.0;
 
-  // Set this to 1 to have /proc/self/status logged every N seconds.
+  // Set this to true to use pthread thread affinity to pin each thread to a dedicated
+  // core. `worker_threads` must be less than or equal to the number of online cores
+  // (as reported by sysconf(_SC_NPROCESSORS_ONLN)).
+  // Only available on Linux-based systems.
+  bool pin_threads = false;
+  // Set this to true to have /proc/self/status logged every N seconds.
   bool debug_memory_usage = false;
   // Suspend the worker when the training server signals that it is training.
   // This is only useful when worker and training server run on the same
