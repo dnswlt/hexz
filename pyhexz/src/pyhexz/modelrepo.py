@@ -7,6 +7,7 @@ from contextlib import contextmanager
 import datetime
 import gzip
 import io
+import json
 import queue
 import time
 import h5py
@@ -168,7 +169,9 @@ class LocalModelRepository:
             if as_bytes:
                 with open(p, "rb") as f_in:
                     return f_in.read()
-            model = HexzNeuralNetwork()
+            with open(p + ".params", "r") as f_in:
+                params = json.load(f_in)
+            model = HexzNeuralNetwork(**params)
             model.load_state_dict(torch.load(p, map_location=map_location, weights_only=True))
             return model
 
@@ -193,6 +196,8 @@ class LocalModelRepository:
             if os.path.exists(m_path):
                 raise IOError(f"Model already exists at {m_path}")
             os.makedirs(os.path.dirname(m_path), exist_ok=True)
+            with open(m_path + ".params", "w") as f_out:
+                json.dump(model.ctor_args, f_out, indent=2)
             torch.save(model.state_dict(), m_path)
             if store_sm:
                 # Generate and store a ScriptModule as well.

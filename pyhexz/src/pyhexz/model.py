@@ -122,12 +122,20 @@ class ResidualLayer(nn.Module):
 
 
 class HexzNeuralNetwork(nn.Module):
+
     def __init__(self, blocks=5, filters=128, model_type="conv2d"):
         super().__init__()
+        # Save parameters of the network, so they can be saved together
+        # with the model's state dict.
+        self.ctor_args = dict(
+            blocks=blocks,
+            filters=filters,
+            model_type=model_type
+        )
         if model_type == "conv2d":
-            self._torso = CNNLayer(blocks=blocks, filters=filters)
+            self.torso = CNNLayer(blocks=blocks, filters=filters)
         elif model_type == "resnet":
-            self._torso = ResidualLayer(blocks=blocks, filters=filters)
+            self.torso = ResidualLayer(blocks=blocks, filters=filters)
         else:
             raise ValueError(f"Invalid model_type: {model_type}")
 
@@ -166,7 +174,7 @@ class HexzNeuralNetwork(nn.Module):
             Values close to 1 predict a win for the current player,
             -1 predicts a clear loss, and 0 is a draw.
         """
-        x = self._torso(b)
+        x = self.torso(b)
         policy = self.policy_head(x)
         # Mask out (i.e. set to ~ 0 in the exp domain) all policy predictions for invalid actions.
         policy = policy.where(action_mask.flatten(1), torch.full_like(policy, -1e32))
