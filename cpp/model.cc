@@ -23,6 +23,7 @@ void TorchModel::UpdateModel(hexzpb::ModelKey key,
                              torch::jit::Module&& module) {
   key_ = std::move(key);
   module_ = std::move(module);
+  module_.eval();
   module_.to(device_);
 }
 
@@ -100,6 +101,7 @@ FiberTorchModel::FiberTorchModel(hexzpb::ModelKey key,
   // Acquire lock to have a synchronization point for module_ before any access
   // to it by other threads or fibers. (Necessary?)
   std::scoped_lock<std::mutex> lk(module_mut_);
+  module_.eval();
   module_.to(device_);
   // Start the GPU thread only after this object has been
   // fully initialized.
@@ -123,6 +125,7 @@ void FiberTorchModel::UpdateModel(hexzpb::ModelKey key,
   key_ = std::move(key);
   module_ = std::move(module);
   module_.to(device_);
+  module_.eval();
 }
 
 hexzpb::ModelKey FiberTorchModel::Key() const {

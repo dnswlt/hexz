@@ -84,7 +84,7 @@ namespace {
 
 // Eager initialization, so time starts counting from program startup.
 absl::NoDestructor<APM> apm_examples("/examples");
-absl::NoDestructor<APM> apm_games("/examples");
+absl::NoDestructor<APM> apm_games("/games");
 
 } // namespace
 

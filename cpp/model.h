@@ -86,6 +86,7 @@ class TorchModel : public Model {
   TorchModel(hexzpb::ModelKey key, torch::jit::Module&& module,
              torch::Device device)
       : key_{std::move(key)}, module_{std::move(module)}, device_(device) {
+    module_.eval();
     module_.to(device_);
   }
 
@@ -117,6 +118,7 @@ class BatchedTorchModel : public Model {
     using result_t = Model::Prediction;
     ComputeT(torch::jit::Module&& module, torch::DeviceType device)
         : module_{std::move(module)}, device_{device} {
+      module_.eval();
       module_.to(device);
     }
     std::vector<result_t> ComputeAll(std::vector<input_t>&& inputs);
