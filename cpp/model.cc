@@ -10,9 +10,10 @@ BatchPrediction PredictBatch(torch::jit::Module& module,
                              std::vector<torch::jit::IValue>&& inputs) {
   auto pred = module.forward(std::move(inputs)).toTuple();
   const auto policy = torch::softmax(pred->elements()[0].toTensor(), 1)
+                          .detach()
                           .to(torch::kCPU)
                           .reshape({-1, 2, 11, 10});
-  const auto values = pred->elements()[1].toTensor().to(torch::kCPU);
+  const auto values = pred->elements()[1].toTensor().detach().to(torch::kCPU);
   return BatchPrediction{
       .policy = policy,
       .values = values,
