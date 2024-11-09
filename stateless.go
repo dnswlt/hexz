@@ -70,7 +70,7 @@ func (s *StatelessServer) lookupPlayerFromCookie(r *http.Request) (Player, error
 }
 
 // Stores a new game in the game store and returns the new game ID.
-func (s *StatelessServer) startNewGame(ctx context.Context, remoteAddr string, p *Player, gameType GameType, singlePlayer bool) (string, error) {
+func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType GameType, singlePlayer bool) (string, error) {
 	engineState, err := NewGameEngine(gameType).Encode()
 	if err != nil {
 		return "", err
@@ -191,7 +191,7 @@ func (s *StatelessServer) handleNewGame(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	gameId, err := s.startNewGame(r.Context(), r.RemoteAddr, &p, GameType(typeParam), singlePlayer)
+	gameId, err := s.startNewGame(r.Context(), &p, GameType(typeParam), singlePlayer)
 	if err != nil {
 		hlog.Errorf("Cannot start new game: %s\n", err)
 		http.Error(w, "", http.StatusPreconditionFailed)

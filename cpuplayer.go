@@ -6,7 +6,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/dnswlt/hexz/hexzpb"
 	pb "github.com/dnswlt/hexz/hexzpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -58,7 +57,7 @@ func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz)
 	if t > cpu.maxThinkTime {
 		t = cpu.maxThinkTime
 	}
-	mv, stats := cpu.mcts.SuggestMove(ge, t)
+	mv, stats := cpu.mcts.SuggestMove(ge, t, 0)
 	if minQ := stats.MinQ(); minQ >= 0.98 || minQ <= 0.02 {
 		// Speed up if we think we (almost) won or lost, but stop at 0.1% of maxThinkTime.
 		if t > cpu.maxThinkTime/500 {
@@ -81,7 +80,7 @@ type RemoteCPUPlayer struct {
 	addr          string // Address of the remote CPU player server, e.g. "localhost:50051"
 	maxThinkTime  time.Duration
 	maxIterations int
-	client        hexzpb.CPUPlayerServiceClient
+	client        pb.CPUPlayerServiceClient
 }
 
 func NewRemoteCPUPlayer(playerId PlayerId, addr string, maxThinkTime time.Duration, maxIterations int) (*RemoteCPUPlayer, error) {
@@ -92,7 +91,7 @@ func NewRemoteCPUPlayer(playerId PlayerId, addr string, maxThinkTime time.Durati
 	if err != nil {
 		return nil, fmt.Errorf("cannot create gRPC client: %w", err)
 	}
-	client := hexzpb.NewCPUPlayerServiceClient(conn)
+	client := pb.NewCPUPlayerServiceClient(conn)
 	return &RemoteCPUPlayer{
 		playerId:      playerId,
 		addr:          addr,
@@ -137,8 +136,8 @@ type MoveSuggesterServerConfig struct {
 }
 
 type MoveSuggesterServer struct {
-	// Needs to be embedded to have MoveSuggesterServer implement hexzpb.CPUPlayerServiceServer.
-	hexzpb.UnimplementedCPUPlayerServiceServer
+	// Needs to be embedded to have MoveSuggesterServer implement pb.CPUPlayerServiceServer.
+	pb.UnimplementedCPUPlayerServiceServer
 	config *MoveSuggesterServerConfig
 }
 
@@ -148,7 +147,7 @@ func NewMoveSuggesterServer(config *MoveSuggesterServerConfig) *MoveSuggesterSer
 	}
 }
 
-func (s *MoveSuggesterServer) SuggestMove(ctx context.Context, req *hexzpb.SuggestMoveRequest) (*hexzpb.SuggestMoveResponse, error) {
+func (s *MoveSuggesterServer) SuggestMove(ctx context.Context, req *pb.SuggestMoveRequest) (*pb.SuggestMoveResponse, error) {
 	if req.GameEngineState == nil {
 		return nil, fmt.Errorf("missing game engine")
 	}
@@ -164,24 +163,19 @@ func (s *MoveSuggesterServer) SuggestMove(ctx context.Context, req *hexzpb.Sugge
 	}
 	mcts := NewMCTS()
 
-	if req.MaxThinkTimeMs > 0 {
-		thinkTime := time.Duration(req.MaxThinkTimeMs) * time.Millisecond
-		if s.config.CpuThinkTime > 0 && thinkTime > s.config.CpuThinkTime {
-			thinkTime = s.config.CpuThinkTime
-		}
-		mv, stats := mcts.SuggestMove(ge, thinkTime)
-		return &hexzpb.SuggestMoveResponse{
-			Move:      mv.Proto(),
-			MoveStats: MCTSStatsToProto(stats),
-		}, nil
-	} else if req.MaxIterations > 0 {
-		mv, stats := mcts.SuggestMoveLimit(ge, int(req.MaxIterations))
-		return &hexzpb.SuggestMoveResponse{
-			Move:      mv.Proto(),
-			MoveStats: MCTSStatsToProto(stats),
-		}, nil
+	if req.MaxThinkTimeMs <= 0 && req.MaxIterations <= 0 && s.config.CpuThinkTime <= 0 {
+		return nil, fmt.Errorf("neither max_think_time_ms nor max_iterations specified")
 	}
-	return nil, fmt.Errorf("neither max_think_time_ms nor max_iterations specified")
+	thinkTime := time.Duration(req.MaxThinkTimeMs) * time.Millisecond
+	// Always respect the maximum think time set by this server.
+	if s.config.CpuThinkTime > 0 && (thinkTime <= 0 || thinkTime > s.config.CpuThinkTime) {
+		thinkTime = s.config.CpuThinkTime
+	}
+	mv, stats := mcts.SuggestMove(ge, thinkTime, int(req.MaxIterations))
+	return &pb.SuggestMoveResponse{
+		Move:      mv.Proto(),
+		MoveStats: MCTSStatsToProto(stats),
+	}, nil
 }
 
 func (s *MoveSuggesterServer) Serve() error {
@@ -192,6 +186,6 @@ func (s *MoveSuggesterServer) Serve() error {
 	infoLog.Printf("MoveSuggesterServer listening on %s", s.config.Addr)
 	var opts []grpc.ServerOption
 	grpcServer := grpc.NewServer(opts...)
-	hexzpb.RegisterCPUPlayerServiceServer(grpcServer, s)
+	pb.RegisterCPUPlayerServiceServer(grpcServer, s)
 	return grpcServer.Serve(lis)
 }

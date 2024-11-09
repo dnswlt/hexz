@@ -96,7 +96,7 @@ func main() {
 						// Double the "think time" for the first 6 iterations, i.e. where flags are usually placed.
 						limit *= 2
 					}
-					m, stats := mcts.SuggestMoveLimit(ge, limit)
+					m, stats := mcts.SuggestMove(ge, 0, limit)
 					moveStats := make([]*pb.MCTSExample_MoveStats, len(stats.Moves))
 					for i, mv := range stats.Moves {
 						moveStats[i] = &pb.MCTSExample_MoveStats{

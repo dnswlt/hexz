@@ -420,33 +420,25 @@ func (mcts *MCTS) Reset() {
 	mcts.LosingBoard = nil
 }
 
-func (mcts *MCTS) SuggestMove(gameEngine *GameEngineFlagz, maxDuration time.Duration) (GameEngineMove, *MCTSStats) {
+func (mcts *MCTS) SuggestMove(gameEngine *GameEngineFlagz, maxDuration time.Duration, maxIterations int) (GameEngineMove, *MCTSStats) {
 	mcts.Reset()
 	root := &mcNode{}
 	root.set(0, 0, gameEngine.Board().Turn, cellNormal) // Dummy values, only the turn matters.
 	started := time.Now()
 	ge := gameEngine.Clone()
-	for n := 0; ; n++ {
+	if maxIterations <= 0 {
+		if maxDuration > 0 {
+			maxIterations = math.MaxInt // Only limited by duration.
+		} else {
+			maxIterations = 1 // Run at least once.
+		}
+	}
+	for n := 0; n < maxIterations; n++ {
 		// Only check every N rounds if we're done to avoid excessive clock reads.
 		// Run at least once.
-		if (n-1)&63 == 0 && time.Since(started) >= maxDuration {
+		if maxDuration > 0 && (n-1)&63 == 0 && time.Since(started) >= maxDuration {
 			break
 		}
-		ge.copyFrom(gameEngine)
-		mcts.run(ge, root)
-	}
-	elapsed := time.Since(started)
-	return mcts.bestNextMoveWithStats(root, elapsed, gameEngine.Board().Move)
-}
-
-// TODO: merge this with SuggestMove.
-func (mcts *MCTS) SuggestMoveLimit(gameEngine *GameEngineFlagz, maxIterations int) (GameEngineMove, *MCTSStats) {
-	mcts.Reset()
-	root := &mcNode{}
-	root.set(0, 0, gameEngine.Board().Turn, cellNormal) // Dummy values, only the turn matters.
-	started := time.Now()
-	ge := gameEngine.Clone()
-	for n := 0; n < maxIterations; n++ {
 		ge.copyFrom(gameEngine)
 		mcts.run(ge, root)
 	}

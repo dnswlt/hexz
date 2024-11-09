@@ -39,7 +39,7 @@ func TestMCTSFull(t *testing.T) {
 	}
 	for !ge.IsDone() {
 		ti := ge.Board().Turn - 1
-		m, _ := mcts[ti].SuggestMove(ge, thinkTime)
+		m, _ := mcts[ti].SuggestMove(ge, thinkTime, 0)
 		if !ge.MakeMove(m) {
 			t.Fatal("Cannot make move")
 		}
@@ -57,7 +57,7 @@ func TestMCTSAverageNumberOfNextMoves(t *testing.T) {
 		ge := NewGameEngineFlagz()
 		mcts := NewMCTS()
 		for !ge.IsDone() {
-			m, stats := mcts.SuggestMoveLimit(ge, 800)
+			m, stats := mcts.SuggestMove(ge, 0, 800)
 			if !ge.MakeMove(m) {
 				t.Fatal("Cannot make move")
 			}
@@ -82,7 +82,7 @@ func TestMCTSAverageNumberOfMovesInGame(t *testing.T) {
 		ge := NewGameEngineFlagz()
 		mcts := NewMCTS()
 		for !ge.IsDone() {
-			m, _ := mcts.SuggestMoveLimit(ge, 800)
+			m, _ := mcts.SuggestMove(ge, 0, 800)
 			if !ge.MakeMove(m) {
 				t.Fatal("Cannot make move")
 			}
@@ -108,7 +108,7 @@ func TestMCTSNumberOfForcedWins(t *testing.T) {
 		ge := NewGameEngineFlagz()
 		mcts := NewMCTS()
 		for !ge.IsDone() {
-			m, stats := mcts.SuggestMoveLimit(ge, 80000)
+			m, stats := mcts.SuggestMove(ge, 0, 80000)
 			var mStats *MCTSMoveStats
 			for i := range stats.Moves {
 				ms := &stats.Moves[i]
@@ -149,7 +149,7 @@ func TestMCTSLosingBoardWithHighQ(t *testing.T) {
 	mcts := NewMCTS()
 	wroteBoard := false
 	for !ge.IsDone() {
-		m, stats := mcts.SuggestMove(ge, thinkTime)
+		m, stats := mcts.SuggestMove(ge, thinkTime, 0)
 		if stats.MinQ() > 0.98 && mcts.LosingBoard != nil && mcts.WinningBoard != nil {
 			// We are very sure we'll win. Let's see what the boards looks like.
 			ExportSVG("losing_board.html",
@@ -225,7 +225,7 @@ func TestMCTSSingleMove(t *testing.T) {
 
 	ge := NewGameEngineFlagz()
 	mcts := NewMCTS()
-	m, stats := mcts.SuggestMove(ge, thinkTime)
+	m, stats := mcts.SuggestMove(ge, thinkTime, 0)
 	t.Log(stats)
 	if !ge.MakeMove(m) {
 		t.Errorf("Cannot make move: %v", m)
@@ -253,7 +253,7 @@ func TestMCTSSingleMoveMidGame(t *testing.T) {
 	}
 	// Now suggest a move.
 	mcts := NewMCTS()
-	m, stats := mcts.SuggestMove(ge, thinkTime)
+	m, stats := mcts.SuggestMove(ge, thinkTime, 0)
 	t.Log(stats)
 	if !ge.MakeMove(m) {
 		t.Errorf("Cannot make move: %v", m)
@@ -277,12 +277,12 @@ func TestMCTSNoThinkTime(t *testing.T) {
 
 	mcts := NewMCTS()
 	thinkTime := time.Duration(0)
-	m, _ := mcts.SuggestMove(ge, thinkTime)
+	m, _ := mcts.SuggestMove(ge, thinkTime, 0)
 	if !ge.MakeMove(m) {
 		t.Errorf("Cannot make move %v", m)
 	}
 	thinkTime = -3 * time.Second
-	m, _ = mcts.SuggestMove(ge, thinkTime)
+	m, _ = mcts.SuggestMove(ge, thinkTime, 0)
 	if !ge.MakeMove(m) {
 		t.Errorf("Cannot make move %v", m)
 	}

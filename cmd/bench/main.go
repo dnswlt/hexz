@@ -127,7 +127,7 @@ func main() {
 			t := ge.Board().Turn - 1
 			moveThinkTime := getThinkTime(moveStats[t], benchPlayer == ge.Board().Turn)
 			hexz.EnableInitialDrawAssumption = (benchPlayer == ge.Board().Turn)
-			m, stats := mcts[t].SuggestMove(ge, moveThinkTime)
+			m, stats := mcts[t].SuggestMove(ge, moveThinkTime, 0)
 			printVisitCountHistograms(stats.VisitCounts)
 			moveStats[t] = append(moveStats[t], stats)
 			// fmt.Print(stats)
