@@ -137,6 +137,9 @@ message MCTSExample {
 message SuggestMoveRequest {
     // Maximum time the engine is allowed to think, in milliseconds.
 	int64 max_think_time_ms = 1;
+    // Maximum number of MCTS iterations to perform to suggest a move.
+    // Only taken into account if max_think_time_ms is zero.
+    int64 max_iterations = 3;
 	// Game engine state from which to start thinking.
 	GameEngineState game_engine_state = 2;
 }

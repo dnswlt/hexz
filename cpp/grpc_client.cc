@@ -4,20 +4,19 @@
 #include <absl/status/status.h>
 #include <absl/strings/str_cat.h>
 #include <grpcpp/create_channel.h>
+#include <grpcpp/grpcpp.h>
 #include <grpcpp/security/credentials.h>
 #include <torch/script.h>
 #include <torch/torch.h>
 
 #include <sstream>
 
+#include "absl/status/status.h"
 #include "grpcpp/grpcpp.h"
 
 namespace hexz {
 
 namespace {
-#include <grpcpp/grpcpp.h>
-
-#include "absl/status/status.h"
 
 // Helper function to translate grpc::StatusCode to absl::StatusCode
 absl::StatusCode AbslStatusCode(grpc::StatusCode grpc_code) {
@@ -143,8 +142,7 @@ GRPCTrainingServiceClient::FetchLatestModel(const std::string& model_name) {
 }
 
 absl::Status GRPCTrainingServiceClient::StreamControlEvents(
-    grpc::ClientContext& context,
-    const hexzpb::ControlRequest& request,
+    grpc::ClientContext& context, const hexzpb::ControlRequest& request,
     StreamCallback<hexzpb::ControlEvent> callback) {
   std::unique_ptr<grpc::ClientReader<hexzpb::ControlEvent>> reader(
       stub_->ControlEvents(&context, request));
@@ -159,7 +157,7 @@ std::unique_ptr<GRPCTrainingServiceClient> GRPCTrainingServiceClient::Connect(
     const std::string& addr) {
   grpc::ChannelArguments channel_args;
   channel_args.SetCompressionAlgorithm(GRPC_COMPRESS_GZIP);
-  channel_args.SetMaxReceiveMessageSize(256<<20); // 256MiB
+  channel_args.SetMaxReceiveMessageSize(256 << 20);  // 256MiB
 
   return std::make_unique<GRPCTrainingServiceClient>(
       grpc::CreateCustomChannel(addr, grpc::InsecureChannelCredentials(),

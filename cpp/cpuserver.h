@@ -16,6 +16,7 @@ struct CPUPlayerServiceConfig {
   int64_t max_think_time_ms = 0;
 };
 
+// Implementation of the gRPC server for the CPUPlayerService.
 class CPUPlayerServiceImpl final : public hexzpb::CPUPlayerService::Service {
  public:
   CPUPlayerServiceImpl(CPUPlayerServiceConfig config);

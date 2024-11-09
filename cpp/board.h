@@ -96,12 +96,12 @@ class Board {
   };
 
   Board();
-  static Board RandomBoard();
-  static absl::StatusOr<Board> FromProto(const hexzpb::Board& board);
-
   // Copy c'tor.
   Board(const Board& other);
 
+  static Board RandomBoard();
+  static absl::StatusOr<Board> FromProto(const hexzpb::Board& board);
+  
   std::pair<float, float> Score() const;
   float Result() const;
 

@@ -21,6 +21,8 @@ var (
 	player2URL       = flag.String("p2-addr", "localhost:50051", "Address for player 2 (empty for the built-in CPU player).")
 	p1ThinkTime      = flag.Duration("p1-think-time", 1*time.Second, "Maximum thinking time per move for P1.")
 	p2ThinkTime      = flag.Duration("p2-think-time", 1*time.Second, "Maximum thinking time per move for P2.")
+	p1MaxIterations  = flag.Int("p1-max-iter", 0, "Maximum MCTS iterations per move for P1 (overrides p1-think-time if >0).")
+	p2MaxIterations  = flag.Int("p2-max-iter", 0, "Maximum MCTS iterations per move for P2 (overrides p2-think-time if >0).")
 	svgMoveScoreKind = flag.String("score-kind", "FINAL", "Kind of move scores to add to the SVG output.")
 	svgOutputFile    = flag.String("svg-file", "/tmp/nbench.html", "File to which SVG output is written.")
 	skipMoves        = flag.Int("skip-moves", 0, "Number of initial moves to make randomly before using the suggestions")
@@ -54,10 +56,13 @@ func playGame(p1, p2 hexz.CPUPlayer) error {
 	moves := []*hexz.GameEngineMove{}
 	for !ge.IsDone() {
 		turn := ge.B.Turn
+		started := time.Now()
 		mv, mvStats, err := cpuPlayers[turn-1].SuggestMove(context.Background(), ge)
+		duration := time.Since(started)
 		if err != nil {
-			return fmt.Errorf("remote SuggestMove: %v", err)
+			return fmt.Errorf("remote SuggestMove failed: %v", err)
 		}
+		fmt.Printf("P%d suggested move %v in %dms\n", turn, mv.String(), duration.Milliseconds())
 		boards = append(boards, ge.B.Copy())
 		stats = append(stats, mvStats)
 		moves = append(moves, mv)
@@ -65,7 +70,6 @@ func playGame(p1, p2 hexz.CPUPlayer) error {
 			// Update SVG after every move, so we can follow along as the game proceeds.
 			hexz.ExportSVGWithStats(*svgOutputFile, boards, moves, stats, pb.SuggestMoveStats_ScoreKind(scoreKind), nil)
 		}
-		fmt.Printf("P%d suggested move %v\n", turn, mv.String())
 		if err := ge.MakeMoveError(*mv); err != nil {
 			return fmt.Errorf("make move for P%d: %s %w", turn, mv.String(), err)
 		}
@@ -84,10 +88,16 @@ func main() {
 	}
 	var p1, p2 hexz.CPUPlayer
 	var err error
+	if *p1MaxIterations > 0 {
+		*p1ThinkTime = 0
+	}
+	if *p2MaxIterations > 0 {
+		*p2ThinkTime = 0
+	}
 	if *player1URL == "" {
 		p1 = hexz.NewLocalCPUPlayer(hexz.PlayerId("P1"), *p1ThinkTime)
 	} else {
-		p1, err = hexz.NewRemoteCPUPlayer(hexz.PlayerId("P1"), *player1URL, *p1ThinkTime)
+		p1, err = hexz.NewRemoteCPUPlayer(hexz.PlayerId("P1"), *player1URL, *p1ThinkTime, *p1MaxIterations)
 		if err != nil {
 			fmt.Printf("Failed to create P1 as remove player: %v", err)
 			os.Exit(1)
@@ -96,7 +106,7 @@ func main() {
 	if *player2URL == "" {
 		p2 = hexz.NewLocalCPUPlayer(hexz.PlayerId("P2"), *p2ThinkTime)
 	} else {
-		p2, err = hexz.NewRemoteCPUPlayer(hexz.PlayerId("P2"), *player2URL, *p2ThinkTime)
+		p2, err = hexz.NewRemoteCPUPlayer(hexz.PlayerId("P2"), *player2URL, *p2ThinkTime, *p2MaxIterations)
 		if err != nil {
 			fmt.Printf("Failed to create P2 as remove player: %v", err)
 			os.Exit(1)

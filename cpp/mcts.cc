@@ -26,8 +26,8 @@ void InitializeFromConfig(const Config& config) {
   Node::InitializeStaticMembers(config);
 }
 
-Node::Node(Node* parent, int turn, Move move)
-    : parent_{parent}, turn_{turn}, move_{move} {}
+Node::Node(Node* parent, int next_turn, Move move)
+    : parent_{parent}, next_turn_{next_turn}, move_{move} {}
 
 float Node::Q() const noexcept {
   ABSL_DCHECK(!IsRoot())
@@ -129,7 +129,7 @@ float Node::Puct() const noexcept {
                    (1 + visit_count_);
 }
 
-Node* Node::MaxPuctChild() const {
+Node* Node::MaxPuctChild() const noexcept {
   //   Perfm::Scope ps(Perfm::MaxPuctChild);
   ABSL_CHECK(!children_.empty());
   Node* best = nullptr;
@@ -144,7 +144,16 @@ Node* Node::MaxPuctChild() const {
   return best;
 }
 
-Node* Node::SampleChildByPrior(internal::RNG& rng) const {
+Node* Node::MostVisitedChild() const noexcept {
+  ABSL_CHECK(!children_.empty());
+  auto max_it = std::max_element(
+      children_.begin(), children_.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs->visit_count() < rhs->visit_count();
+      });
+  return max_it->get();
+}
+
+Node* Node::SampleChildByPrior(internal::RNG& rng) const noexcept {
   float sum = 0;
   float r = static_cast<float>(rng.Uniform());
   for (const auto& c : children_) {
@@ -224,7 +233,7 @@ void Node::ResetTree() {
   }
 }
 
-int Node::SelectChildForNextMove(internal::RNG& rng) const {
+int Node::SelectChildForNextMove(internal::RNG& rng) const noexcept {
   // The sum of the children's visit counts should be equal
   // to visit_count_ - 1. But summing explicitly (hopefully)
   // makes this more robust and future proof.
@@ -256,7 +265,7 @@ std::unique_ptr<Node> Node::SelectChildAsRoot(int i) {
 
 inline int Node::MoveTurn() const noexcept {
   ABSL_DCHECK(!IsRoot());
-  return parent_->turn_;
+  return parent_->next_turn_;
 }
 
 void Node::Backpropagate(float result) {
@@ -659,13 +668,18 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
 }
 
 absl::StatusOr<std::unique_ptr<Node>> NeuralMCTS::SuggestMove(
-    int player, const Board& board, int think_time_millis) {
+    int player, const Board& board, int64_t think_time_millis,
+    int64_t max_iterations) {
   int64_t started_micros = UnixMicros();
   auto root = std::make_unique<Node>(player);
+  const bool is_time_limited = think_time_millis > 0;
   const int64_t max_micros =
       started_micros + static_cast<int64_t>(think_time_millis) * 1000;
-  for (int n = 0; n < config_.runs_per_move; n++) {
-    if (UnixMicros() > max_micros) {
+  if (max_iterations <= 0) {
+    max_iterations = std::numeric_limits<int64_t>::max();
+  }
+  for (int n = 0; n < max_iterations; n++) {
+    if (is_time_limited && UnixMicros() > max_micros) {
       break;
     }
     if (!Run(*root, board)) {

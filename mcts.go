@@ -427,7 +427,8 @@ func (mcts *MCTS) SuggestMove(gameEngine *GameEngineFlagz, maxDuration time.Dura
 	started := time.Now()
 	ge := gameEngine.Clone()
 	for n := 0; ; n++ {
-		// Check every N rounds if we're done. Run at least once.
+		// Only check every N rounds if we're done to avoid excessive clock reads.
+		// Run at least once.
 		if (n-1)&63 == 0 && time.Since(started) >= maxDuration {
 			break
 		}
@@ -438,6 +439,7 @@ func (mcts *MCTS) SuggestMove(gameEngine *GameEngineFlagz, maxDuration time.Dura
 	return mcts.bestNextMoveWithStats(root, elapsed, gameEngine.Board().Move)
 }
 
+// TODO: merge this with SuggestMove.
 func (mcts *MCTS) SuggestMoveLimit(gameEngine *GameEngineFlagz, maxIterations int) (GameEngineMove, *MCTSStats) {
 	mcts.Reset()
 	root := &mcNode{}

@@ -14,7 +14,6 @@ import (
 
 type CPUPlayer interface {
 	SuggestMove(ctx context.Context, ge *GameEngineFlagz) (*GameEngineMove, *pb.SuggestMoveStats, error)
-	MaxThinkTime() time.Duration
 }
 
 type LocalCPUPlayer struct {
@@ -34,8 +33,22 @@ func NewLocalCPUPlayer(playerId PlayerId, maxThinkTime time.Duration) *LocalCPUP
 	}
 }
 
-func (cpu *LocalCPUPlayer) MaxThinkTime() time.Duration {
-	return cpu.maxThinkTime
+func MCTSStatsToProto(stats *MCTSStats) *pb.SuggestMoveStats {
+	moveEvals := make([]*pb.SuggestMoveStats_ScoredMove, len(stats.Moves))
+	for i, m := range stats.Moves {
+		moveEvals[i] = &pb.SuggestMoveStats_ScoredMove{
+			Row:  int32(m.Row),
+			Col:  int32(m.Col),
+			Type: pb.Field_CellType(m.CellType),
+			Scores: []*pb.SuggestMoveStats_Score{
+				{Kind: pb.SuggestMoveStats_FINAL, Score: float32(m.Iterations) / float32(stats.Iterations)},
+			},
+		}
+	}
+	return &pb.SuggestMoveStats{
+		Moves: moveEvals,
+		Value: float32(2*stats.BestMoveQ - 1), // Normalize to the [-1..1] range returned by neural players.
+	}
 }
 
 // SuggestMove calculates a suggested move (using MCTS).
@@ -54,37 +67,24 @@ func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz)
 	} else {
 		cpu.thinkTime = cpu.maxThinkTime // use full time allowed.
 	}
-	moveEvals := make([]*pb.SuggestMoveStats_ScoredMove, len(stats.Moves))
-	for i, m := range stats.Moves {
-		moveEvals[i] = &pb.SuggestMoveStats_ScoredMove{
-			Row:  int32(m.Row),
-			Col:  int32(m.Col),
-			Type: pb.Field_CellType(m.CellType),
-			Scores: []*pb.SuggestMoveStats_Score{
-				{Kind: pb.SuggestMoveStats_FINAL, Score: float32(m.Iterations) / float32(stats.Iterations)},
-			},
-		}
-	}
 	return &GameEngineMove{
-			PlayerNum: ge.B.Turn,
-			Move:      mv.Move,
-			Row:       mv.Row,
-			Col:       mv.Col,
-			CellType:  mv.CellType,
-		}, &pb.SuggestMoveStats{
-			Moves: moveEvals,
-			Value: float32(2*stats.BestMoveQ - 1), // Normalize to the [-1..1] range returned by neural players.
-		}, nil
+		PlayerNum: ge.B.Turn,
+		Move:      mv.Move,
+		Row:       mv.Row,
+		Col:       mv.Col,
+		CellType:  mv.CellType,
+	}, MCTSStatsToProto(stats), nil
 }
 
 type RemoteCPUPlayer struct {
-	playerId     PlayerId
-	addr         string // Address of the remote CPU player server, e.g. "localhost:50051"
-	maxThinkTime time.Duration
-	client       hexzpb.CPUPlayerServiceClient
+	playerId      PlayerId
+	addr          string // Address of the remote CPU player server, e.g. "localhost:50051"
+	maxThinkTime  time.Duration
+	maxIterations int
+	client        hexzpb.CPUPlayerServiceClient
 }
 
-func NewRemoteCPUPlayer(playerId PlayerId, addr string, maxThinkTime time.Duration) (*RemoteCPUPlayer, error) {
+func NewRemoteCPUPlayer(playerId PlayerId, addr string, maxThinkTime time.Duration, maxIterations int) (*RemoteCPUPlayer, error) {
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
@@ -94,15 +94,12 @@ func NewRemoteCPUPlayer(playerId PlayerId, addr string, maxThinkTime time.Durati
 	}
 	client := hexzpb.NewCPUPlayerServiceClient(conn)
 	return &RemoteCPUPlayer{
-		playerId:     playerId,
-		addr:         addr,
-		maxThinkTime: maxThinkTime,
-		client:       client,
+		playerId:      playerId,
+		addr:          addr,
+		maxThinkTime:  maxThinkTime,
+		maxIterations: maxIterations,
+		client:        client,
 	}, nil
-}
-
-func (cpu *RemoteCPUPlayer) MaxThinkTime() time.Duration {
-	return cpu.maxThinkTime
 }
 
 func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz) (*GameEngineMove, *pb.SuggestMoveStats, error) {
@@ -112,11 +109,15 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz
 	}
 	req := &pb.SuggestMoveRequest{
 		MaxThinkTimeMs:  cpu.maxThinkTime.Milliseconds(),
+		MaxIterations:   int64(cpu.maxIterations),
 		GameEngineState: state,
 	}
-	// Allow the RPC at most the think time, plus some buffer.
-	ctx, cancel := context.WithTimeout(ctx, cpu.maxThinkTime+time.Duration(1)*time.Second)
-	defer cancel()
+	// Allow the RPC at most the think time, plus some buffer. If think time is unbounded, don't set a deadline.
+	if cpu.maxThinkTime > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, cpu.maxThinkTime+time.Duration(1)*time.Second)
+		defer cancel()
+	}
 	resp, err := cpu.client.SuggestMove(ctx, req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("gRPC SuggestMove request failed: %v", err)
@@ -162,15 +163,25 @@ func (s *MoveSuggesterServer) SuggestMove(ctx context.Context, req *hexzpb.Sugge
 		return nil, fmt.Errorf("unsupported game type: %T", state)
 	}
 	mcts := NewMCTS()
-	thinkTime := time.Duration(req.MaxThinkTimeMs) * time.Millisecond
-	if s.config.CpuThinkTime > 0 && thinkTime > s.config.CpuThinkTime {
-		thinkTime = s.config.CpuThinkTime
+
+	if req.MaxThinkTimeMs > 0 {
+		thinkTime := time.Duration(req.MaxThinkTimeMs) * time.Millisecond
+		if s.config.CpuThinkTime > 0 && thinkTime > s.config.CpuThinkTime {
+			thinkTime = s.config.CpuThinkTime
+		}
+		mv, stats := mcts.SuggestMove(ge, thinkTime)
+		return &hexzpb.SuggestMoveResponse{
+			Move:      mv.Proto(),
+			MoveStats: MCTSStatsToProto(stats),
+		}, nil
+	} else if req.MaxIterations > 0 {
+		mv, stats := mcts.SuggestMoveLimit(ge, int(req.MaxIterations))
+		return &hexzpb.SuggestMoveResponse{
+			Move:      mv.Proto(),
+			MoveStats: MCTSStatsToProto(stats),
+		}, nil
 	}
-	mv, _ := mcts.SuggestMove(ge, thinkTime)
-	return &hexzpb.SuggestMoveResponse{
-		Move: mv.Proto(),
-		// TODO: add stats
-	}, nil
+	return nil, fmt.Errorf("neither max_think_time_ms nor max_iterations specified")
 }
 
 func (s *MoveSuggesterServer) Serve() error {

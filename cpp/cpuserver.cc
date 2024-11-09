@@ -12,8 +12,6 @@
 
 namespace hexz {
 
-namespace {}  // namespace
-
 CPUPlayerServiceImpl::CPUPlayerServiceImpl(CPUPlayerServiceConfig config)
     : config_{config},
       model_{config.model_key, torch::jit::load(config.model_path),
@@ -39,9 +37,10 @@ grpc::Status CPUPlayerServiceImpl::SuggestMove(
   }
 
   Config config{
-      // Don't limit the runs per move, we only rely on
-      // limiting the execution time.
-      .runs_per_move = std::numeric_limits<int>::max(),
+      // These should not have an effect in SuggestMove, but to be safe, we
+      // disable fast moves and Dirichlet noise explicitly.
+      .fast_move_prob = 0,
+      .dirichlet_concentration = 0,
       // Random playouts should only be used during self-play.
       .random_playouts = 0,
   };
@@ -52,13 +51,20 @@ grpc::Status CPUPlayerServiceImpl::SuggestMove(
   NeuralMCTS mcts(model_, /*playout_runner=*/nullptr, config);
 
   int64_t think_time = request->max_think_time_ms();
+  int64_t max_iterations = request->max_iterations();
+  if (think_time <= 0 && max_iterations <= 0) {
+    return grpc::Status(
+        grpc::INVALID_ARGUMENT,
+        absl::StrCat(
+            "one of max_think_time_ms or max_iterations must be positive"));
+  }
   if (config_.max_think_time_ms > 0 && think_time > config_.max_think_time_ms) {
     think_time = config_.max_think_time_ms;
   }
   int64_t t_started = UnixMicros();
   absl::StatusOr<std::unique_ptr<Node>> node;
   try {
-    node = mcts.SuggestMove(turn, *board, think_time);
+    node = mcts.SuggestMove(turn, *board, think_time, max_iterations);
   } catch (c10::Error& error) {
     ABSL_LOG(ERROR) << "Exception when calling SuggestMove: " << error.msg();
   }
@@ -70,14 +76,9 @@ grpc::Status CPUPlayerServiceImpl::SuggestMove(
   ABSL_CHECK(!(*node)->IsLeaf())
       << "SuggestMove must not return OK if there are no valid moves.";
   const auto& cs = (*node)->children();
-  int most_visited_idx = 0;
   auto& stats = *response->mutable_move_stats();
   stats.set_value((*node)->value());
-  for (int i = 0; i < cs.size(); i++) {
-    const auto& c = cs[i];
-    if (c->visit_count() > cs[most_visited_idx]->visit_count()) {
-      most_visited_idx = i;
-    }
+  for (const auto& c : (*node)->children()) {
     auto& move = *stats.add_moves();
     move.set_row(c->move().r);
     move.set_col(c->move().c);
@@ -90,10 +91,10 @@ grpc::Status CPUPlayerServiceImpl::SuggestMove(
     prior_score.set_kind(hexzpb::SuggestMoveStats::MCTS_PRIOR);
     prior_score.set_score(c->prior());
   }
-  const auto& best_move = cs[most_visited_idx]->move();
-  ABSL_DLOG(INFO) << "SuggestMove: computed move suggestion "
-                  << best_move.DebugString() << " in "
-                  << (UnixMicros() - t_started) / 1000 << "ms";
+  const auto& best_move = (*node)->MostVisitedChild()->move();
+  ABSL_LOG(INFO) << "SuggestMove: computed move suggestion "
+                 << best_move.DebugString() << " in "
+                 << (UnixMicros() - t_started) / 1000 << "ms";
   auto& move = *response->mutable_move();
   move.set_player_num(pb_board.turn());
   move.set_move(pb_board.move());

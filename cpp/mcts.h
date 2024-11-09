@@ -45,16 +45,16 @@ class Node {
   }
 
   // Simple getters.
-  const Move& move() const { return move_; }
+  const Move& move() const noexcept { return move_; }
   float prior() const noexcept { return prior_; }
   int visit_count() const noexcept { return visit_count_; }
   const Node* parent() const noexcept { return parent_; }
   float wins() const noexcept { return wins_; }
   float value() const noexcept { return value_; }
   // Returns the value of this node from the perspective of player 0.
-  float ValueP0() const noexcept { return turn_ == 0 ? value_ : -value_; }
+  float ValueP0() const noexcept { return next_turn_ == 0 ? value_ : -value_; }
   bool terminal() const noexcept { return terminal_; }
-  const std::vector<std::unique_ptr<Node>>& children() const {
+  const std::vector<std::unique_ptr<Node>>& children() const noexcept {
     return children_;
   }
 
@@ -69,21 +69,21 @@ class Node {
   // in this node was made (or the player making the first move, in the case
   // of the root node). This may be wrong ONLY in leaf nodes, b/c
   // Flagz isn't strictly alternating (a player can run out of moves).
-  int NextTurn() const { return turn_; }
+  int NextTurn() const noexcept { return next_turn_; }
   // Updates the turn.
-  void SetNextTurn(int turn) { turn_ = turn; }
+  void SetNextTurn(int next_turn) noexcept { next_turn_ = next_turn; }
 
   // Returns this node's PUCT value.
   float Puct() const noexcept;
   // Returns a non-owning pointer to the child with the greatest PUCT value.
-  Node* MaxPuctChild() const;
+  Node* MaxPuctChild() const noexcept;
   // Returns a non-owning pointer to a randomly sampled child node.
   // The probability of selecting each child is proportional to its prior.
-  Node* SampleChildByPrior(internal::RNG& rng) const;
+  Node* SampleChildByPrior(internal::RNG& rng) const noexcept;
 
   // Selects a child node with a probability
   // proportional to its relative visit count.
-  int SelectChildForNextMove(internal::RNG& rng) const;
+  int SelectChildForNextMove(internal::RNG& rng) const noexcept;
 
   // Returns the specified child and marks it as a root node (by
   // setting its parent_ to nullptr), and moves the child node out of the
@@ -92,6 +92,11 @@ class Node {
   // The Node on which this method was called MUST NOT be used
   // afterwards!
   std::unique_ptr<Node> SelectChildAsRoot(int i);
+
+  // Returns a non-owning pointer to the child with the highest visit count.
+  // This is typically the child that should be chosen to make the next move
+  // in a normal game, i.e. outside of ML self-play training.
+  Node* MostVisitedChild() const noexcept;
 
   // Backpropagate propagates the given result to this Node and all parents.
   // The given result is interpreted from the perspective of player 0.
@@ -173,11 +178,11 @@ class Node {
   | @root
   |------------------------------------|
   | parent_ = nullptr
-  | turn_ = 0  // P0 makes 1st move
+  | next_turn_ = 0  // P0 makes 1st move
   | move_ = {}  // No move
   | prior_ = 0.0  // No prior
   | wins_ = 0.0  // Not set
-  | value_ = predicted value for turn_
+  | value_ = predicted value for next_turn_
   | children_ = [@c1, ...]
   | NextTurn() = 0
   | MoveTurn() = undefined
@@ -187,14 +192,14 @@ class Node {
   | @c1
   |------------------------------------
   | parent_ = @root
-  | turn_ = 1  // P1 makes 2nd move
+  | next_turn_ = 1  // P1 makes 2nd move
   | move_ = Move::Flag(0, 0)
   | prior_ = 0.02 // predicted from @root
   | wins_ = not yet set
   | value_ = not yet set
   | children_ = []
   | NextTurn() = 1
-  | MoveTurn() = 0  // parent_->turn_
+  | MoveTurn() = 0  // parent_->next_turn_
   +------------------------------------
 
   */
@@ -202,9 +207,9 @@ class Node {
   Node* parent_;
   // The player whose turn it is to make the next move, i.e. the move
   // *after* the move stored in this node was made.
-  // Use MoveTurn() (i.e. parent_->turn_) to get the player whose turn
+  // Use MoveTurn() (i.e. parent_->next_turn_) to get the player whose turn
   // it is to make this->move_.
-  int turn_;
+  int next_turn_;
   // The move to be made.
   Move move_;
   // The prior move probability of this node (relative to its siblings),
@@ -298,9 +303,11 @@ class NeuralMCTS {
 
   // SuggestMove returns the best move suggestion that the NeuralMCTS algorithm
   // comes up with in think_time_millis milliseconds.
+  // Callers can decide which node to pick. Usually they'll want node->MostVisitedChild().
   absl::StatusOr<std::unique_ptr<Node>> SuggestMove(int player,
                                                     const Board& board,
-                                                    int think_time_millis);
+                                                    int64_t think_time_millis,
+                                                    int64_t max_iterations);
 
   int PredictionsCount() const { return predictions_count_; }
   int RandomPlayoutsCount() const { return random_playouts_count_; }

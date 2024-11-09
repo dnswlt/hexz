@@ -110,9 +110,9 @@ func (m *GameMaster) processControlEventRegister(e ControlEventRegister) {
 				m.cpuPlayer = NewLocalCPUPlayer(playerIdCPU, m.s.config.CpuThinkTime)
 			} else {
 				var err error
-				m.cpuPlayer, err = NewRemoteCPUPlayer(playerIdCPU, m.s.config.RemoteCPUPlayerURL, m.s.config.CpuThinkTime)
+				m.cpuPlayer, err = NewRemoteCPUPlayer(playerIdCPU, m.s.config.RemoteCPUPlayerURL, m.s.config.CpuThinkTime, 0)
 				if err != nil {
-					// TODO: refactor this, we should just die here.
+					// TODO: refactor this, we should not just die here.
 					errorLog.Fatal("cannot connect to remove CPU player", err)
 				}
 			}

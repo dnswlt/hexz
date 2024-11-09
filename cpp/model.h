@@ -89,7 +89,12 @@ class TorchModel : public Model {
     module_.eval();
     module_.to(device_);
   }
-
+  // TorchModel is neither copyable nor moveable.
+  TorchModel(const TorchModel&) = delete;
+  TorchModel& operator=(const TorchModel&) = delete;
+  TorchModel(TorchModel&&) = delete;
+  TorchModel& operator=(TorchModel&&) = delete;
+  
   void UpdateModel(hexzpb::ModelKey key, torch::jit::Module&& model) override;
 
   Prediction Predict(torch::Tensor board, torch::Tensor action_mask) override;
@@ -168,8 +173,12 @@ class FiberTorchModel : public Model {
   FiberTorchModel(hexzpb::ModelKey key, torch::jit::Module&& module,
                   torch::DeviceType device, int batch_size,
                   bool support_suspension = false);
+  // FiberTorchModel is neither moveable nor copyable.
   FiberTorchModel(const FiberTorchModel&) = delete;
   FiberTorchModel& operator=(const FiberTorchModel&) = delete;
+  FiberTorchModel(FiberTorchModel&&) = delete;
+  FiberTorchModel& operator=(FiberTorchModel&&) = delete;
+  
   void UpdateModel(hexzpb::ModelKey key, torch::jit::Module&& model) override;
 
   Prediction Predict(torch::Tensor board, torch::Tensor action_mask) override;
