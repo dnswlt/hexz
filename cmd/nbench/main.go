@@ -95,7 +95,7 @@ func main() {
 		*p2ThinkTime = 0
 	}
 	if *player1URL == "" {
-		p1 = hexz.NewLocalCPUPlayer(hexz.PlayerId("P1"), *p1ThinkTime)
+		p1 = hexz.NewLocalCPUPlayer(hexz.PlayerId("P1"), *p1ThinkTime, *p1MaxIterations)
 	} else {
 		p1, err = hexz.NewRemoteCPUPlayer(hexz.PlayerId("P1"), *player1URL, *p1ThinkTime, *p1MaxIterations)
 		if err != nil {
@@ -104,7 +104,7 @@ func main() {
 		}
 	}
 	if *player2URL == "" {
-		p2 = hexz.NewLocalCPUPlayer(hexz.PlayerId("P2"), *p2ThinkTime)
+		p2 = hexz.NewLocalCPUPlayer(hexz.PlayerId("P2"), *p2ThinkTime, *p2MaxIterations)
 	} else {
 		p2, err = hexz.NewRemoteCPUPlayer(hexz.PlayerId("P2"), *player2URL, *p2ThinkTime, *p2MaxIterations)
 		if err != nil {

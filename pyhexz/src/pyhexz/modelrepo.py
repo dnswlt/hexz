@@ -128,7 +128,7 @@ class LocalModelRepository:
         return
 
     def h5_size(self, model_name):
-        """Returns the number of examples store in HDF5 for the given model."""
+        """Returns the number of examples stored in HDF5 for the given model."""
         h5_file = os.path.join(self._model_base(model_name), "h5", "examples.h5")
         if not os.path.exists(h5_file):
             return 0

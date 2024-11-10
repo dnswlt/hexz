@@ -107,7 +107,7 @@ func (m *GameMaster) processControlEventRegister(e ControlEventRegister) {
 		m.players[e.player.Id] = pInfo{playerNum, e.player}
 		if m.game.singlePlayer {
 			if m.s.config.RemoteCPUPlayerURL == "" {
-				m.cpuPlayer = NewLocalCPUPlayer(playerIdCPU, m.s.config.CpuThinkTime)
+				m.cpuPlayer = NewLocalCPUPlayer(playerIdCPU, m.s.config.CpuThinkTime, 0)
 			} else {
 				var err error
 				m.cpuPlayer, err = NewRemoteCPUPlayer(playerIdCPU, m.s.config.RemoteCPUPlayerURL, m.s.config.CpuThinkTime, 0)

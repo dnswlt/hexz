@@ -18,17 +18,19 @@ type CPUPlayer interface {
 type LocalCPUPlayer struct {
 	playerId PlayerId
 	// Channel over which moves are sent
-	mcts         *MCTS
-	thinkTime    time.Duration // Current think time (auto-adjusted based on confidence)
-	maxThinkTime time.Duration // Maximum think time. Upper bound, independent of the context's deadline.
+	mcts          *MCTS
+	thinkTime     time.Duration // Current think time (auto-adjusted based on confidence)
+	maxThinkTime  time.Duration // Maximum think time. Upper bound, independent of the context's deadline.
+	maxIterations int           // Maximum number of MCTS iterations per move. <= 0 means unbounded.
 }
 
-func NewLocalCPUPlayer(playerId PlayerId, maxThinkTime time.Duration) *LocalCPUPlayer {
+func NewLocalCPUPlayer(playerId PlayerId, maxThinkTime time.Duration, maxIterations int) *LocalCPUPlayer {
 	return &LocalCPUPlayer{
-		playerId:     playerId,
-		mcts:         NewMCTS(),
-		thinkTime:    maxThinkTime,
-		maxThinkTime: maxThinkTime,
+		playerId:      playerId,
+		mcts:          NewMCTS(),
+		thinkTime:     maxThinkTime,
+		maxThinkTime:  maxThinkTime,
+		maxIterations: maxIterations,
 	}
 }
 
@@ -57,7 +59,7 @@ func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz)
 	if t > cpu.maxThinkTime {
 		t = cpu.maxThinkTime
 	}
-	mv, stats := cpu.mcts.SuggestMove(ge, t, 0)
+	mv, stats := cpu.mcts.SuggestMove(ge, t, cpu.maxIterations)
 	if minQ := stats.MinQ(); minQ >= 0.98 || minQ <= 0.02 {
 		// Speed up if we think we (almost) won or lost, but stop at 0.1% of maxThinkTime.
 		if t > cpu.maxThinkTime/500 {
