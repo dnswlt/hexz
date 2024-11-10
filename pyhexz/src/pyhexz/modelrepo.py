@@ -127,6 +127,14 @@ class LocalModelRepository:
             q.put(h)
         return
 
+    def h5_size(self, model_name):
+        """Returns the number of examples store in HDF5 for the given model."""
+        h5_file = os.path.join(self._model_base(model_name), "h5", "examples.h5")
+        if not os.path.exists(h5_file):
+            return 0
+        with self.acquire_h5(model_name) as h:
+            return len(h["boards"])
+
     def close_all(self):
         """Closes all open file / HDF5 handles.
 

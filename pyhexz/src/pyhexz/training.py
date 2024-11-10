@@ -211,15 +211,11 @@ class TrainingState:
 
     A training server should maintain a single instance of TrainingState.
     Instances are thread-safe. All methods can be called from multiple threads.
-
-    Attributes:
-        training_examples (int): Number of examples to collect before starting a
-            new training run.
     """
 
     def __init__(
         self,
-        model_repo: ModelRepository,
+        model_repo: LocalModelRepository,
         model_name: str,
         logger: logging.Logger,
         config: TrainingConfig,
@@ -230,7 +226,15 @@ class TrainingState:
         self.logger = logger
         self.config = config
         self.latest_checkpoint = model_repo.get_latest_checkpoint(model_name)
-        self._stats = TrainingStats()
+        # Get number of examples from HDF5, so we can restart the training
+        # server at any point without resetting the next training trigger.
+        h5_examples = model_repo.h5_size(model_name)
+        self._stats = TrainingStats(
+            examples=h5_examples,
+            last_training_ex_count=(
+                h5_examples - h5_examples % config.training_trigger_threshold
+            ),
+        )
         self._latest_request: hexz_pb2.AddTrainingExamplesRequest = None
         self._executor = ThreadPoolExecutor(max_workers=8)
         self.is_training: bool = False
