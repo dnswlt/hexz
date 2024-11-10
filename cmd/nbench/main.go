@@ -26,16 +26,17 @@ var (
 	svgMoveScoreKind = flag.String("score-kind", "FINAL", "Kind of move scores to add to the SVG output.")
 	svgOutputFile    = flag.String("svg-file", "/tmp/nbench.html", "File to which SVG output is written.")
 	skipMoves        = flag.Int("skip-moves", 0, "Number of initial moves to make randomly before using the suggestions")
+	numGames         = flag.Int("num-games", 1, "Number of games to play")
 )
 
-func playGame(p1, p2 hexz.CPUPlayer) error {
+func playGame(p1, p2 hexz.CPUPlayer) (winner int, err error) {
 	ge := hexz.NewGameEngineFlagz()
 	cpuPlayers := []hexz.CPUPlayer{p1, p2}
 	scoreKind, found := pb.SuggestMoveStats_ScoreKind_value[*svgMoveScoreKind]
 	if !found {
-		return fmt.Errorf("invalid score kind: %s", *svgMoveScoreKind)
+		return 0, fmt.Errorf("invalid score kind: %s", *svgMoveScoreKind)
 	}
-	nMoves := 0
+	numMoves := 0
 	// Skip moves, if requested. The idea is that the neural network should learn
 	// good end game moves first, because in some sense the feedback obtained from
 	// the final outcome of the game is more closely connected to the final moves
@@ -44,12 +45,12 @@ func playGame(p1, p2 hexz.CPUPlayer) error {
 	for i := 0; i < *skipMoves; i++ {
 		mv, err := ge.RandomMove()
 		if err != nil {
-			return fmt.Errorf("get random move: %w", err)
+			return 0, fmt.Errorf("get random move: %w", err)
 		}
 		if err := ge.MakeMoveError(mv); err != nil {
-			return fmt.Errorf("make random move: %w", err)
+			return 0, fmt.Errorf("make random move: %w", err)
 		}
-		nMoves++
+		numMoves++
 	}
 	boards := []*hexz.Board{}
 	stats := []*pb.SuggestMoveStats{}
@@ -60,7 +61,7 @@ func playGame(p1, p2 hexz.CPUPlayer) error {
 		mv, mvStats, err := cpuPlayers[turn-1].SuggestMove(context.Background(), ge)
 		duration := time.Since(started)
 		if err != nil {
-			return fmt.Errorf("remote SuggestMove failed: %v", err)
+			return 0, fmt.Errorf("remote SuggestMove failed: %v", err)
 		}
 		fmt.Printf("P%d suggested move %v in %dms\n", turn, mv.String(), duration.Milliseconds())
 		boards = append(boards, ge.B.Copy())
@@ -71,13 +72,13 @@ func playGame(p1, p2 hexz.CPUPlayer) error {
 			hexz.ExportSVGWithStats(*svgOutputFile, boards, moves, stats, pb.SuggestMoveStats_ScoreKind(scoreKind), nil)
 		}
 		if err := ge.MakeMoveError(*mv); err != nil {
-			return fmt.Errorf("make move for P%d: %s %w", turn, mv.String(), err)
+			return 0, fmt.Errorf("make move for P%d: %s %w", turn, mv.String(), err)
 		}
-		nMoves++
-		log.Printf("Score after %d moves: %v", nMoves, ge.B.Score)
+		numMoves++
+		log.Printf("Score after %d moves: %v", numMoves, ge.B.Score)
 	}
-	fmt.Printf("Game ended after %d moves. Winner: %d. Final result: %v\n", nMoves, ge.Winner(), ge.B.Score)
-	return nil
+	fmt.Printf("Game ended after %d moves. Winner: %d. Final result: %v\n", numMoves, ge.Winner(), ge.B.Score)
+	return ge.Winner(), nil
 }
 
 func main() {
@@ -112,9 +113,16 @@ func main() {
 			os.Exit(1)
 		}
 	}
-
-	if err := playGame(p1, p2); err != nil {
-		fmt.Printf("playing game failed: %v\n", err)
-		os.Exit(1)
+	var wins [2]int
+	for i := 0; i < *numGames; i++ {
+		winner, err := playGame(p1, p2)
+		if err != nil {
+			fmt.Printf("playing game failed: %v\n", err)
+			os.Exit(1)
+		}
+		if winner > 0 {
+			wins[winner-1]++
+		}
 	}
+	fmt.Printf("Final result after %d games: %d-%d", *numGames, wins[0], wins[1])
 }
