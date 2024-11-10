@@ -721,5 +721,8 @@ func (s *StatelessServer) Serve() {
 
 	hlog.Infof("Stateless server listening on %s", addr)
 
-	hlog.Fatalf("%s", srv.ListenAndServe())
+	if s.config.TlsCertChain != "" && s.config.TlsPrivKey != "" {
+		hlog.Fatalf("%v", srv.ListenAndServeTLS(s.config.TlsCertChain, s.config.TlsPrivKey))
+	}
+	hlog.Fatalf("%v", srv.ListenAndServe())
 }
