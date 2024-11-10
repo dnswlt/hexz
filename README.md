@@ -42,7 +42,7 @@ To train the ML model and use it as a CPU player, you need to build and run the 
 training server. See the respective [cpp/README.md](./cpp/README.md)
 and [pyhexz/README.md](./pyhexz/README.md) files for instructions.
 
-There are also several visualisation tools (HTML+SVG export) to understand better what the CPU players
+There are also several visualisation tools (HTML+SVG export) to better understand what the CPU players
 and ML models are doing.
 
 ## Building and running

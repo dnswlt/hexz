@@ -60,7 +60,7 @@ func main() {
 		}
 		mcts := hexz.NewMCTS()
 		maxThinkTime := time.Duration(a.MaxThinkTimeMillis) * time.Millisecond
-		mv, stats := mcts.SuggestMove(spge, maxThinkTime)
+		mv, stats := mcts.SuggestMove(spge, maxThinkTime, 0)
 		var memstats runtime.MemStats
 		runtime.ReadMemStats(&memstats)
 		heapAllocMiB := float64(memstats.HeapAlloc) / (1024 * 1024)
