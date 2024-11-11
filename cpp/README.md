@@ -257,3 +257,5 @@ env HEAPPROFILE=/tmp/worker.hprof LD_PRELOAD=$HOME/tmp/gperftools-2.13/.libs/lib
   <https://arxiv.org/pdf/1902.10565.pdf>
 * OpenSpiel: DeepMind's open source alpha zero implementation:
   <https://github.com/google-deepmind/open_spiel/blob/master/docs/alpha_zero.md>
+* muZero: _Mastering Atari, Go, Chess and Shogi by Planning with a Learned Model_
+  <https://arxiv.org/pdf/1911.08265>

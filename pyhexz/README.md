@@ -74,3 +74,63 @@ PORT=8080 && docker run -p 8080:${PORT} -e PORT=${PORT} \
 
 If you wonder where the Python game engine code is:
 it was removed in <https://github.com/dnswlt/hexz/commit/cdc83f6e098d3ab7dfc99439b824b8857ac70abe>.
+
+## Training
+
+It is surprisingly hard to find detailed information on how AlphaZero's training actually worked
+in the [paper](https://arxiv.org/pdf/1712.01815.pdf):
+
+We know that
+
+* 700'000 "training steps" were run, using mini-batches of size 4096.
+* 800 MCTS simulations were executed for each move.
+* The learning rate was decreased over time: 0.2, 0.02, 0.002, 0.0002.
+* 44 million training games were played for chess.
+* During training, moves were selected proportional to their MCTS visit count.
+
+But how did training actually work?
+
+* What does a training step in the "700'000 training steps" mentioned in
+  the AlphaZero paper actually involve?
+* After how many new samples was a training step triggered?
+* How many epochs were used per training step?
+
+DeepMind's Open Spiel has an
+[implementation](https://github.com/google-deepmind/open_spiel/blob/master/open_spiel/python/algorithms/alpha_zero/alpha_zero.py#L425)
+of AlphaZero that provides the following answers:
+
+* Each training step (call to `learn`) uses a single epoch; in other words,
+  the typical DL "epoch loop" is not used for training at all.
+* Each training step selects examples from a `replay_buffer` that contains the latest samples from
+  self-play games. Its size (`replay_buffer_size`) can be configured and defaults to 2^16, i.e. 65536.
+* Once the replay buffer has `replay_buffer_size/replay_buffer_reuse` (default: `65536/3 = 21845`)
+  new individual samples (not whole games! each game has N samples, typically one per move),
+  a new training step is performed.
+* N batches (of default size 1024) of samples are sampled
+  *with replacement* from the whole buffer, where N is `replay_buffer_size/train_batch_size`;
+  so on average, each sample in the buffer is used once, but due to the replacement some may
+  be chosen more often and others not at all.
+* The model gets checkpointed after each training step. Training is always done on the
+  current model, i.e. training does not start from a fresh model each time.
+
+I don't think that the default values are chosen specifically to be optimal for learning
+chess. Open Spiel supports a variety of simpler games as well.
+However, the structure of training is very similar to ours! We should probably drop the epoch loop,
+and maybe instead train more frequently, i.e. reduce the trigger threshold.
+As of Nov 2024, we train for 7 epochs once we have 100'000 new samples, sampling (without replacement)
+batches of size 4096 from a window of the latest 1'000'000 samples.
+
+In DeepMind's terms, we set `replay_buffer_reuse = 10` and `replay_buffer_size = 1_000_000`.
+Due to the 7 epochs, our reuse factor per sample is actually 70. That's probably too much.
+
+If we assume similar parameters in the actual AlphaZero implementation:
+
+* 700'000 training steps have been run for 44'000'000 games.
+* Assume 40 moves per game, so 1'760'000'000 samples.
+* 2514 new samples per training step?? That's roughly the size of a mini-batch!
+  So their average number of moves per game is probably 65.16: 700'000 * 4096 / 65.16 ~= 44'000'000.
+
+Still it does not give us a clue about the training window used for each training step.
+Each 4096 batch must trigger a training step: otherwise you couldn't train 700'000 steps
+on the 44m games. But those mini-batches must not contain sequential samples from a single game.
+
