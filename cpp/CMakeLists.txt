@@ -136,3 +136,6 @@ gtest_discover_tests(cpuserver_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 #
 add_executable(base_bench base_bench.cc)
 target_link_libraries(base_bench base benchmark::benchmark absl::random_random)
+
+add_executable(perfm_bench perfm_bench.cc)
+target_link_libraries(perfm_bench base benchmark::benchmark)

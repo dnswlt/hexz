@@ -456,6 +456,7 @@ bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
   n->CreateChildren(moves);
   n->ShuffleChildren(rng_);  // Avoid selection bias.
   auto pred = model_.Predict(board.Tensor(n->NextTurn()), n->ActionMask());
+  APMPredictions().Increment(1);
   predictions_count_++;
   n->SetMoveProbs(pred.move_probs);
   if (add_noise && n == &root) {

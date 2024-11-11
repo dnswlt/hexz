@@ -86,14 +86,20 @@ void APMMon(BackgroundThreadSignal& sig, float period) {
   std::unique_lock<std::mutex> lk(sig.mut);
   while (!sig.cv.wait_for(lk, std::chrono::duration<float>(period),
                           [&sig] { return sig.stop; })) {
-    double examples_rate_1m = hexz::APMExamples().Rate(60);
-    double games_rate_1m = hexz::APMGames().Rate(60);
+    double predictions_rate_5m = hexz::APMPredictions().Rate(5 * 60);
+    double examples_rate_5m = hexz::APMExamples().Rate(5 * 60);
+    double games_rate_5m = hexz::APMGames().Rate(5 * 60);
+    double predictions_rate_10s = hexz::APMPredictions().Rate(10);
     double examples_rate_10s = hexz::APMExamples().Rate(10);
     double games_rate_10s = hexz::APMGames().Rate(10);
-    ABSL_LOG(INFO) << "APM(1m): examples/s: " << examples_rate_1m
-                   << " games/s: " << games_rate_1m
-                   << " -- APM(10s): examples/s: " << examples_rate_10s
+    ABSL_LOG(INFO) << "APM(10s):"  //
+                   << " predictions/s: " << predictions_rate_10s
+                   << " examples/s: " << examples_rate_10s
                    << " games/s: " << games_rate_10s;
+    ABSL_LOG(INFO) << "APM(5m):"  //
+                   << " predictions/s: " << predictions_rate_5m
+                   << " examples/s: " << examples_rate_5m
+                   << " games/s: " << games_rate_5m;
   }
 }
 

@@ -1,7 +1,5 @@
 #pragma once
 
-#include <absl/base/no_destructor.h>
-
 #include <cassert>
 #include <chrono>
 #include <mutex>
@@ -123,6 +121,7 @@ class APM {
   std::string name_;
 };
 
+APM& APMPredictions();
 // Used by workers and MCTS code to count the throughput w.r.t. examples
 // generated.
 APM& APMExamples();

@@ -1,5 +1,6 @@
 #include "perfm.h"
 
+#include <absl/base/no_destructor.h>
 #include <inttypes.h>
 
 #include <algorithm>
@@ -83,16 +84,14 @@ double APM::Rate(int window_seconds) {
 namespace {
 
 // Eager initialization, so time starts counting from program startup.
+absl::NoDestructor<APM> apm_predictions("/examples");
 absl::NoDestructor<APM> apm_examples("/examples");
 absl::NoDestructor<APM> apm_games("/games");
 
-} // namespace
+}  // namespace
 
-APM& APMExamples() {
-  return *apm_examples;
-}
-APM& APMGames() {
-  return *apm_games;
-}
+APM& APMPredictions() { return *apm_predictions; }
+APM& APMExamples() { return *apm_examples; }
+APM& APMGames() { return *apm_games; }
 
 }  // namespace hexz
