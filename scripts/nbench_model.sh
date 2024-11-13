@@ -21,7 +21,7 @@ sleep 2  # let cpuserver become available
 popd > /dev/null
 
 echo go run ./cmd/nbench -p2-addr $server_addr -p1-max-iter $p1_iterations -p2-max-iter $p2_iterations -svg-file ./nbench.html
-go run ./cmd/nbench -p2-addr $server_addr -p1-max-iter $p1_iterations -p2-max-iter $p2_iterations -svg-file ./nbench.html
+go run ./cmd/nbench -num-games 3 -p2-addr $server_addr -p1-max-iter $p1_iterations -p2-max-iter $p2_iterations -svg-file ./nbench.html
 
 echo "Terminating cpuserver process"
 kill $cpu_pid
