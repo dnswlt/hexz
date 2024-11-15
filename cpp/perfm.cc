@@ -1,6 +1,5 @@
 #include "perfm.h"
 
-#include <absl/base/no_destructor.h>
 #include <inttypes.h>
 
 #include <algorithm>
@@ -49,18 +48,38 @@ void Perfm::PrintStats() {
   }
 }
 
+int64_t APM::AlignCounts(int64_t d) {
+  if (d >= counts_.size()) {
+    // Realign s.t. the latest points [d-max_window_seconds..d] are at the
+    // front.
+    size_t offset = d - max_window_seconds_;
+    int i = 0;
+    for (int j = offset; j < counts_.size(); j++) {
+      counts_[i++] = counts_[j];
+    }
+    for (; i < counts_.size(); i++) {
+      counts_[i] = 0;
+    }
+    t_start_ = t_start_ + std::chrono::seconds(offset);
+    return d - offset;
+  }
+  return d;
+}
+
 void APM::Increment(int n) {
   int64_t d = std::chrono::duration_cast<std::chrono::seconds>(
                   std::chrono::high_resolution_clock::now() - t_start_)
                   .count();
   std::scoped_lock<std::mutex> lk(mut_);
-  if (d >= counts_.size()) {
-    counts_.resize(d + 1, 0);
-  }
+  d = AlignCounts(d);
   counts_[d] += n;
 }
 
 double APM::Rate(int window_seconds) {
+  if (counts_.empty()) {
+    // No data collected yet.
+    return 0;
+  }
   int64_t us = std::chrono::duration_cast<std::chrono::microseconds>(
                    std::chrono::high_resolution_clock::now() - t_start_)
                    .count();
@@ -68,30 +87,12 @@ double APM::Rate(int window_seconds) {
   int64_t rem = us % 1'000'000;
 
   std::scoped_lock<std::mutex> lk(mut_);
-  if (quot >= counts_.size()) {
-    counts_.resize(quot + 1, 0);
-  }
-  size_t w = std::min(static_cast<size_t>(window_seconds + 1), counts_.size());
-  if (w == 0) {
-    return 0;
-  }
+  quot = AlignCounts(quot);
+  int64_t w = std::min(static_cast<int64_t>(window_seconds), quot) + 1;
   int64_t sum = std::accumulate(counts_.end() - w, counts_.end(), 0);
   double t =
       static_cast<double>(w) - static_cast<double>(1'000'000 - rem) / 1e6;
   return static_cast<double>(sum) / t;
 }
-
-namespace {
-
-// Eager initialization, so time starts counting from program startup.
-absl::NoDestructor<APM> apm_predictions("/examples");
-absl::NoDestructor<APM> apm_examples("/examples");
-absl::NoDestructor<APM> apm_games("/games");
-
-}  // namespace
-
-APM& APMPredictions() { return *apm_predictions; }
-APM& APMExamples() { return *apm_examples; }
-APM& APMGames() { return *apm_games; }
 
 }  // namespace hexz

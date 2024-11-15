@@ -74,6 +74,17 @@ make install
 popd
 ```
 
+#### Protocol buffers
+
+gRPC comes with the `protoc` and `grpc_cpp_plugin` binaries that are needed to generate
+the C++ protocol buffer source files. After installing gRPC, run
+
+```bash
+scripts/run_protoc.sh cpp
+```
+
+to generate the C++ source files.
+
 #### Boost fibers
 
 ```bash

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <absl/base/no_destructor.h>
+
 #include <cassert>
 #include <chrono>
 #include <mutex>
@@ -100,8 +102,12 @@ class Perfm {
 // specific code block take to run".
 class APM {
  public:
-  explicit APM(std::string name)
+  // Reserve twice the capacity needed to retain max_window_seconds.
+  // We maintain a sliding window that moves in max_window_seconds steps.
+  explicit APM(std::string name, int64_t max_window_seconds)
       : name_(std::move(name)),
+        max_window_seconds_(max_window_seconds),
+        counts_(max_window_seconds * 2, 0),
         t_start_(std::chrono::high_resolution_clock::now()) {}
 
   // Increment the count of processed work items for the current second by n.
@@ -115,17 +121,36 @@ class APM {
   double Rate(int window_seconds);
 
  private:
-  std::vector<int64_t> counts_;
+  // Realign counts_ such that d (an offset in seconds from the t_start_)
+  // is a valid index. Callers MUST use the returned value as the new d,
+  // since this method shifts data in counts_ and adjusts t_start_ accordingly.
+  //
+  // Must only be called while holding a lock on mut_.
+  int64_t AlignCounts(int64_t d);
+
+  const std::string name_;
+  const int64_t max_window_seconds_;
   mutable std::mutex mut_;
+  std::vector<int64_t> counts_;
   std::chrono::high_resolution_clock::time_point t_start_;
-  std::string name_;
 };
 
-APM& APMPredictions();
+// Used by workers and MCTS code to count the throughput w.r.t. predictions
+// generated.
+inline APM& APMPredictions() noexcept {
+  static absl::NoDestructor<APM> apm("/predictions");
+  return *apm;
+}
 // Used by workers and MCTS code to count the throughput w.r.t. examples
 // generated.
-APM& APMExamples();
+inline APM& APMExamples() noexcept {
+  static absl::NoDestructor<APM> apm("/examples");
+  return *apm;
+}
 // Used by workers and MCTS code to count the throughput w.r.t. games generated.
-APM& APMGames();
+inline APM& APMGames() noexcept {
+  static absl::NoDestructor<APM> apm("/games");
+  return *apm;
+}
 
 }  // namespace hexz

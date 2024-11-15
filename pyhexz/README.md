@@ -24,6 +24,15 @@ depending on your conda setup.)
 
 Just run `pytest` without any arguments. The `pytest.ini` file tells pytest where to find stuff.
 
+### Protocol buffers
+
+Before running the training server, you need to generate the protocol buffer sources
+for Python. Run the following command in the project root folder:
+
+```bash
+scripts/run_protoc.sh py
+```
+
 ### Flask web server
 
 The Flask app runs behind a `gunicorn` WSGI web server, both locally and in a Docker container.

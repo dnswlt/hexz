@@ -23,17 +23,15 @@ As part of an ongoing experiment to obtain stronger CPU players, there are sever
 to train an AlphaZero-style CPU player:
 
 * A PyTorch model that is used in an AlphaZero-style MCTS guided by a neural network with a policy and a value
-  head: [pyhexz/src/pyhexz/hexz.py](./pyhexz/src/pyhexz/hexz.py) (yes, it should be renamed to `model.py`).
+  head: [pyhexz/src/pyhexz/model.py](./pyhexz/src/pyhexz/model.py).
 
 * A C++ implementation of workers that generate training examples via self-play using the PyTorch model
   in a neural MCTS algorithm: [cpp/worker_main.cc](./cpp/worker_main.cc).
   The workers send the examples to a training server, from which they also obtain the latest model updates.
 
-  * There is also a Python implementation of the workers, but it is currently not maintained.
-
 * A Python/Flask training server that accepts training examples from the workers and continuously
   trains the model in minibatches using the provided training examples:
-  [pyhexz/src/pyhexz/server.py](./pyhexz/src/pyhexz/server.py)
+  [pyhexz/src/pyhexz/training_server.py](./pyhexz/src/pyhexz/training_server.py)
 
 * An evaluation tool `nbench` ([cmd/nbench/main.go](./cmd/nbench/main.go)) that lets different CPU
   players play against each other and evaluates which one is stronger.
@@ -84,6 +82,16 @@ Redis does not require any configuration. Just install and run it. E.g., on maco
 The PostgreSQL setup is of course a bit more involved. See [sql/schema.sql](./sql/schema.sql) for
 the schema. TODO: create Dockerfile to simplify this.
 
+### WASM
+
+CPU players typically run in the user's browser, not on the server.
+
+To build the WASM module, run:
+
+```bash
+GOOS=js GOARCH=wasm go build -o ./resources/wasm/hexz.wasm cmd/wasm/main.go && gzip -f ./resources/wasm/hexz.wasm
+```
+
 ### Docker and Cloud Run
 
 Build and deploy Docker image:
@@ -106,25 +114,20 @@ gcloud run deploy hexz --image=europe-west4-docker.pkg.dev/hexz-cloud-run/hexz/h
   gcloud run services update-traffic hexz --to-latest
 ```
 
-### WASM
-
-CPU players typically run in the user's browser, not on the server.
-
-To build the WASM module, run:
-
-```bash
-GOOS=js GOARCH=wasm go build -o ./resources/wasm/hexz.wasm cmd/wasm/main.go && gzip -f ./resources/wasm/hexz.wasm
-```
-
 ### Protocol Buffers
 
-The generated sources of all `.proto` files are **no longer** checked in to
-this repository, so users need to regenerate them.
+The generated sources of all `.proto` files are **only** checked in to
+this repository for the Go implementation. So if you only want to play,
+you don't need to do anything w.r.t. protocol buffers.
 
-Run the following command in the root directory of this repository:
+(For C++ and Python you need to generate the source files.
+See the relevant READMEs for instructions.)
+
+During development of the Go implementation, the following command
+regenerates the protobuf sources:
 
 ```bash
-bash run_protoc.sh
+bash scripts/run_protoc.sh go
 ```
 
 If there are errors generating the protobuf sources for Go, you might need to install `protoc-gen-go`:
@@ -132,7 +135,7 @@ If there are errors generating the protobuf sources for Go, you might need to in
 ```bash
 go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-env PATH=$PATH:$HOME/go/bin bash run_protoc.sh
+env PATH=$PATH:$HOME/go/bin bash scripts/run_protoc.sh
 ```
 
 ### Cloud Logging

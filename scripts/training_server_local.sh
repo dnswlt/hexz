@@ -1,13 +1,25 @@
-test "$CONDA_DEFAULT_ENV" = "pyhexz" || { echo "Must be in the 'pyhexz' conda env"; exit 1; }
+if [[ -z "$CONDA_DEFAULT_ENV" ]]; then
+    if [[ -e "$HOME/miniconda3/bin/activate" ]]; then
+        . $HOME/miniconda3/bin/activate pyhexz
+    else
+        echo "You must be in the 'pyhexz' conda env"
+        exit 1
+    fi
+fi
+
+cd $(dirname $0)/../pyhexz/src
 
 env \
 HEXZ_MODEL_BLOCKS=10 \
 HEXZ_MODEL_TYPE=resnet \
-HEXZ_BATCH_SIZE=4096 \
-HEXZ_TRAINING_TRIGGER_THRESHOLD=100000 \
-HEXZ_MODEL_NAME=resus \
+HEXZ_BATCH_SIZE=1024 \
+HEXZ_TRAINING_TRIGGER_THRESHOLD=50000 \
+HEXZ_TRAINING_EXAMPLES_WINDOW_SIZE=150000 \
+HEXZ_MODEL_NAME=res10 \
 HEXZ_MODEL_REPO_BASE_DIR=$HOME/tmp/hexz-models \
-HEXZ_NUM_EPOCHS=7 \
+HEXZ_NUM_EPOCHS=1 \
+HEXZ_LEARNING_RATE=0.02 \
+HEXZ_ADAM_WEIGHT_DECAY=1e-4 \
 HEXZ_DEVICE=cuda \
 HEXZ_SHUFFLE=true \
 gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.training_server:create_app()'
