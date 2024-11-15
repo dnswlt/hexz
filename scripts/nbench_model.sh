@@ -7,7 +7,7 @@ p2_iterations=${2:-1600}
 
 server_addr=localhost:50071
 model_base_dir="$HOME/tmp/hexz-models/models/flagz"
-model_name=resus
+model_name=res10
 latest=$(ls "$model_base_dir/$model_name/checkpoints" | awk -F'/' '{print $NF}' | sort -nr | head -n 1)
 scriptmodule="$model_base_dir/$model_name/checkpoints/$latest/scriptmodule.pt"
 

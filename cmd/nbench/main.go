@@ -124,5 +124,5 @@ func main() {
 			wins[winner-1]++
 		}
 	}
-	fmt.Printf("Final result after %d games: %d-%d", *numGames, wins[0], wins[1])
+	fmt.Printf("Final result after %d games: %d-%d\n", *numGames, wins[0], wins[1])
 }
