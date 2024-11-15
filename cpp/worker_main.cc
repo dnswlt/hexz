@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
+#include <cstdlib>
 #include <ctime>
 #include <fstream>
 #include <iostream>
@@ -28,6 +29,7 @@
 #include "batch.h"
 #include "board.h"
 #include "grpc_client.h"
+#include "health.h"
 #include "hexz.pb.h"
 #include "mcts.h"
 #include "perfm.h"
@@ -54,6 +56,8 @@ ABSL_FLAG(bool, dry_run, false,
           "if true, the worker will not send examples to the training server");
 ABSL_FLAG(bool, pin_threads, false,
           "if true, worker threads will be pinned to CPU cores.");
+ABSL_FLAG(bool, enable_health_service, false,
+          "if true, the gRPC Health service will run on $PORT.");
 
 namespace {
 
@@ -135,9 +139,33 @@ void UpdateConfigFromFlags(hexz::Config& config) {
   if (bool b = absl::GetFlag(FLAGS_dry_run); b) {
     config.dry_run = b;
   }
+  if (bool b = absl::GetFlag(FLAGS_enable_health_service); b) {
+    config.enable_health_service = b;
+  }
   if (bool b = absl::GetFlag(FLAGS_pin_threads); b) {
     config.pin_threads = b;
   }
+}
+
+void StartHealthServiceThread() {
+  std::thread([]() {
+    grpc::ServerBuilder builder;
+    const char* port = std::getenv("PORT");
+    std::string addr =
+        port == nullptr ? "[::]:50051" : "[::]:" + std::string(port);
+    builder.AddListeningPort(addr, grpc::InsecureServerCredentials());
+    hexz::HealthServiceImpl service;
+    builder.RegisterService(&service);
+    std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
+    if (!server) {
+      ABSL_LOG(ERROR) << "Failed to start Health service on " << addr;
+      return;
+    }
+    ABSL_LOG(INFO) << "Health service listening on " << addr;
+    // This call blocks forever, since no other thread has a handle
+    // for the server to call Shutdown.
+    server->Wait();
+  }).detach();
 }
 
 }  // namespace
@@ -200,6 +228,11 @@ int main(int argc, char* argv[]) {
     }
   };
   apmmon = std::thread{APMMon, std::ref(apmmon_sig), /*period=*/5.0};
+
+  // Health monitoring
+  if (config->enable_health_service) {
+    StartHealthServiceThread();
+  }
 
   // Execute
   std::unique_ptr<hexz::TrainingServiceClient> client;

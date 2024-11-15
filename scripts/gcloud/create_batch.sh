@@ -21,7 +21,7 @@ gcloud beta batch jobs submit hexz-worker-batch-$(date +"%Y%m%d%H%M") --location
               "variables": {
                 "HEXZ_TRAINING_SERVER_ADDR": "hexz.hopto.org:50051",
                 "HEXZ_MAX_RUNTIME_SECONDS": "120",
-                "HEXZ_DEVICE": "cpu",
+                "HEXZ_DEVICE": "cuda",
                 "HEXZ_WORKER_THREADS": "4",
                 "HEXZ_FIBERS_PER_THREAD": "1",
                 "HEXZ_PREDICTION_BATCH_SIZE": "1",
@@ -44,9 +44,16 @@ gcloud beta batch jobs submit hexz-worker-batch-$(date +"%Y%m%d%H%M") --location
   "allocationPolicy": {
     "instances": [
       {
+        "installGpuDrivers": true,
         "policy": {
           "provisioningModel": "STANDARD",
-          "machineType": "n1-standard-4"
+          "machineType": "n1-standard-4",
+          "accelerators": [
+              {
+              "type": "nvidia-tesla-t4",
+              "count": 1
+              }
+          ]
         }
       }
     ]

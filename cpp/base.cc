@@ -48,6 +48,7 @@ std::string Config::String() const {
                               startup_delay_seconds),
               absl::StrFormat("pin_threads: %d", pin_threads),
               absl::StrFormat("debug_memory_usage: %d", debug_memory_usage),
+              absl::StrFormat("enable_health_service: %d", enable_health_service),
               absl::StrFormat("suspend_while_training: %d",
                               suspend_while_training),
               absl::StrFormat("dry_run: %d", dry_run),
@@ -97,6 +98,7 @@ absl::StatusOr<Config> Config::FromEnv() {
       GET_ENV_FLOAT(startup_delay_seconds),
       GET_ENV_BOOL(pin_threads),
       GET_ENV_BOOL(debug_memory_usage),
+      GET_ENV_BOOL(enable_health_service),
       GET_ENV_BOOL(suspend_while_training),
       GET_ENV_BOOL(dry_run),
   };

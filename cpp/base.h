@@ -81,6 +81,8 @@ struct Config {
   bool pin_threads = false;
   // Set this to true to have /proc/self/status logged every N seconds.
   bool debug_memory_usage = false;
+  // Set this to true to enable the gRPC Health service.
+  bool enable_health_service = false;
   // Suspend the worker when the training server signals that it is training.
   // This is only useful when worker and training server run on the same
   // machine.

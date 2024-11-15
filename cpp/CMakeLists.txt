@@ -67,13 +67,16 @@ message(CMAKE_FIND_PACKAGE_REDIRECTS_DIR="${CMAKE_FIND_PACKAGE_REDIRECTS_DIR}")
 #
 # Libraries and main binary
 #
-add_library(hexzpb hexz.pb.h hexz.pb.cc)
+add_library(hexzpb hexz.pb.cc)
 target_link_libraries(hexzpb PUBLIC protobuf::libprotobuf)
 
-add_library(hexzpb_grpc hexz.grpc.pb.h hexz.grpc.pb.cc)
+add_library(hexzpb_grpc hexz.grpc.pb.cc)
 target_link_libraries(hexzpb_grpc PUBLIC hexzpb protobuf::libprotobuf gRPC::grpc++ gRPC::grpc++_reflection)
 
-add_library(grpc_client grpc_client.h grpc_client.cc)
+add_library(health_grpc health.grpc.pb.cc health.pb.cc health.cc)
+target_link_libraries(health_grpc PRIVATE protobuf::libprotobuf gRPC::grpc++ gRPC::grpc++_reflection absl::log)
+
+add_library(grpc_client grpc_client.cc)
 target_link_libraries(grpc_client PUBLIC hexzpb_grpc hexzpb absl::log absl::statusor "${TORCH_LIBRARIES}")
 
 add_library(base base.cc perfm.cc queue.h batch.h)
@@ -86,7 +89,7 @@ add_library(mcts base.cc board.cc mcts.cc perfm.cc)
 target_link_libraries(mcts PUBLIC base hexzpb model absl::statusor absl::strings absl::log)
 
 add_executable(worker worker.cc worker_main.cc)
-target_link_libraries(worker PRIVATE grpc_client mcts absl::log absl::flags absl::flags_parse absl::flags_usage)
+target_link_libraries(worker PRIVATE grpc_client health_grpc mcts absl::log absl::flags absl::flags_parse absl::flags_usage)
 
 add_library(cpuserver cpuserver.cc)
 target_link_libraries(cpuserver PUBLIC mcts absl::log hexzpb_grpc)

@@ -38,6 +38,7 @@ fi
 if [[ $gen_cpp == 1 ]]; then
     echo "Generating proto and gRPC files for C++..."
     protoc -Ihexzpb --cpp_out=cpp/ --grpc_out=cpp/ --plugin=protoc-gen-grpc=$(which grpc_cpp_plugin) hexzpb/hexz.proto
+    protoc -Ihexzpb --cpp_out=cpp/ --grpc_out=cpp/ --plugin=protoc-gen-grpc=$(which grpc_cpp_plugin) hexzpb/health.proto
 fi
 
 if [[ $gen_py == 1 ]]; then
