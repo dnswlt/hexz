@@ -138,18 +138,18 @@ class APM {
 // Used by workers and MCTS code to count the throughput w.r.t. predictions
 // generated.
 inline APM& APMPredictions() noexcept {
-  static absl::NoDestructor<APM> apm("/predictions");
+  static absl::NoDestructor<APM> apm("/predictions", 3600);
   return *apm;
 }
 // Used by workers and MCTS code to count the throughput w.r.t. examples
 // generated.
 inline APM& APMExamples() noexcept {
-  static absl::NoDestructor<APM> apm("/examples");
+  static absl::NoDestructor<APM> apm("/examples", 3600);
   return *apm;
 }
 // Used by workers and MCTS code to count the throughput w.r.t. games generated.
 inline APM& APMGames() noexcept {
-  static absl::NoDestructor<APM> apm("/games");
+  static absl::NoDestructor<APM> apm("/games", 3600);
   return *apm;
 }
 
