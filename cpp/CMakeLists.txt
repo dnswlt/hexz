@@ -117,6 +117,7 @@ add_executable(batch_test batch_test.cc)
 add_executable(mcts_test mcts_test.cc)
 add_executable(model_test model_test.cc)
 add_executable(base_test base_test.cc)
+add_executable(perfm_test perfm_test.cc)
 add_executable(cpuserver_test cpuserver_test.cc)
 
 target_link_libraries(mcts_test GTest::gmock_main mcts)
@@ -124,6 +125,7 @@ target_link_libraries(model_test GTest::gmock_main model)
 target_link_libraries(board_test GTest::gmock_main mcts)
 target_link_libraries(batch_test GTest::gmock_main base)
 target_link_libraries(base_test GTest::gtest_main base)
+target_link_libraries(perfm_test GTest::gmock_main base)
 target_link_libraries(cpuserver_test GTest::gtest_main GTest::gmock cpuserver)
 
 include(GoogleTest)
@@ -132,6 +134,7 @@ gtest_discover_tests(model_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 gtest_discover_tests(board_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 gtest_discover_tests(batch_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 gtest_discover_tests(base_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+gtest_discover_tests(perfm_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 gtest_discover_tests(cpuserver_test WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
 #
