@@ -68,9 +68,9 @@ RUN curl -L -o libtorch.zip https://download.pytorch.org/libtorch/cu121/libtorch
 # Copy source files. Do this after required libraries were installed to avoid repeating that
 # each time a source changes.
 COPY ./cpp/ ./
-COPY ./hexzpb/hexz.proto ./hexzpb/
+COPY ./hexzpb/*.proto ./hexzpb/
 
-RUN protoc -Ihexzpb --cpp_out=. --grpc_out=. --plugin=protoc-gen-grpc=$(which grpc_cpp_plugin) hexzpb/hexz.proto \
+RUN protoc -Ihexzpb --cpp_out=. --grpc_out=. --plugin=protoc-gen-grpc=$(which grpc_cpp_plugin) hexzpb/*.proto \
     && mkdir build \
     && cd build \
     && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="/opt/libtorch/share/cmake;/opt/lib/cmake" .. \

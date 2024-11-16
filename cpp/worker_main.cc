@@ -10,6 +10,7 @@
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/str_join.h>
+#include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <torch/script.h>
 
 #include <algorithm>
@@ -149,6 +150,7 @@ void UpdateConfigFromFlags(hexz::Config& config) {
 
 void StartHealthServiceThread() {
   std::thread([]() {
+    grpc::reflection::InitProtoReflectionServerBuilderPlugin();
     grpc::ServerBuilder builder;
     const char* port = std::getenv("PORT");
     std::string addr =

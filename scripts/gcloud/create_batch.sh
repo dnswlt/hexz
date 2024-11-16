@@ -20,11 +20,11 @@ gcloud beta batch jobs submit hexz-worker-batch-$(date +"%Y%m%d%H%M") --location
             "environment": {
               "variables": {
                 "HEXZ_TRAINING_SERVER_ADDR": "hexz.hopto.org:50051",
-                "HEXZ_MAX_RUNTIME_SECONDS": "120",
+                "HEXZ_MAX_RUNTIME_SECONDS": "3600",
                 "HEXZ_DEVICE": "cuda",
                 "HEXZ_WORKER_THREADS": "4",
-                "HEXZ_FIBERS_PER_THREAD": "1",
-                "HEXZ_PREDICTION_BATCH_SIZE": "1",
+                "HEXZ_FIBERS_PER_THREAD": "256",
+                "HEXZ_PREDICTION_BATCH_SIZE": "256",
                 "HEXZ_RUNS_PER_MOVE": "800",
                 "HEXZ_RUNS_PER_FAST_MOVE": "100",
                 "HEXZ_FAST_MOVE_PROB": "0.5",

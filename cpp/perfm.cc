@@ -76,22 +76,23 @@ void APM::Increment(int n) {
 }
 
 double APM::Rate(int window_seconds) {
-  if (counts_.empty()) {
-    // No data collected yet.
-    return 0;
-  }
   int64_t us = std::chrono::duration_cast<std::chrono::microseconds>(
                    std::chrono::high_resolution_clock::now() - t_start_)
                    .count();
-  int64_t quot = us / 1'000'000;
+  int64_t d = us / 1'000'000;
   int64_t rem = us % 1'000'000;
+  if (d == 0 && rem == 0) {
+    // Rate was called right after this instance was created.
+    return 0;
+  }
 
   std::scoped_lock<std::mutex> lk(mut_);
-  quot = AlignCounts(quot);
-  int64_t w = std::min(static_cast<int64_t>(window_seconds), quot) + 1;
-  int64_t sum = std::accumulate(counts_.end() - w, counts_.end(), 0);
-  double t =
-      static_cast<double>(w) - static_cast<double>(1'000'000 - rem) / 1e6;
+  d = AlignCounts(d);
+  int64_t w = std::min(static_cast<int64_t>(window_seconds), d);
+  // Accumulate counts_[d - w .. d+1]
+  int64_t sum =
+      std::accumulate(counts_.begin() + (d - w), counts_.begin() + (d + 1), 0);
+  double t = static_cast<double>(w) + static_cast<double>(rem) / 1e6;
   return static_cast<double>(sum) / t;
 }
 
