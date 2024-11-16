@@ -21,8 +21,8 @@ grpc::Status HealthServiceImpl::Check(grpc::ServerContext* context,
 grpc::Status HealthServiceImpl::Watch(
     grpc::ServerContext* context, const HealthCheckRequest* request,
     grpc::ServerWriter<HealthCheckResponse>* writer) {
-  ABSL_LOG(INFO) << "Received health request for service "
-                 << request->service();
+  ABSL_LOG(INFO) << "Received health request for service '"
+                 << request->service() << "'";
 
   HealthCheckResponse response;
   response.set_status(HealthCheckResponse::SERVING);

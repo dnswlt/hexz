@@ -5,9 +5,10 @@ import os
 import sys
 import torch
 
-from pyhexz import hexz_pb2
+from pyhexz import hexz_pb2, svg
 from google.protobuf import json_format
 
+from pyhexz.board import Board
 from pyhexz.model import HexzNeuralNetwork
 
 
@@ -25,24 +26,38 @@ def print_request(args):
         print(f"Model key: {ex.model_key.name}:{ex.model_key.checkpoint}")
         print(f"Predicted value: {ex.model_predictions.value}")
         idx = 0 if ex.move.cell_type == hexz_pb2.Field.CellType.FLAG else 1
-        priors = torch.load(BytesIO(ex.model_predictions.priors))
+        priors = torch.load(BytesIO(ex.model_predictions.priors), weights_only=True)
         print(f"Chosen move prior: {priors[idx, ex.move.row, ex.move.col].item()}")
         nonzero_priors = priors[priors.nonzero(as_tuple=True)]
         quartiles = torch.quantile(
             nonzero_priors, q=torch.tensor([0, 0.25, 0.5, 0.75, 1])
         )
         print(f"Nonzero prior quartiles (min/25/50/75/max): {quartiles}")
+    ex_n = req.examples[-1]
+    b = Board.from_numpy(torch.load(BytesIO(ex_n.board), weights_only=True).numpy())
+    s1, s2 = b.score()
+    print(f"Score of last example: {int(s1)}-{int(s2)}")
+
+
+def html_export(args):
+    with gzip.open(args.request_file, "rb") as f:
+        req = hexz_pb2.AddTrainingExamplesRequest()
+        req.ParseFromString(f.read())
+    with open(args.out_path, 'w') as f_out:
+        svg.export(f_out, req)
 
 
 def create_model(args) -> int:
     network_args = {
-        key: getattr(args, key) for key in ['blocks', 'filters', 'model_type']
+        key: getattr(args, key) for key in ["blocks", "filters", "model_type"]
     }
     model = HexzNeuralNetwork(**network_args)
     scriptmodule = torch.jit.script(model)
     scriptmodule.save(args.outfile)
     size = os.path.getsize(args.outfile)
-    print(f"Saved PyTorch scriptmodule {network_args} ({size:,} bytes) to {args.outfile}")
+    print(
+        f"Saved PyTorch scriptmodule {network_args} ({size:,} bytes) to {args.outfile}"
+    )
     return 0
 
 
@@ -80,6 +95,19 @@ def main(argv) -> int:
     )
     print_parser.add_argument("request_file", help="Path of the request to print")
     print_parser.set_defaults(func=print_request)
+
+    # Subcommand: html_export
+    export_parser = subparsers.add_parser(
+        "html_export", help="Export examples from AddTrainingExamplesRequest to HTML"
+    )
+    export_parser.add_argument(
+        "--out_path",
+        type=str,
+        default="./export.html",
+        help="Path of the generated HTML export",
+    )
+    export_parser.add_argument("request_file", help="Path of the request to export")
+    export_parser.set_defaults(func=html_export)
 
     # Parse and call the appropriate function based on the command
     args = parser.parse_args()

@@ -1,14 +1,15 @@
-gcloud beta batch jobs submit hexz-worker-batch-$(date +"%Y%m%d%H%M") --location europe-west4 --config - <<EOD
+location=europe-west1
+gcloud beta batch jobs submit hexz-worker-batch-$(date +"%Y%m%d%H%M") --location $location --config - <<EOD
 {
-  "name": "projects/hexz-cloud-run/locations/europe-west4/jobs/hexz-worker-batch",
+  "name": "projects/hexz-cloud-run/locations/$location/jobs/hexz-worker-batch",
   "taskGroups": [
     {
       "taskCount": "1",
       "parallelism": "1",
       "taskSpec": {
         "computeResource": {
-          "cpuMilli": "2000",
-          "memoryMib": "8192"
+          "cpuMilli": "4000",
+          "memoryMib": "16384"
         },
         "runnables": [
           {
@@ -47,10 +48,10 @@ gcloud beta batch jobs submit hexz-worker-batch-$(date +"%Y%m%d%H%M") --location
         "installGpuDrivers": true,
         "policy": {
           "provisioningModel": "STANDARD",
-          "machineType": "n1-standard-4",
+          "machineType": "g2-standard-4",
           "accelerators": [
               {
-              "type": "nvidia-tesla-t4",
+              "type": "nvidia-l4",
               "count": 1
               }
           ]
