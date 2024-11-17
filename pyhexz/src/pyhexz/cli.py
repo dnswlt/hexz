@@ -43,7 +43,11 @@ def html_export(args):
     with gzip.open(args.request_file, "rb") as f:
         req = hexz_pb2.AddTrainingExamplesRequest()
         req.ParseFromString(f.read())
-    with open(args.out_path, 'w') as f_out:
+    out_path = args.out_path
+    if not out_path:
+        b, _ = os.path.splitext(os.path.basename(args.request_file))
+        out_path = f"./{b}.html"
+    with open(out_path, 'w') as f_out:
         svg.export(f_out, req)
 
 
@@ -103,8 +107,8 @@ def main(argv) -> int:
     export_parser.add_argument(
         "--out_path",
         type=str,
-        default="./export.html",
-        help="Path of the generated HTML export",
+        default="",
+        help="Path of the generated HTML export. Default is ./<request_file>.html",
     )
     export_parser.add_argument("request_file", help="Path of the request to export")
     export_parser.set_defaults(func=html_export)
