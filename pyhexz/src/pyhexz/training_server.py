@@ -28,10 +28,12 @@ class TrainingServicer(hexz_pb2_grpc.TrainingServiceServicer):
         logger: logging.Logger,
         model_repo: LocalModelRepository,
         training_state: TrainingState,
+        config: TrainingConfig,
     ):
         self.logger = logger
         self.model_repo = model_repo
         self.training_state = training_state
+        self.config = config
 
     def AddTrainingExamples(
         self, request: hexz_pb2.AddTrainingExamplesRequest, ctx: grpc.ServicerContext
@@ -39,6 +41,16 @@ class TrainingServicer(hexz_pb2_grpc.TrainingServiceServicer):
         self.logger.info(
             f"Received AddTrainingExamplesRequest with {len(request.examples)} examples from {request.execution_id}."
         )
+        if (
+            self.config.min_runs_per_move > 0
+            and request.worker_config.runs_per_move < self.config.min_runs_per_move
+        ):
+            self.logger.warning(
+                f"Ignoring AddTrainingExamplesRequest from {request.execution_id}: runs_per_move too low. "
+                f"Want >={self.config.min_runs_per_move}, got {request.worker_config.runs_per_move}"
+            )
+            ctx.abort(grpc.StatusCode.INVALID_ARGUMENT, "runs_per_move too low")
+
         self.training_state.add_examples(request)
         return hexz_pb2.AddTrainingExamplesResponse(
             status=hexz_pb2.AddTrainingExamplesResponse.ACCEPTED,
@@ -102,11 +114,12 @@ def serve_grpc(
     logger: logging.Logger,
     model_repo: LocalModelRepository,
     training_state: TrainingState,
+    config: TrainingConfig,
 ):
     global _grpc_server
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    svc = TrainingServicer(logger, model_repo, training_state)
+    svc = TrainingServicer(logger, model_repo, training_state, config)
     hexz_pb2_grpc.add_TrainingServiceServicer_to_server(svc, server)
     server.add_insecure_port("[::]:50051")
     server.start()
@@ -152,7 +165,7 @@ def create_app():
 
     # Start gRPC server in separate thread.
     grpc_thread = threading.Thread(
-        target=serve_grpc, args=(app.logger, model_repo, training_state)
+        target=serve_grpc, args=(app.logger, model_repo, training_state, config)
     )
     grpc_thread.start()
     # signal.signal(signal.SIGINT, handle_shutdown)

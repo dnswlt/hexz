@@ -71,10 +71,14 @@ void AsyncExampleSender::StartSenderThread() {
   ABSL_CHECK(state_ == State::PENDING)
       << "AsyncExampleSender::Start must only be called once.";
   sender_thread_ = std::thread([this] {
-    while (true) {
+    const int max_errors = 3;
+    int errors = 0;
+    while (errors < max_errors) {
       auto req = request_queue_.pop();
-      if (!ProcessRequest(req)) {
-        break;
+      if (ProcessRequest(req)) {
+        errors = 0;  // Success: reset error counter.
+      } else {
+        errors++;
       }
     }
     {
@@ -88,20 +92,26 @@ void AsyncExampleSender::StartSenderThread() {
 
 // Put a "kill message" into the queue to shut down the processing thread.
 void AsyncExampleSender::TerminateSenderThread() {
+  bool send_kill_msg = false;
   {
     std::scoped_lock<std::mutex> lk(mut_);
-    if (state_ != State::ACTIVE) {
-      return;
+    ABSL_CHECK(state_ != State::PENDING)
+        << "AsyncExampleSender::TerminateSenderThread called in state PENDING.";
+    if (state_ == State::ACTIVE) {
+      // state_ might already be TERMINATED, if sender thread aborted due to RPC
+      // errors. So only update if it's still ACTIVE.
+      state_ = State::STOPPING;
+      send_kill_msg = true;
     }
-    state_ = State::STOPPING;
   }
-  ABSL_LOG(INFO) << "AsyncExampleSender: terminating sender thread";
-  // Send kill message to terminate sender thread.
-  hexzpb::AddTrainingExamplesRequest kill_req;
-  kill_req.set_execution_id(kKillMessage);
-  // Cannot call EnqueueRequest here anymore in state STOPPING.
-  request_queue_.push(std::move(kill_req));
-
+  if (send_kill_msg) {
+    // Send kill message to terminate sender thread.
+    hexzpb::AddTrainingExamplesRequest kill_req;
+    kill_req.set_execution_id(kKillMessage);
+    ABSL_LOG(INFO) << "AsyncExampleSender: terminating sender thread";
+    // Cannot call EnqueueRequest here anymore in state STOPPING.
+    request_queue_.push(std::move(kill_req));
+  }
   if (sender_thread_.joinable()) {
     sender_thread_.join();
   }
@@ -207,7 +217,8 @@ void Worker::Run() {
     if (config_.suspend_while_training) {
       fiber_torch_model = dynamic_cast<FiberTorchModel*>(model.get());
       ABSL_CHECK(fiber_torch_model != nullptr)
-          << "suspend_while_training is only supported by the FiberTorchModel";
+          << "suspend_while_training is only supported by the "
+             "FiberTorchModel";
     }
     absl::Status status = client_.StreamControlEvents(
         grpc_client_context, request,

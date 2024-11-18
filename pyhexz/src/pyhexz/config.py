@@ -1,5 +1,4 @@
 # Configuration used by the training server.
-import collections
 import os
 import typing
 
@@ -24,6 +23,9 @@ def _from_env(cls):
 class TrainingConfig(typing.NamedTuple):
     model_repo_base_dir: str
     model_name: str
+    # Minimum number of MCTS runs per move that a worker must have made
+    # for its examples to be accepted. This prevents inadvertent bad training data.
+    min_runs_per_move: int = 800
     # Model type. One of (conv2d, resnet). Only relevant if a new model is created at startup.
     model_type: str = "conv2d"
     model_blocks: int = 5

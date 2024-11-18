@@ -102,10 +102,8 @@ GRPCTrainingServiceClient::AddTrainingExamples(
   grpc::Status status = stub_->AddTrainingExamples(&context, request, &resp);
 
   if (!status.ok()) {
-    ABSL_LOG(ERROR) << "AddTrainingExamples RPC failed: Code="
-                    << status.error_code()
-                    << " Message=" << status.error_message();
-    return absl::InternalError("Failed to send examples");
+    return absl::Status(AbslStatusCode(status.error_code()),
+                        status.error_message());
   }
   return resp;
 }

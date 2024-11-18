@@ -28,8 +28,11 @@ class FakeClock {
   static inline time_point current_time_{time_point{duration{0}}};
 };
 
+#ifndef __clang__
+// Apple clang version 16.0.0 (clang-1600.0.26.4) does not support is_clock_v from C++20. 
 static_assert(std::chrono::is_clock_v<FakeClock>,
               "FakeClock does not satisfy std::chrono::is_clock!");
+#endif
 
 TEST(FakeClockTest, Increment) {
   auto t1 = FakeClock::now();
