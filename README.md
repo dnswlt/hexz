@@ -84,7 +84,9 @@ the schema. TODO: create Dockerfile to simplify this.
 
 ### WASM
 
-CPU players typically run in the user's browser, not on the server.
+To reduce the CPU load on the server, CPU players of the *stateless server*
+run in the user's browser as WASM workers. Clients get notified about this
+via the `ServerEventGameInfo.ClientSideCPUPlayer` flag.
 
 To build the WASM module, run:
 

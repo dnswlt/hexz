@@ -44,6 +44,7 @@ const gstate = {
     // Optional information about the scores a CPU assigns to each move.
     moveScores: null,
     renderMoveScores: false,
+    // Whether the CPU player is hosted client-side (as a WASM worker).
     clientSideCPUPlayer: false,
 };
 
@@ -654,6 +655,10 @@ function reset() {
 let wasmWorker = null;
 function startWASMWebWorker() {
     wasmWorker = new Worker('/hexz/static/js/wasmworker.js');
+    // wasmWorker.onmessage gets called when the worker posts a message,
+    // which contains the suggested move.
+    // This move is sent to the game server. The server will asynchronously
+    // send a board update (via SSE), which will show the move in the UI.
     wasmWorker.onmessage = async (e) => {
         move = e.data;
         if (!move) {
