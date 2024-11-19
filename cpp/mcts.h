@@ -209,6 +209,7 @@ class Node {
   // *after* the move stored in this node was made.
   // Use MoveTurn() (i.e. parent_->next_turn_) to get the player whose turn
   // it is to make this->move_.
+  // next_turn_ is always one of {0, 1}.
   int next_turn_;
   // The move to be made.
   Move move_;

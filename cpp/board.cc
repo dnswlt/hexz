@@ -69,6 +69,20 @@ Board::Board() {
 // Copy c'tor.
 Board::Board(const Board& other) { b_ = other.b_.clone(); }
 
+Board Board::EmptyBoard(int flags) {
+  Board b;
+  float fflags = static_cast<float>(flags);
+  b.b_.index_put_({I_NFLAGS(0)}, fflags);
+  b.b_.index_put_({I_NFLAGS(1)}, fflags);
+  // Even rows have 10 cells, odd rows only 9, so mark the last cell in odd
+  // rows as blocked for P1+P2.
+  for (int i = 1; i <= 9; i += 2) {
+    b.b_.index_put_({I_BLOCKED(0), i, 9}, 1);
+    b.b_.index_put_({I_BLOCKED(1), i, 9}, 1);
+  }
+  return b;
+}
+
 Board Board::RandomBoard() {
   Board b;
   b.b_.index_put_({I_NFLAGS(0)}, 3.0f);

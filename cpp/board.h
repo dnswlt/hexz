@@ -99,9 +99,17 @@ class Board {
   // Copy c'tor.
   Board(const Board& other);
 
+  // Returns a randomly initialized board that is valid according to the game
+  // rules. The board will contain 15 rocks and 5 grass cells (with values from
+  // 1 to 5).
   static Board RandomBoard();
+  // Returns an empty board without rocks or grass. Cells in the board's
+  // tensor that are not valid (do not represent hex cells) will be marked as
+  // blocked. Each player will have the given number of flags available.
+  static Board EmptyBoard(int flags);
+  // Constructs a board from its given proto representation.
   static absl::StatusOr<Board> FromProto(const hexzpb::Board& board);
-  
+
   std::pair<float, float> Score() const;
   float Result() const;
 

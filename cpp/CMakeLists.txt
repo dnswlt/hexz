@@ -54,7 +54,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(googlebenchmark)
 
-
 # Debug output for some vars that were relevant getting this whole mess to work:
 message(CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}")
 message(CMAKE_CXX_FLAGS_RELEASE="${CMAKE_CXX_FLAGS_RELEASE}")

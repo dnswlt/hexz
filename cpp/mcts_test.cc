@@ -430,6 +430,43 @@ TEST(MCTSTest, RemainingFlagsAreNotNegative) {
   }
 }
 
+void SetPieceRock(Board& b, int r, int c) {
+  // Block cell for both players.
+  b.SetCellValue(0, Board::kBlocked, r, c, 1);
+  b.SetCellValue(1, Board::kBlocked, r, c, 1);
+}
+
+TEST(MCTSTest, NoMoveLowerScoreIsTerminal) {
+  // Test that a player with no moves and lower score immediately loses.
+  // P0 places a flag at (5, 5).
+  // P1 places a flag at (0, 0), which is surrounded by rocks.
+  // P0 makes any move with value 1.
+  // P1 has no valid moves and P0 should be considered the winner,
+  // i.e. the root node should become terminal.
+  Config config{
+      .fast_move_prob = 0.0,
+      .initial_root_q_value = -0.2,  // the default
+      .initial_q_penalty = 0.3,      // the default
+  };
+  Node::InitializeStaticMembers(config);
+  Board b = Board::EmptyBoard(/*flags=*/1);
+  SetPieceRock(b, 0, 1);
+  SetPieceRock(b, 1, 0);
+  b.MakeMove(0, Move::Flag(5, 5));
+  b.MakeMove(1, Move::Flag(0, 0));
+  auto next_moves = b.NextMoves(0);
+  ASSERT_TRUE(!next_moves.empty());
+  b.MakeMove(0, next_moves[0]);
+
+  UniformFakeModel fake_model(1.0);
+  NeuralMCTS mcts(fake_model, /*playout_runner=*/nullptr, config);
+  auto root = std::make_unique<Node>(/*turn=*/1);
+  
+  EXPECT_FALSE(root->terminal());
+  mcts.SelfplayRun(*root, b, /*add_noise=*/false, /*run_playouts=*/false);
+  EXPECT_TRUE(root->terminal());
+}
+
 TEST(MCTSTest, SelfplayRun) {
   Config config{
       .fast_move_prob = 0.0,
@@ -458,8 +495,9 @@ TEST(MCTSTest, SelfplayRun) {
     float puct = c0->Puct();
     EXPECT_LT(std::abs(puct - c0->Q()), 0.05);
     // All children should have the same PUCT.
-    EXPECT_TRUE(std::all_of(root->children().begin(), root->children().end(),
-                            [puct](const auto& ch) { return ch->Puct() == puct; }));
+    EXPECT_TRUE(
+        std::all_of(root->children().begin(), root->children().end(),
+                    [puct](const auto& ch) { return ch->Puct() == puct; }));
   }
 
   // Second run
@@ -499,12 +537,12 @@ TEST(MCTSTest, SelfplayRun) {
 
 class MCTSScriptModuleTest : public testing::Test {
  protected:
-  void SetUp() override {
+  MCTSScriptModuleTest()
+      : scriptmodule_(torch::jit::load("testdata/scriptmodule.pt")) {
     // The file "testdata/scriptmodule.pt" is expected to be a ScriptModule of
     // the right shape to be used by NeuralMCTS.
     //
     // It can be generated with the regenerate.sh sidecar script.
-    scriptmodule_ = torch::jit::load("testdata/scriptmodule.pt");
     scriptmodule_.to(torch::kCPU);
     scriptmodule_.eval();
   }

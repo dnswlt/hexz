@@ -438,16 +438,24 @@ bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
     n->Backpropagate(board.Result());
     return false;
   }
-  // Expand leaf node. Usually it's the turn as indicated by the node.
+  // Expand leaf node. Usually it's the turn indicated by NextTurn.
   int next_turn = n->NextTurn();
   auto moves = board.NextMoves(next_turn);
   if (moves.empty()) {
-    // Player has no valid moves left. Try if opponent can proceed.
-    next_turn = 1 - next_turn;
-    n->SetNextTurn(next_turn);
-    moves = board.NextMoves(next_turn);
-    if (moves.empty()) {
-      // No player can make a move => game over.
+    bool game_over = false;
+    // Player has no valid moves left: game is over if the other player already
+    // has a higher score.
+    auto [p0, p1] = board.Score();
+    if (next_turn == 0 && p0 < p1 || next_turn == 1 && p1 < p0) {
+      game_over = true;
+    } else {
+      // Try if opponent can proceed.
+      next_turn = 1 - next_turn;
+      n->SetNextTurn(next_turn);
+      moves = board.NextMoves(next_turn);
+      game_over = moves.empty();
+    }
+    if (game_over) {
       n->SetTerminal(true);
       n->Backpropagate(board.Result());
       return false;
@@ -496,15 +504,23 @@ bool NeuralMCTS::Run(Node& root, const Board& b) {
   int next_turn = n->NextTurn();
   auto moves = board.NextMoves(next_turn);
   if (moves.empty()) {
-    // Player has no valid moves left. Try if opponent can proceed.
-    next_turn = 1 - next_turn;
-    n->SetNextTurn(next_turn);
-    moves = board.NextMoves(next_turn);
-    if (moves.empty()) {
-      // No player can make a move => game over.
+    bool game_over = false;
+    // Player has no valid moves left: game is over if the other player already
+    // has a higher score.
+    auto [p0, p1] = board.Score();
+    if (next_turn == 0 && p0 < p1 || next_turn == 1 && p1 < p0) {
+      game_over = true;
+    } else {
+      // Try if opponent can proceed.
+      next_turn = 1 - next_turn;
+      n->SetNextTurn(next_turn);
+      moves = board.NextMoves(next_turn);
+      game_over = moves.empty();
+    }
+    if (game_over) {
       n->SetTerminal(true);
       n->Backpropagate(board.Result());
-      return n != &root;  // Return if we made any progress at all in this run.
+      return false;
     }
   }
   n->CreateChildren(moves);

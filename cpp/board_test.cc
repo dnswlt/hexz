@@ -16,13 +16,6 @@ using internal::Idx;
 using internal::NeighborsOf;
 using testing::UnorderedElementsAre;
 
-Board EmptyBoard(int n_flags) {
-  Board b;
-  b.SetRemainingFlags(0, n_flags);
-  b.SetRemainingFlags(1, n_flags);
-  return b;
-}
-
 TEST(BoardTest, NeighborsOf) {
   EXPECT_THAT(NeighborsOf(Idx{0, 0}),
               UnorderedElementsAre(Idx{0, 1}, Idx{1, 0}));
@@ -143,7 +136,7 @@ TEST(BoardTest, MakeMoveNormal) {
 TEST(BoardTest, NoValidNextMoves) {
   // Player zero has one flag, which is surrounded by rocks.
   int player = 0;
-  Board b = EmptyBoard(/*n_flags=*/1);
+  Board b = Board::EmptyBoard(/*n_flags=*/1);
   // Place rocks first:
   for (const auto& n : NeighborsOf(Idx{0, 0})) {
     b.SetCellValue(player, Board::kBlocked, n.r, n.c, 1);
@@ -185,7 +178,7 @@ TEST(BoardTest, GrassPropagation) {
 
 TEST(BoardTest, Score) {
   int p0 = 0, p1 = 1;
-  Board b = EmptyBoard(/*n_flags=*/3);
+  Board b = Board::EmptyBoard(/*n_flags=*/3);
   b.MakeMove(p0, Move::Flag(3, 3));
   b.MakeMove(p1, Move::Flag(7, 3));
   b.MakeMove(p0, Move{Move::Typ::kNormal, 3, 4, 1});
