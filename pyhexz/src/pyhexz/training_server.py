@@ -41,15 +41,19 @@ class TrainingServicer(hexz_pb2_grpc.TrainingServiceServicer):
         self.logger.info(
             f"Received AddTrainingExamplesRequest with {len(request.examples)} examples from {request.execution_id}."
         )
-        if (
-            self.config.min_runs_per_move > 0
-            and request.worker_config.runs_per_move < self.config.min_runs_per_move
-        ):
+        # sanity checks on the request to ignore data from rogue workers.
+        if request.worker_config.runs_per_move < self.config.min_runs_per_move:
             self.logger.warning(
                 f"Ignoring AddTrainingExamplesRequest from {request.execution_id}: runs_per_move too low. "
                 f"Want >={self.config.min_runs_per_move}, got {request.worker_config.runs_per_move}"
             )
             ctx.abort(grpc.StatusCode.INVALID_ARGUMENT, "runs_per_move too low")
+        if not self.training_state.accept(request):
+            self.logger.warning(
+                f"Ignoring AddTrainingExamplesRequest from {request.execution_id}: runs_per_move too low. "
+                f"Want >={self.config.min_runs_per_move}, got {request.worker_config.runs_per_move}"
+            )
+            ctx.abort(grpc.StatusCode.INVALID_ARGUMENT, "invalid model_key")
 
         self.training_state.add_examples(request)
         return hexz_pb2.AddTrainingExamplesResponse(

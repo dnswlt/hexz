@@ -312,12 +312,12 @@ class TrainingState:
         If enough new examples have been collected, a new training is started,
         unless one is already ongoing.
         """
-        t_start = time.perf_counter_ns()
+        # t_start = time.perf_counter_ns()
         self.model_repo.add_examples(req)
-        t_end = time.perf_counter_ns()
-        self.logger.info(
-            f"Stored {len(req.examples)} examples in the repo in {(t_end-t_start)/1e6:.0f}ms"
-        )
+        # t_end = time.perf_counter_ns()
+        # self.logger.info(
+        #     f"Stored {len(req.examples)} examples in the repo in {(t_end-t_start)/1e6:.0f}ms"
+        # )
         with self.lock:
             self._latest_request = req
             self._stats.example_requests += 1
@@ -328,6 +328,20 @@ class TrainingState:
     def add_examples(self, req: hexz_pb2.AddTrainingExamplesRequest):
         """Asynchronously saves the examples from the request in the repository."""
         self._executor.submit(self._add_examples, req)
+
+    def accept(self, req: hexz_pb2.AddTrainingExamplesRequest):
+        """Check if the request should be accepted for training.
+        
+        Examples must be based on a recent checkpoint of the right model.
+        """
+        key = self.model_key()
+        if len(req.examples) == 0:
+            return False
+        rkey = req.examples[-1].model_key
+        if rkey.name != key.name:
+            return False
+        cp_age = key.checkpoint - rkey.checkpoint
+        return cp_age >= 0 and cp_age < 3
 
     def stats(self) -> TrainingStats:
         """Returns a copy of the training stats."""
