@@ -74,10 +74,10 @@ struct Config {
   // to the training server at the same time.
   float startup_delay_seconds = 0.0;
 
-  // Set this to true to use pthread thread affinity to pin each thread to a dedicated
-  // core. `worker_threads` must be less than or equal to the number of online cores
-  // (as reported by sysconf(_SC_NPROCESSORS_ONLN)).
-  // Only available on Linux-based systems.
+  // Set this to true to use pthread thread affinity to pin each thread to a
+  // dedicated core. `worker_threads` must be less than or equal to the number
+  // of online cores (as reported by sysconf(_SC_NPROCESSORS_ONLN)). Only
+  // available on Linux-based systems.
   bool pin_threads = false;
   // Set this to true to have /proc/self/status logged every N seconds.
   bool debug_memory_usage = false;
@@ -112,10 +112,10 @@ std::string RandomUid();
 class ScopeGuard {
  public:
   explicit ScopeGuard(std::function<void()> cleanup)
-      : cleanup_(std::move(cleanup)), active_(true) {}
+      : active_(true), cleanup_(std::move(cleanup)) {}
   ScopeGuard(const ScopeGuard& other) = delete;
   ScopeGuard(ScopeGuard&& other)
-      : cleanup_(std::move(other.cleanup_)), active_(other.active_) {
+      : active_(other.active_), cleanup_(std::move(other.cleanup_)) {
     other.Dismiss();
   }
   ScopeGuard& operator=(const ScopeGuard& other) = delete;
@@ -191,7 +191,7 @@ class Xoshiro256Plus {
   // yet :( So let's roll our own, based on the gamma distribution:
   // https://en.wikipedia.org/wiki/Dirichlet_distribution#Related_distributions
   std::vector<float> Dirichlet(int n, float concentration) {
-    std::gamma_distribution<float> gamma;
+    std::gamma_distribution<float> gamma(concentration, 1.0);
     std::vector<float> v(n);
     float sum = 0;
     for (int i = 0; i < n; i++) {

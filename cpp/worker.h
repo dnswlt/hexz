@@ -89,7 +89,7 @@ class AsyncExampleSender {
 class Worker {
  public:
   Worker(const Config& config, TrainingServiceClient& client)
-      : config_{config}, client_{client}, execution_id_{RandomUid()} {}
+      : execution_id_{RandomUid()}, client_{client}, config_{config} {}
 
   void Run();
 

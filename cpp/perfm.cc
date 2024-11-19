@@ -27,7 +27,7 @@ void Perfm::PrintStats() {
   for (int i = 0; i < StatsSize; i++) {
     if (Perfm::cum_stats_[i].count == 0) continue;
     stats.push_back(Perfm::cum_stats_[i]);
-    auto s = Perfm::LabelName(static_cast<Perfm::Label>(i)).size() + 3;
+    int s = Perfm::LabelName(static_cast<Perfm::Label>(i)).size() + 3;
     if (s > scope_len) {
       scope_len = s;
     }

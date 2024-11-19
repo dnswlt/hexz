@@ -96,7 +96,7 @@ TEST(BatchTest, BatchSizeEqNumThreads) {
   // Synchronize threads: ensure they first all register.
   std::latch reg_sync{kNumThreads};
   for (int i = 0; i < kNumThreads; i++) {
-    ts.emplace_back([&, i] {
+    ts.emplace_back([&] {
       auto token = batcher.RegisterThread();
       reg_sync.count_down();
       reg_sync.wait();
@@ -131,7 +131,7 @@ TEST(BatchTest, BatchSizeOne) {
   // Synchronize threads: ensure they first all register.
   std::latch reg_sync{kNumThreads};
   for (int i = 0; i < kNumThreads; i++) {
-    ts.emplace_back([&, i] {
+    ts.emplace_back([&] {
       auto token = batcher.RegisterThread();
       reg_sync.count_down();
       reg_sync.wait();
@@ -167,7 +167,7 @@ TEST(BatchTest, BatchSizeHalf) {
   // Synchronize threads: ensure they first all register.
   std::latch reg_sync{kNumThreads};
   for (int i = 0; i < kNumThreads; i++) {
-    ts.emplace_back([&, i] {
+    ts.emplace_back([&] {
       auto token = batcher.RegisterThread();
       reg_sync.count_down();
       reg_sync.wait();

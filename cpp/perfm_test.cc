@@ -1,3 +1,4 @@
+#pragma GCC diagnostic ignored "-Wunused-const-variable"
 #include "perfm.h"
 
 #include <gmock/gmock.h>
@@ -50,7 +51,7 @@ TEST(APMTest, IncrementRate) {
   FakeClock::advance(std::chrono::seconds(2));
   apm.Increment(1);
   apm.Increment(1);
-  double rate = apm.Rate(1);
+  apm.Rate(1);
   EXPECT_EQ(apm.t_start(), t_start);
   // Expect 2x as many elements as the window size.
   std::vector<int64_t> expected_counts = {

@@ -395,9 +395,9 @@ PlayoutRunner::Stats RandomPlayoutRunner::Run(const Board& board, int turn,
 NeuralMCTS::NeuralMCTS(Model& model,
                        std::unique_ptr<PlayoutRunner> playout_runner,
                        const Config& config)
-    : model_{model},
-      playout_runner_{std::move(playout_runner)},
-      config_{config} {}
+    : config_{config},
+      model_{model},
+      playout_runner_{std::move(playout_runner)} {}
 
 bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
                              bool run_playouts) {
@@ -446,7 +446,7 @@ bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
     // Player has no valid moves left: game is over if the other player already
     // has a higher score.
     auto [p0, p1] = board.Score();
-    if (next_turn == 0 && p0 < p1 || next_turn == 1 && p1 < p0) {
+    if ((next_turn == 0 && p0 < p1) || (next_turn == 1 && p1 < p0)) {
       game_over = true;
     } else {
       // Try if opponent can proceed.
@@ -508,7 +508,7 @@ bool NeuralMCTS::Run(Node& root, const Board& b) {
     // Player has no valid moves left: game is over if the other player already
     // has a higher score.
     auto [p0, p1] = board.Score();
-    if (next_turn == 0 && p0 < p1 || next_turn == 1 && p1 < p0) {
+    if ((next_turn == 0 && p0 < p1) || (next_turn == 1 && p1 < p0)) {
       game_over = true;
     } else {
       // Try if opponent can proceed.
@@ -569,7 +569,6 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     bool add_noise = !is_fast_run && config_.dirichlet_concentration > 0;
     playout_runner_->ResetStats();
     while ((n_runs - n_reused) < runs) {
-      float playout_value = 0;
       if (SelfplayRun(*root, board, add_noise, run_playouts)) {
         // Re-used previous prediction, so don't count as a full run.
         n_reused++;

@@ -32,8 +32,8 @@ class TrainingServiceClient {
   // Makes a streaming RPC call to the training server using the provided
   // context. Each streamed response will be
   virtual absl::Status StreamControlEvents(
-      grpc::ClientContext& context, const hexzpb::ControlRequest& request,
-      StreamCallback<hexzpb::ControlEvent> callback) {
+      grpc::ClientContext&, const hexzpb::ControlRequest&,
+      StreamCallback<hexzpb::ControlEvent>) {
     return absl::UnimplementedError("StreamControlEvents not implemented");
   }
 
@@ -73,8 +73,8 @@ class GRPCTrainingServiceClient : public TrainingServiceClient {
  public:
   GRPCTrainingServiceClient(std::shared_ptr<grpc::Channel> channel,
                             std::string remote_addr)
-      : stub_(hexzpb::TrainingService::NewStub(channel)),
-        remote_addr_(std::move(remote_addr)) {}
+      : remote_addr_(std::move(remote_addr)),
+        stub_(hexzpb::TrainingService::NewStub(channel)) {}
 
   // Connects to the training service at the given address addr.
   static std::unique_ptr<GRPCTrainingServiceClient> Connect(

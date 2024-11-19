@@ -53,7 +53,7 @@ class UserFacing {
     //
     // Here we can also register the coroutine (handle) somewhere
     // to be resumed when appropriate.
-    std::suspend_always await_transform(Event event) { return {}; }
+    std::suspend_always await_transform(Event) { return {}; }
 
     // yield_value gets called when the coroutine calls `co_yield value`.
     // To make the yielded value available to the caller of the coroutine,

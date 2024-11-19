@@ -37,8 +37,7 @@ const hexzpb::ModelKey& TestModelKey() {
 }
 
 class FakeModel : public Model {
-  void UpdateModel(hexzpb::ModelKey key, torch::jit::Module&& module) override {
-  }
+  void UpdateModel(hexzpb::ModelKey, torch::jit::Module&&) override {}
   hexzpb::ModelKey Key() const override { return TestModelKey(); }
 };
 
@@ -49,7 +48,7 @@ class UniformFakeModel final : public FakeModel {
   UniformFakeModel() = default;
   explicit UniformFakeModel(float value) : value_{value} {}
 
-  Prediction Predict(torch::Tensor board, torch::Tensor action_mask) override {
+  Prediction Predict(torch::Tensor, torch::Tensor action_mask) override {
     auto t = torch::ones({2, 11, 10}).where(action_mask, 0);
     t = t / t.sum();
     return Prediction{
@@ -73,7 +72,7 @@ class ConstantFakeModel final : public FakeModel {
     ABSL_CHECK(dim.size() == 3);
     ABSL_CHECK(dim[0] == 2 && dim[1] == 11 && dim[2] == 10);
   }
-  Prediction Predict(torch::Tensor board, torch::Tensor action_mask) override {
+  Prediction Predict(torch::Tensor, torch::Tensor action_mask) override {
     auto t = move_probs_.where(action_mask, 0);
     t /= t.sum();
     return Prediction{
@@ -96,7 +95,7 @@ class ConstantFakeModel final : public FakeModel {
 class FakePlayoutRunner final : public PlayoutRunner {
  public:
   explicit FakePlayoutRunner(std::vector<float> results) : results_{results} {}
-  Stats Run(const Board& board, int turn, int runs) override {
+  Stats Run(const Board&, int, int runs) override {
     ABSL_CHECK(iteration_ >= 0 && iteration_ < results_.size());
     float r = results_[iteration_];
     Stats s{
@@ -147,7 +146,6 @@ TEST(NodeTest, MaxPuctChild) {
   pr = pr / pr.sum();
   n.SetMoveProbs(pr);
   auto& n_0 = *n.children()[0];
-  auto& n_1 = *n.children()[1];
   // Mark victory for child n_0.
   n_0.Backpropagate(1.0);
   Node* c = n.MaxPuctChild();
@@ -461,7 +459,7 @@ TEST(MCTSTest, NoMoveLowerScoreIsTerminal) {
   UniformFakeModel fake_model(1.0);
   NeuralMCTS mcts(fake_model, /*playout_runner=*/nullptr, config);
   auto root = std::make_unique<Node>(/*turn=*/1);
-  
+
   EXPECT_FALSE(root->terminal());
   mcts.SelfplayRun(*root, b, /*add_noise=*/false, /*run_playouts=*/false);
   EXPECT_TRUE(root->terminal());
@@ -685,7 +683,7 @@ TEST_F(MCTSScriptModuleTest, WriteDotGraph) {
   absl::Cleanup cleanup = [&dot_path]() { fs::remove(dot_path); };
   Node root(nullptr, 0, Move{});
   for (int i = 0; i < 100; i++) {
-    mcts.SelfplayRun(root, b, /*add_noise=*/i == 0, /*run_playouts=*/false);
+    mcts.SelfplayRun(root, b, /*add_noise=*/false, /*run_playouts=*/false);
   }
   ASSERT_GT(root.children().size(), 0);
   auto status = WriteDotGraph(root, dot_path.string());

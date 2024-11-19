@@ -147,10 +147,10 @@ TEST(FiberTorchModelTest, SmokeTestMultipleFibers) {
   std::mutex mut;
   std::vector<std::thread> threads;
   for (int i = 0; i < n_threads; i++) {
-    threads.emplace_back([&, i] {
+    threads.emplace_back([&] {
       std::vector<boost::fibers::fiber> fibers;
       for (int j = 0; j < fibers_per_thread; j++) {
-        fibers.emplace_back([&, j] {
+        fibers.emplace_back([&] {
           auto token = model.RegisterThread();
           auto board = torch::randn({11, 11, 10});
           auto action_mask = torch::rand({2, 11, 10}) < 0.5;

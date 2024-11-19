@@ -70,7 +70,7 @@ absl::Status AbslStatus(const grpc::Status& grpc_status) {
 
 absl::StatusOr<hexzpb::AddTrainingExamplesResponse>
 EmbeddedTrainingServiceClient::AddTrainingExamples(
-    const hexzpb::AddTrainingExamplesRequest& request) {
+    const hexzpb::AddTrainingExamplesRequest&) {
   hexzpb::AddTrainingExamplesResponse response;
   response.set_status(hexzpb::AddTrainingExamplesResponse::ACCEPTED);
   *response.mutable_latest_model() = model_key_;
@@ -78,7 +78,7 @@ EmbeddedTrainingServiceClient::AddTrainingExamples(
 }
 
 absl::StatusOr<std::pair<hexzpb::ModelKey, torch::jit::Module>>
-EmbeddedTrainingServiceClient::FetchLatestModel(const std::string& model_name) {
+EmbeddedTrainingServiceClient::FetchLatestModel(const std::string&) {
   try {
     auto model = torch::jit::load(path_, torch::kCPU);
     return std::make_pair(model_key_, model);

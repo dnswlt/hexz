@@ -164,7 +164,7 @@ void RunGPUBenchmarkMultiTasked(Options options) {
   float total_sum = 0;
   int64_t t_start = 0;
   for (int i = 0; i < options.worker_threads; i++) {
-    worker_threads.emplace_back([&, thread_num = i] {
+    worker_threads.emplace_back([&] {
       for (;;) {
         Model::Prediction pred;
         float sum = 0;
@@ -310,7 +310,6 @@ void RunGPUBenchmarkBatch(Options options) {
   {
     torch::NoGradGuard no_grad;
     auto guard = fn.RegisterThread();
-    float sum = 0;
     torch::Tensor tb =
         torch::randn({11, 11, 10}, torch::dtype(torch::kFloat32));
     torch::Tensor ta = (torch::rand({2, 11, 10}) < 0.5);
@@ -327,10 +326,9 @@ void RunGPUBenchmarkBatch(Options options) {
   int op_count = 0;
   int64_t t_start = UnixMicros();
   for (int i = 0; i < options.worker_threads; i++) {
-    worker_threads.emplace_back([&, thread_num = i] {
+    worker_threads.emplace_back([&] {
       torch::NoGradGuard no_grad;
       auto guard = fn.RegisterThread();
-      float sum = 0;
       for (int j = 0; j < n_rounds; j++) {
         torch::Tensor tb =
             torch::randn({11, 11, 10}, torch::dtype(torch::kFloat32));
@@ -339,7 +337,6 @@ void RunGPUBenchmarkBatch(Options options) {
             .board = tb,
             .action_mask = ta,
         });
-        sum += result.value;
         {
           std::scoped_lock<std::mutex> l(mut);
           op_count++;
@@ -509,7 +506,6 @@ void FiberWorker(int fiber_id, FiberWorkerArgs args) {
   torch::Tensor ta = (torch::rand({2, 11, 10}) < 0.5);
   {
     // Warmup
-    float sum = 0;
     for (int i = 0; i < args.rounds; i++) {
       boost::fibers::promise<Model::Prediction> promise;
       auto result = promise.get_future();
@@ -522,7 +518,6 @@ void FiberWorker(int fiber_id, FiberWorkerArgs args) {
       });
 
       Model::Prediction pred = result.get();
-      sum += pred.value;
     }
     args.barrier.wait();
     std::call_once(args.start_time_flag, [&args] {
@@ -531,7 +526,6 @@ void FiberWorker(int fiber_id, FiberWorkerArgs args) {
     });
   }
 
-  float sum = 0;
   for (int i = 0; i < args.rounds; i++) {
     boost::fibers::promise<Model::Prediction> promise;
     auto result = promise.get_future();
@@ -544,7 +538,6 @@ void FiberWorker(int fiber_id, FiberWorkerArgs args) {
     });
 
     Model::Prediction pred = result.get();
-    sum += pred.value;
   }
 }
 

@@ -20,8 +20,8 @@ class Batcher {
       : comp_(std::move(comp)),
         max_batch_size_(batch_size),
         timeout_micros_(timeout_micros),
-        batch_ready_(false),
-        waiting_(0) {}
+        waiting_(0),
+        batch_ready_(false) {}
 
   ScopeGuard RegisterThread() {
     std::scoped_lock<std::mutex> l(m_);

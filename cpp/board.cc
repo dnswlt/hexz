@@ -420,8 +420,6 @@ class FastGameState {
   }
 
   bool FastNextMove(int turn, Move& m, internal::RNG& rng) const {
-    int moves_cnt = 0;
-    float j = 0;
     bool can_place_flag = nflags[turn] > 0 && free_cells[turn] > 0;
     bool pick_flag =
         can_place_flag &&

@@ -9,7 +9,7 @@ namespace hexz {
 using grpc::health::v1::HealthCheckRequest;
 using grpc::health::v1::HealthCheckResponse;
 
-grpc::Status HealthServiceImpl::Check(grpc::ServerContext* context,
+grpc::Status HealthServiceImpl::Check(grpc::ServerContext*,
                                       const HealthCheckRequest* request,
                                       HealthCheckResponse* response) {
   ABSL_LOG(INFO) << "Received health request for service "

@@ -93,11 +93,11 @@ FiberTorchModel::FiberTorchModel(hexzpb::ModelKey key,
                                  torch::jit::Module&& module,
                                  torch::DeviceType device, int batch_size,
                                  bool support_suspension)
-    : key_{std::move(key)},
+    : support_suspension_{support_suspension},
       module_{std::move(module)},
-      device_{device},
+      key_{std::move(key)},
       max_batch_size_{batch_size},
-      support_suspension_{support_suspension} {
+      device_{device} {
   // Acquire lock to have a synchronization point for module_ before any access
   // to it by other threads or fibers. (Necessary?)
   std::scoped_lock<std::mutex> lk(module_mut_);

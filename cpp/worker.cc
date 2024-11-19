@@ -28,10 +28,6 @@ std::string ModelId(const hexzpb::ModelKey& key) {
   return absl::StrCat(key.name(), ":", key.checkpoint());
 }
 
-bool SameKey(const hexzpb::ModelKey& lhs, const hexzpb::ModelKey& rhs) {
-  return lhs.name() == rhs.name() && lhs.checkpoint() == rhs.checkpoint();
-}
-
 bool SameOrNewer(const hexzpb::ModelKey& lhs, const hexzpb::ModelKey& rhs) {
   return lhs.name() == rhs.name() && lhs.checkpoint() <= rhs.checkpoint();
 }
@@ -44,12 +40,13 @@ constexpr absl::string_view kKillMessage = "__KILL_KILL_KILL__";
 
 AsyncExampleSender::AsyncExampleSender(TrainingServiceClient& client,
                                        Model& model, bool dry_run)
-    : client_{client},
-      model_{model},
+    : dry_run_{dry_run},
       state_{State::PENDING},
-      dry_run_{dry_run} {
+      client_{client},
+      model_{model} {
   StartSenderThread();
 }
+
 AsyncExampleSender::~AsyncExampleSender() { TerminateSenderThread(); }
 
 // Enqueues another request to be sent to the training server.
@@ -224,7 +221,7 @@ void Worker::Run() {
     }
     absl::Status status = client_.StreamControlEvents(
         grpc_client_context, request,
-        [&model, fiber_torch_model](hexzpb::ControlEvent event) {
+        [fiber_torch_model](hexzpb::ControlEvent event) {
           if (!fiber_torch_model) {
             // Suspension is only supported by FiberTorchModel.
             return;

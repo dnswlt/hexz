@@ -18,7 +18,7 @@ CPUPlayerServiceImpl::CPUPlayerServiceImpl(CPUPlayerServiceConfig config)
              config.device} {}
 
 grpc::Status CPUPlayerServiceImpl::SuggestMove(
-    grpc::ServerContext* context, const hexzpb::SuggestMoveRequest* request,
+    grpc::ServerContext*, const hexzpb::SuggestMoveRequest* request,
     hexzpb::SuggestMoveResponse* response) {
   const auto& pb_board = request->game_engine_state().flagz().board();
   ABSL_LOG(INFO) << "SuggestMove: received request for move:" << pb_board.move()
@@ -75,7 +75,6 @@ grpc::Status CPUPlayerServiceImpl::SuggestMove(
   }
   ABSL_CHECK(!(*node)->IsLeaf())
       << "SuggestMove must not return OK if there are no valid moves.";
-  const auto& cs = (*node)->children();
   auto& stats = *response->mutable_move_stats();
   stats.set_value((*node)->value());
   for (const auto& c : (*node)->children()) {
