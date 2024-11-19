@@ -75,6 +75,12 @@ void AsyncExampleSender::StartSenderThread() {
     int errors = 0;
     while (errors < max_errors) {
       auto req = request_queue_.pop();
+
+      if (req.execution_id() == kKillMessage) {
+        ABSL_LOG(INFO) << "AsyncExampleSender: received kill request";
+        break;
+      }
+
       if (ProcessRequest(req)) {
         errors = 0;  // Success: reset error counter.
       } else {
@@ -119,10 +125,6 @@ void AsyncExampleSender::TerminateSenderThread() {
 
 bool AsyncExampleSender::ProcessRequest(
     const hexzpb::AddTrainingExamplesRequest& req) {
-  if (req.execution_id() == kKillMessage) {
-    ABSL_LOG(ERROR) << "AsyncExampleSender: received kill request";
-    return false;
-  }
   if (dry_run_) {
     ABSL_LOG(INFO) << "AsyncExampleSender is in dry_run mode. Ignoring "
                    << req.examples_size() << " examples";

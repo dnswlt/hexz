@@ -25,7 +25,7 @@ RUN apt-get update && apt-get install -y \
 # https://stackoverflow.com/questions/75010206/cuda-12-c20-support-with-cmake-not-working
 
 RUN curl -L -O https://github.com/Kitware/CMake/releases/download/v3.30.5/cmake-3.30.5.tar.gz \
-    && tar xzf cmake-3.30.5.tar.gz \
+    && tar -xzf --no-same-owner cmake-3.30.5.tar.gz \
     && cd cmake-3.30.5 \
     && ./bootstrap --prefix=/opt \
     && make -j$(($(nproc) < 8 ? $(nproc) : 8)) \
@@ -46,13 +46,13 @@ RUN cd grpc \
     && make install
 
 RUN curl -L -O https://archives.boost.io/release/1.86.0/source/boost_1_86_0.tar.bz2 \
-    && tar xjf boost_1_86_0.tar.bz2 \
+    && tar -xjf --no-same-owner boost_1_86_0.tar.bz2 \
     && cd boost_1_86_0/ \
     && ./bootstrap.sh --prefix=/opt \
     && ./b2 install
 
 RUN curl -L -O https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2 \
-    && tar xjf jemalloc-5.3.0.tar.bz2 \
+    && tar -xjf --no-same-owner jemalloc-5.3.0.tar.bz2 \
     && rm jemalloc-5.3.0.tar.bz2 \
     && cd jemalloc-5.3.0 \
     && ./configure --prefix=/opt \
