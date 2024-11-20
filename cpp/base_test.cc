@@ -1,11 +1,14 @@
 #include "base.h"
 
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 #include <stdlib.h>
 
 #include <algorithm>
 
 namespace hexz {
+
+using ::testing::MatchesRegex;
 
 TEST(BaseTest, GetEnvAsInt) {
   setenv("TEST_FOO", "123", 1);
@@ -29,6 +32,12 @@ TEST(BaseTest, GetEnvAsFloat) {
 TEST(BaseTest, DefaultConfig) {
   Config def{};
   EXPECT_EQ(def.max_games, -1);
+}
+
+TEST(BaseTest, RandomUid) {
+  std::string uid = RandomUid();
+  EXPECT_EQ(uid.size(), 8);
+  EXPECT_THAT(uid, MatchesRegex("[0-9a-f]+"));
 }
 
 TEST(DirichletTest, ValuesInExpectedRange) {

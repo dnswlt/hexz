@@ -40,7 +40,7 @@ class TrainingServicer(hexz_pb2_grpc.TrainingServiceServicer):
         self, request: hexz_pb2.AddTrainingExamplesRequest, ctx: grpc.ServicerContext
     ):
         self.logger.info(
-            f"Received AddTrainingExamplesRequest with {len(request.examples)} examples from {request.execution_id}."
+            f"Received AddTrainingExamplesRequest {request.execution_id}:{request.game_id} with {len(request.examples)} examples."
         )
         # sanity checks on the request to ignore data from rogue workers.
         if request.worker_config.runs_per_move < self.config.min_runs_per_move:

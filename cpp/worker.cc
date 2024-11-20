@@ -342,7 +342,8 @@ void Worker::RunSingle(Model& model, AsyncExampleSender& sender) {
     int64_t max_runtime_seconds =
         config_.max_runtime_seconds - (now - started_micros) / 1'000'000;
 
-    auto examples = mcts.PlayGame(b, max_runtime_seconds);
+    const std::string game_id = RandomUid();
+    auto examples = mcts.PlayGame(game_id, b, max_runtime_seconds);
     if (!examples.ok()) {
       if (!absl::IsDeadlineExceeded(examples.status())) {
         ABSL_LOG(ERROR) << "Aborting: PlayGame returned an error: "
@@ -357,6 +358,7 @@ void Worker::RunSingle(Model& model, AsyncExampleSender& sender) {
 
     hexzpb::AddTrainingExamplesRequest req;
     req.set_execution_id(execution_id_);
+    req.set_game_id(game_id);
     PopulateWorkerConfig(*req.mutable_worker_config());
     std::move(examples->begin(), examples->end(),
               RepeatedPtrFieldBackInserter(req.mutable_examples()));

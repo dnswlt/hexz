@@ -104,6 +104,7 @@ bool GetEnvAsBool(const std::string& name, bool default_value);
 
 int64_t UnixMicros();
 
+// Returns a 64-bit random hex string (ex: "dead1337")
 std::string RandomUid();
 
 // Helper to implement RAII-style scope guards.

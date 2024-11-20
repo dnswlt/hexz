@@ -560,7 +560,7 @@ TEST_F(MCTSScriptModuleTest, PlayGame) {
   NeuralMCTS mcts(model, std::make_unique<RandomPlayoutRunner>(), config);
   auto b = Board::RandomBoard();
 
-  auto examples = mcts.PlayGame(b, /*max_runtime_seconds=*/0);
+  auto examples = mcts.PlayGame("test", b, /*max_runtime_seconds=*/0);
   ASSERT_TRUE(examples.ok());
   ASSERT_GE(examples->size(), 2);
   auto ex0 = (*examples)[0];
@@ -607,7 +607,7 @@ TEST_F(MCTSScriptModuleTest, PlayGameFiberTorchModel) {
   NeuralMCTS mcts(model, std::make_unique<RandomPlayoutRunner>(), config);
   auto b = Board::RandomBoard();
 
-  auto examples = mcts.PlayGame(b, /*max_runtime_seconds=*/0);
+  auto examples = mcts.PlayGame("test", b, /*max_runtime_seconds=*/0);
   EXPECT_TRUE(examples.ok());
   EXPECT_GE(examples->size(), 2);
 }
@@ -627,7 +627,7 @@ TEST(MCTSTest, PlayGameStats) {
   NeuralMCTS mcts(fake_model, std::make_unique<RandomPlayoutRunner>(), config);
   auto b = Board::RandomBoard();
 
-  auto examples = mcts.PlayGame(b, /*max_runtime_seconds=*/0);
+  auto examples = mcts.PlayGame("test", b, /*max_runtime_seconds=*/0);
   ASSERT_TRUE(examples.ok());
   ASSERT_GE(examples->size(), 1);
   auto ex = (*examples)[0];
@@ -669,7 +669,7 @@ TEST(MCTSTest, PlayGameResign) {
       std::make_unique<FakePlayoutRunner>(std::vector<float>{0.0, -0.01, -1});
   NeuralMCTS mcts(model, std::move(runner), config);
   auto b = Board::RandomBoard();
-  auto examples = mcts.PlayGame(b, /*max_runtime_seconds=*/0);
+  auto examples = mcts.PlayGame("test", b, /*max_runtime_seconds=*/0);
   ASSERT_TRUE(examples.ok());
   EXPECT_EQ(examples->size(), 2) << "Should have resigned on the third move";
 }

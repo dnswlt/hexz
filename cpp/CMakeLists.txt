@@ -125,7 +125,7 @@ target_link_libraries(mcts_test GTest::gmock_main mcts)
 target_link_libraries(model_test GTest::gmock_main model)
 target_link_libraries(board_test GTest::gmock_main mcts)
 target_link_libraries(batch_test GTest::gmock_main base)
-target_link_libraries(base_test GTest::gtest_main base)
+target_link_libraries(base_test GTest::gmock_main base)
 target_link_libraries(perfm_test GTest::gmock_main base)
 target_link_libraries(cpuserver_test GTest::gtest_main GTest::gmock cpuserver)
 

@@ -280,8 +280,10 @@ class NeuralMCTS {
   NeuralMCTS(Model& model, std::unique_ptr<PlayoutRunner> playout_runner,
              const Config& config);
 
+  // Plays a full game using the given Board (which gets mutated).
+  // game_id can be any string and is only used for logging.
   absl::StatusOr<std::vector<hexzpb::TrainingExample>> PlayGame(
-      Board& board, int max_runtime_seconds);
+      const std::string& game_id, Board& board, int max_runtime_seconds);
 
   // Returns a pair of (N, record_example), where N is the number of iterations
   // for the MCTS run and record_example indicates whether the resulting example
@@ -304,7 +306,8 @@ class NeuralMCTS {
 
   // SuggestMove returns the best move suggestion that the NeuralMCTS algorithm
   // comes up with in think_time_millis milliseconds.
-  // Callers can decide which node to pick. Usually they'll want node->MostVisitedChild().
+  // Callers can decide which node to pick. Usually they'll want
+  // node->MostVisitedChild().
   absl::StatusOr<std::unique_ptr<Node>> SuggestMove(int player,
                                                     const Board& board,
                                                     int64_t think_time_millis,

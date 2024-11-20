@@ -520,7 +520,8 @@ bool NeuralMCTS::Run(Node& root, const Board& b) {
     if (game_over) {
       n->SetTerminal(true);
       n->Backpropagate(board.Result());
-      return n != &root;  // Return whether we made any progress at all in this run.
+      return n !=
+             &root;  // Return whether we made any progress at all in this run.
     }
   }
   n->CreateChildren(moves);
@@ -542,7 +543,7 @@ std::pair<int, bool> NeuralMCTS::NumRuns(int move) const noexcept {
 }
 
 absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
-    Board& board, int max_runtime_seconds) {
+    const std::string& game_id, Board& board, int max_runtime_seconds) {
   Perfm::Scope ps(Perfm::PlayGame);
   std::vector<hexzpb::TrainingExample> examples;
   int64_t started_micros = UnixMicros();
@@ -594,7 +595,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     //   ".dot");
     if (root->terminal()) {
       result = board.Result();
-      ABSL_LOG(INFO) << "Game over after "
+      ABSL_LOG(INFO) << "Game " << game_id << " over after "
                      << absl::StrFormat(
                             "%.1fs",
                             static_cast<float>(UnixMicros() - started_micros) /
