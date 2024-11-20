@@ -31,7 +31,7 @@ var (
 	p2Eval           = flag.Bool("p2-eval", false, "If true, P1's max iterations are doubled until P2 loses")
 )
 
-func playGame(p1, p2 hexz.CPUPlayer) (winner int, err error) {
+func playGame(gameNum int, p1, p2 hexz.CPUPlayer) (winner int, err error) {
 	ge := hexz.NewGameEngineFlagz()
 	cpuPlayers := []hexz.CPUPlayer{p1, p2}
 	scoreKind, found := pb.SuggestMoveStats_ScoreKind_value[*svgMoveScoreKind]
@@ -65,7 +65,7 @@ func playGame(p1, p2 hexz.CPUPlayer) (winner int, err error) {
 		if err != nil {
 			return 0, fmt.Errorf("remote SuggestMove failed: %v", err)
 		}
-		fmt.Printf("P%d suggested move %v in %dms\n", turn, mv.String(), duration.Milliseconds())
+		log.Printf("P%d suggested move %v in %dms\n", turn, mv.String(), duration.Milliseconds())
 		boards = append(boards, ge.B.Copy())
 		stats = append(stats, mvStats)
 		moves = append(moves, mv)
@@ -77,9 +77,13 @@ func playGame(p1, p2 hexz.CPUPlayer) (winner int, err error) {
 			return 0, fmt.Errorf("make move for P%d: %s %w", turn, mv.String(), err)
 		}
 		numMoves++
-		log.Printf("Score after %d moves: %v", numMoves, ge.B.Score)
+		log.Printf("Game %d: score after %d moves: %v", gameNum, numMoves, ge.B.Score)
 	}
-	fmt.Printf("Game ended after %d moves. Winner: %d. Final result: %v\n", numMoves, ge.Winner(), ge.B.Score)
+	if *svgOutputFile != "" {
+		// Final SVG at the end of the game.
+		hexz.ExportSVGWithStats(*svgOutputFile, boards, moves, stats, pb.SuggestMoveStats_ScoreKind(scoreKind), nil)
+	}
+	log.Printf("Game %d ended after %d moves. Winner: %d. Final result: %v\n", gameNum, numMoves, ge.Winner(), ge.B.Score)
 	return ge.Winner(), nil
 }
 
@@ -246,7 +250,7 @@ func main() {
 	}
 	var wins [2]int
 	for i := 0; i < *numGames; i++ {
-		winner, err := playGame(p1, p2)
+		winner, err := playGame(i, p1, p2)
 		if err != nil {
 			fmt.Printf("playing game failed: %v\n", err)
 			os.Exit(1)
