@@ -79,10 +79,7 @@ func playGame(gameNum int, p1, p2 hexz.CPUPlayer) (winner int, err error) {
 		numMoves++
 		log.Printf("Game %d: score after %d moves: %v", gameNum, numMoves, ge.B.Score)
 	}
-	if *svgOutputFile != "" {
-		// Final SVG at the end of the game.
-		hexz.ExportSVGWithStats(*svgOutputFile, boards, moves, stats, pb.SuggestMoveStats_ScoreKind(scoreKind), nil)
-	}
+	// TODO: one more ExportSVGWithStats for the final board with no added stats or moves.
 	log.Printf("Game %d ended after %d moves. Winner: %d. Final result: %v\n", gameNum, numMoves, ge.Winner(), ge.B.Score)
 	return ge.Winner(), nil
 }
