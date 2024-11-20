@@ -211,6 +211,9 @@ message AddTrainingExamplesRequest {
     // worker logs.
     string game_id = 4;
     WorkerConfig worker_config = 3;
+
+    // Set by the training server when archiving training data.
+    google.protobuf.Timestamp received_timestamp = 5;
 }
 
 message AddTrainingExamplesResponse {

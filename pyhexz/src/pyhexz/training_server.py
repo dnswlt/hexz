@@ -1,11 +1,13 @@
 from concurrent import futures
 import datetime
 import pprint
+import time
 import grpc
 
 import io
 from flask import Flask, make_response
 from google.protobuf import json_format
+from google.protobuf import timestamp_pb2
 import logging
 import pytz
 import threading
@@ -51,11 +53,15 @@ class TrainingServicer(hexz_pb2_grpc.TrainingServiceServicer):
             ctx.abort(grpc.StatusCode.INVALID_ARGUMENT, "runs_per_move too low")
         if not self.training_state.accept(request):
             self.logger.warning(
-                f"Ignoring AddTrainingExamplesRequest from {request.execution_id}: runs_per_move too low. "
-                f"Want >={self.config.min_runs_per_move}, got {request.worker_config.runs_per_move}"
+                f"Ignoring AddTrainingExamplesRequest from {request.execution_id}: invalid model_key."
             )
             ctx.abort(grpc.StatusCode.INVALID_ARGUMENT, "invalid model_key")
 
+        now = time.time()
+        seconds = int(now)
+        request.received_timestamp.CopyFrom(
+            timestamp_pb2.Timestamp(seconds=seconds, nanos=int((now - seconds) * 1e9))
+        )
         self.training_state.add_examples(request)
         return hexz_pb2.AddTrainingExamplesResponse(
             status=hexz_pb2.AddTrainingExamplesResponse.ACCEPTED,
@@ -70,8 +76,9 @@ class TrainingServicer(hexz_pb2_grpc.TrainingServiceServicer):
                 f"Received FetchModelRequest for model_key {json_format.MessageToJson(request.model_key, indent=None)}"
             )
             model_key = request.model_key
-            if model_key.checkpoint == -1:
-                model_key.checkpoint = self.training_state.latest_checkpoint
+            current_key = self.training_state.model_key()
+            if model_key.name == current_key.name and model_key.checkpoint == -1:
+                model_key = current_key
         else:
             model_key = self.training_state.model_key()
             self.logger.info(
@@ -191,8 +198,8 @@ def create_app():
         resp.headers["Content-Type"] = "text/plain"
         return resp
 
-    @app.get("/examples/latest")
-    def examples_html():
+    @app.get("/games/latest")
+    def games_latest():
         """Returns a HTML file with SVG images of the latest example batch."""
         ts: TrainingState = app.training_state
         req: hexz_pb2.AddTrainingExamplesRequest = ts.latest_request()
@@ -200,6 +207,40 @@ def create_app():
             return "No examples yet", 404
         buf = io.StringIO()
         svg.export(buf, req)
+        return buf.getvalue(), {"Content-Type": "text/html; charset=utf-8"}
+
+    @app.get("/games/<model_name>/")
+    def games_list(model_name):
+        """Returns a HTML file with links to the latest SVG images."""
+        repo: LocalModelRepository = app.model_repo
+        reqs = repo.recent_requests(model_name=model_name)
+        if not reqs:
+            return "No recent games", 404
+
+
+        links = []
+        for r in reqs:
+            l = f'<p><a href="/games/{model_name}/{r.game_id}">/games/{model_name}/{r.game_id}</a>'
+            links.append(l)
+        return f"""<html>
+        <h1>Recent games</h1>
+        {"\n".join(links)}
+        </html>""", {"Content-Type": "text/html; charset=utf-8"}
+
+    @app.get("/games/<model_name>/<game_id>")
+    def games_svg(model_name, game_id):
+        """Returns a HTML file with SVG images of the specified game_id, if it exists."""
+        repo: LocalModelRepository = app.model_repo
+        reqs = repo.find_requests(model_name=model_name, game_id=game_id)
+        if not reqs:
+            return f"No such game: {game_id}", 404
+        if len(reqs) > 1:
+            return (
+                f"Multiple games found for game_id={game_id}. Not implemented yet.",
+                501,
+            )
+        buf = io.StringIO()
+        svg.export(buf, reqs[0])
         return buf.getvalue(), {"Content-Type": "text/html; charset=utf-8"}
 
     return app

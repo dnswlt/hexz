@@ -1,5 +1,6 @@
 """SVG export of boards. Pretty much a direct translation of the svg.go code to Python."""
 
+from datetime import datetime
 import io
 import math
 from typing import Any, Optional
@@ -196,8 +197,13 @@ def export(
     <body>
         <h1>Hexz SVG Export</h1>\n"""
     )
-    f.write(f"<p>Created: {time.strftime('%Y-%m-%d %H:%M:%S')}</p>\n")
-    f.write(f"<p>Execution ID: {req.execution_id}</p>")
+    date_format = '%Y-%m-%d %H:%M:%S'
+    f.write(f"<p>Created: {time.strftime(date_format)}</p>\n")
+    f.write(f"<p>ExecutionID:GameID: {req.execution_id}:{req.game_id}</p>")
+    if req.HasField("received_timestamp"):
+        ts = req.received_timestamp
+        dt = datetime.fromtimestamp(ts.seconds + ts.nanos / 1e9)
+        f.write(f"<p>Received: {dt.strftime(date_format)}</p>")
     for ex in req.examples:
         f.write(f"<h2>Move {ex.move.move}</h2>\n")
         n = NumpyExample.decode(ex)
