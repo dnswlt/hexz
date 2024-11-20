@@ -520,7 +520,7 @@ bool NeuralMCTS::Run(Node& root, const Board& b) {
     if (game_over) {
       n->SetTerminal(true);
       n->Backpropagate(board.Result());
-      return false;
+      return n != &root;  // Return whether we made any progress at all in this run.
     }
   }
   n->CreateChildren(moves);
