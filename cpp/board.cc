@@ -232,9 +232,9 @@ void Board::MakeMove(int player, const Move& move) {
   auto b_acc = b_.accessor<float, 3>();
   ABSL_DCHECK_EQ(b_acc[I_BLOCKED(player)][move.r][move.c], 0)
       << "MakeMove on blocked field";
-  ABSL_DCHECK(move.typ == Move::Typ::kFlag && move.value == 1 ||
-              move.typ == Move::Typ::kNormal &&
-                  b_acc[I_NEXTVAL(player)][move.r][move.c] == move.value)
+  ABSL_DCHECK((move.typ == Move::Typ::kFlag && move.value == 1) ||
+              (move.typ == Move::Typ::kNormal &&
+               b_acc[I_NEXTVAL(player)][move.r][move.c] == move.value))
       << "MakeMove: wrong value: move: " << move.DebugString()
       << " board: " << DebugString();
   if (move.typ == Move::Typ::kFlag) {
