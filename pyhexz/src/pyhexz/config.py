@@ -1,4 +1,5 @@
 # Configuration used by the training server.
+from dataclasses import dataclass, fields
 import os
 import typing
 
@@ -8,19 +9,20 @@ def _from_env(cls):
     environment variable HEXZ_FIELD_NAME.
     """
     envvars = {}
-    for f in cls._fields:
-        typ = cls.__annotations__.get(f)
-        v = os.getenv(f"HEXZ_{f.upper()}")
+    for f in fields(cls):
+        typ = f.type
+        v = os.getenv(f"HEXZ_{f.name.upper()}")
         if v is not None:
             if typ == bool:
                 v = v.lower() not in ['0', 'false', 'no', 'off', 'n', '']
             elif typ:
                 v = typ(v)
-            envvars[f] = v
+            envvars[f.name] = v
     return cls(**envvars)
 
 
-class TrainingConfig(typing.NamedTuple):
+@dataclass(frozen=True)
+class TrainingConfig:
     model_repo_base_dir: str
     model_name: str
     # Minimum number of MCTS runs per move that a worker must have made

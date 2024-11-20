@@ -125,9 +125,14 @@ def svg_hexagon(
 class NumpyExample(typing.NamedTuple):
     board: np.ndarray  # shape: (11, 11, 10)
     action_mask: np.ndarray  # shape: (2, 11, 10)
-    move_probs: np.ndarray  # shape: (2, 11, 10)
-    value: np.ndarray  # shape: (1,)
+    # Prior probabilities, as output by the model (potentially including noise)
     priors: np.ndarray  # shape: (2, 11, 10)
+    # Move probabilities after MCTS
+    move_probs: np.ndarray  # shape: (2, 11, 10)
+    # The outcome of the game (-1, 0, 1)
+    result: float
+    # The value of the game as predicted by the model.
+    value: float
 
     @classmethod
     def decode(cls, ex: hexz_pb2.TrainingExample) -> "NumpyExample":
@@ -153,13 +158,13 @@ class NumpyExample(typing.NamedTuple):
             raise ValueError(f"Wrong move_probs shape: {pr.shape}.")
         if priors is not None and priors.shape != (2, 11, 10):
             raise ValueError(f"Wrong model_predictions.priors shape: {priors.shape}.")
-        val = np.array([ex.result], dtype=np.float32)
         return NumpyExample(
             board=board,
             action_mask=action_mask,
-            move_probs=pr,
-            value=val,
             priors=priors,
+            move_probs=pr,
+            result=ex.result,
+            value=ex.model_predictions.value
         )
 
 
@@ -193,12 +198,12 @@ def export(
     )
     f.write(f"<p>Created: {time.strftime('%Y-%m-%d %H:%M:%S')}</p>\n")
     f.write(f"<p>Execution ID: {req.execution_id}</p>")
-    for i, ex in enumerate(req.examples):
-        f.write(f"<h2>Board {i}</h2>\n")
+    for ex in req.examples:
+        f.write(f"<h2>Move {ex.move.move}</h2>\n")
         n = NumpyExample.decode(ex)
         board = Board.from_numpy(n.board)
         p0, p1 = board.score()
-        f.write(f"<p>Score: {int(p0)} &ndash; {int(p1)}</p>\n")
+        f.write(f"<p></p>\n")
         f.write("<div>\n")
         f.write(
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.6f}" height="{height:.6f}" viewBox="{viewbox}">\n'
@@ -208,7 +213,7 @@ def export(
                 hex = svg_hexagon(side_length, board, r, c, n.move_probs)
                 f.write(hex + "\n")
         f.write("</svg>\n")
-        caption = f"Move: {ex.move.move} &bull; Value: {n.value[0]:.3f} PredVal: {ex.model_predictions.value:.3f}"
+        caption = f"Score: {int(p0)} &ndash; {int(p1)} &bull; Result: {n.result:.3f} &bull; PredVal: {n.value:.3f}"
         f.write(f"<p>{caption}</p>\n")
         f.write("</div>\n")
     f.write("</body>\n")

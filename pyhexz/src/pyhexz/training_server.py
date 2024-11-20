@@ -1,5 +1,6 @@
 from concurrent import futures
 import datetime
+import pprint
 import grpc
 
 import io
@@ -183,8 +184,8 @@ def create_app():
         stats = ts.stats()
         lines = [
             f"Hello from Python hexz at {now}!",
-            f"Config: {app.hexz_config}",
-            f"Training stats: {stats}",
+            f"{pprint.pformat(app.hexz_config)}",
+            f"{pprint.pformat(stats)}",
         ]
         resp = make_response("\n\n".join(lines))
         resp.headers["Content-Type"] = "text/plain"
