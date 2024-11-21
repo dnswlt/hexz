@@ -65,6 +65,7 @@ func serverConfigForTest(t *testing.T) *ServerConfig {
 	return &ServerConfig{
 		ServerHost:      "localhost",
 		ServerPort:      8999,
+		URLPathPrefix:   "/hexz",
 		DocumentRoot:    "./resources",
 		GameHistoryRoot: historyRoot,
 		DebugMode:       true,
@@ -89,7 +90,7 @@ func TestHandleNewGame(t *testing.T) {
 	form.Add("type", string(gameTypeFlagz))
 	form.Add("singlePlayer", "true")
 	r := httptest.NewRequest(http.MethodPost, "/hexz/new", strings.NewReader(form.Encode()))
-	r.AddCookie(makePlayerCookie(testPlayerId, 24*time.Hour))
+	r.AddCookie(s.makePlayerCookie(testPlayerId, 24*time.Hour))
 	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
 	s.handleNewGame(w, r)
@@ -289,5 +290,30 @@ func TestFlagzSinglePlayerHistory(t *testing.T) {
 	}
 	if diff := cmp.Diff([]string{testuser, "CPU"}, hist.PlayerNames); diff != "" {
 		t.Errorf("wrong player names in history: -want +got: %s", diff)
+	}
+}
+
+func TestURLPrefix(t *testing.T) {
+	tests := []struct {
+		prefix string
+		suffix string
+		want   string
+	}{
+		{"/hexz", "/foo", "/hexz/foo"},
+		{"/hexz/", "/foo", "/hexz/foo"},
+		{"/hexz/", "/foo/", "/hexz/foo/"},
+		{"/hexz", "", "/hexz"},
+		{"/hexz", "/", "/hexz/"},
+		{"", "/foo", "/foo"},
+	}
+	for _, tc := range tests {
+		s := &Server{
+			config: &ServerConfig{
+				URLPathPrefix: tc.prefix,
+			},
+		}
+		if got := s.prefix(tc.suffix); got != tc.want {
+			t.Errorf("Invalid prefix: got %q, want %q", got, tc.want)
+		}
 	}
 }

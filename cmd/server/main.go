@@ -28,6 +28,7 @@ func main() {
 	flag.IntVar(&cfg.ServerPort, "port", 8080, "Port on which to listen")
 	flag.StringVar(&cfg.DocumentRoot, "resources-dir", "./resources",
 		"Root directory from which to serve files")
+	flag.StringVar(&cfg.URLPathPrefix, "url-path-prefix", "/hexz", "Path prefix for all server URLs")
 	flag.StringVar(&cfg.GameHistoryRoot, "history-dir", "",
 		"Root directory in whicih to read/write history files. If empty, history is disabled.")
 	flag.StringVar(&cfg.LoginDatabasePath, "userdb", "_logins.json",

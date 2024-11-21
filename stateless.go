@@ -61,6 +61,25 @@ func (s *StatelessServer) readStaticResource(filename string) ([]byte, error) {
 	return os.ReadFile(path.Join(s.config.DocumentRoot, filename))
 }
 
+// prefix adds the configured URL prefix to the given urlPath.
+// To run a server under any configured URL path prefix, every
+// client-facing URL should be built using
+func (s *StatelessServer) prefix(urlPath string) string {
+	return urlJoinPath(s.config.URLPathPrefix, urlPath)
+}
+
+func (s *StatelessServer) makePlayerCookie(playerId PlayerId, ttl time.Duration) *http.Cookie {
+	return &http.Cookie{
+		Name:     playerIdCookieName,
+		Value:    string(playerId),
+		Path:     s.prefix(""),
+		MaxAge:   int(ttl.Seconds()),
+		HttpOnly: true,  // Don't let JS access the cookie
+		Secure:   false, // also allow plain http
+		SameSite: http.SameSiteLaxMode,
+	}
+}
+
 func (s *StatelessServer) lookupPlayerFromCookie(r *http.Request) (Player, error) {
 	cookie, err := r.Cookie(playerIdCookieName)
 	if err != nil {
@@ -155,7 +174,7 @@ func (s *StatelessServer) handleLoginRequest(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "Cannot log in right now", http.StatusPreconditionFailed)
 		return
 	}
-	http.SetCookie(w, makePlayerCookie(playerId, s.config.LoginTTL))
+	http.SetCookie(w, s.makePlayerCookie(playerId, s.config.LoginTTL))
 	http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 }
 
@@ -206,8 +225,8 @@ func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown player", http.StatusForbidden)
 		return
 	}
-	gameId, err := gameIdFromPath(r.URL.Path)
-	if err != nil {
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
 		http.Error(w, "invalid game ID", http.StatusBadRequest)
 		return
 	}
@@ -245,7 +264,7 @@ func (s *StatelessServer) handleHexz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Prolong cookie ttl.
-	http.SetCookie(w, makePlayerCookie(p.Id, s.config.LoginTTL))
+	http.SetCookie(w, s.makePlayerCookie(p.Id, s.config.LoginTTL))
 	s.serveHtmlFile(w, newGameHtmlFilename)
 }
 
@@ -280,8 +299,8 @@ func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 		return
 	}
-	gameId, err := gameIdFromPath(r.URL.Path)
-	if err != nil {
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
@@ -291,7 +310,7 @@ func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Game exists, serve HTML and prolong cookie ttl.
-	http.SetCookie(w, makePlayerCookie(p.Id, s.config.LoginTTL))
+	http.SetCookie(w, s.makePlayerCookie(p.Id, s.config.LoginTTL))
 	s.serveHtmlFile(w, gameHtmlFilename)
 }
 
@@ -301,8 +320,8 @@ func (s *StatelessServer) handleWASMStats(w http.ResponseWriter, r *http.Request
 		http.Error(w, "missing player cookie", http.StatusBadRequest)
 		return
 	}
-	_, err = gameIdFromPath(r.URL.Path)
-	if err != nil {
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
@@ -330,8 +349,8 @@ func (s *StatelessServer) handleState(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
 		return
 	}
-	gameId, err := gameIdFromPath(r.URL.Path)
-	if err != nil {
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
@@ -392,8 +411,8 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Player not logged in", http.StatusPreconditionFailed)
 		return
 	}
-	gameId, err := gameIdFromPath(r.URL.Path)
-	if err != nil {
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
@@ -453,8 +472,8 @@ func (s *StatelessServer) handleUndo(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "", http.StatusBadRequest)
 	}
-	gameId, err := gameIdFromPath(r.URL.Path)
-	if err != nil {
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
@@ -492,8 +511,8 @@ func (s *StatelessServer) handleRedo(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "", http.StatusBadRequest)
 	}
-	gameId, err := gameIdFromPath(r.URL.Path)
-	if err != nil {
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
@@ -532,8 +551,8 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Player not logged in", http.StatusPreconditionFailed)
 		return
 	}
-	gameId, err := gameIdFromPath(r.URL.Path)
-	if err != nil {
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
@@ -652,24 +671,6 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *StatelessServer) defaultHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/" {
-		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
-		return
-	}
-	if isFavicon(r.URL.Path) {
-		ico, err := s.readStaticResource(path.Join("images", path.Base(r.URL.Path)))
-		if err != nil {
-			http.Error(w, "favicon not found", http.StatusNotFound)
-			return
-		}
-		w.Header().Set("Content-Type", "image/png")
-		w.Write(ico)
-		return
-	}
-	http.Error(w, "", http.StatusNotFound)
-}
-
 func (s *StatelessServer) createMux() *http.ServeMux {
 	// TODO: Several generic handler functions are copy&pasted from server.go. We should
 	// refactor them into a common place.
@@ -681,15 +682,15 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	// POST method API
 	mux.HandleFunc("/hexz/login", postHandlerFunc(s.handleLoginRequest))
 	mux.HandleFunc("/hexz/new", postHandlerFunc(s.handleNewGame))
-	mux.HandleFunc("/hexz/move/", postHandlerFunc(s.handleMove))
-	mux.HandleFunc("/hexz/reset/", postHandlerFunc(s.handleReset))
+	mux.HandleFunc("/hexz/move/{gameId}", postHandlerFunc(s.handleMove))
+	mux.HandleFunc("/hexz/reset/{gameId}", postHandlerFunc(s.handleReset))
 	// Methods for CPU player.
-	mux.HandleFunc("/hexz/state/", s.handleState)
-	mux.HandleFunc("/hexz/wasmstats/", postHandlerFunc(s.handleWASMStats))
-	mux.HandleFunc("/hexz/undo/", postHandlerFunc(s.handleUndo))
-	mux.HandleFunc("/hexz/redo/", postHandlerFunc(s.handleRedo))
+	mux.HandleFunc("/hexz/state/{gameId}", s.handleState)
+	mux.HandleFunc("/hexz/wasmstats/{gameId}", postHandlerFunc(s.handleWASMStats))
+	mux.HandleFunc("/hexz/undo/{gameId}", postHandlerFunc(s.handleUndo))
+	mux.HandleFunc("/hexz/redo/{gameId}", postHandlerFunc(s.handleRedo))
 	// Server-sent Event handling
-	mux.HandleFunc("/hexz/sse/", s.handleSSE)
+	mux.HandleFunc("/hexz/sse/{gameId}", s.handleSSE)
 
 	// GET method API
 	mux.HandleFunc("/hexz", s.handleHexz)
@@ -697,11 +698,9 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	// mux.HandleFunc("/hexz/view/", s.handleView)
 	// mux.HandleFunc("/hexz/history/", s.handleHistory)
 	// mux.HandleFunc("/hexz/moves/", s.handleValidMoves)
-	mux.HandleFunc("/hexz/", s.handleGame) // /hexz/<GameId>
+	mux.HandleFunc("/hexz/{gameId}", s.handleGame)
 	// Technical services
 	// mux.Handle("/statusz", s.basicAuthHandlerFunc(s.handleStatusz))
-
-	mux.HandleFunc("/", s.defaultHandler)
 
 	return mux
 }

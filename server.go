@@ -26,8 +26,11 @@ import (
 )
 
 type ServerConfig struct {
-	ServerHost         string
-	ServerPort         int
+	ServerHost string
+	ServerPort int
+	// Path prefix that all URLs for this server have.
+	// Usually "/hexz/", but when running behind a reverse proxy it might differ.
+	URLPathPrefix      string
 	DocumentRoot       string        // Path to static resource files.
 	GameHistoryRoot    string        // Path to game history files.
 	LoginDatabasePath  string        // Path to the file where the player DB is stored. If empty, no persistent storage is used.
@@ -160,26 +163,6 @@ const (
 	rulesHtmlFilename    = "rules.html"
 	userDatabaseFilename = "_users.json"
 )
-
-var (
-	// Paths that browsers may request to retrieve a favicon.
-	// Keep in sync with files in the images/ folder.
-	faviconUrlPaths = []string{
-		"/favicon-16x16.png",
-		"/favicon-32x32.png",
-		"/favicon-48x48.png",
-		"/apple-touch-icon.png",
-	}
-)
-
-func isFavicon(path string) bool {
-	for _, p := range faviconUrlPaths {
-		if p == path {
-			return true
-		}
-	}
-	return false
-}
 
 type GameHandle struct {
 	id           string
@@ -348,23 +331,6 @@ func isValidGameId(gameId string) bool {
 	return true
 }
 
-var (
-	errInvalidGameId = errors.New("invalid game ID")
-)
-
-// Looks up the game ID as the last element of the URL path.
-func gameIdFromPath(path string) (gameId string, err error) {
-	pathSegs := strings.Split(path, "/")
-	l := len(pathSegs)
-	if l >= 2 && pathSegs[1] == "hexz" {
-		gameId = pathSegs[l-1]
-		if isValidGameId(gameId) {
-			return
-		}
-	}
-	return "", errInvalidGameId
-}
-
 func (s *Server) startNewGame(host string, gameType GameType, singlePlayer bool) (*GameHandle, error) {
 	// Try a few times to find an unused game Id, else give up.
 	// (I don't like forever loops... 100 attempts is plenty.)
@@ -436,11 +402,11 @@ func isValidPlayerName(name string) bool {
 	return len(name) >= 3 && len(name) <= 20 && playernameRegexp.MatchString(name)
 }
 
-func makePlayerCookie(playerId PlayerId, ttl time.Duration) *http.Cookie {
+func (s *Server) makePlayerCookie(playerId PlayerId, ttl time.Duration) *http.Cookie {
 	return &http.Cookie{
 		Name:     playerIdCookieName,
 		Value:    string(playerId),
-		Path:     "/hexz",
+		Path:     s.prefix(""),
 		MaxAge:   int(ttl.Seconds()),
 		HttpOnly: true,  // Don't let JS access the cookie
 		Secure:   false, // also allow plain http
@@ -471,8 +437,8 @@ func (s *Server) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.IncCounter("/requests/login/success")
-	http.SetCookie(w, makePlayerCookie(playerId, s.config.LoginTTL))
-	http.Redirect(w, r, "/hexz", http.StatusSeeOther)
+	http.SetCookie(w, s.makePlayerCookie(playerId, s.config.LoginTTL))
+	http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
 }
 
 func (s *Server) handleHexz(w http.ResponseWriter, r *http.Request) {
@@ -482,7 +448,7 @@ func (s *Server) handleHexz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Prolong cookie ttl.
-	http.SetCookie(w, makePlayerCookie(p.Id, s.config.LoginTTL))
+	http.SetCookie(w, s.makePlayerCookie(p.Id, s.config.LoginTTL))
 	s.serveHtmlFile(w, newGameHtmlFilename)
 }
 
@@ -524,7 +490,7 @@ func (s *Server) handleNewGame(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "", http.StatusPreconditionFailed)
 	}
 	s.IncCounter("/games/started")
-	http.Redirect(w, r, fmt.Sprintf("/hexz/%s", game.id), http.StatusSeeOther)
+	http.Redirect(w, r, s.prefix("/"+game.id), http.StatusSeeOther)
 }
 
 func (s *Server) lookupPlayerFromCookie(r *http.Request) (Player, error) {
@@ -540,8 +506,8 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "unknown player", http.StatusPreconditionFailed)
 	}
-	gameId, err := gameIdFromPath(r.URL.Path)
-	if err != nil {
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
@@ -569,8 +535,8 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown player", http.StatusPreconditionFailed)
 		return
 	}
-	gameId, err := gameIdFromPath(r.URL.Path)
-	if err != nil {
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
@@ -593,8 +559,8 @@ func (s *Server) handleUndo(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "", http.StatusBadRequest)
 	}
-	gameId, err := gameIdFromPath(r.URL.Path)
-	if err != nil {
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
@@ -616,8 +582,8 @@ func (s *Server) handleRedo(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "", http.StatusBadRequest)
 	}
-	gameId, err := gameIdFromPath(r.URL.Path)
-	if err != nil {
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
@@ -659,8 +625,8 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown player", http.StatusPreconditionFailed)
 		return
 	}
-	gameId, err := gameIdFromPath(r.URL.Path)
-	if err != nil {
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
@@ -716,11 +682,11 @@ func (s *Server) handleGamez(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGame(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
-		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
+		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
 		return
 	}
-	gameId, err := gameIdFromPath(r.URL.Path)
-	if err != nil {
+	gameId := r.PathValue("gameId")
+	if gameId == "" {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
@@ -728,21 +694,21 @@ func (s *Server) handleGame(w http.ResponseWriter, r *http.Request) {
 	if g == nil {
 		if GameHistoryExists(s.config.GameHistoryRoot, gameId) {
 			// This game was played before, redirect to history viewer.
-			http.Redirect(w, r, "/hexz/view/"+gameId, http.StatusSeeOther)
+			http.Redirect(w, r, s.prefix("/view/"+gameId), http.StatusSeeOther)
 			return
 		}
 		// Offer to start a new game.
-		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
+		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
 		return
 	}
 	// Prolong cookie ttl.
-	http.SetCookie(w, makePlayerCookie(p.Id, s.config.LoginTTL))
+	http.SetCookie(w, s.makePlayerCookie(p.Id, s.config.LoginTTL))
 	s.serveHtmlFile(w, gameHtmlFilename)
 }
 
 func (s *Server) handleValidMoves(w http.ResponseWriter, r *http.Request) {
-	gameId, err := gameIdFromPath(r.URL.Path)
-	if err != nil {
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
@@ -753,7 +719,7 @@ func (s *Server) handleValidMoves(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	dec := json.NewEncoder(w)
-	err = dec.Encode(game.validMoves())
+	err := dec.Encode(game.validMoves())
 	if err != nil {
 		http.Error(w, "marshal error", http.StatusInternalServerError)
 		errorLog.Fatal("Cannot marshal valid moves: " + err.Error())
@@ -761,8 +727,8 @@ func (s *Server) handleValidMoves(w http.ResponseWriter, r *http.Request) {
 }
 
 var (
-	viewURLPathRE    = regexp.MustCompile(`^(/hexz/view/(?P<gameId>[A-Z]{6}))(/(?P<seqNum>\d+))?$`)
-	historyURLPathRE = regexp.MustCompile(`^(/hexz/history/(?P<gameId>[A-Z]{6}))$`)
+	viewURLPathRE    = regexp.MustCompile(`^(.*/view/(?P<gameId>[A-Z]{6}))(/(?P<seqNum>\d+))?$`)
+	historyURLPathRE = regexp.MustCompile(`^(.*/history/(?P<gameId>[A-Z]{6}))$`)
 )
 
 func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
@@ -903,26 +869,6 @@ func (s *Server) handleStatusz(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) defaultHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/" {
-		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
-		return
-	}
-	if isFavicon(r.URL.Path) {
-		s.IncCounter("/requests/favicon")
-		ico, err := s.readStaticResource(path.Join("images", path.Base(r.URL.Path)))
-		if err != nil {
-			http.Error(w, "favicon not found", http.StatusNotFound)
-			return
-		}
-		w.Header().Set("Content-Type", "image/png")
-		w.Write(ico)
-		return
-	}
-	s.IncCounter("/requests/other")
-	http.Error(w, "", http.StatusNotFound)
-}
-
 func (s *Server) loggingHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.IncCounter("/requests/total")
@@ -994,35 +940,51 @@ func (s *Server) basicAuthHandlerFunc(h http.HandlerFunc) http.HandlerFunc {
 		})
 }
 
+func urlJoinPath(prefix, urlPath string) string {
+	l := len(prefix)
+	if l > 0 && prefix[l-1] == '/' {
+		prefix = prefix[:l-1]
+	}
+	if prefix == "" && urlPath == "" {
+		return "/"
+	}
+	return prefix + urlPath
+}
+
+// prefix adds the configured URL prefix to the given urlPath.
+// To run a server under any configured URL path prefix, every
+// client-facing URL should be built using
+func (s *Server) prefix(urlPath string) string {
+	return urlJoinPath(s.config.URLPathPrefix, urlPath)
+}
+
 func (s *Server) createMux() *http.ServeMux {
 	mux := &http.ServeMux{}
 	// Static resources (images, JavaScript, ...) live under DocumentRoot.
-	mux.Handle("/hexz/static/", http.StripPrefix("/hexz/static/",
+	mux.Handle(s.prefix("/static/"), http.StripPrefix(s.prefix("/static/"),
 		http.FileServer(http.Dir(s.config.DocumentRoot))))
 	// POST method API
-	mux.HandleFunc("/hexz/login", postHandlerFunc(s.handleLoginRequest))
-	mux.HandleFunc("/hexz/new", postHandlerFunc(s.handleNewGame))
-	mux.HandleFunc("/hexz/move/", postHandlerFunc(s.handleMove))
-	mux.HandleFunc("/hexz/reset/", postHandlerFunc(s.handleReset))
-	mux.HandleFunc("/hexz/undo/", postHandlerFunc(s.handleUndo))
-	mux.HandleFunc("/hexz/redo/", postHandlerFunc(s.handleRedo))
+	mux.HandleFunc(s.prefix("/login"), postHandlerFunc(s.handleLoginRequest))
+	mux.HandleFunc(s.prefix("/new"), postHandlerFunc(s.handleNewGame))
+	mux.HandleFunc(s.prefix("/move/{gameId}"), postHandlerFunc(s.handleMove))
+	mux.HandleFunc(s.prefix("/reset/{gameId}"), postHandlerFunc(s.handleReset))
+	mux.HandleFunc(s.prefix("/undo/{gameId}"), postHandlerFunc(s.handleUndo))
+	mux.HandleFunc(s.prefix("redo/{gameId}"), postHandlerFunc(s.handleRedo))
 	// Server-sent Event handling
-	mux.HandleFunc("/hexz/sse/", s.handleSSE)
+	mux.HandleFunc(s.prefix("/sse/{gameId}"), s.handleSSE)
 
-	mux.HandleFunc("/hexz/rules", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(s.prefix("/rules"), func(w http.ResponseWriter, r *http.Request) {
 		s.serveHtmlFile(w, rulesHtmlFilename)
 	})
 	// GET method API
-	mux.HandleFunc("/hexz", s.handleHexz)
-	mux.HandleFunc("/hexz/gamez", s.handleGamez)
-	mux.HandleFunc("/hexz/view/", s.handleView)
-	mux.HandleFunc("/hexz/history/", s.handleHistory)
-	mux.HandleFunc("/hexz/moves/", s.handleValidMoves)
-	mux.HandleFunc("/hexz/", s.handleGame) // /hexz/<GameId>
+	mux.HandleFunc(s.prefix(""), s.handleHexz)
+	mux.HandleFunc(s.prefix("/gamez"), s.handleGamez)
+	mux.HandleFunc(s.prefix("/view/"), s.handleView)
+	mux.HandleFunc(s.prefix("/history/"), s.handleHistory)
+	mux.HandleFunc(s.prefix("/moves/{gameId}"), s.handleValidMoves)
+	mux.HandleFunc(s.prefix("/{gameId}"), s.handleGame)
 	// Technical services
-	mux.Handle("/statusz", s.basicAuthHandlerFunc(s.handleStatusz))
-
-	mux.HandleFunc("/", s.defaultHandler)
+	mux.Handle(s.prefix("/status"), s.basicAuthHandlerFunc(s.handleStatusz))
 
 	return mux
 }

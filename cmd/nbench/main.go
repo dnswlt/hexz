@@ -166,7 +166,7 @@ func evalP2() {
 		}
 		resultCh <- result
 		for i := 0; i < *numGames; i++ {
-			winner, err := playGame(p1, p2)
+			winner, err := playGame(i, p1, p2)
 			if err != nil {
 				fmt.Printf("playing game failed: %v\n", err)
 				os.Exit(1)

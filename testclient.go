@@ -11,6 +11,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
 type HexzTestClient struct {
@@ -58,7 +59,12 @@ func (c *HexzTestClient) newFlagzGame(singlePlayer bool) (gameId string, err err
 	if newGameResp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("could not start new game: %s", newGameResp.Status)
 	}
-	return gameIdFromPath(newGameResp.Request.URL.Path)
+	p := newGameResp.Request.URL.Path
+	i := strings.LastIndex(p, "/")
+	if i == -1 {
+		return "", fmt.Errorf("response URL path has no game ID: %s", p)
+	}
+	return p[i+1:], nil
 }
 
 func (c *HexzTestClient) makeMove(gameId string, m *MoveRequest) error {
