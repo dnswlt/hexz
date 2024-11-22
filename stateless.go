@@ -4,10 +4,8 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"os"
 	"path"
@@ -31,14 +29,20 @@ import (
 
 type StatelessServer struct {
 	config      *ServerConfig
+	renderer    *Renderer
 	playerStore PlayerStore
 	dbStore     DatabaseStore
 	gameStore   GameStore
 }
 
 func NewStatelessServer(config *ServerConfig, playerStore PlayerStore, gameStore GameStore, dbStore DatabaseStore) (*StatelessServer, error) {
+	renderer, err := NewRenderer()
+	if err != nil {
+		return nil, err
+	}
 	return &StatelessServer{
 		config:      config,
+		renderer:    renderer,
 		playerStore: playerStore,
 		gameStore:   gameStore,
 		dbStore:     dbStore,
@@ -63,7 +67,7 @@ func (s *StatelessServer) readStaticResource(filename string) ([]byte, error) {
 
 // prefix adds the configured URL prefix to the given urlPath.
 // To run a server under any configured URL path prefix, every
-// client-facing URL should be built using
+// client-facing URL should be built using this method.
 func (s *StatelessServer) prefix(urlPath string) string {
 	return urlJoinPath(s.config.URLPathPrefix, urlPath)
 }
@@ -132,25 +136,10 @@ func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType 
 
 // Sends the contents of filename to the ResponseWriter.
 func (s *StatelessServer) serveHtmlFile(w http.ResponseWriter, filename string) {
-	if path.Ext(filename) != ".html" || strings.Contains(filename, "..") || strings.Contains(filename, "/") {
-		// It's a programming error to call this method with non-html files.
-		hlog.Fatalf("Not a valid HTML file: %q\n", filename)
-	}
-	p := path.Join(s.config.DocumentRoot, filename)
-	html, err := os.ReadFile(p)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			// We should only call this method for existing html files.
-			hlog.Fatalf("Cannot read %s: %s", p, err.Error())
-		} else {
-			// Whatever might cause us to fail reading our own files...
-			hlog.Errorf("Could not read existing file %s: %s", p, err.Error())
-			http.Error(w, "", http.StatusInternalServerError)
-			return
-		}
-	}
 	w.Header().Set("Content-Type", "text/html")
-	w.Write(html)
+	s.renderer.Render(w, filename, map[string]any{
+		"URLPathPrefix": s.config.URLPathPrefix,
+	})
 }
 
 func (s *StatelessServer) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
@@ -676,29 +665,38 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	// refactor them into a common place.
 
 	mux := &http.ServeMux{}
+	handle := func(pattern string, handler http.Handler) {
+		mux.Handle(s.prefix(pattern), handler)
+	}
+	handleFunc := func(pattern string, handler func(http.ResponseWriter, *http.Request)) {
+		mux.HandleFunc(s.prefix(pattern), handler)
+	}
 	// Static resources (images, JavaScript, ...) live under DocumentRoot.
-	mux.Handle("/hexz/static/", http.StripPrefix("/hexz/static/",
+	// Use gzipped.FileServer to deliver the WASM module compressed with
+	// Content-Encoding: gzip
+	// (other resources, too, but for them it doesn't matter).
+	handle("/static/", http.StripPrefix(s.prefix("/static/"),
 		gzipped.FileServer(gzipped.Dir(s.config.DocumentRoot))))
 	// POST method API
-	mux.HandleFunc("/hexz/login", postHandlerFunc(s.handleLoginRequest))
-	mux.HandleFunc("/hexz/new", postHandlerFunc(s.handleNewGame))
-	mux.HandleFunc("/hexz/move/{gameId}", postHandlerFunc(s.handleMove))
-	mux.HandleFunc("/hexz/reset/{gameId}", postHandlerFunc(s.handleReset))
+	handleFunc("/login", postHandlerFunc(s.handleLoginRequest))
+	handleFunc("/new", postHandlerFunc(s.handleNewGame))
+	handleFunc("/move/{gameId}", postHandlerFunc(s.handleMove))
+	handleFunc("/reset/{gameId}", postHandlerFunc(s.handleReset))
 	// Methods for CPU player.
-	mux.HandleFunc("/hexz/state/{gameId}", s.handleState)
-	mux.HandleFunc("/hexz/wasmstats/{gameId}", postHandlerFunc(s.handleWASMStats))
-	mux.HandleFunc("/hexz/undo/{gameId}", postHandlerFunc(s.handleUndo))
-	mux.HandleFunc("/hexz/redo/{gameId}", postHandlerFunc(s.handleRedo))
+	handleFunc("/state/{gameId}", s.handleState)
+	handleFunc("/wasmstats/{gameId}", postHandlerFunc(s.handleWASMStats))
+	handleFunc("/undo/{gameId}", postHandlerFunc(s.handleUndo))
+	handleFunc("/redo/{gameId}", postHandlerFunc(s.handleRedo))
 	// Server-sent Event handling
-	mux.HandleFunc("/hexz/sse/{gameId}", s.handleSSE)
+	handleFunc("/sse/{gameId}", s.handleSSE)
 
 	// GET method API
-	mux.HandleFunc("/hexz", s.handleHexz)
-	mux.HandleFunc("/hexz/gamez", s.handleGamez)
+	handleFunc("", s.handleHexz)
+	handleFunc("/gamez", s.handleGamez)
 	// mux.HandleFunc("/hexz/view/", s.handleView)
 	// mux.HandleFunc("/hexz/history/", s.handleHistory)
 	// mux.HandleFunc("/hexz/moves/", s.handleValidMoves)
-	mux.HandleFunc("/hexz/{gameId}", s.handleGame)
+	handleFunc("/{gameId}", s.handleGame)
 	// Technical services
 	// mux.Handle("/statusz", s.basicAuthHandlerFunc(s.handleStatusz))
 

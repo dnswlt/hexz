@@ -2,13 +2,7 @@
 <html lang="en">
 
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    {{template "snip_head.html" .}}
 
     <title>Hexz</title>
     <style>
@@ -69,26 +63,26 @@
         Select the game you want to play:
     </p>
     <div class="centered">
-        <form action="/hexz/new" method="post">
+        <form action="{{.URLPathPrefix}}/new" method="post">
             <input type="hidden" name="type" id="type" value="Classic">
             <input class="gameButton" type="submit" value="&#x1F3B9; Classic">
         </form>
     </div>
     <div class="centered spacer">
-        <form action="/hexz/new" method="post">
+        <form action="{{.URLPathPrefix}}/new" method="post">
             <input type="hidden" name="type" id="type" value="Flagz">
             <input class="gameButton" type="submit" value="&#127480;&#127464; Flagz (2P)">
         </form>
     </div>
     <div class="centered spacer">
-        <form action="/hexz/new" method="post">
+        <form action="{{.URLPathPrefix}}/new" method="post">
             <input type="hidden" name="type" id="type" value="Flagz">
             <input type="hidden" name="singlePlayer" id="singlePlayer" value="true">
             <input class="gameButton" type="submit" value="&#127480;&#127464; Flagz (1P)">
         </form>
     </div>
     <div class="centered spacer">
-        <form action="/hexz/new" method="post">
+        <form action="{{.URLPathPrefix}}/new" method="post">
             <input type="hidden" name="type" id="type" value="Freeform">
             <input class="gameButton" type="submit" value="&#x1F438; Freeform">
         </form>
@@ -113,7 +107,7 @@
 
     <script type="text/javascript">
         async function getActiveGames() {
-            const resp = await fetch("/hexz/gamez");
+            const resp = await fetch("{{.URLPathPrefix}}/gamez");
             const games = await resp.json();
             const tbody = document.getElementById("activeGamesTbody");
             if (games && games.length > 0) {
@@ -122,7 +116,7 @@
             for (const g of games) {
                 tbody.insertAdjacentHTML("beforeend", 
                 `<tr>
-                    <td><a href="/hexz/${g.id}">${g.id}</a></td>
+                    <td><a href="{{.URLPathPrefix}}/${g.id}">${g.id}</a></td>
                     <td>${g.host}</td>
                     <td>${g.gameType}</td>
                 </tr>`);

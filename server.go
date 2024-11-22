@@ -7,10 +7,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"math/big"
 	"net"
@@ -71,6 +69,9 @@ type Server struct {
 	// Server configuration (set from command-line flags).
 	config *ServerConfig
 
+	// For rendering HTML templates.
+	renderer *Renderer
+
 	// Counters
 	counters    map[string]*Counter
 	countersMut sync.Mutex
@@ -87,10 +88,15 @@ func NewServer(cfg *ServerConfig) (s *Server, err error) {
 	if err != nil {
 		return nil, err
 	}
+	renderer, err := NewRenderer()
+	if err != nil {
+		return nil, err
+	}
 	s = &Server{
 		ongoingGames: make(map[string]*GameHandle),
 		playerStore:  playerStore,
 		config:       cfg,
+		renderer:     renderer,
 		counters:     make(map[string]*Counter),
 		distrib:      make(map[string]*Distribution),
 		started:      time.Now(),
@@ -156,11 +162,6 @@ func (s *Server) AddDistribValue(name string, value float64) bool {
 
 const (
 	playerIdCookieName   = "playerId"
-	gameHtmlFilename     = "game.html"
-	viewHtmlFilename     = "view.html"
-	loginHtmlFilename    = "login.html"
-	newGameHtmlFilename  = "new.html"
-	rulesHtmlFilename    = "rules.html"
 	userDatabaseFilename = "_users.json"
 )
 
@@ -263,25 +264,14 @@ func (g *GameHandle) validMoves() []*MoveRequest {
 // Sends the contents of filename to the ResponseWriter.
 func (s *Server) serveHtmlFile(w http.ResponseWriter, filename string) {
 	s.IncCounter("/storage/files/servehtml")
-	if path.Ext(filename) != ".html" || strings.Contains(filename, "..") || strings.Contains(filename, "/") {
-		// It's a programming error to call this method with non-html files.
-		errorLog.Fatalf("Not a valid HTML file: %q\n", filename)
-	}
-	p := path.Join(s.config.DocumentRoot, filename)
-	html, err := os.ReadFile(p)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			// We should only call this method for existing html files.
-			errorLog.Fatalf("Cannot read %s: %s", p, err.Error())
-		} else {
-			// Whatever might cause us to fail reading our own files...
-			errorLog.Printf("Could not read existing file %s: %s", p, err.Error())
-			http.Error(w, "", http.StatusInternalServerError)
-			return
-		}
-	}
 	w.Header().Set("Content-Type", "text/html")
-	w.Write(html)
+	err := s.renderer.Render(w, filename, map[string]any{
+		"URLPathPrefix": s.config.URLPathPrefix,
+	})
+	if err != nil {
+		// This is a serious program error. Template must always be rendered.
+		errorLog.Fatalf("Failed to render template: %v", err)
+	}
 }
 
 func (s *Server) readStaticResource(filename string) ([]byte, error) {
@@ -940,51 +930,62 @@ func (s *Server) basicAuthHandlerFunc(h http.HandlerFunc) http.HandlerFunc {
 		})
 }
 
+// Joins the prefix and urlPath into a single URL path.
+// If either is empty, the other value is returned (even if it's empty as well).
+// Otherwise, the two path segments are joined by a single '/'.
 func urlJoinPath(prefix, urlPath string) string {
-	l := len(prefix)
-	if l > 0 && prefix[l-1] == '/' {
-		prefix = prefix[:l-1]
+	if prefix == "" {
+		return urlPath
 	}
-	if prefix == "" && urlPath == "" {
-		return "/"
+	if urlPath == "" {
+		return prefix
 	}
-	return prefix + urlPath
+	// Neither is empty. Join, and ensure to have a single '/' in between.
+	prefix = strings.TrimSuffix(prefix, "/")
+	urlPath = strings.TrimPrefix(urlPath, "/")
+	return prefix + "/" + urlPath
 }
 
 // prefix adds the configured URL prefix to the given urlPath.
 // To run a server under any configured URL path prefix, every
-// client-facing URL should be built using
+// client-facing URL should be built using this method.
 func (s *Server) prefix(urlPath string) string {
 	return urlJoinPath(s.config.URLPathPrefix, urlPath)
 }
 
 func (s *Server) createMux() *http.ServeMux {
 	mux := &http.ServeMux{}
+	handle := func(pattern string, handler http.Handler) {
+		mux.Handle(s.prefix(pattern), handler)
+	}
+	handleFunc := func(pattern string, handler func(http.ResponseWriter, *http.Request)) {
+		mux.HandleFunc(s.prefix(pattern), handler)
+	}
 	// Static resources (images, JavaScript, ...) live under DocumentRoot.
-	mux.Handle(s.prefix("/static/"), http.StripPrefix(s.prefix("/static/"),
+	handle("/static/", http.StripPrefix(s.prefix("/static/"),
 		http.FileServer(http.Dir(s.config.DocumentRoot))))
 	// POST method API
-	mux.HandleFunc(s.prefix("/login"), postHandlerFunc(s.handleLoginRequest))
-	mux.HandleFunc(s.prefix("/new"), postHandlerFunc(s.handleNewGame))
-	mux.HandleFunc(s.prefix("/move/{gameId}"), postHandlerFunc(s.handleMove))
-	mux.HandleFunc(s.prefix("/reset/{gameId}"), postHandlerFunc(s.handleReset))
-	mux.HandleFunc(s.prefix("/undo/{gameId}"), postHandlerFunc(s.handleUndo))
-	mux.HandleFunc(s.prefix("redo/{gameId}"), postHandlerFunc(s.handleRedo))
+	handleFunc("/login", postHandlerFunc(s.handleLoginRequest))
+	handleFunc("/new", postHandlerFunc(s.handleNewGame))
+	handleFunc("/move/{gameId}", postHandlerFunc(s.handleMove))
+	handleFunc("/reset/{gameId}", postHandlerFunc(s.handleReset))
+	handleFunc("/undo/{gameId}", postHandlerFunc(s.handleUndo))
+	handleFunc("redo/{gameId}", postHandlerFunc(s.handleRedo))
 	// Server-sent Event handling
-	mux.HandleFunc(s.prefix("/sse/{gameId}"), s.handleSSE)
+	handleFunc("/sse/{gameId}", s.handleSSE)
 
-	mux.HandleFunc(s.prefix("/rules"), func(w http.ResponseWriter, r *http.Request) {
+	handleFunc("/rules", func(w http.ResponseWriter, r *http.Request) {
 		s.serveHtmlFile(w, rulesHtmlFilename)
 	})
 	// GET method API
-	mux.HandleFunc(s.prefix(""), s.handleHexz)
-	mux.HandleFunc(s.prefix("/gamez"), s.handleGamez)
-	mux.HandleFunc(s.prefix("/view/"), s.handleView)
-	mux.HandleFunc(s.prefix("/history/"), s.handleHistory)
-	mux.HandleFunc(s.prefix("/moves/{gameId}"), s.handleValidMoves)
-	mux.HandleFunc(s.prefix("/{gameId}"), s.handleGame)
+	handleFunc("", s.handleHexz)
+	handleFunc("/gamez", s.handleGamez)
+	handleFunc("/view/", s.handleView)
+	handleFunc("/history/", s.handleHistory)
+	handleFunc("/moves/{gameId}", s.handleValidMoves)
+	handleFunc("/{gameId}", s.handleGame)
 	// Technical services
-	mux.Handle(s.prefix("/status"), s.basicAuthHandlerFunc(s.handleStatusz))
+	handleFunc("/status", s.basicAuthHandlerFunc(s.handleStatusz))
 
 	return mux
 }
@@ -997,9 +998,8 @@ func (s *Server) Serve() {
 		Handler: s.loggingHandler(mux),
 	}
 
-	// Quick sanity check that we have access to the game HTML file.
-	if _, err := s.readStaticResource(gameHtmlFilename); err != nil {
-		errorLog.Fatal("Cannot load game HTML: ", err)
+	if _, err := s.readStaticResource("js/game.js"); err != nil {
+		errorLog.Fatal("Cannot load JavaScript js/game.js: ", err)
 	}
 
 	infoLog.Printf("Stateful server listening on %s", addr)

@@ -1,6 +1,8 @@
 // Javascript library for displaying and manipulating the hexz board
 // as well as communicating with the server.
 
+const URL_PREFIX = document.querySelector('meta[name="hexz-url-prefix"]')?.content || "";
+
 const styles = {
     colors: {
         grid: '#cbcbcb',
@@ -57,7 +59,7 @@ function gameId() {
 }
 
 async function sendMove(row, col, cellType) {
-    return fetch("/hexz/move/" + gameId(), {
+    return fetch(`${URL_PREFIX}/move/${gameId()}`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -72,7 +74,7 @@ async function sendMove(row, col, cellType) {
 }
 
 async function resetGame() {
-    return fetch("/hexz/reset/" + gameId(), {
+    return fetch(`${URL_PREFIX}/reset/${gameId()}`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -88,7 +90,7 @@ function undoRedoMove(command) {
         if (!gstate.board) {
             return
         }
-        return fetch(`/hexz/${command}/${gameId()}`, {
+        return fetch(`${URL_PREFIX}/${command}/${gameId()}`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -193,7 +195,7 @@ function updatePlayerNames() {
 }
 
 function newGame() {
-    window.location.replace("/hexz");
+    window.location.replace(`${URL_PREFIX}`);
 }
 
 // Returns a Path2D representing a 0-centered hexagon with side length a.
@@ -497,7 +499,7 @@ function initialize() {
         }
     });
 
-    const eventSource = new EventSource("/hexz/sse/" + gameId());
+    const eventSource = new EventSource(`${URL_PREFIX}/sse/${gameId()}`);
     eventSource.onmessage = (event) => {
         // console.log(`Received event (${event.data.length} bytes)`);
         handleServerEvent(eventSource, JSON.parse(event.data));
@@ -654,7 +656,11 @@ function reset() {
 
 let wasmWorker = null;
 function startWASMWebWorker() {
-    wasmWorker = new Worker('/hexz/static/js/wasmworker.js');
+    wasmWorker = new Worker(`${URL_PREFIX}/static/js/wasmworker.js`);
+    // First message is initialization (FMII) (since you cannot pass arguments to worker):
+    wasmWorker.postMessage({
+        urlPrefix: URL_PREFIX,
+    })
     // wasmWorker.onmessage gets called when the worker posts a message,
     // which contains the suggested move.
     // This move is sent to the game server. The server will asynchronously
@@ -664,7 +670,7 @@ function startWASMWebWorker() {
         if (!move) {
             console.log("CPU did not find a move.");
         }
-        const moveResponse = await fetch(`/hexz/move/${gameId()}`, {
+        const moveResponse = await fetch(`${URL_PREFIX}/move/${gameId()}`, {
             method: "POST",
             headers: { "Content-Type": "application/json", },
             body: JSON.stringify(move.moveRequest),
@@ -674,7 +680,7 @@ function startWASMWebWorker() {
             return false;
         }
         // Send WASMStatsRequest so we can learn how our clients perform.
-        const statsResponse = await fetch(`/hexz/wasmstats/${gameId()}`, {
+        const statsResponse = await fetch(`${URL_PREFIX}/wasmstats/${gameId()}`, {
             method: "POST",
             headers: { "Content-Type": "application/json", },
             body: JSON.stringify({

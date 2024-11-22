@@ -293,26 +293,25 @@ func TestFlagzSinglePlayerHistory(t *testing.T) {
 	}
 }
 
-func TestURLPrefix(t *testing.T) {
+func TestURLJoinPath(t *testing.T) {
 	tests := []struct {
 		prefix string
 		suffix string
 		want   string
 	}{
-		{"/hexz", "/foo", "/hexz/foo"},
-		{"/hexz/", "/foo", "/hexz/foo"},
-		{"/hexz/", "/foo/", "/hexz/foo/"},
-		{"/hexz", "", "/hexz"},
-		{"/hexz", "/", "/hexz/"},
+		{"", "", ""},
 		{"", "/foo", "/foo"},
+		{"", "foo", "foo"},
+		{"/foo", "", "/foo"},
+		{"foo", "", "foo"},
+		{"/foo/", "/bar", "/foo/bar"},
+		{"/foo/", "/bar/", "/foo/bar/"},
+		{"/foo", "", "/foo"},
+		{"/foo", "/", "/foo/"},
+		{"", "/bar", "/bar"},
 	}
 	for _, tc := range tests {
-		s := &Server{
-			config: &ServerConfig{
-				URLPathPrefix: tc.prefix,
-			},
-		}
-		if got := s.prefix(tc.suffix); got != tc.want {
+		if got := urlJoinPath(tc.prefix, tc.suffix); got != tc.want {
 			t.Errorf("Invalid prefix: got %q, want %q", got, tc.want)
 		}
 	}
