@@ -205,7 +205,7 @@ func (s *StatelessServer) handleNewGame(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "", http.StatusPreconditionFailed)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/hexz/%s", gameId), http.StatusSeeOther)
+	http.Redirect(w, r, s.prefix(gameId), http.StatusSeeOther)
 }
 
 func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
