@@ -113,7 +113,10 @@ function handleServerEvent(sse, serverEvent) {
     }
     if (serverEvent?.gameInfo?.clientSideCPUPlayer) {
         gstate.clientSideCPUPlayer = true;
-        startWASMWebWorker();
+        if (!wasmWorker) {
+            // Only start WASM worker if it's not already running.
+            startWASMWebWorker();
+        }
     }
     if (serverEvent.board != null) {
         // new board received.

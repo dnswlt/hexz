@@ -552,6 +552,8 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
+	// Disable proxy buffering, in case we're behind a reverse proxy.
+	w.Header().Set("X-Accel-Buffering", "no")
 	pNum := gameState.PlayerNum(string(p.Id))
 	// If there is a slot in the game left, add this player.
 	if pNum == 0 && len(gameState.Players) < ge.NumPlayers() {
@@ -711,8 +713,8 @@ func (s *StatelessServer) Serve() {
 		Handler: s.loggingHandler(mux),
 	}
 
-	// Quick sanity check that we have access to the game HTML file.
-	if _, err := s.readStaticResource(gameHtmlFilename); err != nil {
+	// Quick sanity check that we have access to the game resource files.
+	if _, err := s.readStaticResource("js/game.js"); err != nil {
 		hlog.Fatalf("Cannot load game HTML: %s", err)
 	}
 
