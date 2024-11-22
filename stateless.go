@@ -164,7 +164,7 @@ func (s *StatelessServer) handleLoginRequest(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	http.SetCookie(w, s.makePlayerCookie(playerId, s.config.LoginTTL))
-	http.Redirect(w, r, "/hexz", http.StatusSeeOther)
+	http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
 }
 
 func (s *StatelessServer) handleNewGame(w http.ResponseWriter, r *http.Request) {
@@ -285,7 +285,7 @@ func (s *StatelessServer) handleGamez(w http.ResponseWriter, r *http.Request) {
 func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
-		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
+		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
 		return
 	}
 	gameId := r.PathValue("gameId")
@@ -295,7 +295,7 @@ func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := s.gameStore.LookupGame(r.Context(), gameId); err != nil {
 		// Game does not exist: offer to start a new game.
-		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
+		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
 		return
 	}
 	// Game exists, serve HTML and prolong cookie ttl.
@@ -335,7 +335,7 @@ func (s *StatelessServer) handleWASMStats(w http.ResponseWriter, r *http.Request
 func (s *StatelessServer) handleState(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
-		http.Redirect(w, r, "/hexz", http.StatusSeeOther)
+		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
 		return
 	}
 	gameId := r.PathValue("gameId")
