@@ -48,7 +48,8 @@ std::string Config::String() const {
                               startup_delay_seconds),
               absl::StrFormat("pin_threads: %d", pin_threads),
               absl::StrFormat("debug_memory_usage: %d", debug_memory_usage),
-              absl::StrFormat("enable_health_service: %d", enable_health_service),
+              absl::StrFormat("enable_health_service: %d",
+                              enable_health_service),
               absl::StrFormat("suspend_while_training: %d",
                               suspend_while_training),
               absl::StrFormat("dry_run: %d", dry_run),
@@ -102,6 +103,20 @@ absl::StatusOr<Config> Config::FromEnv() {
       GET_ENV_BOOL(suspend_while_training),
       GET_ENV_BOOL(dry_run),
   };
+  // Special case: HEXZ_WORKER_SPEC is four values in one (to reduce clutter in
+  // cloud env configs). Example: "cuda@4:128:256".
+  std::string worker_spec = GetEnv("HEXZ_WORKER_SPEC", "");
+  if (!worker_spec.empty()) {
+    char device[16];
+    if (std::sscanf(worker_spec.c_str(), "%15[^@]@%d:%d:%d", device,
+                    &config.worker_threads, &config.fibers_per_thread,
+                    &config.prediction_batch_size) != 4) {
+      return absl::InvalidArgumentError(
+          absl::StrFormat("Invalid HEXZ_WORKER_SPEC: %s", worker_spec));
+    }
+    config.device = std::string(device);
+  }
+
   // Validate values
   const std::vector<std::string> valid_devices = {"cpu", "mps", "cuda"};
   if (std::find(valid_devices.begin(), valid_devices.end(), config.device) ==

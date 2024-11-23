@@ -23,6 +23,8 @@ class TrainingServiceClient {
   virtual absl::StatusOr<hexzpb::AddTrainingExamplesResponse>
   AddTrainingExamples(const hexzpb::AddTrainingExamplesRequest& request) = 0;
 
+  virtual absl::StatusOr<hexzpb::TrainingParameters> GetTrainingParameters() = 0;
+
   // Fetches the latest model from the connected training server.
   // Pass an empty model_name to let the training server decide which model to
   // return.
@@ -49,9 +51,8 @@ class EmbeddedTrainingServiceClient : public TrainingServiceClient {
   absl::StatusOr<hexzpb::AddTrainingExamplesResponse> AddTrainingExamples(
       const hexzpb::AddTrainingExamplesRequest& request) override;
 
-  // Fetches the latest model from the connected training server.
-  // Pass an empty model_name to let the training server decide which model to
-  // return.
+  absl::StatusOr<hexzpb::TrainingParameters> GetTrainingParameters() override;
+
   absl::StatusOr<std::pair<hexzpb::ModelKey, torch::jit::Module>>
   FetchLatestModel(const std::string& model_name) override;
 
@@ -82,6 +83,9 @@ class GRPCTrainingServiceClient : public TrainingServiceClient {
 
   absl::StatusOr<hexzpb::AddTrainingExamplesResponse> AddTrainingExamples(
       const hexzpb::AddTrainingExamplesRequest& request) override;
+
+  // Gets the training parameters from the training server.
+  absl::StatusOr<hexzpb::TrainingParameters> GetTrainingParameters() override;
 
   // Fetches the latest model from the connected training server.
   // Pass an empty model_name to let the training server decide which model to

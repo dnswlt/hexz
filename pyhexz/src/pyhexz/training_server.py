@@ -47,12 +47,12 @@ class TrainingServicer(hexz_pb2_grpc.TrainingServiceServicer):
             f"Received AddTrainingExamplesRequest {request.execution_id}:{request.game_id} with {len(request.examples)} examples."
         )
         # sanity checks on the request to ignore data from rogue workers.
-        if request.worker_config.runs_per_move < self.config.min_runs_per_move:
+        if request.worker_config.training_params != self.training_params:
             self.logger.warning(
-                f"Ignoring AddTrainingExamplesRequest from {request.execution_id}: runs_per_move too low. "
-                f"Want >={self.config.min_runs_per_move}, got {request.worker_config.runs_per_move}"
+                f"Ignoring AddTrainingExamplesRequest from {request.execution_id}: invalid training params: "
+                f"{json_format.MessageToJson(request.worker_config.training_params)}"
             )
-            ctx.abort(grpc.StatusCode.INVALID_ARGUMENT, "runs_per_move too low")
+            ctx.abort(grpc.StatusCode.INVALID_ARGUMENT, "invalid training parameters")
         if not self.training_state.accept(request):
             self.logger.warning(
                 f"Ignoring AddTrainingExamplesRequest from {request.execution_id}: invalid model_key."
@@ -173,16 +173,18 @@ def read_training_params() -> str:
     """
     cfg_file = os.getenv("HEXZ_TRAINING_PARAMS_FILE")
     if not cfg_file:
-        params = hexz_pb2.TrainingParameters(
+        ps = hexz_pb2.TrainingParameters(
             runs_per_move=800,
             uct_c=1.5,
-            initial_root_q_value=0,
-            initial_q_penalty=0,
+            initial_root_q_value=-0.2,
+            initial_q_penalty=0.3,
             dirichlet_concentration=0.55,
             fast_move_prob=0,
             runs_per_fast_move=100,
+            random_playouts=False,
         )
-        print("Using default params:", json_format.MessageToJson(params))
+        # print(json_format.MessageToJson(ps))
+        return ps
     with open(cfg_file, "r") as f_in:
         return json_format.Parse(f_in.read(), hexz_pb2.TrainingParameters())
 
@@ -213,10 +215,13 @@ def create_app():
     )
     app.training_state = training_state
 
+    training_params = read_training_params()
+    app.logger.info(f"Using worker training parameters {json_format.MessageToJson(training_params)}")
+
     # Start gRPC server in separate thread.
     grpc_thread = threading.Thread(
         target=serve_grpc,
-        args=(app.logger, model_repo, training_state, config, read_training_params()),
+        args=(app.logger, model_repo, training_state, config, training_params),
     )
     grpc_thread.start()
     # signal.signal(signal.SIGINT, handle_shutdown)

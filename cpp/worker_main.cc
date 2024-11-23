@@ -56,9 +56,13 @@ ABSL_FLAG(bool, suspend_while_training, false,
 ABSL_FLAG(bool, dry_run, false,
           "if true, the worker will not send examples to the training server");
 ABSL_FLAG(bool, pin_threads, false,
-          "if true, worker threads will be pinned to CPU cores.");
+          "if true, worker threads will be pinned to CPU cores");
 ABSL_FLAG(bool, enable_health_service, false,
-          "if true, the gRPC Health service will run on $PORT.");
+          "if true, the gRPC Health service will run on $PORT");
+ABSL_FLAG(
+    bool, fetch_training_server_params, true,
+    "if true, training parameters will be fetched from the training server and "
+    "override any parameters specified as command-line args or env vars.");
 
 namespace {
 
@@ -148,6 +152,31 @@ void UpdateConfigFromFlags(hexz::Config& config) {
   }
 }
 
+absl::Status UpdateConfigFromTrainingServer(hexz::TrainingServiceClient& client,
+                                            hexz::Config& config) {
+  absl::StatusOr<hexzpb::TrainingParameters> resp =
+      client.GetTrainingParameters();
+  if (absl::IsUnimplemented(resp.status())) {
+    ABSL_LOG(INFO) << "Training server does not implement "
+                      "GetTrainingParameters. Config remains unchanged.";
+    return absl::OkStatus();
+  }
+  if (!resp.ok()) {
+    return resp.status();
+  }
+  config.runs_per_move = resp->runs_per_move();
+  config.uct_c = resp->uct_c();
+  config.initial_root_q_value = resp->initial_root_q_value();
+  config.initial_q_penalty = resp->initial_q_penalty();
+  config.dirichlet_concentration = resp->dirichlet_concentration();
+  config.fast_move_prob = resp->fast_move_prob();
+  config.runs_per_fast_move = resp->runs_per_fast_move();
+  config.random_playouts = resp->random_playouts();
+  ABSL_LOG(INFO) << "Updated training parameters from training server:\n"
+                 << resp->DebugString();
+  return absl::OkStatus();
+}
+
 void StartHealthServiceThread() {
   std::thread([]() {
     grpc::reflection::InitProtoReflectionServerBuilderPlugin();
@@ -190,7 +219,6 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   UpdateConfigFromFlags(*config);
-  hexz::InitializeFromConfig(*config);
   // Cannot run without a training server URL, so exit early if it is not set.
   if (config->training_server_addr.empty()) {
     ABSL_LOG(ERROR) << "training_server_addr must be set";
@@ -245,6 +273,17 @@ int main(int argc, char* argv[]) {
     client =
         hexz::GRPCTrainingServiceClient::Connect(config->training_server_addr);
   }
+
+  if (absl::GetFlag(FLAGS_fetch_training_server_params)) {
+    if (auto status = UpdateConfigFromTrainingServer(*client, *config);
+        !status.ok()) {
+      ABSL_LOG(ERROR) << "Failed to get config from training server: "
+                      << status;
+      return 1;
+    };
+  }
+  // Now transfer config values to static fields, etc.
+  hexz::InitializeFromConfig(*config);
 
   hexz::Worker worker(*config, *client);
   worker.Run();

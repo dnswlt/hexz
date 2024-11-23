@@ -36,9 +36,9 @@ class Node {
   // turn indicates the player whose turn it is to make the given move.
   Node(Node* parent, int turn, Move move);
 
-  // Must be called at program startup to initialize static configuration
+  // Should be called at program startup to initialize static configuration
   // parameters.
-  static void InitializeStaticMembers(const Config& config) {
+  static void UpdateStaticParams(const Config& config) {
     uct_c = config.uct_c;
     initial_root_q_value = config.initial_root_q_value;
     initial_q_penalty = config.initial_q_penalty;

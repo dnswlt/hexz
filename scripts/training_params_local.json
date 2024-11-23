@@ -1,0 +1,11 @@
+{
+    "runsPerMove": 800,
+    "uctC": 1.5,
+    "initialRootQValue": -0.2,
+    "initialQPenalty": 0.3,
+    "dirichletConcentration": 0.55,
+    "fastMoveProb": 0,
+    "runsPerFastMove": 100,
+    "randomPlayouts": false
+  }
+  

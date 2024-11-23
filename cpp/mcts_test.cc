@@ -446,7 +446,7 @@ TEST(MCTSTest, NoMoveLowerScoreIsTerminal) {
       .initial_root_q_value = -0.2,  // the default
       .initial_q_penalty = 0.3,      // the default
   };
-  Node::InitializeStaticMembers(config);
+  Node::UpdateStaticParams(config);
   Board b = Board::EmptyBoard(/*flags=*/1);
   SetPieceRock(b, 0, 1);
   SetPieceRock(b, 1, 0);
@@ -471,7 +471,7 @@ TEST(MCTSTest, SelfplayRun) {
       .initial_root_q_value = -0.2,  // the default
       .initial_q_penalty = 0.3,      // the default
   };
-  Node::InitializeStaticMembers(config);
+  Node::UpdateStaticParams(config);
   // The model thinks that the current player always wins.
   UniformFakeModel fake_model(1.0);
   NeuralMCTS mcts(fake_model, /*playout_runner=*/nullptr, config);

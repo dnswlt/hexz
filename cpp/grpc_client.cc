@@ -77,6 +77,13 @@ EmbeddedTrainingServiceClient::AddTrainingExamples(
   return response;
 }
 
+absl::StatusOr<hexzpb::TrainingParameters>
+EmbeddedTrainingServiceClient::GetTrainingParameters() {
+  return absl::UnimplementedError(
+      "GetTrainingParameters is not supported by the "
+      "EmbeddedTrainingServiceClient");
+}
+
 absl::StatusOr<std::pair<hexzpb::ModelKey, torch::jit::Module>>
 EmbeddedTrainingServiceClient::FetchLatestModel(const std::string&) {
   try {
@@ -104,6 +111,23 @@ GRPCTrainingServiceClient::AddTrainingExamples(
   if (!status.ok()) {
     return absl::Status(AbslStatusCode(status.error_code()),
                         status.error_message());
+  }
+  return resp;
+}
+
+absl::StatusOr<hexzpb::TrainingParameters>
+GRPCTrainingServiceClient::GetTrainingParameters() {
+  hexzpb::GetTrainingParametersRequest request;
+  hexzpb::TrainingParameters resp;
+
+  grpc::ClientContext context;
+  grpc::Status status = stub_->GetTrainingParameters(&context, request, &resp);
+
+  if (!status.ok()) {
+    ABSL_LOG(ERROR) << "GetTrainingParameters RPC failed: Code="
+                    << status.error_code()
+                    << " Message=" << status.error_message();
+    return AbslStatus(status);
   }
   return resp;
 }

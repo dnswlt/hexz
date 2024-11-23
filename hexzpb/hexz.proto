@@ -362,7 +362,7 @@ message ControlEvent {
     }
 }
 
-message TrainingParametersRequest {}
+message GetTrainingParametersRequest {}
 
 service TrainingService {
     // AddTrainingExamples is the method that workers use to send their examples to the training server.
@@ -373,7 +373,7 @@ service TrainingService {
     rpc ControlEvents(ControlRequest) returns (stream ControlEvent) {}
     // Workers must use this method to get the correct training parameters.
     // Training servers won't accept training examples that don't match their parameter expectations.
-    rpc GetTrainingParameters(TrainingParametersRequest) returns (TrainingParameters) {}
+    rpc GetTrainingParameters(GetTrainingParametersRequest) returns (TrainingParameters) {}
 }
 
 service CPUPlayerService {

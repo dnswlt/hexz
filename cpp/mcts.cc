@@ -23,7 +23,7 @@ float Node::initial_root_q_value = 0;
 float Node::initial_q_penalty = 0;
 
 void InitializeFromConfig(const Config& config) {
-  Node::InitializeStaticMembers(config);
+  Node::UpdateStaticParams(config);
 }
 
 Node::Node(Node* parent, int next_turn, Move move)

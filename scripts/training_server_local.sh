@@ -23,4 +23,5 @@ HEXZ_LEARNING_RATE=0.01 \
 HEXZ_ADAM_WEIGHT_DECAY=1e-4 \
 HEXZ_DEVICE=cuda \
 HEXZ_SHUFFLE=true \
+HEXZ_TRAINING_PARAMS_FILE="../../scripts/training_params_local.json" \
 gunicorn --bind :8088 --workers 1 --threads 8 --timeout 0 'pyhexz.training_server:create_app()'
