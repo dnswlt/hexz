@@ -130,7 +130,15 @@ def serve_grpc(
 ):
     global _grpc_server
 
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    server_options = [
+        # Server should send keepalive PING messages to keep streaming
+        # connections alive in the presence of a reverse proxy.
+        ("grpc.keepalive_time_ms", 20000),
+        ("grpc.keepalive_timeout_ms", 10000),
+    ]
+    server = grpc.server(
+        thread_pool=futures.ThreadPoolExecutor(max_workers=10), options=server_options
+    )
     svc = TrainingServicer(logger, model_repo, training_state, config)
     hexz_pb2_grpc.add_TrainingServiceServicer_to_server(svc, server)
     server.add_insecure_port("[::]:50051")
@@ -217,7 +225,6 @@ def create_app():
         if not reqs:
             return "No recent games", 404
 
-
         links = []
         for r in reqs:
             l = f'<p><a href="/training/games/{model_name}/{r.game_id}">/games/{model_name}/{r.game_id}</a>'
@@ -225,7 +232,9 @@ def create_app():
         return f"""<html>
         <h1>Recent games</h1>
         {"\n".join(links)}
-        </html>""", {"Content-Type": "text/html; charset=utf-8"}
+        </html>""", {
+            "Content-Type": "text/html; charset=utf-8"
+        }
 
     @app.get("/training/games/<model_name>/<game_id>")
     def games_svg(model_name, game_id):
