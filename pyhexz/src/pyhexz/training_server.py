@@ -214,9 +214,14 @@ def create_app():
         model_repo, config.model_name, logger=app.logger, config=config
     )
     app.training_state = training_state
+    app.logger.info(
+        f"Created initial TrainingState with model_key {json_format.MessageToJson(training_state.model_key())}"
+    )
 
     training_params = read_training_params()
-    app.logger.info(f"Using worker training parameters {json_format.MessageToJson(training_params)}")
+    app.logger.info(
+        f"Using worker training parameters {json_format.MessageToJson(training_params)}"
+    )
 
     # Start gRPC server in separate thread.
     grpc_thread = threading.Thread(

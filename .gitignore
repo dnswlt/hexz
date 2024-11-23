@@ -6,6 +6,7 @@ _auth.txt
 *.test
 /bench
 /hist
+/log
 dump.rdb
 *.wasm
 *.gz

@@ -7,7 +7,12 @@ if [[ -z "$CONDA_DEFAULT_ENV" ]]; then
     fi
 fi
 
-cd $(dirname $0)/../pyhexz/src
+base_dir="$(realpath $(dirname $0)/..)"
+log_dir="$base_dir/log"
+
+test -d "$log_dir" || mkdir "$log_dir"
+
+cd "$base_dir/pyhexz/src"
 
 env \
 HEXZ_MODEL_BLOCKS=10 \
@@ -24,4 +29,4 @@ HEXZ_ADAM_WEIGHT_DECAY=1e-4 \
 HEXZ_DEVICE=cuda \
 HEXZ_SHUFFLE=true \
 HEXZ_TRAINING_PARAMS_FILE="../../scripts/training_params_local.json" \
-gunicorn --bind :8088 --workers 1 --threads 8 --timeout 0 'pyhexz.training_server:create_app()'
+gunicorn --bind :8088 --workers 1 --threads 8 --timeout 0 'pyhexz.training_server:create_app()' 2>&1 | tee -a "$log_dir/training.log"
