@@ -184,6 +184,18 @@ message ModelKey {
     int32 checkpoint = 2;
 }
 
+// Training parameters for self-play.
+message TrainingParameters {
+    int32 runs_per_move = 1;
+    float uct_c = 2;
+    float initial_root_q_value = 3;
+    float initial_q_penalty = 4;
+    float dirichlet_concentration = 5;
+    float fast_move_prob = 6;
+    float runs_per_fast_move = 7;
+    bool random_playouts = 8;
+}
+
 // A subset of configuration parameters from hexz::Config that
 // was used by the worker when generating examples.
 message WorkerConfig {
@@ -191,13 +203,7 @@ message WorkerConfig {
     int32 worker_threads = 3;
     int32 fibers_per_thread = 4;
     int32 prediction_batch_size = 5;
-    int32 runs_per_move = 6;
-    float uct_c = 7;
-    float initial_root_q_value = 8;
-    float initial_q_penalty = 9;
-    float dirichlet_concentration = 10;
-    float fast_move_prob = 11;
-    float runs_per_fast_move = 12;
+    TrainingParameters training_params = 13;
 }
 
 // Used by workers to upload examples to the training server.
@@ -356,10 +362,18 @@ message ControlEvent {
     }
 }
 
+message TrainingParametersRequest {}
+
 service TrainingService {
+    // AddTrainingExamples is the method that workers use to send their examples to the training server.
     rpc AddTrainingExamples(AddTrainingExamplesRequest) returns (AddTrainingExamplesResponse) {}
+    // FetchModel returns the PyTorch model to use for self-play.
     rpc FetchModel(FetchModelRequest) returns (FetchModelResponse) {}
+    // ControlEvent is a server-streaming RPC that workers should subscribe to.
     rpc ControlEvents(ControlRequest) returns (stream ControlEvent) {}
+    // Workers must use this method to get the correct training parameters.
+    // Training servers won't accept training examples that don't match their parameter expectations.
+    rpc GetTrainingParameters(TrainingParametersRequest) returns (TrainingParameters) {}
 }
 
 service CPUPlayerService {

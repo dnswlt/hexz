@@ -1,5 +1,6 @@
 from concurrent import futures
 import datetime
+import os
 import pprint
 import time
 import grpc
@@ -11,7 +12,6 @@ from google.protobuf import timestamp_pb2
 import logging
 import pytz
 import threading
-
 
 from pyhexz.config import TrainingConfig
 from pyhexz.errors import HexzError
@@ -32,11 +32,13 @@ class TrainingServicer(hexz_pb2_grpc.TrainingServiceServicer):
         model_repo: LocalModelRepository,
         training_state: TrainingState,
         config: TrainingConfig,
+        training_params: hexz_pb2.TrainingParameters,
     ):
         self.logger = logger
         self.model_repo = model_repo
         self.training_state = training_state
         self.config = config
+        self.training_params = training_params
 
     def AddTrainingExamples(
         self, request: hexz_pb2.AddTrainingExamplesRequest, ctx: grpc.ServicerContext
@@ -102,6 +104,9 @@ class TrainingServicer(hexz_pb2_grpc.TrainingServiceServicer):
             model_bytes=model,
         )
 
+    def GetTrainingParameters(self, request, context):
+        return self.training_params
+
     def ControlEvents(
         self, request: hexz_pb2.ControlRequest, ctx: grpc.ServicerContext
     ):
@@ -127,6 +132,7 @@ def serve_grpc(
     model_repo: LocalModelRepository,
     training_state: TrainingState,
     config: TrainingConfig,
+    training_params: hexz_pb2.TrainingParameters,
 ):
     global _grpc_server
 
@@ -139,7 +145,7 @@ def serve_grpc(
     server = grpc.server(
         thread_pool=futures.ThreadPoolExecutor(max_workers=10), options=server_options
     )
-    svc = TrainingServicer(logger, model_repo, training_state, config)
+    svc = TrainingServicer(logger, model_repo, training_state, config, training_params)
     hexz_pb2_grpc.add_TrainingServiceServicer_to_server(svc, server)
     server.add_insecure_port("[::]:50051")
     server.start()
@@ -160,8 +166,32 @@ def init_repo_if_missing(app: Flask) -> None:
     app.logger.info(f"Created new initial model in repo for model '{name}'")
 
 
+def read_training_params() -> str:
+    """Reads the training parameter JSON from the file specified by HEXZ_TRAINING_PARAMS_FILE.
+
+    If that environment variable is not set, returns default parameters.
+    """
+    cfg_file = os.getenv("HEXZ_TRAINING_PARAMS_FILE")
+    if not cfg_file:
+        params = hexz_pb2.TrainingParameters(
+            runs_per_move=800,
+            uct_c=1.5,
+            initial_root_q_value=0,
+            initial_q_penalty=0,
+            dirichlet_concentration=0.55,
+            fast_move_prob=0,
+            runs_per_fast_move=100,
+        )
+        print("Using default params:", json_format.MessageToJson(params))
+    with open(cfg_file, "r") as f_in:
+        return json_format.Parse(f_in.read(), hexz_pb2.TrainingParameters())
+
+
 def create_app():
-    # Use the Flask app only for HTML status pages.
+    """Create the Flask app.
+
+    We use the Flask app only for HTML status pages. The core work is done in gRPC.
+    """
     app = Flask(__name__)
     app.logger.setLevel(logging.INFO)
     config = TrainingConfig.from_env()
@@ -185,7 +215,8 @@ def create_app():
 
     # Start gRPC server in separate thread.
     grpc_thread = threading.Thread(
-        target=serve_grpc, args=(app.logger, model_repo, training_state, config)
+        target=serve_grpc,
+        args=(app.logger, model_repo, training_state, config, read_training_params()),
     )
     grpc_thread.start()
     # signal.signal(signal.SIGINT, handle_shutdown)
