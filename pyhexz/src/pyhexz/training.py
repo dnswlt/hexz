@@ -1,3 +1,4 @@
+from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 import dataclasses
@@ -123,6 +124,36 @@ class TrainingTask:
         self.config = config
         self.logger = logger
 
+    def log_training_statistics(self, cum_stats, epoch):
+        """Log L2 norms per layer type."""
+        for typ, stats in cum_stats.items():
+            gradients_norm = np.sqrt(stats['gradients'].item())
+            parameters_norm = np.sqrt(stats['parameters'].item())
+            update = gradients_norm / (parameters_norm + 1e-8)
+            self.logger.info(
+                f"Epoch {epoch} L2 norms: {typ}: gradients: {gradients_norm}, relative updates: {update}"
+            )
+
+    def accumulate_stats(self, cum_stats, model: nn.Module):
+        """Accumulate sum of squares for parameters and gradients per layer type."""
+        for module in model.modules():
+            if isinstance(module, nn.Linear):
+                key = "Linear"
+            elif isinstance(module, nn.Conv2d):
+                key = "Conv2d"
+            elif isinstance(module, nn.BatchNorm2d):
+                key = "BatchNorm2d"
+            else:
+                key = "Other"
+            # Nested loop to find matching parameters
+            for param in module.parameters():
+                if param.grad is not None:
+                    with torch.no_grad():
+                        grad_norm = param.grad.data.norm(2)
+                        cum_stats[key]["gradients"] += grad_norm**2
+                        param_norm = param.data.norm(2)
+                        cum_stats[key]["parameters"] += param_norm**2
+
     def execute(self) -> TrainingResultInfo:
         t_start = time.time()
         device = self.config.device
@@ -154,6 +185,12 @@ class TrainingTask:
             )
             t_iter_start = time.time()
             training_ns = 0
+            cum_stats = defaultdict(
+                lambda: {
+                    "parameters": torch.tensor(0.0, device=device),
+                    "gradients": torch.tensor(0.0, device=device),
+                }
+            )
             for epoch in range(self.config.num_epochs):
                 for (X_board, X_action_mask), (y_pr, y_val) in loader:
                     t_start_batch = time.perf_counter_ns()
@@ -181,6 +218,10 @@ class TrainingTask:
                     optimizer.step()
                     t_end_batch = time.perf_counter_ns()
                     training_ns += t_end_batch - t_start_batch
+                    # Accumulate stats across all batches
+                    self.accumulate_stats(cum_stats, model)
+                # Log stats aggregated across batches for each epoch.
+                self.log_training_statistics(cum_stats, epoch)
 
         # Training is done. Save model under incremented checkpoint.
         next_cp = self.checkpoint + 1
@@ -331,7 +372,7 @@ class TrainingState:
 
     def accept(self, req: hexz_pb2.AddTrainingExamplesRequest):
         """Check if the request should be accepted for training.
-        
+
         Examples must be based on a recent checkpoint of the right model.
         """
         key = self.model_key()
