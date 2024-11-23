@@ -23,4 +23,4 @@ HEXZ_LEARNING_RATE=0.01 \
 HEXZ_ADAM_WEIGHT_DECAY=1e-4 \
 HEXZ_DEVICE=cuda \
 HEXZ_SHUFFLE=true \
-gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.training_server:create_app()'
+gunicorn --bind :8088 --workers 1 --threads 8 --timeout 0 'pyhexz.training_server:create_app()'

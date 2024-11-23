@@ -16,7 +16,9 @@ done
 
 cd $(dirname $0)/..
 
-server_port=8071
+# Run under different path from non-ML server.
+url_path_prefix=/hexzml
+server_port=8080
 cpuserver_addr="localhost:50071"
 model_base_dir="$HOME/tmp/hexz-models/models/flagz"
 model_name=res10
@@ -31,7 +33,7 @@ cpu_pid=$!
 echo "Started cpuserver with PID $cpu_pid"
 popd > /dev/null
 
-go run ./cmd/server -remote-cpu-url "$cpuserver_addr" -cpu-think-time 5s -stateless=false -port=$server_port $tls_flags
+go run ./cmd/server -url-path-prefix "$url_path_prefix" -remote-cpu-url "$cpuserver_addr" -cpu-think-time 5s -stateless=false -port=$server_port $tls_flags
 
 echo "Terminating cpuserver process"
 kill $cpu_pid
