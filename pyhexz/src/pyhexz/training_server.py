@@ -184,7 +184,7 @@ def create_app():
     # signal.signal(signal.SIGTERM, handle_shutdown)
     app.grpc_thread = grpc_thread
 
-    @app.get("/")
+    @app.get("/training")
     def index():
         now = datetime.datetime.now(tz=pytz.UTC).isoformat()
         ts: TrainingState = app.training_state
@@ -198,7 +198,7 @@ def create_app():
         resp.headers["Content-Type"] = "text/plain"
         return resp
 
-    @app.get("/games/latest")
+    @app.get("/training/games/latest")
     def games_latest():
         """Returns a HTML file with SVG images of the latest example batch."""
         ts: TrainingState = app.training_state
@@ -209,7 +209,7 @@ def create_app():
         svg.export(buf, req)
         return buf.getvalue(), {"Content-Type": "text/html; charset=utf-8"}
 
-    @app.get("/games/<model_name>/")
+    @app.get("/training/games/<model_name>/")
     def games_list(model_name):
         """Returns a HTML file with links to the latest SVG images."""
         repo: LocalModelRepository = app.model_repo
@@ -220,14 +220,14 @@ def create_app():
 
         links = []
         for r in reqs:
-            l = f'<p><a href="/games/{model_name}/{r.game_id}">/games/{model_name}/{r.game_id}</a>'
+            l = f'<p><a href="/training/games/{model_name}/{r.game_id}">/games/{model_name}/{r.game_id}</a>'
             links.append(l)
         return f"""<html>
         <h1>Recent games</h1>
         {"\n".join(links)}
         </html>""", {"Content-Type": "text/html; charset=utf-8"}
 
-    @app.get("/games/<model_name>/<game_id>")
+    @app.get("/training/games/<model_name>/<game_id>")
     def games_svg(model_name, game_id):
         """Returns a HTML file with SVG images of the specified game_id, if it exists."""
         repo: LocalModelRepository = app.model_repo
