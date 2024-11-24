@@ -82,13 +82,16 @@ func (c *RedisClient) StoreNewGame(ctx context.Context, s *pb.GameState) (bool, 
 	if err != nil {
 		return false, err
 	}
-	gameId := s.GameInfo.Id
+	gameId := s.GetGameInfo().GetId()
 	ok, err := c.client.SetNX(ctx, "game:"+gameId, data, c.config.GameTTL).Result()
 	if !ok || err != nil {
 		return ok, err
 	}
-	mInfo, _ := proto.Marshal(s.GameInfo) // We can always marshal a GameInfo.
-	if err := c.client.ZAdd(ctx, "recentgames", redis.Z{Score: float64(s.GameInfo.Started.Seconds), Member: mInfo}).Err(); err != nil {
+	mInfo, _ := proto.Marshal(s.GetGameInfo()) // We can always marshal a GameInfo.
+	if err := c.client.ZAdd(ctx, "recentgames", redis.Z{
+		Score:  float64(s.GetGameInfo().GetStarted().GetSeconds()),
+		Member: mInfo,
+	}).Err(); err != nil {
 		hlog.Errorf("Failed to add game %q to recent games: %v", gameId, err)
 	}
 	return true, nil
@@ -103,7 +106,7 @@ func (c *RedisClient) UpdateGame(ctx context.Context, s *pb.GameState) error {
 	if err != nil {
 		return err
 	}
-	return c.client.Set(ctx, "game:"+s.GameInfo.Id, data, c.config.GameTTL).Err()
+	return c.client.Set(ctx, "game:"+s.GetGameInfo().GetId(), data, c.config.GameTTL).Err()
 }
 
 func (c *RedisClient) LookupGame(ctx context.Context, gameId string) (*pb.GameState, error) {
@@ -167,7 +170,7 @@ func (c *RedisClient) ListRecentGames(ctx context.Context, limit int) ([]*pb.Gam
 	return games, nil
 }
 
-func (c *RedisClient) Subscribe(ctx context.Context, gameId string, ch chan<- string) {
+func (c *RedisClient) Subscribe(ctx context.Context, gameId string, ch chan<- *pb.GameStorePubsubEvent) {
 	sub := c.client.Subscribe(ctx, "pubsub:"+gameId)
 	defer sub.Close()
 	defer close(ch)
@@ -177,7 +180,12 @@ func (c *RedisClient) Subscribe(ctx context.Context, gameId string, ch chan<- st
 			if !ok {
 				return
 			}
-			ch <- msg.Payload
+			event := &pb.GameStorePubsubEvent{}
+			if err := proto.Unmarshal([]byte(msg.Payload), event); err != nil {
+				hlog.Errorf("Received invalid event from Redis: %v", err)
+				return
+			}
+			ch <- event
 		case <-ctx.Done():
 			// sub.Channel() does not seem to respond to context cancellation, so we do it externally.
 			return
@@ -187,6 +195,10 @@ func (c *RedisClient) Subscribe(ctx context.Context, gameId string, ch chan<- st
 
 // Sends a message to the channel for the given game.
 // Returns the number of subscribers that received the message.
-func (c *RedisClient) Publish(ctx context.Context, gameId string, message string) error {
-	return c.client.Publish(ctx, "pubsub:"+gameId, message).Err()
+func (c *RedisClient) Publish(ctx context.Context, gameId string, event *pb.GameStorePubsubEvent) error {
+	data, err := proto.Marshal(event)
+	if err != nil {
+		hlog.Fatalf("Cannot marshal event: %v", err)
+	}
+	return c.client.Publish(ctx, "pubsub:"+gameId, data).Err()
 }

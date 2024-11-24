@@ -31,13 +31,22 @@ type DatabaseStore interface {
 
 // GameStore is an interface for local or remote game stores, e.g. Redis.
 type GameStore interface {
+	// StoreNewGame stores a new game using the game ID s.GameInfo.Id.
+	// Returns false if a game with that ID exists, and does not store anything.
 	StoreNewGame(ctx context.Context, s *pb.GameState) (bool, error)
+	// LookupGame looks up the current game state for the given gameId.
 	LookupGame(ctx context.Context, gameId string) (*pb.GameState, error)
+	// UpdateGame updates the game state for game ID s.GameInfo.Id.
+	// Existing states are overwritten unconditionally.
 	UpdateGame(ctx context.Context, s *pb.GameState) error
+	// ListRecentGames lists the limit most recently played games.
 	ListRecentGames(ctx context.Context, limit int) ([]*pb.GameInfo, error)
-
-	Publish(ctx context.Context, gameId string, event string) error
-	Subscribe(ctx context.Context, gameId string, ch chan<- string)
+	// Publish publishes the given game event on the GameStore's pubsub topic.
+	Publish(ctx context.Context, gameId string, event *pb.GameStorePubsubEvent) error
+	// Subscribe subscribes to game events for the given game ID. Events will be
+	// sent to the channel ch. This method does not return until the passed
+	// context ctx is cancelled, so it should typically be executed in its own goroutine.
+	Subscribe(ctx context.Context, gameId string, ch chan<- *pb.GameStorePubsubEvent)
 }
 
 type PlayerStore interface {

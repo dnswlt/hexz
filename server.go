@@ -696,6 +696,7 @@ func (s *Server) handleGame(w http.ResponseWriter, r *http.Request) {
 	s.serveHtmlFile(w, gameHtmlFilename)
 }
 
+// Currently only used by test clients to obtain the valid moves for playing a game.
 func (s *Server) handleValidMoves(w http.ResponseWriter, r *http.Request) {
 	gameId := r.PathValue("gameId")
 	if !isValidGameId(gameId) {
@@ -716,21 +717,16 @@ func (s *Server) handleValidMoves(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-var (
-	viewURLPathRE    = regexp.MustCompile(`^(.*/view/(?P<gameId>[A-Z]{6}))(/(?P<seqNum>\d+))?$`)
-	historyURLPathRE = regexp.MustCompile(`^(.*/history/(?P<gameId>[A-Z]{6}))$`)
-)
-
 func (s *Server) handleView(w http.ResponseWriter, r *http.Request) {
-	groups := viewURLPathRE.FindStringSubmatch(r.URL.Path)
-	if groups == nil {
-		http.Error(w, "", http.StatusNotFound)
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
-	seqNum := groups[viewURLPathRE.SubexpIndex("seqNum")]
+	seqNum := r.PathValue("seqNum")
 	if seqNum == "" {
 		// No move number specified. Redirect to move 0.
-		http.Redirect(w, r, fmt.Sprintf("%s/0", groups[1]), http.StatusSeeOther)
+		http.Redirect(w, r, fmt.Sprintf("%s/0", r.URL.Path), http.StatusSeeOther)
 		return
 	}
 	s.serveHtmlFile(w, viewHtmlFilename)
@@ -756,12 +752,11 @@ func NewGameHistoryResponse(hist *GameHistory) *GameHistoryResponse {
 }
 
 func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
-	groups := historyURLPathRE.FindStringSubmatch(r.URL.Path)
-	if groups == nil {
-		http.Error(w, "", http.StatusNotFound)
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
-	gameId := groups[historyURLPathRE.SubexpIndex("gameId")]
 	hist, err := s.readGameHistoryFromFile(gameId)
 	if err != nil {
 		http.Error(w, "", http.StatusNotFound)
@@ -980,8 +975,9 @@ func (s *Server) createMux() *http.ServeMux {
 	// GET method API
 	handleFunc("", s.handleHexz)
 	handleFunc("/gamez", s.handleGamez)
-	handleFunc("/view/", s.handleView)
-	handleFunc("/history/", s.handleHistory)
+	handleFunc("/view/{gameId}", s.handleView)
+	handleFunc("/view/{gameId}/{seqNum}", s.handleView)
+	handleFunc("/history/{gameId}", s.handleHistory)
 	handleFunc("/moves/{gameId}", s.handleValidMoves)
 	handleFunc("/{gameId}", s.handleGame)
 	// Technical services

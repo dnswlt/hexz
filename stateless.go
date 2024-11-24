@@ -243,7 +243,10 @@ func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Inform other players.
-	s.gameStore.Publish(r.Context(), gameId, sseEventGameUpdated)
+	s.gameStore.Publish(r.Context(), gameId, &pb.GameStorePubsubEvent{
+		GameId: gameId,
+		Event:  &pb.GameStorePubsubEvent_GameUpdated_{},
+	})
 }
 
 func (s *StatelessServer) handleHexz(w http.ResponseWriter, r *http.Request) {
@@ -376,11 +379,6 @@ func (s *StatelessServer) handleState(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-const (
-	sseEventPlayerJoined = "player.joined"
-	sseEventGameUpdated  = "game.updated"
-)
-
 func (s *StatelessServer) loadGame(ctx context.Context, gameId string) (*pb.GameState, GameEngine, error) {
 	gameState, err := s.gameStore.LookupGame(ctx, gameId)
 	if err != nil {
@@ -453,7 +451,10 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 			hlog.Errorf("Cannot add history entry for game %s in database: %s", gameState.GameInfo.Id, err)
 		}
 	}
-	s.gameStore.Publish(r.Context(), gameId, sseEventGameUpdated)
+	s.gameStore.Publish(r.Context(), gameId, &pb.GameStorePubsubEvent{
+		GameId: gameId,
+		Event:  &pb.GameStorePubsubEvent_GameUpdated_{},
+	})
 }
 
 func (s *StatelessServer) handleUndo(w http.ResponseWriter, r *http.Request) {
@@ -492,7 +493,10 @@ func (s *StatelessServer) handleUndo(w http.ResponseWriter, r *http.Request) {
 	if err := s.dbStore.InsertHistory(r.Context(), "undo", gameId, nil); err != nil {
 		hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
 	}
-	s.gameStore.Publish(r.Context(), gameId, sseEventGameUpdated)
+	s.gameStore.Publish(r.Context(), gameId, &pb.GameStorePubsubEvent{
+		GameId: gameId,
+		Event:  &pb.GameStorePubsubEvent_GameUpdated_{},
+	})
 }
 
 func (s *StatelessServer) handleRedo(w http.ResponseWriter, r *http.Request) {
@@ -531,7 +535,10 @@ func (s *StatelessServer) handleRedo(w http.ResponseWriter, r *http.Request) {
 	if err := s.dbStore.InsertHistory(r.Context(), "redo", gameId, nil); err != nil {
 		hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
 	}
-	s.gameStore.Publish(r.Context(), gameId, sseEventGameUpdated)
+	s.gameStore.Publish(r.Context(), gameId, &pb.GameStorePubsubEvent{
+		GameId: gameId,
+		Event:  &pb.GameStorePubsubEvent_GameUpdated_{},
+	})
 }
 
 func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
@@ -572,7 +579,14 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		}
 		pNum = gameState.PlayerNum(string(p.Id))
 		// Tell others we've joined.
-		s.gameStore.Publish(r.Context(), gameId, sseEventPlayerJoined+":"+p.Name)
+		s.gameStore.Publish(r.Context(), gameId, &pb.GameStorePubsubEvent{
+			GameId: gameId,
+			Event: &pb.GameStorePubsubEvent_PlayerJoined_{
+				PlayerJoined: &pb.GameStorePubsubEvent_PlayerJoined{
+					PlayerName: p.Name,
+				},
+			},
+		})
 	}
 	// Send initial ServerEvent to the player.
 	err = sendSSEEvent(w, ServerEvent{
@@ -593,7 +607,7 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Process events from Redis.
-	eventCh := make(chan string)
+	eventCh := make(chan *pb.GameStorePubsubEvent)
 	go s.gameStore.Subscribe(r.Context(), gameId, eventCh)
 	for {
 		select {
@@ -602,10 +616,10 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 				hlog.Errorf("Pubsub closed for player %s", p.Name)
 				return
 			}
-			ev, msg, _ := strings.Cut(e, ":") // Event format: <eventType>:<msg>
-			switch ev {
-			case sseEventPlayerJoined:
-				hlog.Infof("[%s/%s] A new player joined: %s", gameId, p.Name, msg)
+			switch event := e.Event.(type) {
+			case *pb.GameStorePubsubEvent_PlayerJoined_:
+				playerName := event.PlayerJoined.GetPlayerName()
+				hlog.Infof("[%s/%s] A new player joined: %s", gameId, p.Name, playerName)
 				gameState, ge, err := s.loadGame(r.Context(), gameId)
 				if err != nil {
 					hlog.Errorf("Cannot load ongoing game %s: %s", gameId, err)
@@ -616,13 +630,13 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 					Board:         ge.Board().ViewFor(pNum),
 					Role:          pNum,
 					PlayerNames:   gameState.PlayerNames(),
-					Announcements: []string{"New player " + msg + " joined!"},
+					Announcements: []string{"New player " + playerName + " joined!"},
 				})
 				if err != nil {
 					hlog.Errorf("Cannot send ServerEvent: %s", err)
 					return
 				}
-			case sseEventGameUpdated:
+			case *pb.GameStorePubsubEvent_GameUpdated_:
 				gameState, ge, err := s.loadGame(r.Context(), gameId)
 				if err != nil {
 					hlog.Errorf("Cannot load ongoing game %s: %s", gameId, err)

@@ -110,6 +110,20 @@ message GameEngineMove {
 	Field.CellType cell_type = 5;
 }
 
+// GameStore (Redis) pubsub events
+message GameStorePubsubEvent {
+    message PlayerJoined {
+        string player_name = 1;
+    }
+    message GameUpdated {
+    }
+    string game_id = 1;
+    oneof Event {
+        PlayerJoined player_joined = 2;
+        GameUpdated game_updated = 3;
+    }
+}
+
 // MCTSExample encodes all data that is necessary to generate a training example
 // for the NeuraMCTS model.
 // Normally, examples would be saved as HDF5 files, but to be facilitate the

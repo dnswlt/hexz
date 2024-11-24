@@ -36,7 +36,7 @@ func TestRedisPubsub(t *testing.T) {
 	for i := 0; i < nSubscribers; i++ {
 		go func() {
 			events := 0
-			ch := make(chan string)
+			ch := make(chan *pb.GameStorePubsubEvent)
 			go rc.Subscribe(ctx, gameId, ch)
 			for range ch {
 				events++
@@ -47,7 +47,11 @@ func TestRedisPubsub(t *testing.T) {
 	// Wait for all subscribers to be ready. We cannot synchronize this properly,
 	// b/c even the Redis client's Subscribe method returns before the subscription might be active.
 	time.Sleep(500 * time.Millisecond)
-	if err := rc.Publish(ctx, gameId, "hello"); err != nil {
+	event := &pb.GameStorePubsubEvent{
+		GameId: "hello",
+		Event:  &pb.GameStorePubsubEvent_GameUpdated_{},
+	}
+	if err := rc.Publish(ctx, gameId, event); err != nil {
 		t.Fatalf("Failed to publish event: %v", err)
 	}
 	time.Sleep(500 * time.Millisecond)
