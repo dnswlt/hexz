@@ -118,25 +118,36 @@ func main() {
 		hlog.UseJSONLogger()
 	}
 	if cfg.Stateless {
-		// Redis
-		if cfg.RedisAddr == "" {
-			cfg.RedisAddr = "localhost:6379"
-		}
-		rc, err := hexzmem.NewRedisClient(&hexzmem.RedisClientConfig{
-			Addr:     cfg.RedisAddr,
-			LoginTTL: cfg.LoginTTL,
-			GameTTL:  cfg.InactivityTimeout,
-		})
-		if err != nil {
-			hlog.Fatalf("error connecting to redis: %s", err)
-		}
-		hlog.Infof("connected to Redis at %s", cfg.RedisAddr)
-		// Build the stateless server
+		// Build a stateless server
 		renderer, err := hexz.NewRenderer()
 		if err != nil {
 			hlog.Fatalf("error creating renderer: %v", err)
 		}
-		b := hexz.NewStatelessServerBuilder(cfg, &hexzmem.RemotePlayerStore{RedisClient: rc}, rc, renderer)
+		var gameStore hexz.GameStore
+		var playerStore hexz.PlayerStore
+		if cfg.RedisAddr != "" {
+			rc, err := hexzmem.NewRedisClient(&hexzmem.RedisClientConfig{
+				Addr:     cfg.RedisAddr,
+				LoginTTL: cfg.LoginTTL,
+				GameTTL:  cfg.InactivityTimeout,
+			})
+			if err != nil {
+				hlog.Fatalf("error connecting to redis: %s", err)
+			}
+			hlog.Infof("connected to Redis at %s", cfg.RedisAddr)
+			//Redis stores
+			playerStore = &hexzmem.RemotePlayerStore{RedisClient: rc}
+			gameStore = rc
+		} else {
+			// Local stores
+			hlog.Infof("Using in memory player and game stores. Login DB: %s", cfg.LoginDatabasePath)
+			playerStore, err = hexz.NewInMemoryPlayerStore(cfg.LoginTTL, cfg.LoginDatabasePath)
+			if err != nil {
+				hlog.Fatalf("error creating in-memory player store: %v", err)
+			}
+			gameStore = hexz.NewInMemoryGameStore()
+		}
+		b := hexz.NewStatelessServerBuilder(cfg, playerStore, gameStore, renderer)
 		// Postgres (optional)
 		if cfg.PostgresURL != "" {
 			var dbStore hexz.DatabaseStore

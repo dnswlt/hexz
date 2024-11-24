@@ -170,27 +170,31 @@ func (c *RedisClient) ListRecentGames(ctx context.Context, limit int) ([]*pb.Gam
 	return games, nil
 }
 
-func (c *RedisClient) Subscribe(ctx context.Context, gameId string, ch chan<- *pb.GameStorePubsubEvent) {
-	sub := c.client.Subscribe(ctx, "pubsub:"+gameId)
-	defer sub.Close()
-	defer close(ch)
-	for {
-		select {
-		case msg, ok := <-sub.Channel():
-			if !ok {
+func (c *RedisClient) Subscribe(ctx context.Context, gameId string) <-chan *pb.GameStorePubsubEvent {
+	ch := make(chan *pb.GameStorePubsubEvent)
+	go func() {
+		defer close(ch)
+		sub := c.client.Subscribe(ctx, "pubsub:"+gameId)
+		defer sub.Close()
+		for {
+			select {
+			case msg, ok := <-sub.Channel():
+				if !ok {
+					return
+				}
+				event := &pb.GameStorePubsubEvent{}
+				if err := proto.Unmarshal([]byte(msg.Payload), event); err != nil {
+					hlog.Errorf("Received invalid event from Redis: %v", err)
+					return
+				}
+				ch <- event
+			case <-ctx.Done():
+				// sub.Channel() does not seem to respond to context cancellation, so we do it externally.
 				return
 			}
-			event := &pb.GameStorePubsubEvent{}
-			if err := proto.Unmarshal([]byte(msg.Payload), event); err != nil {
-				hlog.Errorf("Received invalid event from Redis: %v", err)
-				return
-			}
-			ch <- event
-		case <-ctx.Done():
-			// sub.Channel() does not seem to respond to context cancellation, so we do it externally.
-			return
 		}
-	}
+	}()
+	return ch
 }
 
 // Sends a message to the channel for the given game.

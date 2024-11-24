@@ -433,6 +433,50 @@ func (s *StatelessServer) storeGameAndNotify(ctx context.Context, gameState *pb.
 	return nil
 }
 
+func (s *StatelessServer) goMakeCPUMove(ge GameEngine, gameState *pb.GameState) {
+	flagz, ok := ge.(*GameEngineFlagz)
+	if !ok {
+		hlog.Errorf("Cannot make move for game type %v", ge.GameType())
+		return
+	}
+	// Asynchronously request a CPU move in a 1P game, if necessary.
+	var cpuPlayer CPUPlayer
+	switch gameState.GameInfo.CpuPlayer {
+	case pb.CPUPlayerMode_LOCAL_CPU:
+		cpuPlayer = NewLocalCPUPlayer(PlayerId(gameState.Players[1].Id), s.config.CpuThinkTime, 0)
+	case pb.CPUPlayerMode_REMOTE_CPU:
+		cpuPlayer = NewRemoteCPUPlayer(s.remoteCPUClient, PlayerId(gameState.Players[1].Id), s.config.CpuThinkTime, 0)
+	default:
+		hlog.Errorf("Async CPU move requested for CPU player type %v", gameState.GameInfo.CpuPlayer)
+		return
+	}
+	go func() {
+		gameId := gameState.GetGameInfo().GetId()
+		hlog.Infof("Requesting CPU move (%T) for game %s", cpuPlayer, gameId)
+		ctx, cancel := context.WithTimeout(context.Background(), s.config.CpuThinkTime*2)
+		defer cancel()
+		move, _, err := cpuPlayer.SuggestMove(ctx, flagz)
+		if err != nil {
+			hlog.Errorf("SuggestMove failed: %v", err)
+			return
+		}
+		if !ge.MakeMove(*move) {
+			hlog.Errorf("failed to make a CPU move for game %s", gameId)
+			return
+		}
+		enc, _ := ge.Encode()
+		gameState.EngineState = enc
+		if err := s.storeGameAndNotify(ctx, gameState); err != nil {
+			hlog.Errorf("failed to store game after CPU move: %v", err)
+		}
+	}()
+}
+
+func isCPUTurn(turn int, cpuPlayerMode pb.CPUPlayerMode_Enum) bool {
+	return turn == 2 && (cpuPlayerMode == pb.CPUPlayerMode_LOCAL_CPU ||
+		cpuPlayerMode == pb.CPUPlayerMode_REMOTE_CPU)
+}
+
 func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
@@ -490,41 +534,8 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if ge.Board().Turn == 2 {
-		// Asynchronously request a CPU move in a 1P game, if necessary.
-		hlog.Infof("gameState.GameInfo.CpuPlayer: ", gameState.GameInfo.CpuPlayer)
-		var cpuPlayer CPUPlayer
-		switch gameState.GameInfo.CpuPlayer {
-		case pb.CPUPlayerMode_LOCAL_CPU:
-			cpuPlayer = NewLocalCPUPlayer(PlayerId(gameState.Players[1].Id), s.config.CpuThinkTime, 0)
-		case pb.CPUPlayerMode_REMOTE_CPU:
-			cpuPlayer = NewRemoteCPUPlayer(s.remoteCPUClient, PlayerId(gameState.Players[1].Id), s.config.CpuThinkTime, 0)
-		}
-		if cpuPlayer != nil {
-			if flagz, ok := ge.(*GameEngineFlagz); ok {
-				go func() {
-					hlog.Infof("Requesting CPU move (%T) for game %s", cpuPlayer, gameId)
-					ctx, cancel := context.WithTimeout(context.Background(), s.config.CpuThinkTime*2)
-					defer cancel()
-					move, _, err := cpuPlayer.SuggestMove(ctx, flagz)
-					if err != nil {
-						hlog.Errorf("SuggestMove failed: %v", err)
-						return
-					}
-					if !ge.MakeMove(*move) {
-						hlog.Errorf("failed to make a CPU move for game %s", gameId)
-						return
-					}
-					enc, _ := ge.Encode()
-					gameState.EngineState = enc
-					if err := s.storeGameAndNotify(ctx, gameState); err != nil {
-						hlog.Errorf("failed to store game after CPU move: %v", err)
-					}
-				}()
-			} else {
-				hlog.Errorf("Cannot make move for game type %v", ge.GameType())
-			}
-		}
+	if isCPUTurn(ge.Board().Turn, gameState.GameInfo.CpuPlayer) {
+		s.goMakeCPUMove(ge, gameState)
 	}
 }
 
@@ -677,74 +688,64 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		hlog.Errorf("Cannot send initial ServerEvent: %s", err)
 		return
 	}
-	// Process events from Redis.
-	eventCh := make(chan *pb.GameStorePubsubEvent)
-	go s.gameStore.Subscribe(r.Context(), gameId, eventCh)
-	for {
-		select {
-		case e, ok := <-eventCh:
-			if !ok {
-				hlog.Errorf("Pubsub closed for player %s", p.Name)
+	// Process events from the game store.
+	eventCh := s.gameStore.Subscribe(r.Context(), gameId)
+	for e := range eventCh {
+		switch event := e.Event.(type) {
+		case *pb.GameStorePubsubEvent_PlayerJoined_:
+			playerName := event.PlayerJoined.GetPlayerName()
+			hlog.Infof("[%s/%s] A new player joined: %s", gameId, p.Name, playerName)
+			gameState, ge, err := s.loadGame(r.Context(), gameId)
+			if err != nil {
+				hlog.Errorf("Cannot load ongoing game %s: %s", gameId, err)
 				return
 			}
-			switch event := e.Event.(type) {
-			case *pb.GameStorePubsubEvent_PlayerJoined_:
-				playerName := event.PlayerJoined.GetPlayerName()
-				hlog.Infof("[%s/%s] A new player joined: %s", gameId, p.Name, playerName)
-				gameState, ge, err := s.loadGame(r.Context(), gameId)
-				if err != nil {
-					hlog.Errorf("Cannot load ongoing game %s: %s", gameId, err)
-					return
-				}
-				err = sendSSEEvent(w, ServerEvent{
-					Timestamp:     time.Now(),
-					Board:         ge.Board().ViewFor(pNum),
-					Role:          pNum,
-					PlayerNames:   gameState.PlayerNames(),
-					Announcements: []string{"New player " + playerName + " joined!"},
-				})
-				if err != nil {
-					hlog.Errorf("Cannot send ServerEvent: %s", err)
-					return
-				}
-			case *pb.GameStorePubsubEvent_GameUpdated_:
-				gameState, ge, err := s.loadGame(r.Context(), gameId)
-				if err != nil {
-					hlog.Errorf("Cannot load ongoing game %s: %s", gameId, err)
-					return
-				}
-				var winner int
-				var announcements []string
-				if ge.IsDone() {
-					winner = ge.Winner()
-					if winner > 0 {
-						announcements = append(announcements,
-							fmt.Sprintf("&#127942; &#127942; &#127942; %s won &#127942; &#127942; &#127942;",
-								gameState.PlayerNames()[winner-1]))
-					} else {
-						announcements = append(announcements, "The game is a draw!")
-					}
-				}
-				err = sendSSEEvent(w, ServerEvent{
-					Timestamp:     time.Now(),
-					Board:         ge.Board().ViewFor(pNum),
-					Role:          pNum,
-					PlayerNames:   gameState.PlayerNames(),
-					Winner:        winner,
-					Announcements: announcements,
-				})
-				if err != nil {
-					hlog.Errorf("Cannot send ServerEvent: %s", err)
-					return
-				}
-			default:
-				hlog.Infof("[%s/%s] Received unknown event: %s", gameId, p.Name, e)
+			err = sendSSEEvent(w, ServerEvent{
+				Timestamp:     time.Now(),
+				Board:         ge.Board().ViewFor(pNum),
+				Role:          pNum,
+				PlayerNames:   gameState.PlayerNames(),
+				Announcements: []string{"New player " + playerName + " joined!"},
+			})
+			if err != nil {
+				hlog.Errorf("Cannot send ServerEvent: %s", err)
+				return
 			}
-		case <-r.Context().Done():
-			hlog.Infof("SSE connection closed for player %s", p.Name)
-			return
+		case *pb.GameStorePubsubEvent_GameUpdated_:
+			gameState, ge, err := s.loadGame(r.Context(), gameId)
+			if err != nil {
+				hlog.Errorf("Cannot load ongoing game %s: %s", gameId, err)
+				return
+			}
+			var winner int
+			var announcements []string
+			if ge.IsDone() {
+				winner = ge.Winner()
+				if winner > 0 {
+					announcements = append(announcements,
+						fmt.Sprintf("&#127942; &#127942; &#127942; %s won &#127942; &#127942; &#127942;",
+							gameState.PlayerNames()[winner-1]))
+				} else {
+					announcements = append(announcements, "The game is a draw!")
+				}
+			}
+			err = sendSSEEvent(w, ServerEvent{
+				Timestamp:     time.Now(),
+				Board:         ge.Board().ViewFor(pNum),
+				Role:          pNum,
+				PlayerNames:   gameState.PlayerNames(),
+				Winner:        winner,
+				Announcements: announcements,
+			})
+			if err != nil {
+				hlog.Errorf("Cannot send ServerEvent: %s", err)
+				return
+			}
+		default:
+			hlog.Infof("[%s/%s] Received unknown event: %T", gameId, p.Name, e.Event)
 		}
 	}
+	hlog.Infof("SSE connection closed for player %s", p.Name)
 }
 
 func (s *StatelessServer) createMux() *http.ServeMux {

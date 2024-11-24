@@ -36,8 +36,7 @@ func TestRedisPubsub(t *testing.T) {
 	for i := 0; i < nSubscribers; i++ {
 		go func() {
 			events := 0
-			ch := make(chan *pb.GameStorePubsubEvent)
-			go rc.Subscribe(ctx, gameId, ch)
+			ch := rc.Subscribe(ctx, gameId)
 			for range ch {
 				events++
 			}

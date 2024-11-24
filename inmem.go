@@ -9,6 +9,9 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	pb "github.com/dnswlt/hexz/hexzpb"
+	"google.golang.org/protobuf/proto"
 )
 
 // When run as a standalone app, we can store all logged in users
@@ -146,4 +149,125 @@ func (s *InMemoryPlayerStore) saveToFile() error {
 		return err
 	}
 	return nil
+}
+
+var (
+	errGameNotExist = fmt.Errorf("game does not exist in store")
+)
+
+// An in-memory replacement for a RedisClient, to enable purely local, single-server
+// gameplay. The implementation does not clean up old games and should only be used
+// for "casual play" at home, not in a public server environment!
+type InMemoryGameStore struct {
+	gameStates map[string]*pb.GameState
+	// Sequence of game IDs. Used to list the most recent games.
+	gameStatesSeq []string
+	mut           sync.Mutex
+	subscribers   map[string][]chan<- *pb.GameStorePubsubEvent
+}
+
+func NewInMemoryGameStore() *InMemoryGameStore {
+	return &InMemoryGameStore{
+		gameStates:  make(map[string]*pb.GameState),
+		subscribers: make(map[string][]chan<- *pb.GameStorePubsubEvent),
+	}
+}
+
+func (s *InMemoryGameStore) StoreNewGame(ctx context.Context, state *pb.GameState) (bool, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+	gameId := state.GetGameInfo().GetId()
+	if _, ok := s.gameStates[gameId]; ok {
+		return false, nil
+	}
+	s.gameStates[gameId] = state
+	s.gameStatesSeq = append(s.gameStatesSeq, gameId)
+	return true, nil
+}
+
+func (s *InMemoryGameStore) LookupGame(ctx context.Context, gameId string) (*pb.GameState, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+	if state, ok := s.gameStates[gameId]; ok {
+		return state, nil
+	}
+	return nil, errGameNotExist
+}
+
+func (s *InMemoryGameStore) UpdateGame(ctx context.Context, state *pb.GameState) error {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+	s.gameStates[state.GetGameInfo().GetId()] = state
+	return nil
+}
+
+func (s *InMemoryGameStore) ListRecentGames(ctx context.Context, limit int) ([]*pb.GameInfo, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+	l := len(s.gameStatesSeq)
+	if limit > l {
+		limit = l
+	}
+	infos := []*pb.GameInfo{}
+	for i := 0; i < limit; i++ {
+		id := s.gameStatesSeq[l-i-1]
+		if state, ok := s.gameStates[id]; ok {
+			infos = append(infos, state.GetGameInfo())
+		} else {
+			return nil, fmt.Errorf("invariant broken: gameStatesSeq not in sync: %s", id)
+		}
+	}
+	return infos, nil
+}
+
+func (s *InMemoryGameStore) Publish(ctx context.Context, gameId string, event *pb.GameStorePubsubEvent) error {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+	for _, sub := range s.subscribers[gameId] {
+		eventCopy := proto.Clone(event).(*pb.GameStorePubsubEvent)
+		sub <- eventCopy
+	}
+	return nil
+}
+
+func (s *InMemoryGameStore) Subscribe(ctx context.Context, gameId string) <-chan *pb.GameStorePubsubEvent {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	ch := make(chan *pb.GameStorePubsubEvent)
+	sub := make(chan *pb.GameStorePubsubEvent)
+	s.subscribers[gameId] = append(s.subscribers[gameId], sub)
+
+	go func() {
+		defer close(ch)
+		defer func() {
+			// Remove sub from subscriber list.
+			s.mut.Lock()
+			defer s.mut.Unlock()
+
+			subs := s.subscribers[gameId]
+			for i, s1 := range subs {
+				if s1 == sub {
+					l := len(subs)
+					subs[i] = subs[l-1]
+					subs = subs[:l-1]
+					if len(subs) > 0 {
+						s.subscribers[gameId] = subs
+					} else {
+						delete(s.subscribers, gameId)
+					}
+					return
+				}
+			}
+		}()
+		for {
+			select {
+			case event := <-sub:
+				ch <- event
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	return ch
 }
