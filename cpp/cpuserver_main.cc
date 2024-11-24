@@ -58,6 +58,11 @@ int main(int argc, char* argv[]) {
   builder.AddListeningPort(addr, grpc::InsecureServerCredentials());
   builder.RegisterService(&service);
   std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
+  if (!server) {
+    ABSL_LOG(ERROR) << "Cannot instantiate server. Invalid address? Try "
+                       "[::]:<port> to listen on any interface.";
+    return 1;
+  }
   std::cout << "Server listening on " << addr << std::endl;
   server->Wait();
 }
