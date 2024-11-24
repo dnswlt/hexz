@@ -11,6 +11,7 @@ import (
 	"time"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
+	"github.com/dnswlt/hexz/hlog"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -18,9 +19,6 @@ import (
 // in memory and sporadically dump the list to disk.
 // When running as a container, we can't do that, so we need to
 // store logins in some external storage.
-
-// A random UUID used to identify players. Also used in cookies.
-type PlayerId string
 
 const (
 	maxLoggedInPlayers = 10000
@@ -71,7 +69,7 @@ func (s *InMemoryPlayerStore) Lookup(ctx context.Context, playerId PlayerId) (Pl
 		if s.dbPath != "" {
 			go func() {
 				if err := s.saveToFile(); err != nil {
-					errorLog.Print("Failed to save player DB: ", err)
+					hlog.Errorf("Failed to save player DB: %v", err)
 				}
 			}()
 		}

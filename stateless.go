@@ -3,12 +3,16 @@ package hexz
 import (
 	"compress/gzip"
 	"context"
+	crand "crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"os"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +23,40 @@ import (
 	"github.com/dnswlt/hexz/hlog"
 	"google.golang.org/protobuf/proto"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
+)
+
+type ServerConfig struct {
+	ServerHost string
+	ServerPort int
+	// Path prefix that all URLs for this server have.
+	// Usually "/hexz/", but when running behind a reverse proxy it might differ.
+	URLPathPrefix      string
+	DocumentRoot       string                // Path to static resource files.
+	GameHistoryRoot    string                // Path to game history files.
+	LoginDatabasePath  string                // Path to the file where the player DB is stored. If empty, no persistent storage is used.
+	RemoteCPUPlayerURL string                // Base URL of the remote CPU player server. If emtpy, a local CPU player is used.
+	CPUPlayerMode      pb.CPUPlayerMode_Enum // Type of CPU player to use.
+	RedisAddr          string                // Address of the Redis server. If empty, local storage is used.
+	PostgresURL        string                // URL of the PostgreSQL server. If empty, no persistent storage is used.
+	InactivityTimeout  time.Duration         // Time after which a game is ended due to inactivity.
+	PlayerRemoveDelay  time.Duration         // Time to wait before removing an unregistered player from the game.
+	LoginTTL           time.Duration
+	CpuThinkTime       time.Duration
+	CpuMaxFlags        int
+	AuthTokenSha256    string // Used in http Basic authentication for /statusz. Must be a SHA256 checksum.
+	DisableUndo        bool   // If true, Undo/Redo is enabled for all games
+	TlsCertChain       string
+	TlsPrivKey         string
+	DebugMode          bool
+}
+
+var (
+	// Regexp used to validate player names.
+	playernameRegexp = regexp.MustCompile(`^[\p{Latin}0-9_.-]+$`)
+)
+
+const (
+	playerIdCookieName = "playerId"
 )
 
 // This file contains the implementation of the stateless hexz game server.
@@ -69,10 +107,103 @@ func (b *StatelessServerBuilder) Build() *StatelessServer {
 	return s
 }
 
+// A random UUID used to identify players. Also used in cookies.
+type PlayerId string
+
+// Generates a random 128-bit hex string representing a player ID.
+func generatePlayerId() PlayerId {
+	p := make([]byte, 16)
+	crand.Read(p)
+	return PlayerId(hex.EncodeToString(p))
+}
+
+// Player has JSON annotations for serialization to disk.
+// It is not used in the public API.
+type Player struct {
+	Id         PlayerId  `json:"id"`
+	Name       string    `json:"name"`
+	LastActive time.Time `json:"lastActive"`
+}
+
+func isValidPlayerName(name string) bool {
+	return len(name) >= 3 && len(name) <= 20 && playernameRegexp.MatchString(name)
+}
+
+// Generates a 6-letter game ID.
+func GenerateGameId() string {
+	var alphabet = []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	var b strings.Builder
+	for i := 0; i < 6; i++ {
+		max := big.NewInt(int64(len(alphabet)))
+		n, err := crand.Int(crand.Reader, max)
+		if err != nil {
+			panic(fmt.Sprintf("cannot generate random number: %s", err.Error()))
+		}
+		b.WriteRune(alphabet[n.Int64()])
+	}
+	return b.String()
+}
+
+func isValidGameId(gameId string) bool {
+	if len(gameId) != 6 {
+		return false
+	}
+	for i := 0; i < len(gameId); i++ {
+		if gameId[i] < 'A' || gameId[i] > 'Z' {
+			return false
+		}
+	}
+	return true
+}
+
+func sendSSEEvent(w http.ResponseWriter, ev ServerEvent) error {
+	if _, err := io.WriteString(w, "data: "); err != nil {
+		return err
+	}
+	enc := json.NewEncoder(w)
+	if err := enc.Encode(ev); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(w, "\n\n"); err != nil {
+		return err
+	}
+	if f, canFlush := w.(http.Flusher); canFlush {
+		f.Flush()
+	}
+	return nil
+}
+
+// Joins the prefix and urlPath into a single URL path.
+// If either is empty, the other value is returned (even if it's empty as well).
+// Otherwise, the two path segments are joined by a single '/'.
+func urlJoinPath(prefix, urlPath string) string {
+	if prefix == "" {
+		return urlPath
+	}
+	if urlPath == "" {
+		return prefix
+	}
+	// Neither is empty. Join, and ensure to have a single '/' in between.
+	prefix = strings.TrimSuffix(prefix, "/")
+	urlPath = strings.TrimPrefix(urlPath, "/")
+	return prefix + "/" + urlPath
+}
+
 func (s *StatelessServer) loggingHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.config.DebugMode {
 			hlog.Infof("Incoming request: %s %s %s", r.RemoteAddr, r.Method, r.URL.String())
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
+func postHandlerFunc(h http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, "", http.StatusMethodNotAllowed)
+			return
 		}
 		h.ServeHTTP(w, r)
 	})
@@ -534,7 +665,7 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if isCPUTurn(ge.Board().Turn, gameState.GameInfo.CpuPlayer) {
+	if !ge.IsDone() && isCPUTurn(ge.Board().Turn, gameState.GameInfo.CpuPlayer) {
 		s.goMakeCPUMove(ge, gameState)
 	}
 }

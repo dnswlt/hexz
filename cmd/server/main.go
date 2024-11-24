@@ -59,7 +59,6 @@ func main() {
 	flag.StringVar(&cfg.TlsCertChain, "tls-cert", "", "Path to chain.pem for TLS")
 	flag.StringVar(&cfg.TlsPrivKey, "tls-key", "", "Path to privkey.pem for TLS")
 	flag.BoolVar(&cfg.DisableUndo, "disable-undo", false, "If true, games will not support undo/redo")
-	flag.BoolVar(&cfg.Stateless, "stateless", true, "If true, run in stateless mode (e.g. Cloud Run)")
 	logFormat := flag.String("log-format", "plain", "Format of log messages. One of {plain, json}.")
 	flag.Parse()
 	setFlags := make(map[string]bool)
@@ -117,64 +116,54 @@ func main() {
 	if *logFormat == "json" {
 		hlog.UseJSONLogger()
 	}
-	if cfg.Stateless {
-		// Build a stateless server
-		renderer, err := hexz.NewRenderer()
-		if err != nil {
-			hlog.Fatalf("error creating renderer: %v", err)
-		}
-		var gameStore hexz.GameStore
-		var playerStore hexz.PlayerStore
-		if cfg.RedisAddr != "" {
-			rc, err := hexzmem.NewRedisClient(&hexzmem.RedisClientConfig{
-				Addr:     cfg.RedisAddr,
-				LoginTTL: cfg.LoginTTL,
-				GameTTL:  cfg.InactivityTimeout,
-			})
-			if err != nil {
-				hlog.Fatalf("error connecting to redis: %s", err)
-			}
-			hlog.Infof("connected to Redis at %s", cfg.RedisAddr)
-			//Redis stores
-			playerStore = &hexzmem.RemotePlayerStore{RedisClient: rc}
-			gameStore = rc
-		} else {
-			// Local stores
-			hlog.Infof("Using in memory player and game stores. Login DB: %s", cfg.LoginDatabasePath)
-			playerStore, err = hexz.NewInMemoryPlayerStore(cfg.LoginTTL, cfg.LoginDatabasePath)
-			if err != nil {
-				hlog.Fatalf("error creating in-memory player store: %v", err)
-			}
-			gameStore = hexz.NewInMemoryGameStore()
-		}
-		b := hexz.NewStatelessServerBuilder(cfg, playerStore, gameStore, renderer)
-		// Postgres (optional)
-		if cfg.PostgresURL != "" {
-			var dbStore hexz.DatabaseStore
-			dbStore, err := hexzsql.NewPostgresStore(context.Background(), cfg.PostgresURL)
-			if err != nil {
-				hlog.Fatalf("error connecting to postgres: %s", err)
-			}
-			hlog.Infof("connected to PostgreSQL at %s", redactPGPassword(cfg.PostgresURL))
-			b = b.WithDatabaseStore(dbStore)
-		}
-		// Remote CPU (optional)
-		if cfg.RemoteCPUPlayerURL != "" {
-			client, err := hexz.NewCPUPlayerServiceClient(cfg.RemoteCPUPlayerURL)
-			if err != nil {
-				hlog.Fatalf("error connecting to remote CPU player: %v", err)
-			}
-			b = b.WithCPUPlayerServiceClient(client)
-		}
-		s := b.Build()
-		s.Serve()
-		return // never reached.
-	}
-
-	// Stateful server.
-	s, err := hexz.NewServer(cfg)
+	// Build a stateless server
+	renderer, err := hexz.NewRenderer()
 	if err != nil {
-		hlog.Fatalf("error creating server: %v\n", err)
+		hlog.Fatalf("error creating renderer: %v", err)
 	}
+	var gameStore hexz.GameStore
+	var playerStore hexz.PlayerStore
+	if cfg.RedisAddr != "" {
+		rc, err := hexzmem.NewRedisClient(&hexzmem.RedisClientConfig{
+			Addr:     cfg.RedisAddr,
+			LoginTTL: cfg.LoginTTL,
+			GameTTL:  cfg.InactivityTimeout,
+		})
+		if err != nil {
+			hlog.Fatalf("error connecting to redis: %s", err)
+		}
+		hlog.Infof("connected to Redis at %s", cfg.RedisAddr)
+		//Redis stores
+		playerStore = &hexzmem.RemotePlayerStore{RedisClient: rc}
+		gameStore = rc
+	} else {
+		// Local stores
+		hlog.Infof("Using in memory player and game stores. Login DB: %s", cfg.LoginDatabasePath)
+		playerStore, err = hexz.NewInMemoryPlayerStore(cfg.LoginTTL, cfg.LoginDatabasePath)
+		if err != nil {
+			hlog.Fatalf("error creating in-memory player store: %v", err)
+		}
+		gameStore = hexz.NewInMemoryGameStore()
+	}
+	b := hexz.NewStatelessServerBuilder(cfg, playerStore, gameStore, renderer)
+	// Postgres (optional)
+	if cfg.PostgresURL != "" {
+		var dbStore hexz.DatabaseStore
+		dbStore, err := hexzsql.NewPostgresStore(context.Background(), cfg.PostgresURL)
+		if err != nil {
+			hlog.Fatalf("error connecting to postgres: %s", err)
+		}
+		hlog.Infof("connected to PostgreSQL at %s", redactPGPassword(cfg.PostgresURL))
+		b = b.WithDatabaseStore(dbStore)
+	}
+	// Remote CPU (optional)
+	if cfg.RemoteCPUPlayerURL != "" {
+		client, err := hexz.NewCPUPlayerServiceClient(cfg.RemoteCPUPlayerURL)
+		if err != nil {
+			hlog.Fatalf("error connecting to remote CPU player: %v", err)
+		}
+		b = b.WithCPUPlayerServiceClient(client)
+	}
+	s := b.Build()
 	s.Serve()
 }

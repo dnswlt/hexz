@@ -2,6 +2,7 @@ package hexz
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,24 @@ import (
 	"testing"
 	"time"
 )
+
+const (
+	testPlayerId   = "testId"
+	testPlayerName = "tester"
+)
+
+func testServerConfig(t *testing.T) *ServerConfig {
+	historyRoot := t.TempDir()
+	return &ServerConfig{
+		ServerHost:      "localhost",
+		ServerPort:      8999,
+		URLPathPrefix:   "/hexz",
+		DocumentRoot:    "./resources",
+		GameHistoryRoot: historyRoot,
+		DebugMode:       true,
+		LoginTTL:        24 * time.Hour, // By default, don't auto-log out players in tests.
+	}
+}
 
 func newTestStatelessServer(config *ServerConfig) (*StatelessServer, error) {
 	renderer, err := NewRenderer()
@@ -26,8 +45,45 @@ func newTestStatelessServer(config *ServerConfig) (*StatelessServer, error) {
 	return b.Build(), nil
 }
 
+func TestGenerateGameId(t *testing.T) {
+	got := GenerateGameId()
+	if !regexp.MustCompile(`^[A-Z]{6}$`).MatchString(got) {
+		t.Errorf("Wrong gameId: %q", got)
+	}
+}
+
+func TestValidPlayerName(t *testing.T) {
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{"abc", true},
+		{"abc.def", true},
+		{"abc_def-123", true},
+		{"1digit", true},
+		{"HANS", true},
+		{"Mørän", true},
+		{"Jérôme", true},
+		{"Strüßenbähn", true},
+		{"123", true},
+		{"_letter-or.digit", true},
+		{"ab", false},      // Too short
+		{"jens$", false},   // Invalid character
+		{"dw@best", false}, // Invalid character
+		{"", false},
+		{"verylongusernamesarenotallowedalright", false},
+	}
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
+			if got := isValidPlayerName(test.name); got != test.want {
+				t.Errorf("unexpected result %t for name %s", got, test.name)
+			}
+		})
+	}
+}
+
 func TestHandleNewGame(t *testing.T) {
-	cfg := serverConfigForTest(t)
+	cfg := testServerConfig(t)
 	s, err := newTestStatelessServer(cfg)
 	if err != nil {
 		t.Fatal("Could not create server:", err)

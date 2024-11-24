@@ -7,6 +7,7 @@ import (
 	"time"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
+	"github.com/dnswlt/hexz/hlog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -186,7 +187,7 @@ func (s *MoveSuggesterServer) Serve() error {
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
-	infoLog.Printf("MoveSuggesterServer listening on %s", s.config.Addr)
+	hlog.Infof("MoveSuggesterServer listening on %s", s.config.Addr)
 	var opts []grpc.ServerOption
 	grpcServer := grpc.NewServer(opts...)
 	pb.RegisterCPUPlayerServiceServer(grpcServer, s)
