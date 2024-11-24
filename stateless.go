@@ -442,7 +442,7 @@ func (s *StatelessServer) goMakeCPUMove(ge GameEngine, gameState *pb.GameState) 
 	// Asynchronously request a CPU move in a 1P game, if necessary.
 	var cpuPlayer CPUPlayer
 	switch gameState.GameInfo.CpuPlayer {
-	case pb.CPUPlayerMode_LOCAL_CPU:
+	case pb.CPUPlayerMode_EMBEDDED_CPU:
 		cpuPlayer = NewLocalCPUPlayer(PlayerId(gameState.Players[1].Id), s.config.CpuThinkTime, 0)
 	case pb.CPUPlayerMode_REMOTE_CPU:
 		cpuPlayer = NewRemoteCPUPlayer(s.remoteCPUClient, PlayerId(gameState.Players[1].Id), s.config.CpuThinkTime, 0)
@@ -473,7 +473,7 @@ func (s *StatelessServer) goMakeCPUMove(ge GameEngine, gameState *pb.GameState) 
 }
 
 func isCPUTurn(turn int, cpuPlayerMode pb.CPUPlayerMode_Enum) bool {
-	return turn == 2 && (cpuPlayerMode == pb.CPUPlayerMode_LOCAL_CPU ||
+	return turn == 2 && (cpuPlayerMode == pb.CPUPlayerMode_EMBEDDED_CPU ||
 		cpuPlayerMode == pb.CPUPlayerMode_REMOTE_CPU)
 }
 

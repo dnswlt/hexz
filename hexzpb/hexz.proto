@@ -53,7 +53,7 @@ message CPUPlayerMode {
     enum Enum {
         NONE = 0; // Not playing against a CPU
         WASM = 1; // Use client-side WASM engine
-        LOCAL_CPU = 2; // Use local CPU engine
+        EMBEDDED_CPU = 2; // Use embedded CPU engine
         REMOTE_CPU = 3; // Use remote CPU engine
     }
 }

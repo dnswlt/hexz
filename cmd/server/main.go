@@ -42,7 +42,7 @@ func main() {
 		"Address of the Redis server. Only used by the -stateless server (default: localhost:6379).")
 	flag.StringVar(&cfg.PostgresURL, "postgres-url", "",
 		"URL of the PostgreSQL server (e.g. \"postgres://hexz:hexz@localhost:5432/hexz\"). If empty, no persistent storage is used.")
-	cpuPlayerMode := flag.String("cpu-player-mode", "local", "Mode in which to run CPU players. One of {wasm, local, remote}")
+	cpuPlayerMode := flag.String("cpu-player-mode", "embedded", "Mode in which to run CPU players. One of {wasm, embedded, remote}")
 	flag.DurationVar(&cfg.InactivityTimeout, "inactivity-timeout", 60*time.Minute,
 		"Time to wait before ending a game due to inactivity")
 	flag.DurationVar(&cfg.PlayerRemoveDelay, "remove-delay", 60*time.Second,
@@ -73,11 +73,11 @@ func main() {
 			hlog.Fatalf("WASM file %s not found", wasmFile)
 		}
 		cfg.CPUPlayerMode = hexzpb.CPUPlayerMode_WASM
-	case "local":
+	case "embedded":
 		if cfg.RemoteCPUPlayerURL != "" {
-			hlog.Fatalf("-cpu-player-mode=local and -remote-cpu-url are mutually exclusive")
+			hlog.Fatalf("-cpu-player-mode=embedded and -remote-cpu-url are mutually exclusive")
 		}
-		cfg.CPUPlayerMode = hexzpb.CPUPlayerMode_LOCAL_CPU
+		cfg.CPUPlayerMode = hexzpb.CPUPlayerMode_EMBEDDED_CPU
 	case "remote":
 		if cfg.RemoteCPUPlayerURL == "" {
 			hlog.Fatalf("-cpu-player-mode=remote requires -remote-cpu-url to be set")
