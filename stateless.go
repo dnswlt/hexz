@@ -21,9 +21,6 @@ import (
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type CPUPlayerWorkerPool struct {
-}
-
 // This file contains the implementation of the stateless hexz game server.
 // It can be used in "serverless" contexts (e.g. Cloud Run) where the server
 // is only guaranteed to run while it is handling a request.
@@ -125,6 +122,10 @@ func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType 
 	if singlePlayer {
 		players = append(players, &pb.Player{Id: "CPU", Name: "CPU"})
 	}
+	cpuPlayer := pb.CPUPlayerMode_NONE
+	if singlePlayer {
+		cpuPlayer = s.config.CPUPlayerMode
+	}
 	// Try to find an unused gameId. This loop should usually exit after the first iteration.
 	var gameState *pb.GameState
 	for i := 0; i < 100; i++ {
@@ -134,7 +135,7 @@ func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType 
 				Host:      p.Name,
 				Started:   tpb.Now(),
 				Type:      string(gameType),
-				CpuPlayer: s.config.CPUPlayerMode,
+				CpuPlayer: cpuPlayer,
 			},
 			Players:     players, // More players are registed in handleSSE.
 			EngineState: engineState,
@@ -415,6 +416,23 @@ func (s *StatelessServer) loadGame(ctx context.Context, gameId string) (*pb.Game
 	return gameState, ge, nil
 }
 
+func (s *StatelessServer) storeGameAndNotify(ctx context.Context, gameState *pb.GameState) error {
+	gameId := gameState.GetGameInfo().GetId()
+	if err := s.gameStore.UpdateGame(ctx, gameState); err != nil {
+		return fmt.Errorf("failed to save game state: %v", err)
+	}
+	if s.dbStore != nil {
+		if err := s.dbStore.InsertHistory(ctx, "move", gameId, gameState); err != nil {
+			hlog.Errorf("Cannot add history entry for game %s in database: %s", gameState.GameInfo.Id, err)
+		}
+	}
+	s.gameStore.Publish(ctx, gameId, &pb.GameStorePubsubEvent{
+		GameId: gameId,
+		Event:  &pb.GameStorePubsubEvent_GameUpdated_{},
+	})
+	return nil
+}
+
 func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
@@ -446,7 +464,8 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 	pNum := gameState.PlayerNum(string(p.Id))
 	isWASM := gameState.GetGameInfo().GetCpuPlayer() == pb.CPUPlayerMode_WASM
 	if pNum == 1 && isWASM && ge.Board().Turn == 2 {
-		pNum = 2 // Pretend to be the CPU player.
+		// TODO: fix this mess. Clients should explicitly tell us that this is a WASM move for P2.
+		pNum = 2 // WASM move: pretend to be the CPU player.
 	} else if ge.Board().Turn != pNum {
 		http.Error(w, "player cannot make a move", http.StatusPreconditionFailed)
 		return
@@ -461,23 +480,52 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid move", http.StatusBadRequest)
 		return
 	}
+
 	// Store new game state and notify other players.
 	enc, _ := ge.Encode()
 	gameState.EngineState = enc
-	if err := s.gameStore.UpdateGame(r.Context(), gameState); err != nil {
+	if err := s.storeGameAndNotify(r.Context(), gameState); err != nil {
 		http.Error(w, "failed to save game state", http.StatusInternalServerError)
-		hlog.Errorf("Could not store game %s: %s", gameId, err)
+		hlog.Errorf("Could not store game %s: %v", gameId, err)
 		return
 	}
-	if s.dbStore != nil {
-		if err := s.dbStore.InsertHistory(r.Context(), "move", gameId, gameState); err != nil {
-			hlog.Errorf("Cannot add history entry for game %s in database: %s", gameState.GameInfo.Id, err)
+
+	if ge.Board().Turn == 2 {
+		// Asynchronously request a CPU move in a 1P game, if necessary.
+		hlog.Infof("gameState.GameInfo.CpuPlayer: ", gameState.GameInfo.CpuPlayer)
+		var cpuPlayer CPUPlayer
+		switch gameState.GameInfo.CpuPlayer {
+		case pb.CPUPlayerMode_LOCAL_CPU:
+			cpuPlayer = NewLocalCPUPlayer(PlayerId(gameState.Players[1].Id), s.config.CpuThinkTime, 0)
+		case pb.CPUPlayerMode_REMOTE_CPU:
+			cpuPlayer = NewRemoteCPUPlayer(s.remoteCPUClient, PlayerId(gameState.Players[1].Id), s.config.CpuThinkTime, 0)
+		}
+		if cpuPlayer != nil {
+			if flagz, ok := ge.(*GameEngineFlagz); ok {
+				go func() {
+					hlog.Infof("Requesting CPU move (%T) for game %s", cpuPlayer, gameId)
+					ctx, cancel := context.WithTimeout(context.Background(), s.config.CpuThinkTime*2)
+					defer cancel()
+					move, _, err := cpuPlayer.SuggestMove(ctx, flagz)
+					if err != nil {
+						hlog.Errorf("SuggestMove failed: %v", err)
+						return
+					}
+					if !ge.MakeMove(*move) {
+						hlog.Errorf("failed to make a CPU move for game %s", gameId)
+						return
+					}
+					enc, _ := ge.Encode()
+					gameState.EngineState = enc
+					if err := s.storeGameAndNotify(ctx, gameState); err != nil {
+						hlog.Errorf("failed to store game after CPU move: %v", err)
+					}
+				}()
+			} else {
+				hlog.Errorf("Cannot make move for game type %v", ge.GameType())
+			}
 		}
 	}
-	s.gameStore.Publish(r.Context(), gameId, &pb.GameStorePubsubEvent{
-		GameId: gameId,
-		Event:  &pb.GameStorePubsubEvent_GameUpdated_{},
-	})
 }
 
 func (s *StatelessServer) handleUndo(w http.ResponseWriter, r *http.Request) {

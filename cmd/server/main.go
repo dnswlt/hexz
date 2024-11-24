@@ -74,6 +74,9 @@ func main() {
 		}
 		cfg.CPUPlayerMode = hexzpb.CPUPlayerMode_WASM
 	case "local":
+		if cfg.RemoteCPUPlayerURL != "" {
+			hlog.Fatalf("-cpu-player-mode=local and -remote-cpu-url are mutually exclusive")
+		}
 		cfg.CPUPlayerMode = hexzpb.CPUPlayerMode_LOCAL_CPU
 	case "remote":
 		if cfg.RemoteCPUPlayerURL == "" {
