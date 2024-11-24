@@ -12,6 +12,21 @@ project(HexzWorker)
 
 include(FetchContent)
 
+# Optionally enable gperftools libprofile:
+option(USE_PROFILER "Enable gperftools CPU profiling" OFF)
+set(PROFILER_LIB "")
+
+if (USE_PROFILER)
+    # Check if libprofiler is available
+    find_library(PROFILER_LIB_FOUND profiler)
+    if (PROFILER_LIB_FOUND)
+        message(STATUS "Found libprofiler: ${PROFILER_LIB_FOUND}")
+        set(PROFILER_LIB ${PROFILER_LIB_FOUND})
+    else ()
+        message(FATAL_ERROR "libprofiler not found. Please install gperftools.")
+    endif ()
+endif ()
+
 #
 # Protocol Buffers
 #
@@ -90,7 +105,7 @@ add_library(mcts base.cc board.cc mcts.cc perfm.cc)
 target_link_libraries(mcts PUBLIC base hexzpb model absl::statusor absl::strings absl::log)
 
 add_executable(worker worker.cc worker_main.cc)
-target_link_libraries(worker PRIVATE grpc_client health_grpc mcts absl::log absl::flags absl::flags_parse absl::flags_usage)
+target_link_libraries(worker PRIVATE grpc_client health_grpc mcts "${PROFILER_LIB}" absl::log absl::flags absl::flags_parse absl::flags_usage)
 
 add_library(cpuserver cpuserver.cc)
 target_link_libraries(cpuserver PUBLIC mcts absl::log hexzpb_grpc)
