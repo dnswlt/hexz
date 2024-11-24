@@ -79,13 +79,12 @@ func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz)
 
 type RemoteCPUPlayer struct {
 	playerId      PlayerId
-	addr          string // Address of the remote CPU player server, e.g. "localhost:50051"
 	maxThinkTime  time.Duration
 	maxIterations int
 	client        pb.CPUPlayerServiceClient
 }
 
-func NewRemoteCPUPlayer(playerId PlayerId, addr string, maxThinkTime time.Duration, maxIterations int) (*RemoteCPUPlayer, error) {
+func NewCPUPlayerServiceClient(addr string) (pb.CPUPlayerServiceClient, error) {
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
@@ -93,14 +92,16 @@ func NewRemoteCPUPlayer(playerId PlayerId, addr string, maxThinkTime time.Durati
 	if err != nil {
 		return nil, fmt.Errorf("cannot create gRPC client: %w", err)
 	}
-	client := pb.NewCPUPlayerServiceClient(conn)
+	return pb.NewCPUPlayerServiceClient(conn), nil
+}
+
+func NewRemoteCPUPlayer(client pb.CPUPlayerServiceClient, playerId PlayerId, maxThinkTime time.Duration, maxIterations int) *RemoteCPUPlayer {
 	return &RemoteCPUPlayer{
 		playerId:      playerId,
-		addr:          addr,
 		maxThinkTime:  maxThinkTime,
 		maxIterations: maxIterations,
 		client:        client,
-	}, nil
+	}
 }
 
 func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz) (*GameEngineMove, *pb.SuggestMoveStats, error) {

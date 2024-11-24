@@ -2,14 +2,17 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/dnswlt/hexz"
 	"github.com/dnswlt/hexz/hexzmem"
+	"github.com/dnswlt/hexz/hexzpb"
 	"github.com/dnswlt/hexz/hexzsql"
 	"github.com/dnswlt/hexz/hlog"
 )
@@ -39,6 +42,7 @@ func main() {
 		"Address of the Redis server. Only used by the -stateless server (default: localhost:6379).")
 	flag.StringVar(&cfg.PostgresURL, "postgres-url", "",
 		"URL of the PostgreSQL server (e.g. \"postgres://hexz:hexz@localhost:5432/hexz\"). If empty, no persistent storage is used.")
+	cpuPlayerMode := flag.String("cpu-player-mode", "local", "Mode in which to run CPU players. One of {wasm, local, remote}")
 	flag.DurationVar(&cfg.InactivityTimeout, "inactivity-timeout", 60*time.Minute,
 		"Time to wait before ending a game due to inactivity")
 	flag.DurationVar(&cfg.PlayerRemoveDelay, "remove-delay", 60*time.Second,
@@ -55,12 +59,30 @@ func main() {
 	flag.StringVar(&cfg.TlsCertChain, "tls-cert", "", "Path to chain.pem for TLS")
 	flag.StringVar(&cfg.TlsPrivKey, "tls-key", "", "Path to privkey.pem for TLS")
 	flag.BoolVar(&cfg.DisableUndo, "disable-undo", false, "If true, games will not support undo/redo")
-	flag.BoolVar(&cfg.Stateless, "stateless", false, "If true, run in stateless mode (e.g. Cloud Run)")
+	flag.BoolVar(&cfg.Stateless, "stateless", true, "If true, run in stateless mode (e.g. Cloud Run)")
+	logFormat := flag.String("log-format", "plain", "Format of log messages. One of {plain, json}.")
 	flag.Parse()
 	setFlags := make(map[string]bool)
 	flag.Visit(func(f *flag.Flag) {
 		setFlags[f.Name] = true
 	})
+	switch *cpuPlayerMode {
+	case "wasm":
+		wasmFile := path.Join(cfg.DocumentRoot, "wasm", "hexz.wasm.gz")
+		if _, err := os.Stat(wasmFile); errors.Is(err, os.ErrNotExist) {
+			hlog.Fatalf("WASM file %s not found", wasmFile)
+		}
+		cfg.CPUPlayerMode = hexzpb.CPUPlayerMode_WASM
+	case "local":
+		cfg.CPUPlayerMode = hexzpb.CPUPlayerMode_LOCAL_CPU
+	case "remote":
+		if cfg.RemoteCPUPlayerURL == "" {
+			hlog.Fatalf("-cpu-player-mode=remote requires -remote-cpu-url to be set")
+		}
+		cfg.CPUPlayerMode = hexzpb.CPUPlayerMode_REMOTE_CPU
+	default:
+		hlog.Fatalf("Invalid value for -cpu-player-mode: %s", *cpuPlayerMode)
+	}
 	// If -port was not specified explicitly, try the $PORT environment variable.
 	envPort := os.Getenv("PORT")
 	if !setFlags["port"] && envPort != "" {
@@ -89,8 +111,10 @@ func main() {
 	if len(flag.Args()) > 0 {
 		hlog.Fatalf("unexpected extra arguments: %v", flag.Args())
 	}
-	if cfg.Stateless {
+	if *logFormat == "json" {
 		hlog.UseJSONLogger()
+	}
+	if cfg.Stateless {
 		// Redis
 		if cfg.RedisAddr == "" {
 			cfg.RedisAddr = "localhost:6379"
@@ -104,20 +128,31 @@ func main() {
 			hlog.Fatalf("error connecting to redis: %s", err)
 		}
 		hlog.Infof("connected to Redis at %s", cfg.RedisAddr)
+		// Build the stateless server
+		renderer, err := hexz.NewRenderer()
+		if err != nil {
+			hlog.Fatalf("error creating renderer: %v", err)
+		}
+		b := hexz.NewStatelessServerBuilder(cfg, &hexzmem.RemotePlayerStore{RedisClient: rc}, rc, renderer)
 		// Postgres (optional)
-		var dbStore hexz.DatabaseStore
 		if cfg.PostgresURL != "" {
-			dbStore, err = hexzsql.NewPostgresStore(context.Background(), cfg.PostgresURL)
+			var dbStore hexz.DatabaseStore
+			dbStore, err := hexzsql.NewPostgresStore(context.Background(), cfg.PostgresURL)
 			if err != nil {
 				hlog.Fatalf("error connecting to postgres: %s", err)
 			}
 			hlog.Infof("connected to PostgreSQL at %s", redactPGPassword(cfg.PostgresURL))
+			b = b.WithDatabaseStore(dbStore)
 		}
-		// Let's go!
-		s, err := hexz.NewStatelessServer(cfg, &hexzmem.RemotePlayerStore{RedisClient: rc}, rc, dbStore)
-		if err != nil {
-			hlog.Fatalf("error creating server: %s", err)
+		// Remote CPU (optional)
+		if cfg.RemoteCPUPlayerURL != "" {
+			client, err := hexz.NewCPUPlayerServiceClient(cfg.RemoteCPUPlayerURL)
+			if err != nil {
+				hlog.Fatalf("error connecting to remote CPU player: %v", err)
+			}
+			b = b.WithCPUPlayerServiceClient(client)
 		}
+		s := b.Build()
 		s.Serve()
 		return // never reached.
 	}

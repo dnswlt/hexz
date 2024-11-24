@@ -21,6 +21,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	pb "github.com/dnswlt/hexz/hexzpb"
 )
 
 type ServerConfig struct {
@@ -29,14 +31,15 @@ type ServerConfig struct {
 	// Path prefix that all URLs for this server have.
 	// Usually "/hexz/", but when running behind a reverse proxy it might differ.
 	URLPathPrefix      string
-	DocumentRoot       string        // Path to static resource files.
-	GameHistoryRoot    string        // Path to game history files.
-	LoginDatabasePath  string        // Path to the file where the player DB is stored. If empty, no persistent storage is used.
-	RemoteCPUPlayerURL string        // Base URL of the remote CPU player server. If emtpy, a local CPU player is used.
-	RedisAddr          string        // Address of the Redis server. If empty, local storage is used.
-	PostgresURL        string        // URL of the PostgreSQL server. If empty, no persistent storage is used.
-	InactivityTimeout  time.Duration // Time after which a game is ended due to inactivity.
-	PlayerRemoveDelay  time.Duration // Time to wait before removing an unregistered player from the game.
+	DocumentRoot       string                // Path to static resource files.
+	GameHistoryRoot    string                // Path to game history files.
+	LoginDatabasePath  string                // Path to the file where the player DB is stored. If empty, no persistent storage is used.
+	RemoteCPUPlayerURL string                // Base URL of the remote CPU player server. If emtpy, a local CPU player is used.
+	CPUPlayerMode      pb.CPUPlayerMode_Enum // Type of CPU player to use.
+	RedisAddr          string                // Address of the Redis server. If empty, local storage is used.
+	PostgresURL        string                // URL of the PostgreSQL server. If empty, no persistent storage is used.
+	InactivityTimeout  time.Duration         // Time after which a game is ended due to inactivity.
+	PlayerRemoveDelay  time.Duration         // Time to wait before removing an unregistered player from the game.
 	LoginTTL           time.Duration
 	CpuThinkTime       time.Duration
 	CpuMaxFlags        int

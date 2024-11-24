@@ -21,32 +21,55 @@ import (
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
+type CPUPlayerWorkerPool struct {
+}
+
 // This file contains the implementation of the stateless hexz game server.
 // It can be used in "serverless" contexts (e.g. Cloud Run) where the server
 // is only guaranteed to run while it is handling a request.
 //
 // See server.go for the stateful implementation.
 
+// StatelessServer is the handle to the "stateless" server implementation.
+// Instances should be created using a builder. See NewStatelessServerBuilder.
 type StatelessServer struct {
-	config      *ServerConfig
-	renderer    *Renderer
-	playerStore PlayerStore
-	dbStore     DatabaseStore
-	gameStore   GameStore
+	config          *ServerConfig
+	renderer        *Renderer
+	playerStore     PlayerStore
+	dbStore         DatabaseStore
+	gameStore       GameStore
+	remoteCPUClient pb.CPUPlayerServiceClient // Only non-nil if a remote CPU addr was configured.
 }
 
-func NewStatelessServer(config *ServerConfig, playerStore PlayerStore, gameStore GameStore, dbStore DatabaseStore) (*StatelessServer, error) {
-	renderer, err := NewRenderer()
-	if err != nil {
-		return nil, err
+type StatelessServerBuilder struct {
+	s *StatelessServer
+}
+
+func NewStatelessServerBuilder(config *ServerConfig, playerStore PlayerStore, gameStore GameStore, renderer *Renderer) *StatelessServerBuilder {
+	return &StatelessServerBuilder{
+		s: &StatelessServer{
+			config:      config,
+			playerStore: playerStore,
+			gameStore:   gameStore,
+			renderer:    renderer,
+		},
 	}
-	return &StatelessServer{
-		config:      config,
-		renderer:    renderer,
-		playerStore: playerStore,
-		gameStore:   gameStore,
-		dbStore:     dbStore,
-	}, nil
+}
+
+func (b *StatelessServerBuilder) WithDatabaseStore(dbStore DatabaseStore) *StatelessServerBuilder {
+	b.s.dbStore = dbStore
+	return b
+}
+
+func (b *StatelessServerBuilder) WithCPUPlayerServiceClient(client pb.CPUPlayerServiceClient) *StatelessServerBuilder {
+	b.s.remoteCPUClient = client
+	return b
+}
+
+func (b *StatelessServerBuilder) Build() *StatelessServer {
+	s := b.s
+	b.s = nil
+	return s
 }
 
 func (s *StatelessServer) loggingHandler(h http.Handler) http.Handler {
@@ -111,7 +134,7 @@ func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType 
 				Host:      p.Name,
 				Started:   tpb.Now(),
 				Type:      string(gameType),
-				CpuPlayer: singlePlayer,
+				CpuPlayer: s.config.CPUPlayerMode,
 			},
 			Players:     players, // More players are registed in handleSSE.
 			EngineState: engineState,
@@ -421,13 +444,13 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 	}
 	// Is it the player's turn?
 	pNum := gameState.PlayerNum(string(p.Id))
-	if ge.Board().Turn != pNum && !gameState.GetGameInfo().GetCpuPlayer() {
+	isWASM := gameState.GetGameInfo().GetCpuPlayer() == pb.CPUPlayerMode_WASM
+	if pNum == 1 && isWASM && ge.Board().Turn == 2 {
+		pNum = 2 // Pretend to be the CPU player.
+	} else if ge.Board().Turn != pNum {
 		http.Error(w, "player cannot make a move", http.StatusPreconditionFailed)
 		return
-	} else if pNum == 1 && gameState.GetGameInfo().GetCpuPlayer() && ge.Board().Turn == 2 {
-		pNum = 2 // Pretend to be the CPU player.
 	}
-
 	if !ge.MakeMove(GameEngineMove{
 		PlayerNum: pNum,
 		Move:      req.Move,
@@ -598,7 +621,7 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		GameInfo: &ServerEventGameInfo{
 			ValidCellTypes:      ge.ValidCellTypes(),
 			GameType:            ge.GameType(),
-			ClientSideCPUPlayer: gameState.GameInfo.CpuPlayer,
+			ClientSideCPUPlayer: gameState.GameInfo.CpuPlayer == pb.CPUPlayerMode_WASM,
 		},
 		DisableUndo: s.config.DisableUndo,
 	})

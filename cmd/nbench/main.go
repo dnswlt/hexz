@@ -153,13 +153,14 @@ func evalP2() {
 	p2Iterations := *p2MaxIterations
 	results := []EvalResult{}
 	p2Lost := false
+	remoteCPUClient, err := hexz.NewCPUPlayerServiceClient(*player2URL)
+	if err != nil {
+		fmt.Printf("Failed to create P2 as remote player: %v", err)
+		os.Exit(1)
+	}
 	for rounds := 0; rounds < 7; rounds++ {
 		p1 = hexz.NewLocalCPUPlayer(hexz.PlayerId("P1"), thinkTime, p1Iterations)
-		p2, err = hexz.NewRemoteCPUPlayer(hexz.PlayerId("P2"), *player2URL, thinkTime, p2Iterations)
-		if err != nil {
-			fmt.Printf("Failed to create P2 as remote player: %v", err)
-			os.Exit(1)
-		}
+		p2 = hexz.NewRemoteCPUPlayer(remoteCPUClient, hexz.PlayerId("P2"), thinkTime, p2Iterations)
 		result := EvalResult{
 			p1Iterations: p1Iterations,
 			p2Iterations: p2Iterations,
@@ -219,7 +220,6 @@ func main() {
 		return
 	}
 	var p1, p2 hexz.CPUPlayer
-	var err error
 	if *p1MaxIterations > 0 {
 		*p1ThinkTime = 0
 	}
@@ -230,20 +230,22 @@ func main() {
 	if *player1URL == "" {
 		p1 = hexz.NewLocalCPUPlayer(hexz.PlayerId("P1"), *p1ThinkTime, p1Iterations)
 	} else {
-		p1, err = hexz.NewRemoteCPUPlayer(hexz.PlayerId("P1"), *player1URL, *p1ThinkTime, p1Iterations)
+		remoteCPUClient, err := hexz.NewCPUPlayerServiceClient(*player1URL)
 		if err != nil {
-			fmt.Printf("Failed to create P1 as remove player: %v", err)
+			fmt.Printf("Failed to create P1 as remote player: %v", err)
 			os.Exit(1)
 		}
+		p1 = hexz.NewRemoteCPUPlayer(remoteCPUClient, hexz.PlayerId("P1"), *p1ThinkTime, p1Iterations)
 	}
 	if *player2URL == "" {
 		p2 = hexz.NewLocalCPUPlayer(hexz.PlayerId("P2"), *p2ThinkTime, *p2MaxIterations)
 	} else {
-		p2, err = hexz.NewRemoteCPUPlayer(hexz.PlayerId("P2"), *player2URL, *p2ThinkTime, *p2MaxIterations)
+		remoteCPUClient, err := hexz.NewCPUPlayerServiceClient(*player1URL)
 		if err != nil {
 			fmt.Printf("Failed to create P2 as remove player: %v", err)
 			os.Exit(1)
 		}
+		p2 = hexz.NewRemoteCPUPlayer(remoteCPUClient, hexz.PlayerId("P2"), *p2ThinkTime, *p2MaxIterations)
 	}
 	var wins [2]int
 	for i := 0; i < *numGames; i++ {

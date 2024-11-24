@@ -49,6 +49,14 @@ message Player {
     string name = 2;
 }
 
+message CPUPlayerMode {
+    enum Enum {
+        NONE = 0; // Not playing against a CPU
+        WASM = 1; // Use client-side WASM engine
+        LOCAL_CPU = 2; // Use local CPU engine
+        REMOTE_CPU = 3; // Use remote CPU engine
+    }
+}
 // GameInfo is summary information about an ongoing game, used to 
 // display a list of games to the user.
 message GameInfo {
@@ -56,7 +64,7 @@ message GameInfo {
     string host = 2; // The player hosting the game.
     google.protobuf.Timestamp started = 3;
     string type = 4; // Expected to match a hexz.GameType value.
-    bool cpu_player = 5; // True if this is a single player game against a CPU player.
+    CPUPlayerMode.Enum cpu_player = 5; // True if this is a single player game against a CPU player.
 }
 
 // This message contains all data to restore a game state.
