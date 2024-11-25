@@ -23,14 +23,15 @@ const (
 func testServerConfig(t *testing.T) *ServerConfig {
 	historyRoot := t.TempDir()
 	return &ServerConfig{
-		ServerHost:      "localhost",
-		ServerPort:      8999,
-		URLPathPrefix:   "/hexz",
-		DocumentRoot:    "./resources",
-		GameHistoryRoot: historyRoot,
-		DebugMode:       true,
-		LoginTTL:        24 * time.Hour, // By default, don't auto-log out players in tests.
-		CPUPlayerMode:   hexzpb.CPUPlayerMode_EMBEDDED_CPU,
+		ServerHost:        "localhost",
+		ServerPort:        8999,
+		URLPathPrefix:     "/hexz",
+		DocumentRoot:      "./resources",
+		GameHistoryRoot:   historyRoot,
+		DebugMode:         true,
+		LoginTTL:          24 * time.Hour, // By default, don't auto-log out players in tests.
+		InactivityTimeout: 1 * time.Hour,
+		CPUPlayerMode:     hexzpb.CPUPlayerMode_EMBEDDED_CPU,
 	}
 }
 
@@ -43,7 +44,7 @@ func newTestStatelessServer(config *ServerConfig) (*StatelessServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	gameStore := NewInMemoryGameStore()
+	gameStore := NewInMemoryGameStore(config.InactivityTimeout)
 	b := NewStatelessServerBuilder(config, playerStore, gameStore, renderer)
 	return b.Build(), nil
 }

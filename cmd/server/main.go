@@ -143,7 +143,7 @@ func main() {
 		if err != nil {
 			hlog.Fatalf("error creating in-memory player store: %v", err)
 		}
-		gameStore = hexz.NewInMemoryGameStore()
+		gameStore = hexz.NewInMemoryGameStore(cfg.InactivityTimeout)
 	}
 	b := hexz.NewStatelessServerBuilder(cfg, playerStore, gameStore, renderer)
 	// Postgres (optional)

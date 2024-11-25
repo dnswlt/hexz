@@ -155,34 +155,60 @@ var (
 )
 
 // An in-memory replacement for a RedisClient, to enable purely local, single-server
-// gameplay. The implementation does not clean up old games and should only be used
-// for "casual play" at home, not in a public server environment!
+// gameplay.
 type InMemoryGameStore struct {
-	gameStates map[string]*pb.GameState
+	gameTTL    time.Duration // How long a game is kept in memory.
+	gameStates map[string]*gameStoreEntry
 	// Sequence of game IDs. Used to list the most recent games.
 	gameStatesSeq []string
 	mut           sync.Mutex
 	subscribers   map[string][]chan<- *pb.GameStorePubsubEvent
 }
 
-func NewInMemoryGameStore() *InMemoryGameStore {
+type gameStoreEntry struct {
+	gameState *pb.GameState
+	created   time.Time
+}
+
+func NewInMemoryGameStore(gameTTL time.Duration) *InMemoryGameStore {
 	return &InMemoryGameStore{
-		gameStates:  make(map[string]*pb.GameState),
+		gameTTL:     gameTTL,
+		gameStates:  make(map[string]*gameStoreEntry),
 		subscribers: make(map[string][]chan<- *pb.GameStorePubsubEvent),
 	}
+}
+
+// Deletes all games from the store that are older than s.gameTTL.
+// Must only be called while holding the s.mut lock.
+func (s *InMemoryGameStore) deleteOldGames() {
+	j := 0
+	for i := 0; i < len(s.gameStatesSeq); i++ {
+		id := s.gameStatesSeq[i]
+		gs := s.gameStates[id]
+		if time.Since(gs.created) >= s.gameTTL {
+			delete(s.gameStates, id)
+		} else {
+			s.gameStatesSeq[j] = s.gameStatesSeq[i]
+			j++
+		}
+	}
+	s.gameStatesSeq = s.gameStatesSeq[:j]
 }
 
 func (s *InMemoryGameStore) StoreNewGame(ctx context.Context, state *pb.GameState) (bool, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
+	s.deleteOldGames()
 	state.Modified = tpb.Now()
 	gameId := state.GetGameInfo().GetId()
 	if _, ok := s.gameStates[gameId]; ok {
 		return false, nil
 	}
 	// Create a copy, like the remote store would, to avoid nasty concurrent access problems.
-	stateCopy := proto.Clone(state).(*pb.GameState)
-	s.gameStates[gameId] = stateCopy
+	s.gameStates[gameId] = &gameStoreEntry{
+		gameState: proto.Clone(state).(*pb.GameState),
+		created:   time.Now(),
+	}
 	s.gameStatesSeq = append(s.gameStatesSeq, gameId)
 	return true, nil
 }
@@ -190,10 +216,10 @@ func (s *InMemoryGameStore) StoreNewGame(ctx context.Context, state *pb.GameStat
 func (s *InMemoryGameStore) LookupGame(ctx context.Context, gameId string) (*pb.GameState, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
-	if state, ok := s.gameStates[gameId]; ok {
+	if e, ok := s.gameStates[gameId]; ok {
 		// Create a copy, like the remote store would, to avoid nasty concurrent access problems.
-		stateCopy := proto.Clone(state).(*pb.GameState)
-		return stateCopy, nil
+		state := proto.Clone(e.gameState).(*pb.GameState)
+		return state, nil
 	}
 	return nil, errGameNotExist
 }
@@ -203,15 +229,19 @@ func (s *InMemoryGameStore) UpdateGame(ctx context.Context, state *pb.GameState)
 	defer s.mut.Unlock()
 	state.Seqnum++
 	state.Modified = tpb.Now()
+	gs, ok := s.gameStates[state.GetGameInfo().GetId()]
+	if !ok {
+		return fmt.Errorf("game %v does not exist in the store", state.GetGameInfo().GetId())
+	}
 	// Create a copy, like the remote store would, to avoid nasty concurrent access problems.
-	stateCopy := proto.Clone(state).(*pb.GameState)
-	s.gameStates[state.GetGameInfo().GetId()] = stateCopy
+	gs.gameState = proto.Clone(state).(*pb.GameState)
 	return nil
 }
 
 func (s *InMemoryGameStore) ListRecentGames(ctx context.Context, limit int) ([]*pb.GameInfo, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
+	s.deleteOldGames()
 	l := len(s.gameStatesSeq)
 	if limit > l {
 		limit = l
@@ -219,11 +249,7 @@ func (s *InMemoryGameStore) ListRecentGames(ctx context.Context, limit int) ([]*
 	infos := []*pb.GameInfo{}
 	for i := 0; i < limit; i++ {
 		id := s.gameStatesSeq[l-i-1]
-		if state, ok := s.gameStates[id]; ok {
-			infos = append(infos, state.GetGameInfo())
-		} else {
-			return nil, fmt.Errorf("invariant broken: gameStatesSeq not in sync: %s", id)
-		}
+		infos = append(infos, s.gameStates[id].gameState.GetGameInfo())
 	}
 	return infos, nil
 }

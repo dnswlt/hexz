@@ -221,7 +221,7 @@ func TestMCTSSingleMove(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Don't run MCTS simulation in -short mode.")
 	}
-	thinkTime := time.Duration(5000) * time.Millisecond
+	thinkTime := time.Duration(1000) * time.Millisecond
 
 	ge := NewGameEngineFlagz()
 	mcts := NewMCTS()
@@ -238,7 +238,7 @@ func TestMCTSSingleMoveMidGame(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Don't run MCTS simulation in -short mode.")
 	}
-	thinkTime := time.Duration(5000) * time.Millisecond
+	thinkTime := time.Duration(1000) * time.Millisecond
 
 	ge := NewGameEngineFlagz()
 	// Advance the game a bit.
