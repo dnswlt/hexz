@@ -581,24 +581,28 @@ func (s *StatelessServer) goMakeCPUMove(ge GameEngine, gameState *pb.GameState) 
 		hlog.Errorf("Async CPU move requested for CPU player type %v", gameState.GameInfo.CpuPlayer)
 		return
 	}
+	turn := flagz.Board().Turn
 	go func() {
-		gameId := gameState.GetGameInfo().GetId()
-		hlog.Infof("Requesting CPU move (%T) for game %s", cpuPlayer, gameId)
-		ctx, cancel := context.WithTimeout(context.Background(), s.config.CpuThinkTime*2)
-		defer cancel()
-		move, _, err := cpuPlayer.SuggestMove(ctx, flagz)
-		if err != nil {
-			hlog.Errorf("SuggestMove failed: %v", err)
-			return
-		}
-		if !ge.MakeMove(*move) {
-			hlog.Errorf("failed to make a CPU move for game %s", gameId)
-			return
-		}
-		enc, _ := ge.Encode()
-		gameState.EngineState = enc
-		if err := s.storeGameAndNotify(ctx, gameState); err != nil {
-			hlog.Errorf("failed to store game after CPU move: %v", err)
+		// Play 1..N moves while it is CPU's turn and the game is not over.
+		for !flagz.IsDone() && flagz.Board().Turn == turn {
+			gameId := gameState.GetGameInfo().GetId()
+			hlog.Infof("Requesting CPU move (%T) for game %s, move %d", cpuPlayer, gameId, flagz.Board().Move)
+			ctx, cancel := context.WithTimeout(context.Background(), s.config.CpuThinkTime*2)
+			defer cancel()
+			move, _, err := cpuPlayer.SuggestMove(ctx, flagz)
+			if err != nil {
+				hlog.Errorf("SuggestMove failed: %v", err)
+				return
+			}
+			if !flagz.MakeMove(*move) {
+				hlog.Errorf("failed to make a CPU move for game %s", gameId)
+				return
+			}
+			enc, _ := flagz.Encode()
+			gameState.EngineState = enc
+			if err := s.storeGameAndNotify(ctx, gameState); err != nil {
+				hlog.Errorf("failed to store game after CPU move: %v", err)
+			}
 		}
 	}()
 }
@@ -667,6 +671,41 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 
 	if !ge.IsDone() && isCPUTurn(ge.Board().Turn, gameState.GameInfo.CpuPlayer) {
 		s.goMakeCPUMove(ge, gameState)
+	}
+}
+
+func (s *StatelessServer) handleValidMoves(w http.ResponseWriter, r *http.Request) {
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
+		return
+	}
+	_, ge, err := s.loadGame(r.Context(), gameId)
+	if err != nil {
+		http.Error(w, "No such game", http.StatusNotFound)
+		return
+	}
+
+	engine, ok := ge.(*GameEngineFlagz)
+	if !ok {
+		http.Error(w, "invalid game type", http.StatusPreconditionFailed)
+	}
+	validMoves := engine.ValidMoves()
+	moves := make([]*MoveRequest, len(validMoves))
+	for i, m := range validMoves {
+		moves[i] = &MoveRequest{
+			Move: m.Move,
+			Row:  m.Row,
+			Col:  m.Col,
+			Type: m.CellType,
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(w)
+	err = enc.Encode(moves)
+	if err != nil {
+		http.Error(w, "marshal error", http.StatusInternalServerError)
+		hlog.Fatalf("Cannot marshal valid moves: %v", err)
 	}
 }
 
@@ -914,7 +953,7 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	handleFunc("/gamez", s.handleGamez)
 	// mux.HandleFunc("/hexz/view/", s.handleView)
 	// mux.HandleFunc("/hexz/history/", s.handleHistory)
-	// mux.HandleFunc("/hexz/moves/", s.handleValidMoves)
+	mux.HandleFunc("/hexz/moves/{gameId}", s.handleValidMoves)
 	handleFunc("/{gameId}", s.handleGame)
 	// Technical services
 	// mux.Handle("/statusz", s.basicAuthHandlerFunc(s.handleStatusz))

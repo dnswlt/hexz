@@ -13,6 +13,7 @@ import (
 	pb "github.com/dnswlt/hexz/hexzpb"
 	"github.com/dnswlt/hexz/hlog"
 	"google.golang.org/protobuf/proto"
+	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // When run as a standalone app, we can store all logged in users
@@ -174,11 +175,14 @@ func NewInMemoryGameStore() *InMemoryGameStore {
 func (s *InMemoryGameStore) StoreNewGame(ctx context.Context, state *pb.GameState) (bool, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
+	state.Modified = tpb.Now()
 	gameId := state.GetGameInfo().GetId()
 	if _, ok := s.gameStates[gameId]; ok {
 		return false, nil
 	}
-	s.gameStates[gameId] = state
+	// Create a copy, like the remote store would, to avoid nasty concurrent access problems.
+	stateCopy := proto.Clone(state).(*pb.GameState)
+	s.gameStates[gameId] = stateCopy
 	s.gameStatesSeq = append(s.gameStatesSeq, gameId)
 	return true, nil
 }
@@ -187,7 +191,9 @@ func (s *InMemoryGameStore) LookupGame(ctx context.Context, gameId string) (*pb.
 	s.mut.Lock()
 	defer s.mut.Unlock()
 	if state, ok := s.gameStates[gameId]; ok {
-		return state, nil
+		// Create a copy, like the remote store would, to avoid nasty concurrent access problems.
+		stateCopy := proto.Clone(state).(*pb.GameState)
+		return stateCopy, nil
 	}
 	return nil, errGameNotExist
 }
@@ -195,7 +201,11 @@ func (s *InMemoryGameStore) LookupGame(ctx context.Context, gameId string) (*pb.
 func (s *InMemoryGameStore) UpdateGame(ctx context.Context, state *pb.GameState) error {
 	s.mut.Lock()
 	defer s.mut.Unlock()
-	s.gameStates[state.GetGameInfo().GetId()] = state
+	state.Seqnum++
+	state.Modified = tpb.Now()
+	// Create a copy, like the remote store would, to avoid nasty concurrent access problems.
+	stateCopy := proto.Clone(state).(*pb.GameState)
+	s.gameStates[state.GetGameInfo().GetId()] = stateCopy
 	return nil
 }
 

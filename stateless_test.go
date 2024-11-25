@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/dnswlt/hexz/hexzpb"
 )
 
 const (
@@ -28,6 +30,7 @@ func testServerConfig(t *testing.T) *ServerConfig {
 		GameHistoryRoot: historyRoot,
 		DebugMode:       true,
 		LoginTTL:        24 * time.Hour, // By default, don't auto-log out players in tests.
+		CPUPlayerMode:   hexzpb.CPUPlayerMode_EMBEDDED_CPU,
 	}
 }
 
@@ -143,5 +146,98 @@ func TestURLJoinPath(t *testing.T) {
 		if got := urlJoinPath(tc.prefix, tc.suffix); got != tc.want {
 			t.Errorf("Invalid prefix: got %q, want %q", got, tc.want)
 		}
+	}
+}
+
+// Process SSE ServerEvents and return boards with strictly monotonically increasing move numbers.
+func receiveBoards(ctx context.Context, eventCh <-chan tcServerEvent) <-chan *BoardView {
+	boardCh := make(chan *BoardView)
+	go func() {
+		defer close(boardCh)
+		moveNum := -1
+		for {
+			select {
+			case e := <-eventCh:
+				if e.s.Board != nil {
+					if e.s.Board.Move > moveNum {
+						moveNum = e.s.Board.Move
+						boardCh <- e.s.Board
+					}
+				}
+				// Ignore errors and events without a new board.
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	return boardCh
+}
+
+// Longish test that starts a server, logs in a new player, starts a new
+// single-player flagz game and plays it till the end using random moves.
+func TestFlagzSinglePlayer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Don't run http tests in -short mode.")
+	}
+	cfg := testServerConfig(t)
+	cfg.CpuThinkTime = 1 * time.Millisecond // We want a fast test, not smart moves.
+	srv, _ := newTestStatelessServer(cfg)
+	testServer := httptest.NewServer(srv.createMux())
+	defer testServer.Close()
+
+	c, err := newHexzTestClient(testServer.URL)
+	if err != nil {
+		t.Fatalf("could not create client: %s", err)
+	}
+	// Log in.
+	if err := c.login("testuser"); err != nil {
+		t.Fatal(err)
+	}
+	// Start a new single player game.
+	gameId, err := c.newFlagzGame(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Receive SSE events.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	eventCh, err := c.receiveEvents(ctx, testServer.URL+"/hexz/sse/"+gameId)
+	if err != nil {
+		t.Fatalf("cannot receive events for game %s: %s", gameId, err)
+	}
+	boardCh := receiveBoards(ctx, eventCh)
+	<-boardCh // Ignore first broadcast of the initial board.
+	finished := false
+	maxMoves := numFieldsFirstRow * numBoardRows // upper bound for possible moves
+	for i := 0; !finished && i < maxMoves; i++ {
+		// Get valid moves.
+		validMoves, err := c.validMoves(gameId)
+		if err != nil {
+			t.Errorf("could not get valid moves: %v", err)
+			break
+		}
+		if len(validMoves) == 0 {
+			t.Errorf("No valid move despite game not having finished")
+			break
+		}
+		// Make move.
+		if err := c.makeMove(gameId, validMoves[0]); err != nil {
+			t.Errorf("could not make move: %v", err)
+			break
+		}
+		// Receive boards until the game is finished or it's our turn again.
+		for {
+			board := <-boardCh
+			if board.State == Finished {
+				finished = true
+				break
+			}
+			if board.Turn == 1 {
+				break
+			}
+		}
+	}
+	if !finished {
+		t.Errorf("did not finish the game after %d moves", maxMoves)
 	}
 }
