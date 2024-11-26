@@ -71,11 +71,10 @@ message GameInfo {
 // It can be used to save and load games in a memory store.
 message GameState {
     GameInfo game_info = 1;
-    int64 seqnum = 2;
-    google.protobuf.Timestamp modified = 4;
+    google.protobuf.Timestamp modified = 2;
     // Players in this game, in the order they joined.
-    repeated Player players = 5;
-    GameEngineState engine_state = 6;
+    repeated Player players = 3;
+    GameEngineState engine_state = 4;
 
     message UndoRedoState {
         GameEngineState initial_state = 1;
@@ -85,7 +84,7 @@ message GameState {
         // from previous Undo actions.
         repeated GameEngineMove redo_moves = 3;
     }
-    UndoRedoState undo_redo_state = 7;
+    UndoRedoState undo_redo_state = 5;
 }
 
 // This message contains all data to restore a game engine state.

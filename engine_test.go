@@ -193,3 +193,39 @@ func BenchmarkUndoRedoFirstMove(b *testing.B) {
 	}
 
 }
+
+func TestGameReprEncodedSize(t *testing.T) {
+	// This test ensures that encoded game state sizes stay withing
+	// reasonable bounds, to avoid blowing up the DB or memory stores.
+	g := testFlagzGameRepr(t)
+	{
+		data, err := proto.Marshal(g.state)
+		if err != nil {
+			t.Fatal("Cannot marshal proto: ", err)
+		}
+		l := len(data)
+		if l < 1500 || l > 2500 {
+			t.Errorf("Unexpected size of marshalled GameState: got %d, want [1500, 2500]", l)
+		}
+	}
+	// Play till the end
+	for !g.Engine().IsDone() {
+		mv, err := g.Engine().(*GameEngineFlagz).RandomMove()
+		if err != nil {
+			t.Fatal("RandomMove: ", err)
+		}
+		g.MakeMove(mv)
+	}
+
+	{
+		data, err := proto.Marshal(g.state)
+		if err != nil {
+			t.Fatal("Cannot marshal proto: ", err)
+		}
+		l := len(data)
+		if l < 3500 || l > 4500 {
+			t.Errorf("Unexpected size of marshalled GameState: got %d, want [3500, 4500]", l)
+		}
+	}
+
+}

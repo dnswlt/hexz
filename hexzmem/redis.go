@@ -100,7 +100,6 @@ func (c *RedisClient) StoreNewGame(ctx context.Context, s *pb.GameState) (bool, 
 // Stores the given game state in Redis, overwriting any existing game with the same ID.
 // This method updates the Seqnum and Modified fields of the game state.
 func (c *RedisClient) UpdateGame(ctx context.Context, s *pb.GameState) error {
-	s.Seqnum++
 	s.Modified = tpb.Now()
 	data, err := proto.Marshal(s)
 	if err != nil {

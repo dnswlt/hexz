@@ -227,7 +227,6 @@ func (s *InMemoryGameStore) LookupGame(ctx context.Context, gameId string) (*pb.
 func (s *InMemoryGameStore) UpdateGame(ctx context.Context, state *pb.GameState) error {
 	s.mut.Lock()
 	defer s.mut.Unlock()
-	state.Seqnum++
 	state.Modified = tpb.Now()
 	gs, ok := s.gameStates[state.GetGameInfo().GetId()]
 	if !ok {

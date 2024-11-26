@@ -247,6 +247,15 @@ func (g *GameRepr) State() *pb.GameState {
 	return g.state
 }
 
+// Returns the most recent move made in the game, or nil if no move has been made yet.
+func (g *GameRepr) LastMove() *pb.GameEngineMove {
+	moves := g.State().GetUndoRedoState().GetMoves()
+	if len(moves) == 0 {
+		return nil
+	}
+	return moves[len(moves)-1]
+}
+
 func (g *GameRepr) PlayerNames() []string {
 	names := make([]string, len(g.state.Players))
 	for i, p := range g.state.Players {
