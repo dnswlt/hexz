@@ -6,6 +6,7 @@ import (
 	crand "crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -270,6 +271,9 @@ func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType 
 			},
 			Players:     players, // More players are registed in handleSSE.
 			EngineState: engineState,
+			UndoRedoState: &pb.GameState_UndoRedoState{
+				InitialState: engineState,
+			},
 		}
 		if ok, err := s.gameStore.StoreNewGame(ctx, gs); err != nil {
 			return "", err
@@ -374,7 +378,7 @@ func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid game ID", http.StatusBadRequest)
 		return
 	}
-	gameState, ge, err := s.loadGame(r.Context(), gameId)
+	g, err := s.loadGame(r.Context(), gameId)
 	if err != nil {
 		http.Error(w, "game does not exist", http.StatusNotFound)
 		return
@@ -385,14 +389,16 @@ func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unmarshal error", http.StatusBadRequest)
 		return
 	}
-	if gameState.PlayerNum(string(p.Id)) <= 0 {
+	if g.PlayerNum(string(p.Id)) <= 0 {
 		http.Error(w, "only players can reset a game", http.StatusForbidden)
 		return
 	}
-	ge.Reset()
-	state, _ := ge.Encode()
-	gameState.EngineState = state
-	if err := s.gameStore.UpdateGame(r.Context(), gameState); err != nil {
+	if err := g.Reset(); err != nil {
+		http.Error(w, "cannot reset game", http.StatusInternalServerError)
+		hlog.Errorf("Cannot reset game %s: %v", gameId, err)
+		return
+	}
+	if err := s.gameStore.UpdateGame(r.Context(), g.State()); err != nil {
 		http.Error(w, "cannot update game", http.StatusInternalServerError)
 		hlog.Errorf("Cannot update game %s: %s", gameId, err)
 		return
@@ -501,13 +507,13 @@ func (s *StatelessServer) handleState(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
-	gameState, err := s.gameStore.LookupGame(r.Context(), gameId)
+	g, err := s.loadGame(r.Context(), gameId)
 	if err != nil {
 		// Game does not exist: offer to start a new game.
 		http.Error(w, "No such game", http.StatusNotFound)
 		return
 	}
-	if gameState.PlayerNum(string(p.Id)) == 0 {
+	if g.PlayerNum(string(p.Id)) == 0 {
 		http.Error(w, "Only players can request the game state", http.StatusForbidden)
 		return
 	}
@@ -523,7 +529,7 @@ func (s *StatelessServer) handleState(w http.ResponseWriter, r *http.Request) {
 	} else {
 		enc = json.NewEncoder(w)
 	}
-	encodedGameState, err := proto.Marshal(gameState)
+	encodedGameState, err := proto.Marshal(g.State())
 	if err != nil {
 		http.Error(w, "marshal error", http.StatusInternalServerError)
 		hlog.Errorf("Cannot marshal GameState: %s", err.Error())
@@ -534,27 +540,22 @@ func (s *StatelessServer) handleState(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *StatelessServer) loadGame(ctx context.Context, gameId string) (*pb.GameState, GameEngine, error) {
+func (s *StatelessServer) loadGame(ctx context.Context, gameId string) (*GameRepr, error) {
 	gameState, err := s.gameStore.LookupGame(ctx, gameId)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	ge, err := DecodeGameEngine(gameState.EngineState)
-	if err != nil {
-		hlog.Errorf("Cannot decode game engine for game %s: %s", gameId, err)
-		return nil, nil, err
-	}
-	return gameState, ge, nil
+	return NewGameRepr(gameState), nil
 }
 
-func (s *StatelessServer) storeGameAndNotify(ctx context.Context, gameState *pb.GameState) error {
-	gameId := gameState.GetGameInfo().GetId()
-	if err := s.gameStore.UpdateGame(ctx, gameState); err != nil {
+func (s *StatelessServer) storeGameAndNotify(ctx context.Context, g *GameRepr) error {
+	gameId := g.State().GetGameInfo().GetId()
+	if err := s.gameStore.UpdateGame(ctx, g.State()); err != nil {
 		return fmt.Errorf("failed to save game state: %v", err)
 	}
 	if s.dbStore != nil {
-		if err := s.dbStore.InsertHistory(ctx, "move", gameId, gameState); err != nil {
-			hlog.Errorf("Cannot add history entry for game %s in database: %s", gameState.GameInfo.Id, err)
+		if err := s.dbStore.InsertHistory(ctx, "move", gameId, g.State()); err != nil {
+			hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
 		}
 	}
 	s.gameStore.Publish(ctx, gameId, &pb.GameStorePubsubEvent{
@@ -564,28 +565,29 @@ func (s *StatelessServer) storeGameAndNotify(ctx context.Context, gameState *pb.
 	return nil
 }
 
-func (s *StatelessServer) goMakeCPUMove(ge GameEngine, gameState *pb.GameState) {
-	flagz, ok := ge.(*GameEngineFlagz)
+func (s *StatelessServer) goMakeCPUMove(g *GameRepr) {
+	_, ok := g.Engine().(*GameEngineFlagz)
 	if !ok {
-		hlog.Errorf("Cannot make move for game type %v", ge.GameType())
+		hlog.Errorf("Cannot make move for game type %v", g.Engine().GameType())
 		return
 	}
 	// Asynchronously request a CPU move in a 1P game, if necessary.
 	var cpuPlayer CPUPlayer
-	switch gameState.GameInfo.CpuPlayer {
+	switch g.State().GameInfo.CpuPlayer {
 	case pb.CPUPlayerMode_EMBEDDED_CPU:
-		cpuPlayer = NewLocalCPUPlayer(PlayerId(gameState.Players[1].Id), s.config.CpuThinkTime, 0)
+		cpuPlayer = NewLocalCPUPlayer(PlayerId(g.State().Players[1].Id), s.config.CpuThinkTime, 0)
 	case pb.CPUPlayerMode_REMOTE_CPU:
-		cpuPlayer = NewRemoteCPUPlayer(s.remoteCPUClient, PlayerId(gameState.Players[1].Id), s.config.CpuThinkTime, 0)
+		cpuPlayer = NewRemoteCPUPlayer(s.remoteCPUClient, PlayerId(g.State().Players[1].Id), s.config.CpuThinkTime, 0)
 	default:
-		hlog.Errorf("Async CPU move requested for CPU player type %v", gameState.GameInfo.CpuPlayer)
+		hlog.Errorf("Async CPU move requested for CPU player type %v", g.State().GameInfo.CpuPlayer)
 		return
 	}
-	turn := flagz.Board().Turn
+	turn := g.Engine().Board().Turn
 	go func() {
 		// Play 1..N moves while it is CPU's turn and the game is not over.
+		flagz := g.Engine().(*GameEngineFlagz)
 		for !flagz.IsDone() && flagz.Board().Turn == turn {
-			gameId := gameState.GetGameInfo().GetId()
+			gameId := g.State().GetGameInfo().GetId()
 			hlog.Infof("Requesting CPU move (%T) for game %s, move %d", cpuPlayer, gameId, flagz.Board().Move)
 			ctx, cancel := context.WithTimeout(context.Background(), s.config.CpuThinkTime*2)
 			defer cancel()
@@ -594,13 +596,12 @@ func (s *StatelessServer) goMakeCPUMove(ge GameEngine, gameState *pb.GameState) 
 				hlog.Errorf("SuggestMove failed: %v", err)
 				return
 			}
-			if !flagz.MakeMove(*move) {
-				hlog.Errorf("failed to make a CPU move for game %s", gameId)
+			if err := g.MakeMove(*move); err != nil {
+				hlog.Errorf("failed to make a CPU move for game %s: %v", gameId, err)
 				return
 			}
-			enc, _ := flagz.Encode()
-			gameState.EngineState = enc
-			if err := s.storeGameAndNotify(ctx, gameState); err != nil {
+			flagz = g.Engine().(*GameEngineFlagz)
+			if err := s.storeGameAndNotify(ctx, g); err != nil {
 				hlog.Errorf("failed to store game after CPU move: %v", err)
 			}
 		}
@@ -623,7 +624,7 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
-	gameState, ge, err := s.loadGame(r.Context(), gameId)
+	g, err := s.loadGame(r.Context(), gameId)
 	if err != nil {
 		http.Error(w, "No such game", http.StatusNotFound)
 		return
@@ -640,37 +641,35 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Is it the player's turn?
-	pNum := gameState.PlayerNum(string(p.Id))
-	isWASM := gameState.GetGameInfo().GetCpuPlayer() == pb.CPUPlayerMode_WASM
-	if pNum == 1 && isWASM && ge.Board().Turn == 2 {
+	pNum := g.PlayerNum(string(p.Id))
+	isWASM := g.State().GetGameInfo().GetCpuPlayer() == pb.CPUPlayerMode_WASM
+	if pNum == 1 && isWASM && g.Engine().Board().Turn == 2 {
 		// TODO: fix this mess. Clients should explicitly tell us that this is a WASM move for P2.
 		pNum = 2 // WASM move: pretend to be the CPU player.
-	} else if ge.Board().Turn != pNum {
+	} else if g.Engine().Board().Turn != pNum {
 		http.Error(w, "player cannot make a move", http.StatusPreconditionFailed)
 		return
 	}
-	if !ge.MakeMove(GameEngineMove{
+	if err := g.MakeMove(GameEngineMove{
 		PlayerNum: pNum,
 		Move:      req.Move,
 		Row:       req.Row,
 		Col:       req.Col,
 		CellType:  req.Type,
-	}) {
+	}); err != nil {
 		http.Error(w, "invalid move", http.StatusBadRequest)
 		return
 	}
 
 	// Store new game state and notify other players.
-	enc, _ := ge.Encode()
-	gameState.EngineState = enc
-	if err := s.storeGameAndNotify(r.Context(), gameState); err != nil {
+	if err := s.storeGameAndNotify(r.Context(), g); err != nil {
 		http.Error(w, "failed to save game state", http.StatusInternalServerError)
 		hlog.Errorf("Could not store game %s: %v", gameId, err)
 		return
 	}
 
-	if !ge.IsDone() && isCPUTurn(ge.Board().Turn, gameState.GameInfo.CpuPlayer) {
-		s.goMakeCPUMove(ge, gameState)
+	if !g.Engine().IsDone() && isCPUTurn(g.Engine().Board().Turn, g.State().GameInfo.CpuPlayer) {
+		s.goMakeCPUMove(g)
 	}
 }
 
@@ -680,13 +679,13 @@ func (s *StatelessServer) handleValidMoves(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
-	_, ge, err := s.loadGame(r.Context(), gameId)
+	g, err := s.loadGame(r.Context(), gameId)
 	if err != nil {
 		http.Error(w, "No such game", http.StatusNotFound)
 		return
 	}
 
-	engine, ok := ge.(*GameEngineFlagz)
+	engine, ok := g.Engine().(*GameEngineFlagz)
 	if !ok {
 		http.Error(w, "invalid game type", http.StatusPreconditionFailed)
 	}
@@ -719,31 +718,34 @@ func (s *StatelessServer) handleUndo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
-	if s.dbStore == nil {
-		http.Error(w, "Undo not supported", http.StatusNotImplemented)
-		return
-	}
-	currentGameState, _, err := s.loadGame(r.Context(), gameId)
+	g, err := s.loadGame(r.Context(), gameId)
 	if err != nil {
 		http.Error(w, "No such game", http.StatusNotFound)
 		return
 	}
-	if currentGameState.PlayerNum(string(p.Id)) == 0 {
+	if g.PlayerNum(string(p.Id)) == 0 {
 		http.Error(w, "Only players can undo a move", http.StatusForbidden)
 		return
 	}
-	prevGameState, err := s.dbStore.PreviousGameState(r.Context(), gameId)
-	if err != nil {
-		http.Error(w, "No previous game state", http.StatusNotFound)
+
+	if err := g.Undo(); err != nil {
+		if errors.Is(err, errUndoRedoEmpty) {
+			http.Error(w, "Cannot undo: no previous state", http.StatusPreconditionFailed)
+			return
+		}
+		hlog.Errorf("Undo failed: %v", err)
+		http.Error(w, "Cannot undo (no previous state?)", http.StatusInternalServerError)
 		return
 	}
-	if err := s.gameStore.UpdateGame(r.Context(), prevGameState); err != nil {
+	if err := s.gameStore.UpdateGame(r.Context(), g.State()); err != nil {
 		http.Error(w, "failed to save game state", http.StatusInternalServerError)
 		hlog.Errorf("Could not store game %s: %s", gameId, err)
 		return
 	}
-	if err := s.dbStore.InsertHistory(r.Context(), "undo", gameId, nil); err != nil {
-		hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
+	if s.dbStore != nil {
+		if err := s.dbStore.InsertHistory(r.Context(), "undo", gameId, nil); err != nil {
+			hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
+		}
 	}
 	s.gameStore.Publish(r.Context(), gameId, &pb.GameStorePubsubEvent{
 		GameId: gameId,
@@ -761,31 +763,33 @@ func (s *StatelessServer) handleRedo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
-	if s.dbStore == nil {
-		http.Error(w, "Redo not supported", http.StatusNotImplemented)
-		return
-	}
-	currentGameState, _, err := s.loadGame(r.Context(), gameId)
+	g, err := s.loadGame(r.Context(), gameId)
 	if err != nil {
 		http.Error(w, "No such game", http.StatusNotFound)
 		return
 	}
-	if currentGameState.PlayerNum(string(p.Id)) == 0 {
+	if g.PlayerNum(string(p.Id)) == 0 {
 		http.Error(w, "Only players can redo a move", http.StatusForbidden)
 		return
 	}
-	nextGameState, err := s.dbStore.NextGameState(r.Context(), gameId)
-	if err != nil {
-		http.Error(w, "No next game state", http.StatusNotFound)
+	if err := g.Redo(); err != nil {
+		if errors.Is(err, errUndoRedoEmpty) {
+			http.Error(w, "No next game state", http.StatusNotFound)
+			return
+		}
+		hlog.Errorf("Failed to redo move: %v", err)
+		http.Error(w, "Failed to redo move", http.StatusInternalServerError)
 		return
 	}
-	if err := s.gameStore.UpdateGame(r.Context(), nextGameState); err != nil {
+	if err := s.gameStore.UpdateGame(r.Context(), g.State()); err != nil {
 		http.Error(w, "failed to save game state", http.StatusInternalServerError)
 		hlog.Errorf("Could not store game %s: %s", gameId, err)
 		return
 	}
-	if err := s.dbStore.InsertHistory(r.Context(), "redo", gameId, nil); err != nil {
-		hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
+	if s.dbStore != nil {
+		if err := s.dbStore.InsertHistory(r.Context(), "redo", gameId, nil); err != nil {
+			hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
+		}
 	}
 	s.gameStore.Publish(r.Context(), gameId, &pb.GameStorePubsubEvent{
 		GameId: gameId,
@@ -804,7 +808,7 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
-	gameState, ge, err := s.loadGame(r.Context(), gameId)
+	g, err := s.loadGame(r.Context(), gameId)
 	if err != nil {
 		http.Error(w, "No such game", http.StatusNotFound)
 		return
@@ -813,23 +817,23 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	// Disable proxy buffering, in case we're behind a reverse proxy.
 	w.Header().Set("X-Accel-Buffering", "no")
-	pNum := gameState.PlayerNum(string(p.Id))
+	pNum := g.PlayerNum(string(p.Id))
 	// If there is a slot in the game left, add this player.
-	if pNum == 0 && len(gameState.Players) < ge.NumPlayers() {
-		gameState.Players = append(gameState.Players, &pb.Player{
+	if pNum == 0 && !g.AllPlayersJoined() {
+		g.AddPlayer(&pb.Player{
 			Id:   string(p.Id),
 			Name: p.Name,
 		})
-		if err := s.gameStore.UpdateGame(r.Context(), gameState); err != nil {
+		if err := s.gameStore.UpdateGame(r.Context(), g.State()); err != nil {
 			hlog.Errorf("Cannot store updated game state: %s", err)
 			return
 		}
 		if s.dbStore != nil {
-			if err := s.dbStore.InsertHistory(r.Context(), "join", gameId, gameState); err != nil {
-				hlog.Errorf("Cannot add history entry for game %s in database: %s", gameState.GameInfo.Id, err)
+			if err := s.dbStore.InsertHistory(r.Context(), "join", gameId, g.State()); err != nil {
+				hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
 			}
 		}
-		pNum = gameState.PlayerNum(string(p.Id))
+		pNum = g.PlayerNum(string(p.Id))
 		// Tell others we've joined.
 		s.gameStore.Publish(r.Context(), gameId, &pb.GameStorePubsubEvent{
 			GameId: gameId,
@@ -843,14 +847,14 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	// Send initial ServerEvent to the player.
 	err = sendSSEEvent(w, ServerEvent{
 		Timestamp:     time.Now(),
-		Board:         ge.Board().ViewFor(gameState.PlayerNum(string(p.Id))),
-		Role:          gameState.PlayerNum(string(p.Id)),
-		PlayerNames:   gameState.PlayerNames(),
+		Board:         g.Engine().Board().ViewFor(g.PlayerNum(string(p.Id))),
+		Role:          g.PlayerNum(string(p.Id)),
+		PlayerNames:   g.PlayerNames(),
 		Announcements: []string{fmt.Sprintf("Welcome %s!", p.Name)},
 		GameInfo: &ServerEventGameInfo{
-			ValidCellTypes:      ge.ValidCellTypes(),
-			GameType:            ge.GameType(),
-			ClientSideCPUPlayer: gameState.GameInfo.CpuPlayer == pb.CPUPlayerMode_WASM,
+			ValidCellTypes:      g.Engine().ValidCellTypes(),
+			GameType:            g.Engine().GameType(),
+			ClientSideCPUPlayer: g.State().GameInfo.CpuPlayer == pb.CPUPlayerMode_WASM,
 		},
 		DisableUndo: s.config.DisableUndo,
 	})
@@ -865,16 +869,16 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 		case *pb.GameStorePubsubEvent_PlayerJoined_:
 			playerName := event.PlayerJoined.GetPlayerName()
 			hlog.Infof("[%s/%s] A new player joined: %s", gameId, p.Name, playerName)
-			gameState, ge, err := s.loadGame(r.Context(), gameId)
+			g, err := s.loadGame(r.Context(), gameId)
 			if err != nil {
 				hlog.Errorf("Cannot load ongoing game %s: %s", gameId, err)
 				return
 			}
 			err = sendSSEEvent(w, ServerEvent{
 				Timestamp:     time.Now(),
-				Board:         ge.Board().ViewFor(pNum),
+				Board:         g.Engine().Board().ViewFor(pNum),
 				Role:          pNum,
-				PlayerNames:   gameState.PlayerNames(),
+				PlayerNames:   g.PlayerNames(),
 				Announcements: []string{"New player " + playerName + " joined!"},
 			})
 			if err != nil {
@@ -882,28 +886,28 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case *pb.GameStorePubsubEvent_GameUpdated_:
-			gameState, ge, err := s.loadGame(r.Context(), gameId)
+			g, err := s.loadGame(r.Context(), gameId)
 			if err != nil {
 				hlog.Errorf("Cannot load ongoing game %s: %s", gameId, err)
 				return
 			}
 			var winner int
 			var announcements []string
-			if ge.IsDone() {
-				winner = ge.Winner()
+			if g.Engine().IsDone() {
+				winner = g.Engine().Winner()
 				if winner > 0 {
 					announcements = append(announcements,
 						fmt.Sprintf("&#127942; &#127942; &#127942; %s won &#127942; &#127942; &#127942;",
-							gameState.PlayerNames()[winner-1]))
+							g.PlayerNames()[winner-1]))
 				} else {
 					announcements = append(announcements, "The game is a draw!")
 				}
 			}
 			err = sendSSEEvent(w, ServerEvent{
 				Timestamp:     time.Now(),
-				Board:         ge.Board().ViewFor(pNum),
+				Board:         g.Engine().Board().ViewFor(pNum),
 				Role:          pNum,
-				PlayerNames:   gameState.PlayerNames(),
+				PlayerNames:   g.PlayerNames(),
 				Winner:        winner,
 				Announcements: announcements,
 			})

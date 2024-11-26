@@ -268,6 +268,13 @@ func (g *GameEngineClassic) revealHiddenMoves() {
 	}
 }
 
+func (g *GameEngineClassic) MakeMoveError(m GameEngineMove) error {
+	if !g.MakeMove(m) {
+		return errMakeMove
+	}
+	return nil
+}
+
 func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 	board := g.board
 	turn := board.Turn

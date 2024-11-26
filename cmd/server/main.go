@@ -39,7 +39,7 @@ func main() {
 	flag.StringVar(&cfg.RemoteCPUPlayerURL, "remote-cpu-url", "",
 		"Base URL of the CPU player server. If empty, the in-process or WASM CPU engine is used.")
 	flag.StringVar(&cfg.RedisAddr, "redis-addr", "",
-		"Address of the Redis server. Only used by the -stateless server (default: localhost:6379).")
+		"Address of the Redis server storing game states. If empty, an embedded in-memory store is used.")
 	flag.StringVar(&cfg.PostgresURL, "postgres-url", "",
 		"URL of the PostgreSQL server (e.g. \"postgres://hexz:hexz@localhost:5432/hexz\"). If empty, no persistent storage is used.")
 	cpuPlayerMode := flag.String("cpu-player-mode", "embedded", "Mode in which to run CPU players. One of {wasm, embedded, remote}")

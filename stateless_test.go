@@ -210,7 +210,8 @@ func TestFlagzSinglePlayer(t *testing.T) {
 	<-boardCh // Ignore first broadcast of the initial board.
 	finished := false
 	maxMoves := numFieldsFirstRow * numBoardRows // upper bound for possible moves
-	for i := 0; !finished && i < maxMoves; i++ {
+	moves := 0
+	for ; !finished && moves < maxMoves; moves++ {
 		// Get valid moves.
 		validMoves, err := c.validMoves(gameId)
 		if err != nil {
@@ -239,6 +240,6 @@ func TestFlagzSinglePlayer(t *testing.T) {
 		}
 	}
 	if !finished {
-		t.Errorf("did not finish the game after %d moves", maxMoves)
+		t.Errorf("did not finish the game after %d moves", moves)
 	}
 }

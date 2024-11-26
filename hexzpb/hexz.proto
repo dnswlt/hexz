@@ -76,6 +76,16 @@ message GameState {
     // Players in this game, in the order they joined.
     repeated Player players = 5;
     GameEngineState engine_state = 6;
+
+    message UndoRedoState {
+        GameEngineState initial_state = 1;
+        // History of moves made up to the current engine_state.
+        repeated GameEngineMove moves = 2;
+        // Moves that can be applied to engine_state, obtained
+        // from previous Undo actions.
+        repeated GameEngineMove redo_moves = 3;
+    }
+    UndoRedoState undo_redo_state = 7;
 }
 
 // This message contains all data to restore a game engine state.
@@ -96,8 +106,6 @@ message GameEngineFlagzState {
     int32 free_cells = 2;
     // Always exactly two elements, one per player.
     repeated int32 normal_moves = 3;
-    // History of moves made so far.
-    repeated GameEngineMove moves = 4;
 }
 
 // The encoded state of a GameEngineClassic. Used for saving and loading games.

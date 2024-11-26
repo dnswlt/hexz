@@ -5,8 +5,10 @@ import (
 	"testing"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
+	"github.com/dnswlt/hexz/xrand"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/proto"
+	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // func makeTestBoard() *Board {
@@ -85,4 +87,109 @@ func BenchmarkBoardProtoMarshalUnmarshal(b *testing.B) {
 			b.Fatal("cannot decode: ", err)
 		}
 	}
+}
+
+func testFlagzGameRepr(t testing.TB) *GameRepr {
+	t.Helper()
+	ge := NewGameEngineFlagz()
+	enc, err := ge.Encode()
+	if err != nil {
+		t.Fatal("Cannot encode GameEngineFlagz", err)
+	}
+	return NewGameRepr(&pb.GameState{
+		GameInfo: &pb.GameInfo{
+			Id:      "TTESTT",
+			Host:    "testhost",
+			Started: tpb.Now(),
+			Type:    string(gameTypeFlagz),
+		},
+		Players: []*pb.Player{
+			{Id: "P1", Name: "P1"},
+			{Id: "P2", Name: "P2"},
+		},
+		EngineState: enc,
+		UndoRedoState: &pb.GameState_UndoRedoState{
+			InitialState: enc,
+		},
+	})
+}
+
+func TestGameReprUndoRedo(t *testing.T) {
+	g := testFlagzGameRepr(t)
+	numMoves := 4
+	// Make random moves
+	for i := 0; i < numMoves; i++ {
+		moves := g.Engine().(*GameEngineFlagz).ValidMoves()
+		j := xrand.Intn(len(moves))
+		if err := g.MakeMove(*moves[j]); err != nil {
+			t.Fatal("Cannot make move:", err)
+		}
+	}
+	// Undo N moves, redo them
+	for i := 1; i < numMoves; i++ {
+		for j := 0; j < i; j++ {
+			if err := g.Undo(); err != nil {
+				t.Fatalf("undo failed at %d:%d: %v", i, j, err)
+			}
+		}
+		for j := 0; j < i; j++ {
+			if err := g.Redo(); err != nil {
+				t.Fatalf("redo failed at %d:%d: %v", i, j, err)
+			}
+		}
+		if n := g.Engine().Board().Move; n != numMoves {
+			t.Errorf("not at move %d: %d", numMoves, n)
+		}
+	}
+}
+
+func BenchmarkUndoRedoLastMove(b *testing.B) {
+	// The most expensive Undo is undoing the last move, since it
+	// has to repeat all moves from the beginning.
+	g := testFlagzGameRepr(b)
+	for !g.Engine().IsDone() {
+		moves := g.Engine().(*GameEngineFlagz).ValidMoves()
+		j := xrand.Intn(len(moves))
+		if err := g.MakeMove(*moves[j]); err != nil {
+			b.Fatal("Cannot make move:", err)
+		}
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := g.Undo(); err != nil {
+			b.Fatal("undo failed", err)
+		}
+		if err := g.Redo(); err != nil {
+			b.Fatal("redo failed", err)
+		}
+	}
+
+}
+
+func BenchmarkUndoRedoFirstMove(b *testing.B) {
+	// The cheapest Undo is undoing the first move, since it
+	// only has to repeat one move.
+	//
+	// This takes ~ 12us on an M1, while UndoRedoLastMove
+	// takes 14us. So virtually all time is spent recreating
+	// the game engine from its proto representation. Making
+	// moves costs almost nothing.
+	g := testFlagzGameRepr(b)
+	moves := g.Engine().(*GameEngineFlagz).ValidMoves()
+	j := xrand.Intn(len(moves))
+	if err := g.MakeMove(*moves[j]); err != nil {
+		b.Fatal("Cannot make move:", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := g.Undo(); err != nil {
+			b.Fatal("undo failed", err)
+		}
+		if err := g.Redo(); err != nil {
+			b.Fatal("redo failed", err)
+		}
+	}
+
 }

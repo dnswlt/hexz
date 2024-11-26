@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
+	"github.com/dnswlt/hexz/hlog"
 )
 
 const (
@@ -27,6 +28,7 @@ type GameEngine interface {
 	NumPlayers() int
 	ValidCellTypes() []CellType
 	MakeMove(move GameEngineMove) bool
+	MakeMoveError(move GameEngineMove) error
 	Board() *Board
 	IsDone() bool
 	Winner() (playerNum int) // Results are only meaningful if IsDone() is true. 0 for draw.
@@ -209,6 +211,142 @@ func DecodeGameEngine(s *pb.GameEngineState) (GameEngine, error) {
 		return nil, err
 	}
 	return g, nil
+}
+
+var (
+	errMakeMove      = fmt.Errorf("could not make the move")
+	errUndoRedoEmpty = fmt.Errorf("undo/redo buffer is empty")
+)
+
+// GameRepr is the "handle" to a game that HTTP handlers should use.
+// It contains a proto representation of the game, as well as a
+// (lazily initialized) GameEngine representation.
+type GameRepr struct {
+	state  *pb.GameState
+	engine GameEngine
+}
+
+func NewGameRepr(state *pb.GameState) *GameRepr {
+	return &GameRepr{
+		state: state,
+	}
+}
+
+func (g *GameRepr) Engine() GameEngine {
+	if g.engine == nil {
+		var err error
+		g.engine, err = DecodeGameEngine(g.state.EngineState)
+		if err != nil {
+			hlog.Fatalf("Cannot decode game engine: %v", err)
+		}
+	}
+	return g.engine
+}
+
+func (g *GameRepr) State() *pb.GameState {
+	return g.state
+}
+
+func (g *GameRepr) PlayerNames() []string {
+	names := make([]string, len(g.state.Players))
+	for i, p := range g.state.Players {
+		names[i] = p.Name
+	}
+	return names
+}
+
+func (g *GameRepr) PlayerNum(playerId string) int {
+	for i, p := range g.state.Players {
+		if p.Id == playerId {
+			return i + 1
+		}
+	}
+	return 0 // spectator
+}
+
+func (g *GameRepr) AddPlayer(p *pb.Player) {
+	g.State().Players = append(g.State().Players, p)
+}
+
+func (g *GameRepr) AllPlayersJoined() bool {
+	return len(g.State().Players) < g.Engine().NumPlayers()
+}
+
+func (g *GameRepr) Reset() error {
+	g.Engine().Reset()
+	var err error
+	g.state.EngineState, err = g.Engine().Encode()
+	return err
+}
+
+func (g *GameRepr) MakeMove(move GameEngineMove) error {
+	if err := g.Engine().MakeMoveError(move); err != nil {
+		return err
+	}
+	enc, err := g.Engine().Encode()
+	if err != nil {
+		return err
+	}
+	g.state.EngineState = enc
+	g.state.UndoRedoState.Moves = append(g.state.UndoRedoState.Moves, move.Proto())
+	return nil
+}
+
+// func (g *GameRepr) debugPrintUndoRedoStack(label string) {
+// 	t := g.state.UndoRedoState.InitialState
+// 	g.state.UndoRedoState.InitialState = nil
+// 	fmt.Print(label, prototext.Format(g.state.UndoRedoState))
+// 	g.state.UndoRedoState.InitialState = t
+// }
+
+func (g *GameRepr) Undo() error {
+	s := g.State()
+	if len(s.GetUndoRedoState().GetMoves()) == 0 {
+		return errUndoRedoEmpty
+	}
+	ge, err := DecodeGameEngine(s.GetUndoRedoState().GetInitialState())
+	if err != nil {
+		return err
+	}
+	moves := s.UndoRedoState.Moves
+	// Push last move onto the redo stack
+	s.UndoRedoState.Moves = moves[:len(moves)-1]
+	s.UndoRedoState.RedoMoves = append(s.UndoRedoState.RedoMoves, moves[len(moves)-1])
+	// Make all moves from initial state to reach previous state.
+	for i, move := range s.UndoRedoState.Moves {
+		geMove := GameEngineMove{}
+		geMove.DecodeProto(move)
+		if err := ge.MakeMoveError(geMove); err != nil {
+			return fmt.Errorf("undo: error making move #%d: %v: %v", i, move, err)
+		}
+	}
+	enc, err := ge.Encode()
+	if err != nil {
+		return fmt.Errorf("failed to encode GameEngine: %v", err)
+	}
+	g.engine = ge
+	s.EngineState = enc
+
+	return nil
+}
+
+func (g *GameRepr) Redo() error {
+	s := g.State()
+	redoMoves := s.GetUndoRedoState().GetRedoMoves()
+	if len(redoMoves) == 0 {
+		return errUndoRedoEmpty
+	}
+	move := redoMoves[len(redoMoves)-1]
+
+	// Remove move from redo stack. It will get pushed onto the undo stack in MakeMove.
+	s.UndoRedoState.RedoMoves = redoMoves[:len(redoMoves)-1]
+	geMove := GameEngineMove{}
+	geMove.DecodeProto(move)
+	if err := g.MakeMove(geMove); err != nil {
+		return fmt.Errorf("redo: error making move: %v: %v", move, err)
+	}
+
+	return nil
 }
 
 // Creates a new, empty 2d field array.

@@ -75,6 +75,13 @@ func (g *GameEngineFreeform) Winner() (playerNum int) {
 	return 0 // No one ever wins here.
 }
 
+func (g *GameEngineFreeform) MakeMoveError(m GameEngineMove) error {
+	if !g.MakeMove(m) {
+		return errMakeMove
+	}
+	return nil
+}
+
 func (g *GameEngineFreeform) MakeMove(m GameEngineMove) bool {
 	board := g.board
 	if !board.valid(idx{m.Row, m.Col}) {
