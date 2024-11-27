@@ -5,8 +5,8 @@ import (
 	"flag"
 	"testing"
 
-	pb "github.com/dnswlt/hexz/hexzpb"
 	"github.com/dnswlt/hexz/internal/api"
+	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 )
 
 var (

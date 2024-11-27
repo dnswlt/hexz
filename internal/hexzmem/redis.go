@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/dnswlt/hexz"
-	pb "github.com/dnswlt/hexz/hexzpb"
 	"github.com/dnswlt/hexz/internal/hlog"
+	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"

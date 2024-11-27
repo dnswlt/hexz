@@ -3,7 +3,7 @@ package hexz
 import (
 	"testing"
 
-	pb "github.com/dnswlt/hexz/hexzpb"
+	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 )
 
 func TestCellTypeEnumsAligned(t *testing.T) {

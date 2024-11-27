@@ -8,8 +8,8 @@ package hexz
 import (
 	"context"
 
-	pb "github.com/dnswlt/hexz/hexzpb"
 	"github.com/dnswlt/hexz/internal/api"
+	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 )
 
 type DatabaseStore interface {

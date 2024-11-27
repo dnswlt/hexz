@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/dnswlt/hexz"
-	pb "github.com/dnswlt/hexz/hexzpb"
+	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 )
 
 var (

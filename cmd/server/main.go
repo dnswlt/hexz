@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/dnswlt/hexz"
-	"github.com/dnswlt/hexz/hexzpb"
 	"github.com/dnswlt/hexz/internal/hexzmem"
 	"github.com/dnswlt/hexz/internal/hexzsql"
 	"github.com/dnswlt/hexz/internal/hlog"
+	"github.com/dnswlt/hexz/pkg/hexzpb"
 )
 
 func redactPGPassword(url string) string {

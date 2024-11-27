@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dnswlt/hexz/hexzpb"
 	"github.com/dnswlt/hexz/internal/hexzsql"
+	"github.com/dnswlt/hexz/pkg/hexzpb"
 )
 
 const (

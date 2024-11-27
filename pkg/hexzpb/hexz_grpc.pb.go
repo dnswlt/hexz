@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v5.27.2
-// source: hexzpb/hexz.proto
+// source: pkg/hexzpb/hexz.proto
 
 package hexzpb
 
@@ -245,7 +245,7 @@ var TrainingService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "hexzpb/hexz.proto",
+	Metadata: "pkg/hexzpb/hexz.proto",
 }
 
 const (
@@ -347,5 +347,5 @@ var CPUPlayerService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "hexzpb/hexz.proto",
+	Metadata: "pkg/hexzpb/hexz.proto",
 }

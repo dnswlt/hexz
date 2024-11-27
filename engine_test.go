@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	pb "github.com/dnswlt/hexz/hexzpb"
 	"github.com/dnswlt/hexz/internal/xrand"
+	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/proto"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"

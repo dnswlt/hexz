@@ -3,8 +3,8 @@ package hexz
 import (
 	"fmt"
 
-	pb "github.com/dnswlt/hexz/hexzpb"
 	"github.com/dnswlt/hexz/internal/api"
+	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 )
 
 //

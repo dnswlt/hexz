@@ -14,9 +14,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 
-	pb "github.com/dnswlt/hexz/hexzpb"
 	"github.com/dnswlt/hexz/internal/api"
 	"github.com/dnswlt/hexz/internal/hlog"
+	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 )
 
 type PostgresStore struct {

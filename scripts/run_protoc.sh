@@ -32,7 +32,7 @@ done
 
 if [[ $gen_go == 1 ]]; then
     echo "Generating proto and gRPC files for Go..."
-    protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative hexzpb/hexz.proto
+    protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative pkg/hexzpb/hexz.proto
 fi
 
 if [[ $gen_cpp == 1 ]]; then

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	pb "github.com/dnswlt/hexz/hexzpb"
+	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 )
 
 // Export boards as SVG files for debugging.

@@ -5,9 +5,9 @@ package hexz
 import (
 	"fmt"
 
-	pb "github.com/dnswlt/hexz/hexzpb"
 	"github.com/dnswlt/hexz/internal/api"
 	"github.com/dnswlt/hexz/internal/xrand"
+	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 )
 
 type GameEngineFlagz struct {

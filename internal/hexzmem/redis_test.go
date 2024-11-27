@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	pb "github.com/dnswlt/hexz/hexzpb"
+	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
