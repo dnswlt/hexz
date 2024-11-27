@@ -1,3 +1,8 @@
+// Package api contains API messages that are used by multiple
+// internal packages and hence need to live in a leaf package
+// to avoid circular imports.
+//
+// TODO: consider moving all API stuff here, or make it protobuf based.
 package api
 
 import "time"

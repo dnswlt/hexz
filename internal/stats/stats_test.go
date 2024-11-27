@@ -1,4 +1,4 @@
-package hexz
+package stats
 
 import (
 	"testing"

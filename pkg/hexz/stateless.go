@@ -22,6 +22,8 @@ import (
 	"github.com/lpar/gzipped/v2"
 
 	"github.com/dnswlt/hexz/internal/api"
+	"github.com/dnswlt/hexz/internal/hexzmem"
+	"github.com/dnswlt/hexz/internal/hexzsql"
 	"github.com/dnswlt/hexz/internal/hlog"
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 	"google.golang.org/protobuf/proto"
@@ -73,9 +75,9 @@ const (
 type StatelessServer struct {
 	config          *ServerConfig
 	renderer        *Renderer
-	playerStore     PlayerStore
-	dbStore         DatabaseStore
-	gameStore       GameStore
+	playerStore     hexzmem.PlayerStore
+	dbStore         hexzsql.DatabaseStore
+	gameStore       hexzmem.GameStore
 	remoteCPUClient pb.CPUPlayerServiceClient // Only non-nil if a remote CPU addr was configured.
 }
 
@@ -83,7 +85,7 @@ type StatelessServerBuilder struct {
 	s *StatelessServer
 }
 
-func NewStatelessServerBuilder(config *ServerConfig, playerStore PlayerStore, gameStore GameStore, renderer *Renderer) *StatelessServerBuilder {
+func NewStatelessServerBuilder(config *ServerConfig, playerStore hexzmem.PlayerStore, gameStore hexzmem.GameStore, renderer *Renderer) *StatelessServerBuilder {
 	return &StatelessServerBuilder{
 		s: &StatelessServer{
 			config:      config,
@@ -94,7 +96,7 @@ func NewStatelessServerBuilder(config *ServerConfig, playerStore PlayerStore, ga
 	}
 }
 
-func (b *StatelessServerBuilder) WithDatabaseStore(dbStore DatabaseStore) *StatelessServerBuilder {
+func (b *StatelessServerBuilder) WithDatabaseStore(dbStore hexzsql.DatabaseStore) *StatelessServerBuilder {
 	b.s.dbStore = dbStore
 	return b
 }
@@ -110,22 +112,11 @@ func (b *StatelessServerBuilder) Build() *StatelessServer {
 	return s
 }
 
-// A random UUID used to identify players. Also used in cookies.
-type PlayerId string
-
 // Generates a random 128-bit hex string representing a player ID.
-func generatePlayerId() PlayerId {
+func generatePlayerId() api.PlayerId {
 	p := make([]byte, 16)
 	crand.Read(p)
-	return PlayerId(hex.EncodeToString(p))
-}
-
-// Player has JSON annotations for serialization to disk.
-// It is not used in the public API.
-type Player struct {
-	Id         PlayerId  `json:"id"`
-	Name       string    `json:"name"`
-	LastActive time.Time `json:"lastActive"`
+	return api.PlayerId(hex.EncodeToString(p))
 }
 
 func isValidPlayerName(name string) bool {
@@ -226,7 +217,7 @@ func (s *StatelessServer) prefix(urlPath string) string {
 	return urlJoinPath(s.config.URLPathPrefix, urlPath)
 }
 
-func (s *StatelessServer) makePlayerCookie(playerId PlayerId, ttl time.Duration) *http.Cookie {
+func (s *StatelessServer) makePlayerCookie(playerId api.PlayerId, ttl time.Duration) *http.Cookie {
 	return &http.Cookie{
 		Name:     playerIdCookieName,
 		Value:    string(playerId),
@@ -238,16 +229,16 @@ func (s *StatelessServer) makePlayerCookie(playerId PlayerId, ttl time.Duration)
 	}
 }
 
-func (s *StatelessServer) lookupPlayerFromCookie(r *http.Request) (Player, error) {
+func (s *StatelessServer) lookupPlayerFromCookie(r *http.Request) (api.Player, error) {
 	cookie, err := r.Cookie(playerIdCookieName)
 	if err != nil {
-		return Player{}, fmt.Errorf("missing cookie")
+		return api.Player{}, fmt.Errorf("missing cookie")
 	}
-	return s.playerStore.Lookup(r.Context(), PlayerId(cookie.Value))
+	return s.playerStore.Lookup(r.Context(), api.PlayerId(cookie.Value))
 }
 
 // Stores a new game in the game store and returns the new game ID.
-func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType api.GameType, singlePlayer bool) (string, error) {
+func (s *StatelessServer) startNewGame(ctx context.Context, p *api.Player, gameType api.GameType, singlePlayer bool) (string, error) {
 	engineState, err := NewGameEngine(gameType).Encode()
 	if err != nil {
 		return "", err
@@ -585,9 +576,9 @@ func (s *StatelessServer) goMakeCPUMove(g *GameRepr) {
 	var cpuPlayer CPUPlayer
 	switch g.State().GameInfo.CpuPlayer {
 	case pb.CPUPlayerMode_EMBEDDED_CPU:
-		cpuPlayer = NewLocalCPUPlayer(PlayerId(g.State().Players[1].Id), s.config.CpuThinkTime, 0)
+		cpuPlayer = NewLocalCPUPlayer(api.PlayerId(g.State().Players[1].Id), s.config.CpuThinkTime, 0)
 	case pb.CPUPlayerMode_REMOTE_CPU:
-		cpuPlayer = NewRemoteCPUPlayer(s.remoteCPUClient, PlayerId(g.State().Players[1].Id), s.config.CpuThinkTime, 0)
+		cpuPlayer = NewRemoteCPUPlayer(s.remoteCPUClient, api.PlayerId(g.State().Players[1].Id), s.config.CpuThinkTime, 0)
 	default:
 		hlog.Errorf("Async CPU move requested for CPU player type %v", g.State().GameInfo.CpuPlayer)
 		return
@@ -843,7 +834,7 @@ func replayForGameHistoryResponse(gameState *pb.GameState) (*GameHistoryResponse
 	}
 	for i, move := range gameState.UndoRedoState.Moves {
 		geMove := GameEngineMove{}
-		geMove.DecodeProto(move)
+		geMove.FromProto(move)
 		if err := ge.MakeMoveError(geMove); err != nil {
 			return nil, fmt.Errorf("error making move #%d: %v: %v", i, move, err)
 		}

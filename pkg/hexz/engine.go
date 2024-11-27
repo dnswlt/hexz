@@ -169,7 +169,7 @@ func (m *GameEngineMove) Proto() *pb.GameEngineMove {
 	}
 }
 
-func (m *GameEngineMove) DecodeProto(pm *pb.GameEngineMove) {
+func (m *GameEngineMove) FromProto(pm *pb.GameEngineMove) {
 	m.PlayerNum = int(pm.PlayerNum)
 	m.Move = int(pm.Move)
 	m.Row = int(pm.Row)
@@ -323,7 +323,7 @@ func (g *GameRepr) Undo() error {
 	// Make all moves from initial state to reach previous state.
 	for i, move := range s.UndoRedoState.Moves {
 		geMove := GameEngineMove{}
-		geMove.DecodeProto(move)
+		geMove.FromProto(move)
 		if err := ge.MakeMoveError(geMove); err != nil {
 			return fmt.Errorf("undo: error making move #%d: %v: %v", i, move, err)
 		}
@@ -349,7 +349,7 @@ func (g *GameRepr) Redo() error {
 	// Remove move from redo stack. It will get pushed onto the undo stack in MakeMove.
 	s.UndoRedoState.RedoMoves = redoMoves[:len(redoMoves)-1]
 	geMove := GameEngineMove{}
-	geMove.DecodeProto(move)
+	geMove.FromProto(move)
 	if err := g.MakeMove(geMove); err != nil {
 		return fmt.Errorf("redo: error making move: %v: %v", move, err)
 	}

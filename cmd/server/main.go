@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dnswlt/hexz"
 	"github.com/dnswlt/hexz/internal/hexzmem"
 	"github.com/dnswlt/hexz/internal/hexzsql"
 	"github.com/dnswlt/hexz/internal/hlog"
+	"github.com/dnswlt/hexz/pkg/hexz"
 	"github.com/dnswlt/hexz/pkg/hexzpb"
 )
 
@@ -117,12 +117,12 @@ func main() {
 		hlog.UseJSONLogger()
 	}
 	// Build a stateless server
-	renderer, err := hexz.NewRenderer()
+	renderer, err := hexz.NewRenderer(path.Join(cfg.DocumentRoot, "templates"))
 	if err != nil {
 		hlog.Fatalf("error creating renderer: %v", err)
 	}
-	var gameStore hexz.GameStore
-	var playerStore hexz.PlayerStore
+	var gameStore hexzmem.GameStore
+	var playerStore hexzmem.PlayerStore
 	if cfg.RedisAddr != "" {
 		rc, err := hexzmem.NewRedisClient(&hexzmem.RedisClientConfig{
 			Addr:     cfg.RedisAddr,
@@ -139,16 +139,16 @@ func main() {
 	} else {
 		// Local stores
 		hlog.Infof("Using in memory player and game stores. Login DB: %s", cfg.LoginDatabasePath)
-		playerStore, err = hexz.NewInMemoryPlayerStore(cfg.LoginTTL, cfg.LoginDatabasePath)
+		playerStore, err = hexzmem.NewInMemoryPlayerStore(cfg.LoginTTL, cfg.LoginDatabasePath)
 		if err != nil {
 			hlog.Fatalf("error creating in-memory player store: %v", err)
 		}
-		gameStore = hexz.NewInMemoryGameStore(cfg.InactivityTimeout)
+		gameStore = hexzmem.NewInMemoryGameStore(cfg.InactivityTimeout)
 	}
 	b := hexz.NewStatelessServerBuilder(cfg, playerStore, gameStore, renderer)
 	// Postgres (optional)
 	if cfg.PostgresURL != "" {
-		var dbStore hexz.DatabaseStore
+		var dbStore hexzsql.DatabaseStore
 		dbStore, err := hexzsql.NewPostgresStore(context.Background(), cfg.PostgresURL)
 		if err != nil {
 			hlog.Fatalf("error connecting to postgres: %s", err)

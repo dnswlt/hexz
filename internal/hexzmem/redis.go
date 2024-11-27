@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/dnswlt/hexz"
+	"github.com/dnswlt/hexz/internal/api"
 	"github.com/dnswlt/hexz/internal/hlog"
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 	"github.com/redis/go-redis/v9"
@@ -31,11 +31,11 @@ type RemotePlayerStore struct {
 	*RedisClient
 }
 
-func (s *RemotePlayerStore) Lookup(ctx context.Context, playerId hexz.PlayerId) (hexz.Player, error) {
+func (s *RemotePlayerStore) Lookup(ctx context.Context, playerId api.PlayerId) (api.Player, error) {
 	return s.LookupPlayer(ctx, playerId)
 }
 
-func (s *RemotePlayerStore) Login(ctx context.Context, playerId hexz.PlayerId, name string) error {
+func (s *RemotePlayerStore) Login(ctx context.Context, playerId api.PlayerId, name string) error {
 	return s.LoginPlayer(ctx, playerId, name)
 }
 
@@ -57,19 +57,19 @@ func (c *RedisClient) Ping() error {
 	return c.client.Ping(context.Background()).Err()
 }
 
-func (c *RedisClient) LookupPlayer(ctx context.Context, playerId hexz.PlayerId) (hexz.Player, error) {
+func (c *RedisClient) LookupPlayer(ctx context.Context, playerId api.PlayerId) (api.Player, error) {
 	val, err := c.client.GetEx(ctx, "login:"+string(playerId), c.config.LoginTTL).Result()
 	if err != nil {
-		return hexz.Player{}, err
+		return api.Player{}, err
 	}
-	return hexz.Player{
+	return api.Player{
 		Id:         playerId,
 		Name:       val,
 		LastActive: time.Now(),
 	}, nil
 }
 
-func (c *RedisClient) LoginPlayer(ctx context.Context, playerId hexz.PlayerId, name string) error {
+func (c *RedisClient) LoginPlayer(ctx context.Context, playerId api.PlayerId, name string) error {
 	return c.client.SetEx(ctx, "login:"+string(playerId), name, c.config.LoginTTL).Err()
 }
 

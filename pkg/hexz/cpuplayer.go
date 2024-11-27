@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/dnswlt/hexz/internal/api"
 	"github.com/dnswlt/hexz/internal/hlog"
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 	"google.golang.org/grpc"
@@ -17,7 +18,7 @@ type CPUPlayer interface {
 }
 
 type LocalCPUPlayer struct {
-	playerId PlayerId
+	playerId api.PlayerId
 	// Channel over which moves are sent
 	mcts          *MCTS
 	thinkTime     time.Duration // Current think time (auto-adjusted based on confidence)
@@ -25,7 +26,7 @@ type LocalCPUPlayer struct {
 	maxIterations int           // Maximum number of MCTS iterations per move. <= 0 means unbounded.
 }
 
-func NewLocalCPUPlayer(playerId PlayerId, maxThinkTime time.Duration, maxIterations int) *LocalCPUPlayer {
+func NewLocalCPUPlayer(playerId api.PlayerId, maxThinkTime time.Duration, maxIterations int) *LocalCPUPlayer {
 	return &LocalCPUPlayer{
 		playerId:      playerId,
 		mcts:          NewMCTS(),
@@ -79,7 +80,7 @@ func (cpu *LocalCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz)
 }
 
 type RemoteCPUPlayer struct {
-	playerId      PlayerId
+	playerId      api.PlayerId
 	maxThinkTime  time.Duration
 	maxIterations int
 	client        pb.CPUPlayerServiceClient
@@ -96,7 +97,7 @@ func NewCPUPlayerServiceClient(addr string) (pb.CPUPlayerServiceClient, error) {
 	return pb.NewCPUPlayerServiceClient(conn), nil
 }
 
-func NewRemoteCPUPlayer(client pb.CPUPlayerServiceClient, playerId PlayerId, maxThinkTime time.Duration, maxIterations int) *RemoteCPUPlayer {
+func NewRemoteCPUPlayer(client pb.CPUPlayerServiceClient, playerId api.PlayerId, maxThinkTime time.Duration, maxIterations int) *RemoteCPUPlayer {
 	return &RemoteCPUPlayer{
 		playerId:      playerId,
 		maxThinkTime:  maxThinkTime,
@@ -129,7 +130,7 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz
 		return nil, nil, fmt.Errorf("SuggestMoveResponse contains no move")
 	}
 	geMove := &GameEngineMove{}
-	geMove.DecodeProto(resp.Move)
+	geMove.FromProto(resp.Move)
 	return geMove, resp.MoveStats, nil
 }
 

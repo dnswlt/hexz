@@ -9,8 +9,9 @@ import (
 	"syscall/js"
 	"time"
 
-	"github.com/dnswlt/hexz"
-	pb "github.com/dnswlt/hexz/hexzpb"
+	"github.com/dnswlt/hexz/internal/api"
+	"github.com/dnswlt/hexz/pkg/hexz"
+	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -21,7 +22,7 @@ type suggestMoveArgs struct {
 
 type suggestMoveResult struct {
 	MoveRequest hexz.MoveRequest `json:"moveRequest"`
-	Stats       hexz.WASMStats   `json:"stats"`
+	Stats       api.WASMStats    `json:"stats"`
 }
 
 func main() {
@@ -72,7 +73,7 @@ func main() {
 				Col:  mv.Col,
 				Type: mv.CellType,
 			},
-			Stats: hexz.WASMStats{
+			Stats: api.WASMStats{
 				TreeSize:      stats.TreeSize,
 				MaxDepth:      stats.MaxDepth,
 				Iterations:    stats.Iterations,

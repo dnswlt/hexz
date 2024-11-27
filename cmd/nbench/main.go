@@ -13,7 +13,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/dnswlt/hexz"
+	"github.com/dnswlt/hexz/internal/api"
+	"github.com/dnswlt/hexz/pkg/hexz"
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 )
 
@@ -159,8 +160,8 @@ func evalP2() {
 		os.Exit(1)
 	}
 	for rounds := 0; rounds < 7; rounds++ {
-		p1 = hexz.NewLocalCPUPlayer(hexz.PlayerId("P1"), thinkTime, p1Iterations)
-		p2 = hexz.NewRemoteCPUPlayer(remoteCPUClient, hexz.PlayerId("P2"), thinkTime, p2Iterations)
+		p1 = hexz.NewLocalCPUPlayer(api.PlayerId("P1"), thinkTime, p1Iterations)
+		p2 = hexz.NewRemoteCPUPlayer(remoteCPUClient, api.PlayerId("P2"), thinkTime, p2Iterations)
 		result := EvalResult{
 			p1Iterations: p1Iterations,
 			p2Iterations: p2Iterations,
@@ -228,24 +229,24 @@ func main() {
 	}
 	p1Iterations := *p1MaxIterations
 	if *player1URL == "" {
-		p1 = hexz.NewLocalCPUPlayer(hexz.PlayerId("P1"), *p1ThinkTime, p1Iterations)
+		p1 = hexz.NewLocalCPUPlayer(api.PlayerId("P1"), *p1ThinkTime, p1Iterations)
 	} else {
 		remoteCPUClient, err := hexz.NewCPUPlayerServiceClient(*player1URL)
 		if err != nil {
 			fmt.Printf("Failed to create P1 as remote player: %v", err)
 			os.Exit(1)
 		}
-		p1 = hexz.NewRemoteCPUPlayer(remoteCPUClient, hexz.PlayerId("P1"), *p1ThinkTime, p1Iterations)
+		p1 = hexz.NewRemoteCPUPlayer(remoteCPUClient, api.PlayerId("P1"), *p1ThinkTime, p1Iterations)
 	}
 	if *player2URL == "" {
-		p2 = hexz.NewLocalCPUPlayer(hexz.PlayerId("P2"), *p2ThinkTime, *p2MaxIterations)
+		p2 = hexz.NewLocalCPUPlayer(api.PlayerId("P2"), *p2ThinkTime, *p2MaxIterations)
 	} else {
 		remoteCPUClient, err := hexz.NewCPUPlayerServiceClient(*player1URL)
 		if err != nil {
 			fmt.Printf("Failed to create P2 as remove player: %v", err)
 			os.Exit(1)
 		}
-		p2 = hexz.NewRemoteCPUPlayer(remoteCPUClient, hexz.PlayerId("P2"), *p2ThinkTime, *p2MaxIterations)
+		p2 = hexz.NewRemoteCPUPlayer(remoteCPUClient, api.PlayerId("P2"), *p2ThinkTime, *p2MaxIterations)
 	}
 	var wins [2]int
 	for i := 0; i < *numGames; i++ {

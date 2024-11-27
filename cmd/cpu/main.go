@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/dnswlt/hexz"
+	"github.com/dnswlt/hexz/pkg/hexz"
 )
 
 func main() {

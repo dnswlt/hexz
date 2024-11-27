@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dnswlt/hexz"
+	"github.com/dnswlt/hexz/pkg/hexz"
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 	"google.golang.org/protobuf/proto"
 )

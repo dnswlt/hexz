@@ -8,11 +8,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/dnswlt/hexz/internal/hexzmem"
 	"github.com/dnswlt/hexz/internal/hexzsql"
 	"github.com/dnswlt/hexz/pkg/hexzpb"
 )
@@ -44,18 +46,20 @@ func testServerConfig(t *testing.T) *ServerConfig {
 
 func newTestStatelessServer(t testing.TB, config *ServerConfig) (*StatelessServer, error) {
 	t.Helper()
-	renderer, err := NewRenderer()
+	templateDir := "../../resources/templates"
+	renderer, err := NewRenderer(templateDir)
+	if err != nil {
+		absPath, _ := filepath.Abs(templateDir)
+		return nil, fmt.Errorf("failed to created renderer in directory %s: %v", absPath, err)
+	}
+	playerStore, err := hexzmem.NewInMemoryPlayerStore(config.LoginTTL, config.LoginDatabasePath)
 	if err != nil {
 		return nil, err
 	}
-	playerStore, err := NewInMemoryPlayerStore(config.LoginTTL, config.LoginDatabasePath)
-	if err != nil {
-		return nil, err
-	}
-	gameStore := NewInMemoryGameStore(config.InactivityTimeout)
+	gameStore := hexzmem.NewInMemoryGameStore(config.InactivityTimeout)
 	b := NewStatelessServerBuilder(config, playerStore, gameStore, renderer)
 	if config.PostgresURL != "" {
-		var dbStore DatabaseStore
+		var dbStore hexzsql.DatabaseStore
 		dbStore, err := hexzsql.NewPostgresStore(context.Background(), config.PostgresURL)
 		if err != nil {
 			t.Fatalf("error connecting to postgres: %s", err)
@@ -197,7 +201,11 @@ func TestHistoryDatabase(t *testing.T) {
 	cfg := testServerConfig(t)
 	cfg.PostgresURL = *postgresTestURL
 	cfg.CpuThinkTime = 1 * time.Millisecond // We want a fast test, not smart moves.
-	srv, _ := newTestStatelessServer(t, cfg)
+	srv, err := newTestStatelessServer(t, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	testServer := httptest.NewServer(srv.createMux())
 	defer testServer.Close()
 
@@ -274,7 +282,10 @@ func TestFlagzUndo(t *testing.T) {
 	}
 	cfg := testServerConfig(t)
 	cfg.CpuThinkTime = 1 * time.Millisecond // We want a fast test, not smart moves.
-	srv, _ := newTestStatelessServer(t, cfg)
+	srv, err := newTestStatelessServer(t, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
 	testServer := httptest.NewServer(srv.createMux())
 	defer testServer.Close()
 
@@ -340,7 +351,11 @@ func TestFlagzSinglePlayer(t *testing.T) {
 	}
 	cfg := testServerConfig(t)
 	cfg.CpuThinkTime = 1 * time.Millisecond // We want a fast test, not smart moves.
-	srv, _ := newTestStatelessServer(t, cfg)
+	srv, err := newTestStatelessServer(t, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	testServer := httptest.NewServer(srv.createMux())
 	defer testServer.Close()
 

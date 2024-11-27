@@ -1,17 +1,14 @@
 package hexz
 
 import (
-	"embed"
 	"fmt"
 	"html/template"
 	"io"
+	"path"
 
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
-
-//go:embed resources/templates
-var embeddedTemplates embed.FS
 
 type Renderer struct {
 	tmpl *template.Template
@@ -48,8 +45,10 @@ func commonFuncs() template.FuncMap {
 	}
 }
 
-func NewRenderer() (*Renderer, error) {
-	tmpl, err := template.New("__root__").Funcs(commonFuncs()).ParseFS(embeddedTemplates, "resources/templates/*.html")
+// NewRenderer creates a new Renderer that reads templates from the given templates folder.
+// That folder is expected to contain the *.html template files (no subdirs).
+func NewRenderer(templateDir string) (*Renderer, error) {
+	tmpl, err := template.New("__root__").Funcs(commonFuncs()).ParseGlob(path.Join(templateDir, "*.html"))
 	if err != nil {
 		return nil, fmt.Errorf("cannot create templates: %v", err)
 	}

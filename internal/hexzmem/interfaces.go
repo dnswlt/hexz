@@ -1,9 +1,4 @@
-package hexz
-
-// Database support.
-// While a stateless server will store the current game state in a memstore,
-// history and stats can be stored in a database.
-// Concrete implementations of the DatabaseStore interface are in subpackage hexzsql.
+package hexzmem
 
 import (
 	"context"
@@ -12,18 +7,12 @@ import (
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 )
 
-type DatabaseStore interface {
-	// Stores a game state in the database.
-	StoreGame(ctx context.Context, hostId string, state *pb.GameState) error
-	// Adds an entry to the game history.
-	// state can be nil for "undo" and "redo" entries.
-	InsertHistory(ctx context.Context, entryType string, gameId string, state *pb.GameState) error
-	// Adds stats for a CPU move.
-	InsertStats(ctx context.Context, stats *api.WASMStatsRequest) error
-	// Loads the latest game state.
-	LoadGame(ctx context.Context, gameId string) (*pb.GameState, error)
-	// Lists the `limit` most recent games, skipping `offset` many (for paging).
-	ListRecentGames(ctx context.Context, offset int, limit int) ([]*pb.GameInfo, error)
+type PlayerStore interface {
+	// Lookup looks up the given player by ID.
+	Lookup(ctx context.Context, playerId api.PlayerId) (api.Player, error)
+	// Login logs in the given player. If the player is already logged in,
+	// the existing data will be overwritten with the new data.
+	Login(ctx context.Context, playerId api.PlayerId, name string) error
 }
 
 // GameStore is an interface for local or remote game stores, e.g. Redis.
@@ -45,12 +34,4 @@ type GameStore interface {
 	// and returns immediately. The goroutine will close the returned channel
 	// and terminate when the provided context ctx is cancelled.
 	Subscribe(ctx context.Context, gameId string) <-chan *pb.GameStorePubsubEvent
-}
-
-type PlayerStore interface {
-	// Lookup looks up the given player by ID.
-	Lookup(ctx context.Context, playerId PlayerId) (Player, error)
-	// Login logs in the given player. If the player is already logged in,
-	// the existing data will be overwritten with the new data.
-	Login(ctx context.Context, playerId PlayerId, name string) error
 }
