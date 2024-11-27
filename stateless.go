@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"context"
 	crand "crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -797,6 +798,110 @@ func (s *StatelessServer) handleRedo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *StatelessServer) handleView(w http.ResponseWriter, r *http.Request) {
+	// Return the HTML for viewing a game.
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
+		return
+	}
+	seqNum := r.PathValue("seqNum")
+	if _, err := strconv.Atoi(seqNum); err != nil {
+		http.Error(w, "invalid seqNum", http.StatusBadRequest)
+		return
+	}
+	s.serveHtmlFile(w, viewHtmlFilename)
+}
+
+func replayForGameHistoryResponse(gameState *pb.GameState) (*GameHistoryResponse, error) {
+	if gameState.GetUndoRedoState().InitialState == nil {
+		return nil, fmt.Errorf("no initial state in GameState")
+	}
+	ge, err := DecodeGameEngine(gameState.UndoRedoState.InitialState)
+	if err != nil {
+		return nil, fmt.Errorf("cannot decode game engine: %v", err)
+	}
+	entries := []*GameHistoryResponseEntry{
+		{
+			Timestamp:  gameState.GetModified().AsTime(),
+			EntryType:  "reset",
+			Board:      ge.Board().ViewFor(ge.Board().Turn),
+			MoveScores: nil,
+		},
+	}
+	for i, move := range gameState.UndoRedoState.Moves {
+		geMove := GameEngineMove{}
+		geMove.DecodeProto(move)
+		if err := ge.MakeMoveError(geMove); err != nil {
+			return nil, fmt.Errorf("error making move #%d: %v: %v", i, move, err)
+		}
+		entries = append(entries, &GameHistoryResponseEntry{
+			Timestamp: gameState.GetModified().AsTime(),
+			EntryType: "move",
+			Move: &MoveRequest{
+				Move: geMove.Move,
+				Row:  geMove.Row,
+				Col:  geMove.Col,
+				Type: geMove.CellType,
+			},
+			Board:      ge.Board().ViewFor(geMove.PlayerNum),
+			MoveScores: nil,
+		})
+	}
+	playerNames := make([]string, len(gameState.Players))
+	for i, p := range gameState.Players {
+		playerNames[i] = p.Name
+	}
+	return &GameHistoryResponse{
+		GameId:      gameState.GetGameInfo().Id,
+		PlayerNames: playerNames,
+		GameType:    GameType(gameState.GetGameInfo().Type),
+		Entries:     entries,
+	}, nil
+}
+
+func (s *StatelessServer) handleHistory(w http.ResponseWriter, r *http.Request) {
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
+		return
+	}
+	if s.dbStore == nil {
+		http.Error(w, "no database connected", http.StatusPreconditionFailed)
+		return
+	}
+	gameState, err := s.dbStore.LoadGame(r.Context(), gameId)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "game not found", http.StatusNotFound)
+			return
+		}
+		hlog.Errorf("Failed to load game %s from DB: %v", gameId, err)
+		http.Error(w, "cannot load game", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	var z io.Writer = w
+	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		z = gz
+	}
+	enc := json.NewEncoder(z)
+	resp, err := replayForGameHistoryResponse(gameState)
+	if err != nil {
+		http.Error(w, "", http.StatusInternalServerError)
+		hlog.Errorf("Failed to generate history response: %v", err)
+		return
+	}
+	err = enc.Encode(resp)
+	if err != nil {
+		http.Error(w, "", http.StatusInternalServerError)
+		hlog.Fatalf("Failed to marshal history response: %s", err)
+	}
+}
+
 func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
@@ -955,8 +1060,11 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	// GET method API
 	handleFunc("", s.handleHexz)
 	handleFunc("/gamez", s.handleGamez)
-	// mux.HandleFunc("/hexz/view/", s.handleView)
-	// mux.HandleFunc("/hexz/history/", s.handleHistory)
+	mux.HandleFunc("/hexz/view/{gameId}", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, r.URL.Path+"/0", http.StatusTemporaryRedirect)
+	})
+	mux.HandleFunc("/hexz/view/{gameId}/{seqNum}", s.handleView)
+	mux.HandleFunc("/hexz/history/{gameId}", s.handleHistory)
 	mux.HandleFunc("/hexz/moves/{gameId}", s.handleValidMoves)
 	handleFunc("/{gameId}", s.handleGame)
 	// Technical services

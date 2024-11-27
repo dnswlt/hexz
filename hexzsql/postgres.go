@@ -1,15 +1,20 @@
 package hexzsql
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"io"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // Needed to register pgx as a database/sql driver.
 	"google.golang.org/protobuf/proto"
 
 	"github.com/dnswlt/hexz"
 	pb "github.com/dnswlt/hexz/hexzpb"
+	"github.com/dnswlt/hexz/hlog"
 )
 
 type PostgresStore struct {
@@ -44,21 +49,61 @@ func (s *PostgresStore) StoreGame(ctx context.Context, hostId string, gs *pb.Gam
 	return nil
 }
 
+func (s *PostgresStore) LoadGame(ctx context.Context, gameId string) (*pb.GameState, error) {
+	var gameStateBytes []byte
+	err := s.pool.QueryRowContext(ctx, `
+		SELECT
+			game_state
+		FROM game_history
+		WHERE game_id = $1 AND game_state IS NOT NULL
+		ORDER BY seqnum DESC
+		LIMIT 1
+	`, gameId).Scan(&gameStateBytes)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("game %s not found in DB: %w", gameId, sql.ErrNoRows)
+		}
+		return nil, fmt.Errorf("failed to read game state from DB: %v", err)
+	}
+	hlog.Infof("Read game state of size %d bytes for game %s from DB.", len(gameStateBytes), gameId)
+	gz, err := gzip.NewReader(bytes.NewReader(gameStateBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gzip reader: %v", err)
+	}
+	defer gz.Close()
+	protoBytes, err := io.ReadAll(gz)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read compressed game state: %v", err)
+	}
+	gameState := &pb.GameState{}
+	if err := proto.Unmarshal(protoBytes, gameState); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal game state from DB: %v", err)
+	}
+	return gameState, nil
+}
+
 func (s *PostgresStore) InsertHistory(ctx context.Context, entryType string, gameId string, gs *pb.GameState) error {
 	var gameStateBytes []byte
 	if gs != nil {
-		var err error
-		gameStateBytes, err = proto.Marshal(gs)
+		var buf bytes.Buffer
+		data, err := proto.Marshal(gs)
 		if err != nil {
-			return fmt.Errorf("failed to marshal game state: %w", err)
+			return fmt.Errorf("failed to marshal game state: %v", err)
 		}
+		gz := gzip.NewWriter(&buf)
+		if _, err := gz.Write(data); err != nil {
+			return fmt.Errorf("failed to compress game state: %v", err)
+		}
+		gz.Close()
+		gameStateBytes = buf.Bytes()
+		hlog.Infof("Storing game ID %s in DB: game state is %d bytes", gameId, len(gameStateBytes))
 	}
 	_, err := s.pool.ExecContext(ctx, `
 		INSERT INTO game_history (game_id, game_state, entry_type)
 		VALUES ($1, $2, $3)`,
 		gameId, gameStateBytes, entryType)
 	if err != nil {
-		return fmt.Errorf("failed to store game history: %w", err)
+		return fmt.Errorf("failed to store game history: %v", err)
 	}
 	return nil
 }

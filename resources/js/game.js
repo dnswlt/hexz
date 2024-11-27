@@ -713,4 +713,4 @@ function sendWASMWorkerMoveRequest() {
     })
 }
 
-initialize();
+// initialize(); // Must be called in game.html - we don't want it for view.html.

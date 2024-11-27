@@ -19,6 +19,8 @@ type DatabaseStore interface {
 	InsertHistory(ctx context.Context, entryType string, gameId string, state *pb.GameState) error
 	// Adds stats for a CPU move.
 	InsertStats(ctx context.Context, stats *WASMStatsRequest) error
+	// Loads the latest game state.
+	LoadGame(ctx context.Context, gameId string) (*pb.GameState, error)
 }
 
 // GameStore is an interface for local or remote game stores, e.g. Redis.
