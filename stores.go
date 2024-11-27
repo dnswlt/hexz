@@ -9,6 +9,7 @@ import (
 	"context"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
+	"github.com/dnswlt/hexz/internal/api"
 )
 
 type DatabaseStore interface {
@@ -18,7 +19,7 @@ type DatabaseStore interface {
 	// state can be nil for "undo" and "redo" entries.
 	InsertHistory(ctx context.Context, entryType string, gameId string, state *pb.GameState) error
 	// Adds stats for a CPU move.
-	InsertStats(ctx context.Context, stats *WASMStatsRequest) error
+	InsertStats(ctx context.Context, stats *api.WASMStatsRequest) error
 	// Loads the latest game state.
 	LoadGame(ctx context.Context, gameId string) (*pb.GameState, error)
 	// Lists the `limit` most recent games, skipping `offset` many (for paging).
@@ -53,5 +54,3 @@ type PlayerStore interface {
 	// the existing data will be overwritten with the new data.
 	Login(ctx context.Context, playerId PlayerId, name string) error
 }
-
-// Local

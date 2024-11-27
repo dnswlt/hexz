@@ -7,7 +7,7 @@ import (
 	"time"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
-	"github.com/dnswlt/hexz/hlog"
+	"github.com/dnswlt/hexz/internal/hlog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

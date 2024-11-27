@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
-	"github.com/dnswlt/hexz/xrand"
+	"github.com/dnswlt/hexz/internal/xrand"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/proto"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"

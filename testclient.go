@@ -96,6 +96,28 @@ func (c *HexzTestClient) validMoves(gameId string) ([]*MoveRequest, error) {
 	return validMoves, nil
 }
 
+func (c *HexzTestClient) undo(gameId string) error {
+	resp, err := c.client.Post(c.serverURL+"/hexz/undo/"+gameId, "application/json", nil)
+	if err != nil {
+		return fmt.Errorf("failed to undo: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to undo a move: %s", resp.Status)
+	}
+	return nil
+}
+
+func (c *HexzTestClient) redo(gameId string) error {
+	resp, err := c.client.Post(c.serverURL+"/hexz/redo/"+gameId, "application/json", nil)
+	if err != nil {
+		return fmt.Errorf("failed to undo: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to redo a move: %s", resp.Status)
+	}
+	return nil
+}
+
 func (c *HexzTestClient) history(gameId string) (*GameHistoryResponse, error) {
 	historyResp, err := c.client.Get(fmt.Sprintf("%s/hexz/history/%s", c.serverURL, gameId))
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
+	"github.com/dnswlt/hexz/internal/api"
 )
 
 //
@@ -20,8 +21,8 @@ func NewGameEngineClassic() *GameEngineClassic {
 	return g
 }
 
-func (g *GameEngineClassic) GameType() GameType { return gameTypeClassic }
-func (g *GameEngineClassic) Board() *Board      { return g.board }
+func (g *GameEngineClassic) GameType() api.GameType { return gameTypeClassic }
+func (g *GameEngineClassic) Board() *Board          { return g.board }
 func (g *GameEngineClassic) Init() {
 	b := NewBoard()
 	numPlayers := g.NumPlayers()

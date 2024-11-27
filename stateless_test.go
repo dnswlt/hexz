@@ -2,6 +2,7 @@ package hexz
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,11 +14,17 @@ import (
 	"time"
 
 	"github.com/dnswlt/hexz/hexzpb"
+	"github.com/dnswlt/hexz/internal/hexzsql"
 )
 
 const (
 	testPlayerId   = "testId"
 	testPlayerName = "tester"
+)
+
+var (
+	// This is typically going to be postgres://hexz_test:hexz_test@localhost:5432/hexz_test
+	postgresTestURL = flag.String("test-postgres-url", "", "URL to PostgreSQL DB for integration tests")
 )
 
 func testServerConfig(t *testing.T) *ServerConfig {
@@ -35,7 +42,8 @@ func testServerConfig(t *testing.T) *ServerConfig {
 	}
 }
 
-func newTestStatelessServer(config *ServerConfig) (*StatelessServer, error) {
+func newTestStatelessServer(t testing.TB, config *ServerConfig) (*StatelessServer, error) {
+	t.Helper()
 	renderer, err := NewRenderer()
 	if err != nil {
 		return nil, err
@@ -46,6 +54,14 @@ func newTestStatelessServer(config *ServerConfig) (*StatelessServer, error) {
 	}
 	gameStore := NewInMemoryGameStore(config.InactivityTimeout)
 	b := NewStatelessServerBuilder(config, playerStore, gameStore, renderer)
+	if config.PostgresURL != "" {
+		var dbStore DatabaseStore
+		dbStore, err := hexzsql.NewPostgresStore(context.Background(), config.PostgresURL)
+		if err != nil {
+			t.Fatalf("error connecting to postgres: %s", err)
+		}
+		b = b.WithDatabaseStore(dbStore)
+	}
 	return b.Build(), nil
 }
 
@@ -88,7 +104,7 @@ func TestValidPlayerName(t *testing.T) {
 
 func TestHandleNewGame(t *testing.T) {
 	cfg := testServerConfig(t)
-	s, err := newTestStatelessServer(cfg)
+	s, err := newTestStatelessServer(t, cfg)
 	if err != nil {
 		t.Fatal("Could not create server:", err)
 	}
@@ -174,6 +190,148 @@ func receiveBoards(ctx context.Context, eventCh <-chan tcServerEvent) <-chan *Bo
 	return boardCh
 }
 
+func TestHistoryDatabase(t *testing.T) {
+	if *postgresTestURL == "" {
+		t.Skip("--test-postgres-url is not set, skipping database integration test")
+	}
+	cfg := testServerConfig(t)
+	cfg.PostgresURL = *postgresTestURL
+	cfg.CpuThinkTime = 1 * time.Millisecond // We want a fast test, not smart moves.
+	srv, _ := newTestStatelessServer(t, cfg)
+	testServer := httptest.NewServer(srv.createMux())
+	defer testServer.Close()
+
+	c, err := newHexzTestClient(testServer.URL)
+	if err != nil {
+		t.Fatalf("could not create client: %s", err)
+	}
+	// Log in.
+	if err := c.login("testuser"); err != nil {
+		t.Fatal(err)
+	}
+	// Start a new single player game.
+	gameId, err := c.newFlagzGame(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Receive SSE events.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	eventCh, err := c.receiveEvents(ctx, testServer.URL+"/hexz/sse/"+gameId)
+	if err != nil {
+		t.Fatalf("cannot receive events for game %s: %s", gameId, err)
+	}
+	boardCh := receiveBoards(ctx, eventCh)
+	finished := false
+	maxMoves := numFieldsFirstRow * numBoardRows // upper bound for possible moves
+	moves := 0
+GameLoop:
+	for ; !finished && moves < maxMoves; moves++ {
+		// Receive boards until the game is finished or it's our turn again.
+		for {
+			board := <-boardCh
+			if board.State == Finished {
+				finished = true
+				break GameLoop
+			}
+			if board.Turn == 1 {
+				break
+			}
+			moves++ // Count move of P2
+		}
+		// Get valid moves.
+		validMoves, err := c.validMoves(gameId)
+		if err != nil {
+			t.Errorf("could not get valid moves: %v", err)
+			break
+		}
+		if len(validMoves) == 0 {
+			t.Errorf("No valid move despite game not having finished")
+			break
+		}
+		// Make move.
+		if err := c.makeMove(gameId, validMoves[0]); err != nil {
+			t.Errorf("could not make move: %v", err)
+			break
+		}
+	}
+	hist, err := c.history(gameId)
+	if err != nil {
+		t.Fatalf("could not get history: %v", err)
+	}
+	if hist.GameId != gameId {
+		t.Errorf("wrong game ID in history: want %s, got %s", gameId, hist.GameId)
+	}
+	if len(hist.Entries) != moves+1 {
+		// History entries should be the initial board and one per move.
+		t.Errorf("Want %d history entries, got %d", moves, len(hist.Entries))
+	}
+}
+
+func TestFlagzUndo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Don't run http tests in -short mode.")
+	}
+	cfg := testServerConfig(t)
+	cfg.CpuThinkTime = 1 * time.Millisecond // We want a fast test, not smart moves.
+	srv, _ := newTestStatelessServer(t, cfg)
+	testServer := httptest.NewServer(srv.createMux())
+	defer testServer.Close()
+
+	c, err := newHexzTestClient(testServer.URL)
+	if err != nil {
+		t.Fatalf("could not create client: %s", err)
+	}
+	// Log in.
+	if err := c.login("testuser"); err != nil {
+		t.Fatal(err)
+	}
+	// Start a new two player game (so the CPU doesn't interfere).
+	gameId, err := c.newFlagzGame(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Receive SSE events.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	eventCh, err := c.receiveEvents(ctx, testServer.URL+"/hexz/sse/"+gameId)
+	if err != nil {
+		t.Fatalf("cannot receive events for game %s: %s", gameId, err)
+	}
+	go func() {
+		for range eventCh {
+			// Consume and ignore all events
+		}
+	}()
+	// Make one random move:
+	validMoves, err := c.validMoves(gameId)
+	if err != nil {
+		t.Fatalf("could not get valid moves: %v", err)
+	}
+	if len(validMoves) < 2 {
+		t.Fatalf("No valid moves despite game not having finished")
+	}
+	if err := c.makeMove(gameId, validMoves[0]); err != nil {
+		t.Fatalf("could not make move: %v", err)
+	}
+	// Undo the move:
+	if err := c.undo(gameId); err != nil {
+		t.Fatalf("undo failed: %v", err)
+	}
+	// Redo the move:
+	if err := c.redo(gameId); err != nil {
+		t.Fatalf("undo failed: %v", err)
+	}
+	// Undo the move (again):
+	if err := c.undo(gameId); err != nil {
+		t.Fatalf("undo failed: %v", err)
+	}
+	// Now make a different first move:
+	if err := c.makeMove(gameId, validMoves[1]); err != nil {
+		t.Fatalf("could not make move: %v", err)
+	}
+}
+
 // Longish test that starts a server, logs in a new player, starts a new
 // single-player flagz game and plays it till the end using random moves.
 func TestFlagzSinglePlayer(t *testing.T) {
@@ -182,7 +340,7 @@ func TestFlagzSinglePlayer(t *testing.T) {
 	}
 	cfg := testServerConfig(t)
 	cfg.CpuThinkTime = 1 * time.Millisecond // We want a fast test, not smart moves.
-	srv, _ := newTestStatelessServer(cfg)
+	srv, _ := newTestStatelessServer(t, cfg)
 	testServer := httptest.NewServer(srv.createMux())
 	defer testServer.Close()
 

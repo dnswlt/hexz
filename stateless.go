@@ -22,7 +22,8 @@ import (
 	"github.com/lpar/gzipped/v2"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
-	"github.com/dnswlt/hexz/hlog"
+	"github.com/dnswlt/hexz/internal/api"
+	"github.com/dnswlt/hexz/internal/hlog"
 	"google.golang.org/protobuf/proto"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -246,7 +247,7 @@ func (s *StatelessServer) lookupPlayerFromCookie(r *http.Request) (Player, error
 }
 
 // Stores a new game in the game store and returns the new game ID.
-func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType GameType, singlePlayer bool) (string, error) {
+func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType api.GameType, singlePlayer bool) (string, error) {
 	engineState, err := NewGameEngine(gameType).Encode()
 	if err != nil {
 		return "", err
@@ -354,7 +355,7 @@ func (s *StatelessServer) handleNewGame(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Invalid value for 'type'", http.StatusBadRequest)
 		return
 	}
-	gameType := GameType(typeParam)
+	gameType := api.GameType(typeParam)
 	singlePlayer := false
 	if r.Form.Has("singlePlayer") {
 		singlePlayer, err = strconv.ParseBool(r.Form.Get("singlePlayer"))
@@ -367,7 +368,7 @@ func (s *StatelessServer) handleNewGame(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	gameId, err := s.startNewGame(r.Context(), &p, GameType(typeParam), singlePlayer)
+	gameId, err := s.startNewGame(r.Context(), &p, api.GameType(typeParam), singlePlayer)
 	if err != nil {
 		hlog.Errorf("Cannot start new game: %s\n", err)
 		http.Error(w, "", http.StatusPreconditionFailed)
@@ -443,7 +444,7 @@ func (s *StatelessServer) handleGamez(w http.ResponseWriter, r *http.Request) {
 			Id:       g.Id,
 			Host:     g.Host,
 			Started:  g.Started.AsTime(),
-			GameType: GameType(g.Type),
+			GameType: api.GameType(g.Type),
 		}
 	}
 	json, err := json.Marshal(resp)
@@ -492,7 +493,7 @@ func (s *StatelessServer) handleWASMStats(w http.ResponseWriter, r *http.Request
 		hlog.Errorf("Cannot read request body: %s", err)
 		http.Error(w, "", http.StatusInternalServerError)
 	}
-	var req WASMStatsRequest
+	var req api.WASMStatsRequest
 	if err = json.Unmarshal(body, &req); err != nil {
 		http.Error(w, "unmarshal error", http.StatusBadRequest)
 		return
@@ -599,8 +600,8 @@ func (s *StatelessServer) goMakeCPUMove(g *GameRepr) {
 			gameId := g.State().GetGameInfo().GetId()
 			hlog.Infof("Requesting CPU move (%T) for game %s, move %d", cpuPlayer, gameId, flagz.Board().Move)
 			ctx, cancel := context.WithTimeout(context.Background(), s.config.CpuThinkTime*2)
-			defer cancel()
 			move, _, err := cpuPlayer.SuggestMove(ctx, flagz)
+			cancel()
 			if err != nil {
 				hlog.Errorf("SuggestMove failed: %v", err)
 				return
@@ -610,7 +611,10 @@ func (s *StatelessServer) goMakeCPUMove(g *GameRepr) {
 				return
 			}
 			flagz = g.Engine().(*GameEngineFlagz)
-			if err := s.storeGameAndNotify(ctx, g); err != nil {
+			ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+			err = s.storeGameAndNotify(ctx, g)
+			cancel()
+			if err != nil {
 				hlog.Errorf("failed to store game after CPU move: %v", err)
 			}
 		}
@@ -863,7 +867,7 @@ func replayForGameHistoryResponse(gameState *pb.GameState) (*GameHistoryResponse
 	return &GameHistoryResponse{
 		GameId:      gameState.GetGameInfo().Id,
 		PlayerNames: playerNames,
-		GameType:    GameType(gameState.GetGameInfo().Type),
+		GameType:    api.GameType(gameState.GetGameInfo().Type),
 		Entries:     entries,
 	}, nil
 }

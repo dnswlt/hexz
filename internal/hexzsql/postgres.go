@@ -14,9 +14,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/dnswlt/hexz"
 	pb "github.com/dnswlt/hexz/hexzpb"
-	"github.com/dnswlt/hexz/hlog"
+	"github.com/dnswlt/hexz/internal/api"
+	"github.com/dnswlt/hexz/internal/hlog"
 )
 
 type PostgresStore struct {
@@ -167,7 +167,7 @@ func (s *PostgresStore) InsertHistory(ctx context.Context, entryType string, gam
 	return nil
 }
 
-func (s *PostgresStore) InsertStats(ctx context.Context, stats *hexz.WASMStatsRequest) error {
+func (s *PostgresStore) InsertStats(ctx context.Context, stats *api.WASMStatsRequest) error {
 	t := &stats.Stats
 	u := &stats.UserInfo
 	_, err := s.pool.ExecContext(ctx, `

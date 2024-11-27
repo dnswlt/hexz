@@ -1,6 +1,9 @@
 -- Table definitions for the PostgreSQL database.
 --
--- To create the schema, run sth like:
+-- See the README.md for detailed instructions.
+--
+-- To just regenerate the schema:
+-- 
 -- psql -f schema.sql -h localhost hexz hexz 
 
 DROP TABLE IF EXISTS games;

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dnswlt/hexz/xrand"
+	"github.com/dnswlt/hexz/internal/xrand"
 )
 
 // Nodes of the MCTS search tree.

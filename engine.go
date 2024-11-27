@@ -4,7 +4,8 @@ import (
 	"fmt"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
-	"github.com/dnswlt/hexz/hlog"
+	"github.com/dnswlt/hexz/internal/api"
+	"github.com/dnswlt/hexz/internal/hlog"
 )
 
 const (
@@ -32,23 +33,21 @@ type GameEngine interface {
 	Board() *Board
 	IsDone() bool
 	Winner() (playerNum int) // Results are only meaningful if IsDone() is true. 0 for draw.
-	GameType() GameType
+	GameType() api.GameType
 	// Encodes the current state of the game engine.
 	Encode() (*pb.GameEngineState, error)
 	// Sets this game engine into the state defined by the given encoded state.
 	Decode(s *pb.GameEngineState) error
 }
 
-type GameType string
-
 const (
-	gameTypeClassic  GameType = "Classic"
-	gameTypeFlagz    GameType = "Flagz"
-	gameTypeFreeform GameType = "Freeform"
+	gameTypeClassic  api.GameType = "Classic"
+	gameTypeFlagz    api.GameType = "Flagz"
+	gameTypeFreeform api.GameType = "Freeform"
 )
 
 var (
-	allGameTypes = map[GameType]bool{
+	allGameTypes = map[api.GameType]bool{
 		gameTypeClassic:  true,
 		gameTypeFlagz:    true,
 		gameTypeFreeform: true,
@@ -56,10 +55,10 @@ var (
 )
 
 func validGameType(gameType string) bool {
-	return allGameTypes[GameType(gameType)]
+	return allGameTypes[api.GameType(gameType)]
 }
 
-func supportsSinglePlayer(t GameType) bool {
+func supportsSinglePlayer(t api.GameType) bool {
 	return t == gameTypeFlagz
 }
 
@@ -180,7 +179,7 @@ func (m *GameEngineMove) DecodeProto(pm *pb.GameEngineMove) {
 
 // Dispatches on the gameType to create a corresponding GameEngine.
 // The returned GameEngine is initialized and ready to play.
-func NewGameEngine(gameType GameType) GameEngine {
+func NewGameEngine(gameType api.GameType) GameEngine {
 	var ge GameEngine
 	switch gameType {
 	case gameTypeClassic:

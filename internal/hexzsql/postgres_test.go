@@ -5,8 +5,8 @@ import (
 	"flag"
 	"testing"
 
-	"github.com/dnswlt/hexz"
 	pb "github.com/dnswlt/hexz/hexzpb"
+	"github.com/dnswlt/hexz/internal/api"
 )
 
 var (
@@ -46,15 +46,15 @@ func TestPostgresInsertStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	stats := &hexz.WASMStatsRequest{
+	stats := &api.WASMStatsRequest{
 		GameId:   "TestPostgresInsertStats",
 		Move:     1,
 		GameType: "Test",
-		Stats: hexz.WASMStats{
+		Stats: api.WASMStats{
 			TreeSize:   42,
 			Iterations: 1000,
 		},
-		UserInfo: hexz.UserInfo{
+		UserInfo: api.UserInfo{
 			UserAgent:  "Golang_Test",
 			Language:   "en-US",
 			Resolution: [2]int{800, 600},

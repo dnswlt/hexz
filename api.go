@@ -1,6 +1,10 @@
 package hexz
 
-import "time"
+import (
+	"time"
+
+	"github.com/dnswlt/hexz/internal/api"
+)
 
 type GameState string
 
@@ -35,7 +39,7 @@ type ServerEventGameInfo struct {
 	// Indicates which cell types exist in this type of game.
 	ValidCellTypes []CellType `json:"validCellTypes"`
 	// The type of game we're playing.
-	GameType GameType `json:"gameType"`
+	GameType api.GameType `json:"gameType"`
 	// True if this is a game of one player against a CPU player, which
 	// should be run on the client side.
 	ClientSideCPUPlayer bool `json:"clientSideCPUPlayer"`
@@ -100,7 +104,7 @@ func (c CellType) valid() bool {
 type GameHistoryResponse struct {
 	GameId      string                      `json:"gameId"`
 	PlayerNames []string                    `json:"playerNames"`
-	GameType    GameType                    `json:"gameType,omitempty"`
+	GameType    api.GameType                `json:"gameType,omitempty"`
 	Entries     []*GameHistoryResponseEntry `json:"entries"`
 }
 
@@ -141,46 +145,10 @@ type GameStateResponse struct {
 
 // Used in responses to list active games (/hexz/gamez).
 type GameInfo struct {
-	Id       string    `json:"id"`
-	Host     string    `json:"host"`
-	Started  time.Time `json:"started"`
-	GameType GameType  `json:"gameType"`
-}
-
-// Used to report CPU stats by clients.
-type WASMStatsRequest struct {
-	GameId   string    `json:"gameId"`
-	GameType GameType  `json:"gameType"`
-	Move     int       `json:"move"`
-	UserInfo UserInfo  `json:"userInfo"`
-	Stats    WASMStats `json:"stats"`
-}
-
-type WASMStats struct {
-	// MCTS stats.
-	TreeSize   int           `json:"treeSize"`
-	MaxDepth   int           `json:"maxDepth"`
-	Iterations int           `json:"iterations"`
-	Elapsed    time.Duration `json:"elapsed"`
-	// Memory allocations, in MiB (1024*1024 bytes).
-	TotalAllocMiB float64 `json:"totalAllocMiB"`
-	HeapAllocMiB  float64 `json:"heapAllocMiB"`
-}
-
-type UserInfo struct {
-	// The User-Agent header.
-	UserAgent string `json:"userAgent"`
-	// Taken from navigator.language.
-	Language string `json:"language"`
-	// Resolution is the screen resolution in pixels [window.screen.width, window.screen.height].
-	Resolution [2]int `json:"resolution"`
-	// Viewport is the size of the viewport in pixels [window.innerWidth, window.innerHeight].
-	Viewport [2]int `json:"viewport"`
-	// BrowserWindow is the size of the browser window in pixels [window.outerWidth, window.outerHeight].
-	BrowserWindow [2]int `json:"browserWindow"`
-	// HardwareConcurrency is the number of logical processors available to run threads
-	// on the user's computer (navigator.hardwareConcurrency).
-	HardwareConcurrency int `json:"hardwareConcurrency"`
+	Id       string       `json:"id"`
+	Host     string       `json:"host"`
+	Started  time.Time    `json:"started"`
+	GameType api.GameType `json:"gameType"`
 }
 
 // /statusz messages.

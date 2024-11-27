@@ -11,7 +11,7 @@ import (
 	"time"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
-	"github.com/dnswlt/hexz/hlog"
+	"github.com/dnswlt/hexz/internal/hlog"
 	"google.golang.org/protobuf/proto"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )

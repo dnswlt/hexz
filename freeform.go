@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
+	"github.com/dnswlt/hexz/internal/api"
 )
 
 //
@@ -20,8 +21,8 @@ func NewGameEngineFreeform() *GameEngineFreeform {
 	return g
 }
 
-func (g *GameEngineFreeform) GameType() GameType { return gameTypeFreeform }
-func (g *GameEngineFreeform) Board() *Board      { return g.board }
+func (g *GameEngineFreeform) GameType() api.GameType { return gameTypeFreeform }
+func (g *GameEngineFreeform) Board() *Board          { return g.board }
 
 func (g *GameEngineFreeform) Init() {
 	flatFields, fields := makeFields()

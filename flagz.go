@@ -6,7 +6,8 @@ import (
 	"fmt"
 
 	pb "github.com/dnswlt/hexz/hexzpb"
-	"github.com/dnswlt/hexz/xrand"
+	"github.com/dnswlt/hexz/internal/api"
+	"github.com/dnswlt/hexz/internal/xrand"
 )
 
 type GameEngineFlagz struct {
@@ -17,7 +18,7 @@ type GameEngineFlagz struct {
 	// History of moves made so far
 }
 
-func (g *GameEngineFlagz) GameType() GameType { return gameTypeFlagz }
+func (g *GameEngineFlagz) GameType() api.GameType { return gameTypeFlagz }
 
 const (
 	flagzNumRockCells  = 15 // Odd number, so we have an even number of free cells.
