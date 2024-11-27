@@ -68,11 +68,11 @@
             gstate.board = entry.board;
             gstate.moveScores = entry.moveScores;
             gstate.playerNames = gameHistory.playerNames;
-            // Update URL to the new move
+            // Update URL to the new move, but don't add to the browser's history.
             let url = new URL(window.location);
             pathSegs[pathSegs.length - 1] = newSeqNum.toString();
             url.pathname = pathSegs.join("/");
-            window.history.pushState({}, "", url);
+            window.history.replaceState(null, "", url);
             refreshView();
         }
 
