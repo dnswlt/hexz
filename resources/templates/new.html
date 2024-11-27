@@ -3,63 +3,11 @@
 
 <head>
     {{template "snip_head.html" .}}
-
-    <title>Hexz</title>
-    <style>
-        html,
-        body {
-            background-color: #1e1e1e;
-            color: #cbcbcb;
-        }
-        a:link,
-        a:visited,
-        a:hover,
-        a:active {
-            color: #92acd9;
-        }
-
-        body {
-            font-family: arial, sans-serif;
-        }
-
-        h1,
-        h2,
-        p,
-        div {
-            text-align: center;
-        }
-
-        div.centered {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        div.spacer {
-            margin-top: 1ex;
-        }
-
-        .gameButton {
-            min-width: 10em;
-            font-size: 120%;
-            background-color: #92acd9;
-            padding: 4px;
-            border: none;
-            color: #1e1e1e;
-        }
-        th, td {
-            text-align: left;
-            padding-right: 1em;
-        }
-        div#joingame {
-            display: none;
-        }
-    </style>
 </head>
 
 <body>
-    <h1>Start a new game</h1>
-    <p>
+    <h1 class="center">Start a new game</h1>
+    <p class="center">
         Select the game you want to play:
     </p>
     <div class="centered">
@@ -89,7 +37,7 @@
     </div>
 
     <div id="joingame">
-        <h1>Join a game</h1>
+        <h1 class="center">Join a game</h1>
         <div class="centered" id="activeGames">
             <table>
                 <thead>

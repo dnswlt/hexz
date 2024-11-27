@@ -296,10 +296,18 @@ func (s *StatelessServer) startNewGame(ctx context.Context, p *Player, gameType 
 
 // Sends the contents of filename to the ResponseWriter.
 func (s *StatelessServer) serveHtmlFile(w http.ResponseWriter, filename string) {
+	s.serveHtmlFileParams(w, filename, nil)
+}
+
+func (s *StatelessServer) serveHtmlFileParams(w http.ResponseWriter, filename string, params map[string]any) {
 	w.Header().Set("Content-Type", "text/html")
-	s.renderer.Render(w, filename, map[string]any{
+	templateParams := map[string]any{
 		"URLPathPrefix": s.config.URLPathPrefix,
-	})
+	}
+	for k, v := range params {
+		templateParams[k] = v
+	}
+	s.renderer.Render(w, filename, templateParams)
 }
 
 func (s *StatelessServer) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
@@ -860,6 +868,44 @@ func replayForGameHistoryResponse(gameState *pb.GameState) (*GameHistoryResponse
 	}, nil
 }
 
+func (s *StatelessServer) handleHistoryList(w http.ResponseWriter, r *http.Request) {
+	if s.dbStore == nil {
+		http.Error(w, "no database connected", http.StatusPreconditionFailed)
+		return
+	}
+	validOffset := func(offset int) bool {
+		return offset >= 0 && offset < 1000000
+	}
+	offsetStr := r.URL.Query().Get("offset")
+	offset := 0
+	if o, err := strconv.Atoi(offsetStr); err == nil && validOffset(o) {
+		offset = o
+	}
+	limit := 20
+	games, err := s.dbStore.ListRecentGames(r.Context(), offset, limit+1)
+	if err != nil {
+		hlog.Errorf("failed to list games: %v", err)
+		http.Error(w, "failed to list games", http.StatusInternalServerError)
+	}
+	moreGames := len(games) > limit
+	if moreGames {
+		// The last game is a marker showing that there are more games.
+		games = games[:limit]
+	}
+	prevOffset := offset - limit
+	if prevOffset < 0 {
+		prevOffset = 0
+	}
+	s.serveHtmlFileParams(w, historyHtmlFilename, map[string]any{
+		"Games":      games,
+		"Offset":     offset,
+		"HasPrev":    offset > 0,
+		"PrevOffset": prevOffset,
+		"HasNext":    moreGames,
+		"NextOffset": offset + limit,
+	})
+}
+
 func (s *StatelessServer) handleHistory(w http.ResponseWriter, r *http.Request) {
 	gameId := r.PathValue("gameId")
 	if !isValidGameId(gameId) {
@@ -1060,12 +1106,13 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	// GET method API
 	handleFunc("", s.handleHexz)
 	handleFunc("/gamez", s.handleGamez)
-	mux.HandleFunc("/hexz/view/{gameId}", func(w http.ResponseWriter, r *http.Request) {
+	handleFunc("/view/{gameId}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, r.URL.Path+"/0", http.StatusTemporaryRedirect)
 	})
-	mux.HandleFunc("/hexz/view/{gameId}/{seqNum}", s.handleView)
-	mux.HandleFunc("/hexz/history/{gameId}", s.handleHistory)
-	mux.HandleFunc("/hexz/moves/{gameId}", s.handleValidMoves)
+	handleFunc("/view/{gameId}/{seqNum}", s.handleView)
+	handleFunc("/history", s.handleHistoryList)
+	handleFunc("/history/{gameId}", s.handleHistory)
+	handleFunc("/moves/{gameId}", s.handleValidMoves)
 	handleFunc("/{gameId}", s.handleGame)
 	// Technical services
 	// mux.Handle("/statusz", s.basicAuthHandlerFunc(s.handleStatusz))

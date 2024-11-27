@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    {{template "snip_head.html" .}}
+</head>
+
+<body>
+<h1>Recent games</h1>
+<table>
+    <thead>
+        <tr>
+            <th>Game ID</th>
+            <th>Host</th>
+            <th>Started</th>
+            <th>Game</th>
+            <th>Mode</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{$urlPathPrefix := .URLPathPrefix}}
+        {{range .Games}}
+        <tr>
+            <td><a href="{{$urlPathPrefix}}/view/{{.Id}}">{{.Id}}</a></td>
+            <td>{{.Host}}</td>
+            <td>{{protodate .Started}}</td>
+            <td>{{.Type}}</td>
+            <td>{{cpuPlayerMode .CpuPlayer}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+
+<div class="spacer">
+    {{if .HasPrev}}
+    <a href="{{$urlPathPrefix}}/history?offset={{.PrevOffset}}">Prev</a>
+    {{end}}
+    {{if .HasNext}}
+    <a href="{{$urlPathPrefix}}/history?offset={{.NextOffset}}">Next</a>
+    {{end}}    
+</div>
+
+</body>
+
+</html>

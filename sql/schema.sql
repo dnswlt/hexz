@@ -6,14 +6,18 @@
 DROP TABLE IF EXISTS games;
 CREATE TABLE games (
     created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Values from the GameInfo proto.
     game_id TEXT NOT NULL,
+    started TIMESTAMP,
     game_type TEXT NOT NULL,
-    -- Identifies the player hosting the game.
-    host_id TEXT,
+    cpu_player_mode TEXT, -- string value of CPUPlayerMode.Enum proto.
     host_name TEXT,
+    -- Player (cookie) ID of the player hosting the game.
+    host_id TEXT,
 
     PRIMARY KEY (game_id)
 );
+CREATE INDEX games_started_desc_idx ON games (started DESC);
 
 DROP TABLE IF EXISTS game_history;
 DROP SEQUENCE IF EXISTS game_history_seq;

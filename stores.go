@@ -21,6 +21,8 @@ type DatabaseStore interface {
 	InsertStats(ctx context.Context, stats *WASMStatsRequest) error
 	// Loads the latest game state.
 	LoadGame(ctx context.Context, gameId string) (*pb.GameState, error)
+	// Lists the `limit` most recent games, skipping `offset` many (for paging).
+	ListRecentGames(ctx context.Context, offset int, limit int) ([]*pb.GameInfo, error)
 }
 
 // GameStore is an interface for local or remote game stores, e.g. Redis.
