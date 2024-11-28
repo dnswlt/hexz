@@ -3,8 +3,6 @@
 
 <head>
     {{template "snip_head.html" .}}
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
-
 </head>
 
 <body>
@@ -48,10 +46,18 @@
                 <div class="dropup" id="dropup-tridot">
                     <button class="dropup-button">...</button>
                     <div class="dropup-menu">
-                        <button id="home" class="dropup-option">New Game</button>
-                        <button id="reset" class="dropup-option">Reset</button>
-                        <button id="shareLink" class="dropup-option"><!-- &#x1F517; --><i
-                                class="fas fa-share"></i>&nbsp;Share</button>
+                        <button id="home" class="dropup-option">
+                            <i class="fa-solid fa-up-right-from-square"></i>
+                            <span class="ml-1">New</span>
+                        </button>
+                        <button id="reset" class="dropup-option">
+                            <i class="fa-solid fa-rotate-right"></i>
+                            <span class="ml-1">Reset</span>
+                        </button>
+                        <button id="shareLink" class="dropup-option">
+                            <i class="fa-solid fa-share"></i>
+                            <span class="ml-1">Share</span>
+                        </button>
                     </div>
                 </div>
             </div>

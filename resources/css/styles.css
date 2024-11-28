@@ -1,3 +1,14 @@
+:root {
+    --blue-normal: #255ab4;
+    --blue-light: #92acd9;
+    --yellow-normal: #f8d748;
+    --yellow-light: #fbeba3;
+    --dark-text: #1e1e1e;
+    --light-text: #ececec;
+    --medium-gray: #5f5f5f;
+    --medium-dark-gray: #3a3a3a;
+}
+
 html {
     width: 100%;
     height: 100%;
@@ -5,8 +16,8 @@ html {
 
 body {
     min-height: 100%;
-    background-color: #1e1e1e;
-    color: #ececec;
+    background-color: var(--dark-text);
+    color: var(--light-text);
 }
 
 body, input, textarea, button {
@@ -68,24 +79,20 @@ div.hflow {
 }
 
 #playerOneBadge {
-    color: #ececec;
-    background-color: #255ab4;
+    color: var(--light-text);
+    background-color: var(--blue-normal);
 }
 
 #playerTwoBadge {
-    color: #1e1e1e;
-    background-color: #f8d748;
-}
-
-#shareLink {
-    cursor: pointer;
+    color: var(--dark-text);
+    background-color: var(--yellow-normal);
 }
 
 a:link,
 a:visited,
 a:hover,
 a:active {
-    color: #92acd9;
+    color: var(--blue-light);
 }
 
 div.menurow {
@@ -118,8 +125,8 @@ div.login {
 
 .login button {
     padding: 10px 20px;
-    background-color: #255ab4;
-    color: white;
+    background-color: var(--blue-light);
+    color: var(--dark-text);
     border: none;
     cursor: pointer;
     border-radius: 5px;
@@ -133,11 +140,11 @@ div.spacer {
 
 .gameButton {
     min-width: 10em;
-    background-color: #92acd9;
+    background-color: var(--blue-light);
+    color: var(--dark-text);
     padding: 10px 20px;
     border: none;
     cursor: pointer;
-    color: #1e1e1e;
     border-radius: 5px;
 }
 
@@ -164,8 +171,9 @@ td {
     border: none;
     border-radius: 5px;
     cursor: pointer;
-    color: #1e1e1e;
-    background-color: #92acd9;
+    color: var(--light-text);
+    background-color: var(--medium-gray);
+    /* background-color: var(--blue-light); */
 }
 
 
@@ -184,14 +192,14 @@ input:focus {
     border: 1px solid transparent;
     border-radius: 5px;
     z-index: 1;
-    outline: 1px solid #cbcbcb;
+    outline: 1px solid var(--light-text);
 }
 
 .dropup-menu button {
     width: 100%;
     padding: 10px;
-    background-color: #2a2a2a;
-    color: #cbcbcb;
+    background-color: var(--medium-dark-gray);
+    color: var(--light-text);
     border: none;
     cursor: pointer;
     display: flex;
@@ -199,14 +207,18 @@ input:focus {
 }
 
 .dropup-menu button.selected {
-    color: #2a2a2a;
-    background-color: #92acd9;
+    color: var(--dark-text);
+    background-color: var(--blue-light);
 }
 
 .dropup-menu.open {
     display: block;
 }
 
-button {
+button, input[type='submit'] {
     -webkit-tap-highlight-color: transparent;
+}
+
+.ml-1 {
+    margin-left: 1ex;
 }
