@@ -246,6 +246,16 @@ func (g *GameRepr) State() *pb.GameState {
 	return g.state
 }
 
+func (g *GameRepr) isCPUTurn() bool {
+	if g.Engine().IsDone() {
+		return false
+	}
+	turn := g.Engine().Board().Turn
+	mode := g.State().GameInfo.CpuPlayer
+	return turn == 2 && (mode == pb.CPUPlayerMode_EMBEDDED_CPU ||
+		mode == pb.CPUPlayerMode_REMOTE_CPU)
+}
+
 // Returns the most recent move made in the game, or nil if no move has been made yet.
 func (g *GameRepr) LastMove() *pb.GameEngineMove {
 	moves := g.State().GetUndoRedoState().GetMoves()

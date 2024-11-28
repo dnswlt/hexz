@@ -27,7 +27,21 @@
         <div class="menurow" id="menurow-undo-redo">
             <button id="undo" class="menuitem">Undo</button>
             <button id="redo" class="menuitem">Redo</button>
-        </div>
+            <div class="dropup">
+                <button class="dropup-button">CPU Speed</button>
+                <div class="dropup-menu">
+                    <!--
+                    {{range .CPUThinkTimes}}
+                    <button id="think-time-{{.DurationMillis}}">{{.Label}}</button>
+                    {{end}}
+                    -->
+                    <button data-millis="100" class="think-time-button">100ms</button>
+                    <button data-millis="1000" class="think-time-button">1s</button>
+                    <button data-millis="3000" class="think-time-button">3s</button>
+                    <button data-millis="5000" class="think-time-button">5s</button>
+                </div>
+            </div>
+        </div>  
     </div>
     <div class="widget" id="announcements"></div>
 

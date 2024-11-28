@@ -137,6 +137,11 @@ type RedoRequest struct {
 	Move int `json:"move"`
 }
 
+type GameSettingsRequest struct {
+	GameId             string `json:"gameId"`
+	CPUThinkTimeMillis int64  `json:"cpuThinkTimeMillis"`
+}
+
 // Used in /hexz/status responses.
 type GameStateResponse struct {
 	GameId           string `json:"gameId"`

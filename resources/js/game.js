@@ -502,6 +502,8 @@ function initialize() {
         }
     });
 
+    initializeMenus();
+
     const eventSource = new EventSource(`${URL_PREFIX}/sse/${gameId()}`);
     eventSource.onmessage = (event) => {
         // console.log(`Received event (${event.data.length} bytes)`);
@@ -712,5 +714,76 @@ function sendWASMWorkerMoveRequest() {
         gameId: gameId(),
     })
 }
+
+async function getActiveGames(joingameDivId) {
+    const resp = await fetch(`${URL_PREFIX}/gamez`);
+    const games = await resp.json();
+    const div = document.getElementById(joingameDivId);
+    if (!div) {
+        console.error(`getActiveGames: no element with ID ${joingameDivId}`);
+        return;
+    }
+    if (games && games.length > 0) {
+        div.style.display = "block";
+    }
+    const tbody = div.querySelector("tbody");
+    for (const g of games) {
+        tbody.insertAdjacentHTML("beforeend",
+            `<tr>
+            <td><a href="${URL_PREFIX}/${g.id}">${g.id}</a></td>
+            <td>${g.host}</td>
+            <td>${g.gameType}</td>
+        </tr>`);
+    }
+}
+
+async function updateCPUThinkTIme(thinkTimeMillis) {
+    const resp = await fetch(`${URL_PREFIX}/gamesettings/${gameId()}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", },
+        body: JSON.stringify({
+            gameId: gameId(),
+            cpuThinkTimeMillis: thinkTimeMillis,
+        }),
+    });
+    if (!resp.ok) {
+        console.log("Failed to set think time:", resp.statusText);
+    }
+}
+
+function initializeMenus() {
+    // Close menus if clicked outside
+    document.addEventListener("click", (event) => {
+        const menu = document.querySelector(".dropup-menu");
+        const button = document.querySelector(".dropup-button");
+        if (menu && button && !button.contains(event.target) && !menu.contains(event.target)) {
+            menu.style.display = "none";
+        }
+    });
+    // Generic hide/show logic for all dropup buttons.
+    document.querySelectorAll(".dropup-button").forEach((button) => {
+        button.addEventListener("click", (e) => {
+            const dropup = button.closest(".dropup");
+            if (dropup) {
+                const menu = dropup.querySelector(".dropup-menu");
+                if (menu) {
+                    menu.style.display = menu.style.display === "block" ? "none" : "block";
+                }
+            }
+        });
+    });
+    // Clicks on think time buttons trigger request to backend to adjust CPU speed.
+    document.querySelectorAll(".think-time-button").forEach((button) => {
+        button.addEventListener("click", (e) => {
+            updateCPUThinkTIme(parseInt(button.dataset.millis));
+            // Hide the menu after selection
+            const menu = button.closest(".dropup-menu");
+            if (menu) {
+                setTimeout(() => { menu.style.display = "none"; }, 100);
+            }
+        });
+    });
+}
+
 
 // initialize(); // Must be called in game.html - we don't want it for view.html.

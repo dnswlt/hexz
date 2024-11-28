@@ -11,7 +11,9 @@ import (
 )
 
 type Renderer struct {
-	tmpl *template.Template
+	templateDir string
+	tmpl        *template.Template
+	autoReload  bool
 }
 
 const (
@@ -45,18 +47,38 @@ func commonFuncs() template.FuncMap {
 	}
 }
 
+func newTemplate(templateDir string) (*template.Template, error) {
+	return template.New("__root__").Funcs(commonFuncs()).ParseGlob(path.Join(templateDir, "*.html"))
+}
+
 // NewRenderer creates a new Renderer that reads templates from the given templates folder.
 // That folder is expected to contain the *.html template files (no subdirs).
 func NewRenderer(templateDir string) (*Renderer, error) {
-	tmpl, err := template.New("__root__").Funcs(commonFuncs()).ParseGlob(path.Join(templateDir, "*.html"))
+	tmpl, err := newTemplate(templateDir)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create templates: %v", err)
 	}
 	return &Renderer{
-		tmpl: tmpl,
+		templateDir: templateDir,
+		tmpl:        tmpl,
+		autoReload:  false,
 	}, nil
 }
 
+func (r *Renderer) SetAutoReload(enabled bool) {
+	r.autoReload = enabled
+}
+
 func (r *Renderer) Render(w io.Writer, filename string, data map[string]any) error {
-	return r.tmpl.ExecuteTemplate(w, filename, data)
+	tmpl := r.tmpl
+	if r.autoReload {
+		// Always read templates from disk in debug mode.
+		var err error
+		tmpl, err = newTemplate(r.templateDir)
+		if err != nil {
+			return fmt.Errorf("cannot create templates: %v", err)
+		}
+
+	}
+	return tmpl.ExecuteTemplate(w, filename, data)
 }

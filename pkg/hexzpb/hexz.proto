@@ -65,6 +65,10 @@ message GameInfo {
     google.protobuf.Timestamp started = 3;
     string type = 4; // Expected to match a hexz.GameType value.
     CPUPlayerMode.Enum cpu_player = 5; // True if this is a single player game against a CPU player.
+    message Settings {
+        int64 cpu_think_time_millis = 1;
+    }
+    Settings settings = 6;
 }
 
 // This message contains all data to restore a game state.

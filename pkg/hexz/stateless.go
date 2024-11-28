@@ -261,6 +261,9 @@ func (s *StatelessServer) startNewGame(ctx context.Context, p *api.Player, gameT
 				Started:   tpb.Now(),
 				Type:      string(gameType),
 				CpuPlayer: cpuPlayer,
+				Settings: &pb.GameInfo_Settings{
+					CpuThinkTimeMillis: s.config.CpuThinkTime.Milliseconds(),
+				},
 			},
 			Players:     players, // More players are registed in handleSSE.
 			EngineState: engineState,
@@ -572,13 +575,17 @@ func (s *StatelessServer) goMakeCPUMove(g *GameRepr) {
 		hlog.Errorf("Cannot make move for game type %v", g.Engine().GameType())
 		return
 	}
+	cpuThinkTime := s.config.CpuThinkTime
+	if t := g.State().GetGameInfo().GetSettings().CpuThinkTimeMillis; t > 0 {
+		cpuThinkTime = time.Duration(t) * time.Millisecond
+	}
 	// Asynchronously request a CPU move in a 1P game, if necessary.
 	var cpuPlayer CPUPlayer
 	switch g.State().GameInfo.CpuPlayer {
 	case pb.CPUPlayerMode_EMBEDDED_CPU:
-		cpuPlayer = NewLocalCPUPlayer(api.PlayerId(g.State().Players[1].Id), s.config.CpuThinkTime, 0)
+		cpuPlayer = NewLocalCPUPlayer(api.PlayerId(g.State().Players[1].Id), cpuThinkTime, 0)
 	case pb.CPUPlayerMode_REMOTE_CPU:
-		cpuPlayer = NewRemoteCPUPlayer(s.remoteCPUClient, api.PlayerId(g.State().Players[1].Id), s.config.CpuThinkTime, 0)
+		cpuPlayer = NewRemoteCPUPlayer(s.remoteCPUClient, api.PlayerId(g.State().Players[1].Id), cpuThinkTime, 0)
 	default:
 		hlog.Errorf("Async CPU move requested for CPU player type %v", g.State().GameInfo.CpuPlayer)
 		return
@@ -590,7 +597,7 @@ func (s *StatelessServer) goMakeCPUMove(g *GameRepr) {
 		for !flagz.IsDone() && flagz.Board().Turn == turn {
 			gameId := g.State().GetGameInfo().GetId()
 			hlog.Infof("Requesting CPU move (%T) for game %s, move %d", cpuPlayer, gameId, flagz.Board().Move)
-			ctx, cancel := context.WithTimeout(context.Background(), s.config.CpuThinkTime*2)
+			ctx, cancel := context.WithTimeout(context.Background(), max(cpuThinkTime*2, 1*time.Second))
 			move, _, err := cpuPlayer.SuggestMove(ctx, flagz)
 			cancel()
 			if err != nil {
@@ -612,11 +619,6 @@ func (s *StatelessServer) goMakeCPUMove(g *GameRepr) {
 	}()
 }
 
-func isCPUTurn(turn int, cpuPlayerMode pb.CPUPlayerMode_Enum) bool {
-	return turn == 2 && (cpuPlayerMode == pb.CPUPlayerMode_EMBEDDED_CPU ||
-		cpuPlayerMode == pb.CPUPlayerMode_REMOTE_CPU)
-}
-
 func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
@@ -635,7 +637,7 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 	}
 	// Get move request.
 	dec := json.NewDecoder(r.Body)
-	var req *MoveRequest
+	var req MoveRequest
 	if err := dec.Decode(&req); err != nil {
 		http.Error(w, "unmarshal error", http.StatusBadRequest)
 		return
@@ -672,7 +674,7 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !g.Engine().IsDone() && isCPUTurn(g.Engine().Board().Turn, g.State().GameInfo.CpuPlayer) {
+	if g.isCPUTurn() {
 		s.goMakeCPUMove(g)
 	}
 }
@@ -801,6 +803,60 @@ func (s *StatelessServer) handleRedo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *StatelessServer) handleGameSettings(w http.ResponseWriter, r *http.Request) {
+	p, err := s.lookupPlayerFromCookie(r)
+	if err != nil {
+		http.Error(w, "", http.StatusBadRequest)
+	}
+	gameId := r.PathValue("gameId")
+	if !isValidGameId(gameId) {
+		http.Error(w, "Invalid game ID", http.StatusBadRequest)
+		return
+	}
+	g, err := s.loadGame(r.Context(), gameId)
+	if err != nil {
+		http.Error(w, "No such game", http.StatusNotFound)
+		return
+	}
+	if g.PlayerNum(string(p.Id)) == 0 {
+		http.Error(w, "Only players can update game settings", http.StatusForbidden)
+		return
+	}
+	var req GameSettingsRequest
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&req); err != nil {
+		http.Error(w, "unmarshal error", http.StatusBadRequest)
+		hlog.Infof("bad request for game settings: %v", err)
+		return
+	}
+	settings := g.State().GetGameInfo().Settings
+	if settings == nil {
+		http.Error(w, "game has no settings", http.StatusNotImplemented)
+		return
+	}
+	if req.GameId != gameId {
+		http.Error(w, "wrong game ID in request", http.StatusBadRequest)
+		return
+	}
+	if req.CPUThinkTimeMillis > 0 && req.CPUThinkTimeMillis <= s.config.CpuThinkTime.Milliseconds() {
+		hlog.Infof("Updating CPU think time to %dms for game %v", req.CPUThinkTimeMillis, gameId)
+		settings.CpuThinkTimeMillis = req.CPUThinkTimeMillis
+	} else {
+		hlog.Infof("Ignoring request to set CpuThinkTimeMillis to %dms for game %v", req.CPUThinkTimeMillis, gameId)
+	}
+	if err := s.gameStore.UpdateGame(r.Context(), g.State()); err != nil {
+		http.Error(w, "failed to save game state", http.StatusInternalServerError)
+		hlog.Errorf("Could not store game %s: %s", gameId, err)
+		return
+	}
+	if s.dbStore != nil {
+		if err := s.dbStore.InsertHistory(r.Context(), "settings", gameId, nil); err != nil {
+			hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
+		}
+	}
+
+}
+
 func (s *StatelessServer) handleView(w http.ResponseWriter, r *http.Request) {
 	// Return the HTML for viewing a game.
 	gameId := r.PathValue("gameId")
@@ -881,6 +937,7 @@ func (s *StatelessServer) handleHistoryList(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		hlog.Errorf("failed to list games: %v", err)
 		http.Error(w, "failed to list games", http.StatusInternalServerError)
+		return
 	}
 	moreGames := len(games) > limit
 	if moreGames {
@@ -1095,6 +1152,7 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	handleFunc("/wasmstats/{gameId}", postHandlerFunc(s.handleWASMStats))
 	handleFunc("/undo/{gameId}", postHandlerFunc(s.handleUndo))
 	handleFunc("/redo/{gameId}", postHandlerFunc(s.handleRedo))
+	handleFunc("/gamesettings/{gameId}", postHandlerFunc(s.handleGameSettings))
 	// Server-sent Event handling
 	handleFunc("/sse/{gameId}", s.handleSSE)
 

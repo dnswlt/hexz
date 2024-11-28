@@ -88,6 +88,34 @@ div.centered {
     align-items: center;
 }
 
+/* Login */
+div.login {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.login form div {
+    margin: 10px 0;
+}
+
+.login input[type="text"] {
+    padding: 10px;
+    font-size: 16px;
+}
+
+.login button {
+    padding: 10px 20px;
+    font-size: 16px;
+    background-color: #255ab4;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 5px;
+}
+
+.login button:hover {
+    background-color: #1d4690;
+}
 
 /* New Game */
 
@@ -97,12 +125,19 @@ div.spacer {
 
 .gameButton {
     min-width: 10em;
-    font-size: 120%;
+    font-size: 16px;
     background-color: #92acd9;
-    padding: 4px;
+    padding: 10px 20px;
     border: none;
+    cursor: pointer;
     color: #1e1e1e;
+    border-radius: 5px;
 }
+
+input.gameButton:hover {
+    background-color: #255ab4;
+}
+
 th, td {
     text-align: left;
     padding-right: 1em;
@@ -110,4 +145,46 @@ th, td {
 
 #joingame {
     display: none; /* Initially hidden */
+}
+
+/* Dropup menu for CPU think time */
+.dropup {
+    position: relative;
+    display: inline-block;
+}
+
+.dropup-button {
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    background-color: #255ab4;
+    color: white;
+    border: none;
+    border-radius: 5px;
+}
+
+.dropup-menu {
+    display: none;
+    position: absolute;
+    bottom: 100%; /* Position it above the button */
+    left: 0;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    min-width: 100px;
+    /* box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.2); */
+    z-index: 1;
+}
+
+.dropup-menu button {
+    width: 100%;
+    padding: 10px;
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+}
+
+.dropup-menu button:hover {
+    background-color: #f0f0f0;
 }

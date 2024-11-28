@@ -121,6 +121,8 @@ func main() {
 	if err != nil {
 		hlog.Fatalf("error creating renderer: %v", err)
 	}
+	renderer.SetAutoReload(cfg.DebugMode)
+
 	var gameStore hexzmem.GameStore
 	var playerStore hexzmem.PlayerStore
 	if cfg.RedisAddr != "" {

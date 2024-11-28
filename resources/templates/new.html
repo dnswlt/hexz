@@ -10,10 +10,11 @@
     <p class="center">
         Select the game you want to play:
     </p>
-    <div class="centered">
+    <div class="centered spacer">
         <form action="{{.URLPathPrefix}}/new" method="post">
-            <input type="hidden" name="type" id="type" value="Classic">
-            <input class="gameButton" type="submit" value="&#x1F3B9; Classic">
+            <input type="hidden" name="type" id="type" value="Flagz">
+            <input type="hidden" name="singlePlayer" id="singlePlayer" value="true">
+            <input class="gameButton" type="submit" value="&#127480;&#127464; Flagz (1P)">
         </form>
     </div>
     <div class="centered spacer">
@@ -24,9 +25,8 @@
     </div>
     <div class="centered spacer">
         <form action="{{.URLPathPrefix}}/new" method="post">
-            <input type="hidden" name="type" id="type" value="Flagz">
-            <input type="hidden" name="singlePlayer" id="singlePlayer" value="true">
-            <input class="gameButton" type="submit" value="&#127480;&#127464; Flagz (1P)">
+            <input type="hidden" name="type" id="type" value="Classic">
+            <input class="gameButton" type="submit" value="&#x1F3B9; Classic">
         </form>
     </div>
     <div class="centered spacer">
@@ -39,7 +39,7 @@
     <div id="joingame">
         <h1 class="center">Join a game</h1>
         <div class="centered" id="activeGames">
-            <table>
+            <table id="activeGamesTable">
                 <thead>
                     <tr>
                         <th>Game</th>
@@ -47,33 +47,17 @@
                         <th>Type</th>
                     </tr>
                 </thead>
-                <tbody id="activeGamesTbody">
+                <tbody>
                 </tbody>
             </table>
         </div>
     </div>
 
-    <script type="text/javascript">
-        async function getActiveGames() {
-            const resp = await fetch("{{.URLPathPrefix}}/gamez");
-            const games = await resp.json();
-            const tbody = document.getElementById("activeGamesTbody");
-            if (games && games.length > 0) {
-                document.getElementById("joingame").style.display = "block";
-            }
-            for (const g of games) {
-                tbody.insertAdjacentHTML("beforeend", 
-                `<tr>
-                    <td><a href="{{.URLPathPrefix}}/${g.id}">${g.id}</a></td>
-                    <td>${g.host}</td>
-                    <td>${g.gameType}</td>
-                </tr>`);
-            }
-        }
-
-        getActiveGames();
-
+    <script src="{{.URLPathPrefix}}/static/js/game.js"></script>
+    <script>
+        getActiveGames("joingame");
     </script>
+
 </body>
 
 </html>
