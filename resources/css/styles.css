@@ -82,6 +82,7 @@ button {
 .center {
     text-align: center;
 }
+
 div.centered {
     display: flex;
     justify-content: center;
@@ -186,6 +187,13 @@ div:focus, button:focus, input:focus {
     border: none;
     text-align: left;
     cursor: pointer;
+    display: flex;
+    justify-content: center;
+}
+
+.dropup-menu button.selected {
+    color: #2a2a2a;
+    background-color: #92acd9;
 }
 
 .dropup-menu button:hover {

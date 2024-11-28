@@ -757,48 +757,29 @@ async function updateCPUThinkTIme(thinkTimeMillis) {
 // Registers a dropup widget (a dropdown that expands upwards).
 // The callback will be called with the clicked button as the only argument.
 function registerDropup(dropup, callback) {
-    // Make the dropdown focusable with tab.
-    dropup.setAttribute("tabindex", "0");
+    const button = dropup.querySelector(".dropup-button");
     // Open/close the dropdown when gaining/losing focus.
-    dropup.addEventListener("focus", function () {
-        dropup.querySelector(".dropup-menu").classList.add("open");
+    button.addEventListener("click", function (event) {
+        dropup.querySelector(".dropup-menu").classList.toggle("open");
+
     });
-    dropup.addEventListener("blur", function (event) {
-        // We can delay blur until the next event loop cycle (even setTimeout([..], 0) works)
-        // to ensure that clicks on buttons inside the dropup get handled.
-        // 
-        // setTimeout(() => dropup.querySelector(".dropup-menu").classList.remove("open"), 0);
-        //
-        // Alternatively, we can check whether the element that will receive the focus
-        // is inside the dropup, and prevent hiding the dropup entirely:
+    button.addEventListener("blur", function (event) {
         if (event.relatedTarget && dropup.contains(event.relatedTarget)) {
+            // Do not hide the dropup when clicking inside it.
             return;
         }
-        // In all other cases: hide the dropup.
-        dropup.querySelector(".dropup-menu").classList.remove("open")
+        dropup.querySelector(".dropup-menu").classList.remove("open");
     });
-    // Toggle the dropdown menu when clicking the button.
-    // Use "mousedown" instead of "click" to handle the event
-    // before the dropdown loses its focus.
-    const button = dropup.querySelector(".dropup-button");
-    button.addEventListener("mousedown", function (event) {
-        // Prevent dropdown from losing focus:
-        event.preventDefault();
-        if (document.activeElement === dropup) {
-            dropup.blur();
-        } else {
-            dropup.focus();
-        }
-    });
-    // Set the dropdown value on select and hide the dropdown options.
-    dropup.querySelectorAll(".dropup-option").forEach((option) => {
-        option.addEventListener("click", () => {
-            // Delay hiding the dropdown so users see what they clicked.
+    // Identify the selected option, hide the dropup and call the callback.
+    dropup.querySelector(".dropup-menu").addEventListener("click", (event) => {
+        const option = event.target.closest(".dropup-option");
+        if (option) {
+            // Delay hiding the dropup so users see what they clicked.
             setTimeout(() => {
                 dropup.querySelector(".dropup-menu").classList.remove("open");
             }, 100);
             callback(option);
-        });
+        }
     });
 }
 
@@ -812,9 +793,11 @@ function initializeMenus() {
             // Add a small |> marker to the select option.
             option.closest(".dropup-menu").querySelectorAll(".dropup-option").forEach((b) => {
                 if (b === option) {
-                    b.textContent = "\u25B8 " + b.dataset.label;
+                    b.classList.add("selected");
+                    // b.textContent = "\u25B8 " + b.dataset.label;
                 } else {
-                    b.textContent = b.dataset.label
+                    // b.textContent = b.dataset.label
+                    b.classList.remove("selected");
                 }
             });
         });
