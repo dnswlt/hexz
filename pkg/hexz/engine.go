@@ -287,7 +287,7 @@ func (g *GameRepr) AddPlayer(p *pb.Player) {
 }
 
 func (g *GameRepr) AllPlayersJoined() bool {
-	return len(g.State().Players) < g.Engine().NumPlayers()
+	return len(g.State().Players) == g.Engine().NumPlayers()
 }
 
 func (g *GameRepr) Reset() error {
