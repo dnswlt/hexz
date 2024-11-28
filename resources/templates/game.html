@@ -32,15 +32,9 @@
                 <div class="dropup" id="dropup-think-time">
                     <button class="dropup-button">CPU Speed</button>
                     <div class="dropup-menu center">
-                        <!--
-                {{range .CPUThinkTimes}}
-                <button id="think-time-{{.DurationMillis}}">{{.Label}}</button>
-                {{end}}
-                -->
-                        <button data-millis="100" data-label="100ms" class="dropup-option">100ms</button>
-                        <button data-millis="1000" data-label="1s" class="dropup-option">1s</button>
-                        <button data-millis="3000" data-label="3s" class="dropup-option">3s</button>
-                        <button data-millis="5000" data-label="5s" class="dropup-option">5s</button>
+                        {{range .CPUThinkTimes}}
+                        <button data-millis="{{.Millis}}" data-label="{{.Label}}" class="dropup-option">{{.Label}}</button>
+                        {{end}}
                     </div>
                 </div>
                 <div class="dropup" id="dropup-tridot">

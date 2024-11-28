@@ -64,6 +64,9 @@ func main() {
 	flag.Visit(func(f *flag.Flag) {
 		setFlags[f.Name] = true
 	})
+	if cfg.CpuThinkTime <= 0 {
+		hlog.Fatalf("-cpu-think-time must be positive")
+	}
 	switch *cpuPlayerMode {
 	case "wasm":
 		wasmFile := path.Join(cfg.DocumentRoot, "wasm", "hexz.wasm.gz")
