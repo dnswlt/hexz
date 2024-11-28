@@ -8,10 +8,10 @@
 
 DROP TABLE IF EXISTS games;
 CREATE TABLE games (
-    created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     -- Values from the GameInfo proto.
     game_id TEXT NOT NULL,
-    started TIMESTAMP,
+    started TIMESTAMP WITH TIME ZONE NOT NULL,
     game_type TEXT NOT NULL,
     cpu_player_mode TEXT, -- string value of CPUPlayerMode.Enum proto.
     host_name TEXT,
@@ -26,7 +26,7 @@ DROP TABLE IF EXISTS game_history;
 DROP SEQUENCE IF EXISTS game_history_seq;
 CREATE SEQUENCE game_history_seq;
 CREATE TABLE game_history (
-    created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     seqnum INTEGER NOT NULL DEFAULT nextval('game_history_seq'),
     game_id TEXT NOT NULL,
     game_state bytea, -- A serialized GameState proto. NULL for 'undo' and 'redo' entries.
@@ -37,7 +37,7 @@ CREATE TABLE game_history (
 
 DROP TABLE IF EXISTS wasm_stats;
 CREATE TABLE wasm_stats (
-    created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     game_id TEXT NOT NULL,
     game_type TEXT NOT NULL,
     move_num INTEGER,

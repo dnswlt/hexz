@@ -30,13 +30,31 @@ body {
     margin-bottom: 10px;
 }
 
+div.eqspaced {
+    display: flex;
+    width: 100%;
+    /* Ensure equal-width items */
+    justify-content: space-between;
+    /* Vertically centers all children */
+    align-items: center;
+}
+
+/* Children of eqspaced should be ... eq-spaced */
+div.eqspaced > div {
+    flex: 1;
+    text-align: center;
+}
+
+#score {}
+
 #playerOneBadge,
 #playerTwoBadge {
-    display: inline-block;
-    /* TODO: make them occupy all space in the menu row. */
-    width: 7em;
-    text-align: center;
-    padding: 5px;
+    display: inline-flex;
+    justify-content: center;
+    padding: 10px 20px;
+    font-size: 16px;
+    border: none;
+    border-radius: 5px;
 }
 
 #playerOneBadge {
@@ -140,13 +158,15 @@ input.gameButton:hover {
     background-color: #255ab4;
 }
 
-th, td {
+th,
+td {
     text-align: left;
     padding-right: 1em;
 }
 
 #joingame {
-    display: none; /* Initially hidden */
+    display: none;
+    /* Initially hidden */
 }
 
 /* Dropup menu for CPU think time */
@@ -159,30 +179,29 @@ th, td {
     margin-right: 1ex;
 }
 
-.dropup-button, .action-button {
+.dropup-button,
+.action-button {
     padding: 10px 20px;
     font-size: 16px;
+    border: none;
+    border-radius: 5px;
     cursor: pointer;
     color: #1e1e1e;
     background-color: #92acd9;
-    border: none;
-    border-radius: 5px;
-}
-
-.dropup-button:hover, .action-button:hover {
-    color: #ececec;
-    background-color: #255ab4;
 }
 
 
-div:focus, button:focus, input:focus {
+div:focus,
+button:focus,
+input:focus {
     outline: none;
 }
 
 .dropup-menu {
     display: none;
     position: absolute;
-    bottom: 100%; /* Position it above the button */
+    bottom: 100%;
+    /* Position it above the button */
     left: 0;
     border: 1px solid transparent;
     border-radius: 5px;
@@ -206,11 +225,10 @@ div:focus, button:focus, input:focus {
     background-color: #92acd9;
 }
 
-.dropup-menu button:hover {
-    background-color: #3a3a3a;
-    color: white;
-}
-
 .dropup-menu.open {
     display: block;
+}
+
+button {
+    -webkit-tap-highlight-color: transparent;
 }
