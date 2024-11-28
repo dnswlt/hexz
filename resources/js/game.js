@@ -489,18 +489,6 @@ function initialize() {
         e.preventDefault();
         onCanvasClicked(e);
     });
-    document.getElementById("home").addEventListener('click', newGame);
-    document.getElementById("reset").addEventListener('click', resetGame);
-    document.getElementById("undo").addEventListener('click', undoRedoMove("undo"));
-    document.getElementById("redo").addEventListener('click', undoRedoMove("redo"));
-    document.getElementById("shareLink").addEventListener('click', async function () {
-        try {
-            await navigator.clipboard.writeText(window.location.href);
-            console.log("Copied URL to clipboard.");
-        } catch (err) {
-            console.log("Cannot copy to clipboard:", err);
-        }
-    });
 
     initializeMenus();
 
@@ -784,6 +772,10 @@ function registerDropup(dropup, callback) {
 }
 
 function initializeMenus() {
+
+    document.getElementById("undo").addEventListener('click', undoRedoMove("undo"));
+    document.getElementById("redo").addEventListener('click', undoRedoMove("redo"));
+
     const thinkTimeDropup = document.getElementById("dropup-think-time");
     if (thinkTimeDropup) {
         registerDropup(thinkTimeDropup, (option) => {
@@ -801,7 +793,22 @@ function initializeMenus() {
                 }
             });
         });
-        return;
+    }
+    const tridotDropup = document.getElementById("dropup-tridot");
+    if (tridotDropup) {
+        registerDropup(tridotDropup, (option) => {
+            switch (option.id) {
+                case "home":
+                    newGame();
+                    break;
+                case "reset":
+                    resetGame();
+                    break;
+                case "shareLink":
+                    navigator.clipboard.writeText(window.location.href);
+                    break;
+            }
+        });
     }
 }
 

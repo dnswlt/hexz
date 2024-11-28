@@ -3,6 +3,8 @@
 
 <head>
     {{template "snip_head.html" .}}
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+
 </head>
 
 <body>
@@ -19,14 +21,9 @@
                 <span id="playerTwoBadge">&nbsp;</span>
             </div>
         </div>
-        <div class="menurow">
-            <button id="home" class="menuitem">New Game</button>
-            <button id="reset" class="menuitem">Reset</button>
-            <div class="menuitem" id="shareLink">&#x1F517; Share</div>
-        </div>
         <div class="menurow" id="menurow-undo-redo">
-            <button id="undo" class="menuitem">Undo</button>
-            <button id="redo" class="menuitem">Redo</button>
+            <button id="undo" class="action-button">Undo</button>
+            <button id="redo" class="action-button">Redo</button>
             <div class="dropup" id="dropup-think-time">
                 <button class="dropup-button">CPU Speed</button>
                 <div class="dropup-menu center">
@@ -41,7 +38,17 @@
                     <button data-millis="5000" data-label="5s" class="dropup-option">5s</button>
                 </div>
             </div>
-        </div>  
+        </div>
+        <div class="menurow">
+            <div class="dropup" id="dropup-tridot">
+                <button class="dropup-button">...</button>
+                <div class="dropup-menu">
+                    <button id="home" class="dropup-option">New Game</button>
+                    <button id="reset" class="dropup-option">Reset</button>
+                    <button id="shareLink" class="dropup-option"><!-- &#x1F517; --><i class="fas fa-share"></i>&nbsp;Share</button>
+                </div>
+            </div>
+        </div>
     </div>
     <div class="widget" id="announcements"></div>
 

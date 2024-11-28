@@ -136,6 +136,7 @@ div.spacer {
 }
 
 input.gameButton:hover {
+    color: #ececec;
     background-color: #255ab4;
 }
 
@@ -154,15 +155,25 @@ th, td {
     display: inline-block;
 }
 
-.dropup-button {
+.action-button {
+    margin-right: 1ex;
+}
+
+.dropup-button, .action-button {
     padding: 10px 20px;
     font-size: 16px;
     cursor: pointer;
-    background-color: #255ab4;
-    color: #ececec;
+    color: #1e1e1e;
+    background-color: #92acd9;
     border: none;
     border-radius: 5px;
 }
+
+.dropup-button:hover, .action-button:hover {
+    color: #ececec;
+    background-color: #255ab4;
+}
+
 
 div:focus, button:focus, input:focus {
     outline: none;
@@ -185,7 +196,6 @@ div:focus, button:focus, input:focus {
     background-color: #2a2a2a;
     color: #cbcbcb;
     border: none;
-    text-align: left;
     cursor: pointer;
     display: flex;
     justify-content: center;

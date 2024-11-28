@@ -714,7 +714,11 @@ func (s *StatelessServer) handleValidMoves(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (s *StatelessServer) handleUndo(w http.ResponseWriter, r *http.Request) {
+func (s *StatelessServer) handleUndoRedo(w http.ResponseWriter, r *http.Request) {
+	action := "undo"
+	if strings.Contains(r.URL.Path, "/redo/") {
+		action = "redo"
+	}
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
 		http.Error(w, "", http.StatusBadRequest)
@@ -734,13 +738,18 @@ func (s *StatelessServer) handleUndo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := g.Undo(); err != nil {
+	if action == "undo" {
+		err = g.Undo()
+	} else {
+		err = g.Redo()
+	}
+	if err != nil {
 		if errors.Is(err, errUndoRedoEmpty) {
-			http.Error(w, "Cannot undo: no previous state", http.StatusPreconditionFailed)
+			http.Error(w, "Cannot undo/redo: no previous state", http.StatusPreconditionFailed)
 			return
 		}
-		hlog.Errorf("Undo failed: %v", err)
-		http.Error(w, "Cannot undo (no previous state?)", http.StatusInternalServerError)
+		hlog.Errorf("%s failed: %v", action, err)
+		http.Error(w, "Failed to undo/redo", http.StatusInternalServerError)
 		return
 	}
 	if err := s.gameStore.UpdateGame(r.Context(), g.State()); err != nil {
@@ -749,51 +758,7 @@ func (s *StatelessServer) handleUndo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.dbStore != nil {
-		if err := s.dbStore.InsertHistory(r.Context(), "undo", gameId, nil); err != nil {
-			hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
-		}
-	}
-	s.gameStore.Publish(r.Context(), gameId, &pb.GameStorePubsubEvent{
-		GameId: gameId,
-		Event:  &pb.GameStorePubsubEvent_GameUpdated_{},
-	})
-}
-
-func (s *StatelessServer) handleRedo(w http.ResponseWriter, r *http.Request) {
-	p, err := s.lookupPlayerFromCookie(r)
-	if err != nil {
-		http.Error(w, "", http.StatusBadRequest)
-	}
-	gameId := r.PathValue("gameId")
-	if !isValidGameId(gameId) {
-		http.Error(w, "Invalid game ID", http.StatusBadRequest)
-		return
-	}
-	g, err := s.loadGame(r.Context(), gameId)
-	if err != nil {
-		http.Error(w, "No such game", http.StatusNotFound)
-		return
-	}
-	if g.PlayerNum(string(p.Id)) == 0 {
-		http.Error(w, "Only players can redo a move", http.StatusForbidden)
-		return
-	}
-	if err := g.Redo(); err != nil {
-		if errors.Is(err, errUndoRedoEmpty) {
-			http.Error(w, "No next game state", http.StatusNotFound)
-			return
-		}
-		hlog.Errorf("Failed to redo move: %v", err)
-		http.Error(w, "Failed to redo move", http.StatusInternalServerError)
-		return
-	}
-	if err := s.gameStore.UpdateGame(r.Context(), g.State()); err != nil {
-		http.Error(w, "failed to save game state", http.StatusInternalServerError)
-		hlog.Errorf("Could not store game %s: %s", gameId, err)
-		return
-	}
-	if s.dbStore != nil {
-		if err := s.dbStore.InsertHistory(r.Context(), "redo", gameId, nil); err != nil {
+		if err := s.dbStore.InsertHistory(r.Context(), action, gameId, nil); err != nil {
 			hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
 		}
 	}
@@ -1149,8 +1114,8 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	// Methods for CPU player.
 	handleFunc("/state/{gameId}", s.handleState)
 	handleFunc("/wasmstats/{gameId}", postHandlerFunc(s.handleWASMStats))
-	handleFunc("/undo/{gameId}", postHandlerFunc(s.handleUndo))
-	handleFunc("/redo/{gameId}", postHandlerFunc(s.handleRedo))
+	handleFunc("/undo/{gameId}", postHandlerFunc(s.handleUndoRedo))
+	handleFunc("/redo/{gameId}", postHandlerFunc(s.handleUndoRedo))
 	handleFunc("/gamesettings/{gameId}", postHandlerFunc(s.handleGameSettings))
 	// Server-sent Event handling
 	handleFunc("/sse/{gameId}", s.handleSSE)
