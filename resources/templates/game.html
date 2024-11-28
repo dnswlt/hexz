@@ -13,7 +13,7 @@
     </div>
     <div id="controls" class="menu">
         <div class="menurow">
-            <div class="menuitem eqspaced">
+            <div class="eqspaced">
                 <div id="playerOneBadge">&nbsp;</div>
                 <div id="score">
                     <span id="playerOneTurnInfo">&#9664;</span>
@@ -23,32 +23,36 @@
                 <div id="playerTwoBadge">&nbsp;</div>
             </div>
         </div>
-        <div class="menurow" id="menurow-undo-redo">
-            <button id="undo" class="action-button">Undo</button>
-            <button id="redo" class="action-button">Redo</button>
-            <div class="dropup" id="dropup-think-time">
-                <button class="dropup-button">CPU Speed</button>
-                <div class="dropup-menu center">
-                    <!--
-                    {{range .CPUThinkTimes}}
-                    <button id="think-time-{{.DurationMillis}}">{{.Label}}</button>
-                    {{end}}
-                    -->
-                    <button data-millis="100" data-label="100ms" class="dropup-option">100ms</button>
-                    <button data-millis="1000" data-label="1s" class="dropup-option">1s</button>
-                    <button data-millis="3000" data-label="3s" class="dropup-option">3s</button>
-                    <button data-millis="5000" data-label="5s" class="dropup-option">5s</button>
-                </div>
+        <div class="menurow">
+            <div class="eqspaced">
+                <button id="undo" class="action-button">Undo</button>
+                <button id="redo" class="action-button">Redo</button>
             </div>
         </div>
         <div class="menurow">
-            <div class="dropup" id="dropup-tridot">
-                <button class="dropup-button">...</button>
-                <div class="dropup-menu">
-                    <button id="home" class="dropup-option">New Game</button>
-                    <button id="reset" class="dropup-option">Reset</button>
-                    <button id="shareLink" class="dropup-option"><!-- &#x1F517; --><i
-                            class="fas fa-share"></i>&nbsp;Share</button>
+            <div class="hflow">
+                <div class="dropup" id="dropup-think-time">
+                    <button class="dropup-button">CPU Speed</button>
+                    <div class="dropup-menu center">
+                        <!--
+                {{range .CPUThinkTimes}}
+                <button id="think-time-{{.DurationMillis}}">{{.Label}}</button>
+                {{end}}
+                -->
+                        <button data-millis="100" data-label="100ms" class="dropup-option">100ms</button>
+                        <button data-millis="1000" data-label="1s" class="dropup-option">1s</button>
+                        <button data-millis="3000" data-label="3s" class="dropup-option">3s</button>
+                        <button data-millis="5000" data-label="5s" class="dropup-option">5s</button>
+                    </div>
+                </div>
+                <div class="dropup" id="dropup-tridot">
+                    <button class="dropup-button">...</button>
+                    <div class="dropup-menu">
+                        <button id="home" class="dropup-option">New Game</button>
+                        <button id="reset" class="dropup-option">Reset</button>
+                        <button id="shareLink" class="dropup-option"><!-- &#x1F517; --><i
+                                class="fas fa-share"></i>&nbsp;Share</button>
+                    </div>
                 </div>
             </div>
         </div>

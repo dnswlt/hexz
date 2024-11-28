@@ -58,7 +58,6 @@ func main() {
 	flag.StringVar(&cfg.AuthTokenSha256, "auth-token", "", "SHA256 token for access to restricted paths (http authentication)")
 	flag.StringVar(&cfg.TlsCertChain, "tls-cert", "", "Path to chain.pem for TLS")
 	flag.StringVar(&cfg.TlsPrivKey, "tls-key", "", "Path to privkey.pem for TLS")
-	flag.BoolVar(&cfg.DisableUndo, "disable-undo", false, "If true, games will not support undo/redo")
 	logFormat := flag.String("log-format", "plain", "Format of log messages. One of {plain, json}.")
 	flag.Parse()
 	setFlags := make(map[string]bool)

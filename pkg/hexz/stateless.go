@@ -49,7 +49,6 @@ type ServerConfig struct {
 	CpuThinkTime       time.Duration
 	CpuMaxFlags        int
 	AuthTokenSha256    string // Used in http Basic authentication for /statusz. Must be a SHA256 checksum.
-	DisableUndo        bool   // If true, Undo/Redo is enabled for all games
 	TlsCertChain       string
 	TlsPrivKey         string
 	DebugMode          bool
@@ -1023,7 +1022,6 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 			GameType:            g.Engine().GameType(),
 			ClientSideCPUPlayer: g.State().GameInfo.CpuPlayer == pb.CPUPlayerMode_WASM,
 		},
-		DisableUndo: s.config.DisableUndo,
 	})
 	if err != nil {
 		hlog.Errorf("Cannot send initial ServerEvent: %s", err)

@@ -28,8 +28,6 @@ type ServerEvent struct {
 	Winner int `json:"winner,omitempty"`
 	// Only sent in the first event to clients.
 	GameInfo *ServerEventGameInfo `json:"gameInfo,omitempty"`
-	// If true, the client should not display undo/redo buttons.
-	DisableUndo bool `json:"disableUndo,omitempty"`
 	// Signals to clients that this is the last event they will receive.
 	LastEvent bool `json:"lastEvent"`
 }

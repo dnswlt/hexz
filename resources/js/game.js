@@ -106,11 +106,6 @@ function handleServerEvent(sse, serverEvent) {
     if (serverEvent.role > 0) {
         gstate.role = serverEvent.role;
     }
-    if (serverEvent.disableUndo) {
-        console.log("Disabling undo/redo menu");
-        let menurow = document.getElementById("menurow-undo-redo");
-        menurow.style.display = "none";
-    }
     if (serverEvent?.gameInfo?.clientSideCPUPlayer) {
         gstate.clientSideCPUPlayer = true;
         if (!wasmWorker) {
