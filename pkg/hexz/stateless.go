@@ -823,8 +823,7 @@ func (s *StatelessServer) handleGameSettings(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var req GameSettingsRequest
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&req); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "unmarshal error", http.StatusBadRequest)
 		hlog.Infof("bad request for game settings: %v", err)
 		return
@@ -841,7 +840,7 @@ func (s *StatelessServer) handleGameSettings(w http.ResponseWriter, r *http.Requ
 	if req.CPUThinkTimeMillis > 0 && req.CPUThinkTimeMillis <= s.config.CpuThinkTime.Milliseconds() {
 		hlog.Infof("Updating CPU think time to %dms for game %v", req.CPUThinkTimeMillis, gameId)
 		settings.CpuThinkTimeMillis = req.CPUThinkTimeMillis
-	} else {
+	} else if req.CPUThinkTimeMillis != 0 {
 		hlog.Infof("Ignoring request to set CpuThinkTimeMillis to %dms for game %v", req.CPUThinkTimeMillis, gameId)
 	}
 	if err := s.gameStore.UpdateGame(r.Context(), g.State()); err != nil {
@@ -850,7 +849,7 @@ func (s *StatelessServer) handleGameSettings(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if s.dbStore != nil {
-		if err := s.dbStore.InsertHistory(r.Context(), "settings", gameId, nil); err != nil {
+		if err := s.dbStore.InsertHistory(r.Context(), "settings", gameId, g.State()); err != nil {
 			hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
 		}
 	}
