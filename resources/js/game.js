@@ -173,13 +173,23 @@ function updateScore() {
 }
 
 function updateTurnInfo() {
+    // Show/hide the small triangle next to the score of the player whose turn it is.
     let ts = [
         document.getElementById("playerOneTurnInfo"),
         document.getElementById("playerTwoTurnInfo"),
     ];
     let turn = gstate.board.turn - 1;
     ts[turn].style.visibility = 'visible';
-    ts[(turn + 1) % 2].style.visibility = 'hidden';
+    ts[1-turn].style.visibility = 'hidden';
+    // Darken the color of the player whose turn it is not.
+    let bs = [
+        document.getElementById("playerOneBadge"),
+        document.getElementById("playerTwoBadge"),
+    ]
+    bs[turn].classList.add("turn");
+    bs[turn].classList.remove("no-turn");
+    bs[1-turn].classList.add("no-turn");
+    bs[1-turn].classList.remove("turn");
 }
 
 function updatePlayerNames() {
@@ -187,7 +197,7 @@ function updatePlayerNames() {
         document.getElementById("playerOneBadge"),
         document.getElementById("playerTwoBadge"),
     ];
-    for (let i = 0; i < gstate.playerNames.length; i++) {
+    for (let i = 0; i < Math.min(2, gstate.playerNames.length); i++) {
         ps[i].innerHTML = gstate.playerNames[i];
     }
 }
