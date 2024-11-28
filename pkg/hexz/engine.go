@@ -292,9 +292,16 @@ func (g *GameRepr) AllPlayersJoined() bool {
 
 func (g *GameRepr) Reset() error {
 	g.Engine().Reset()
-	var err error
-	g.state.EngineState, err = g.Engine().Encode()
-	return err
+	enc, err := g.Engine().Encode()
+	if err != nil {
+		return err
+	}
+	g.state.EngineState = enc
+	g.state.UndoRedoState.InitialState = enc
+	// Remove undo/redo stack on reset.
+	g.state.UndoRedoState.Moves = nil
+	g.state.UndoRedoState.RedoMoves = nil
+	return nil
 }
 
 func (g *GameRepr) MakeMove(move GameEngineMove) error {

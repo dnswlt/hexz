@@ -386,9 +386,8 @@ func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "game does not exist", http.StatusNotFound)
 		return
 	}
-	dec := json.NewDecoder(r.Body)
 	var req ResetRequest
-	if err := dec.Decode(&req); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "unmarshal error", http.StatusBadRequest)
 		return
 	}
@@ -401,16 +400,7 @@ func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
 		hlog.Errorf("Cannot reset game %s: %v", gameId, err)
 		return
 	}
-	if err := s.gameStore.UpdateGame(r.Context(), g.State()); err != nil {
-		http.Error(w, "cannot update game", http.StatusInternalServerError)
-		hlog.Errorf("Cannot update game %s: %s", gameId, err)
-		return
-	}
-	// Inform other players.
-	s.gameStore.Publish(r.Context(), gameId, &pb.GameStorePubsubEvent{
-		GameId: gameId,
-		Event:  &pb.GameStorePubsubEvent_GameUpdated_{},
-	})
+	s.storeGameAndNotify(r.Context(), "reset", g)
 }
 
 func (s *StatelessServer) handleHexz(w http.ResponseWriter, r *http.Request) {
@@ -551,21 +541,21 @@ func (s *StatelessServer) loadGame(ctx context.Context, gameId string) (*GameRep
 	return NewGameRepr(gameState), nil
 }
 
-func (s *StatelessServer) storeGameAndNotify(ctx context.Context, g *GameRepr) error {
+func (s *StatelessServer) storeGameAndNotify(ctx context.Context, entryType string, g *GameRepr) error {
 	gameId := g.State().GetGameInfo().GetId()
 	if err := s.gameStore.UpdateGame(ctx, g.State()); err != nil {
 		return fmt.Errorf("failed to save game state: %v", err)
 	}
 	if s.dbStore != nil {
-		if err := s.dbStore.InsertHistory(ctx, "move", gameId, g.State()); err != nil {
-			hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
+		if err := s.dbStore.InsertHistory(ctx, entryType, gameId, g.State()); err != nil {
+			hlog.Errorf("Cannot add history entry for entry type %s, game %s in database: %s", entryType, gameId, err)
+			return err
 		}
 	}
-	s.gameStore.Publish(ctx, gameId, &pb.GameStorePubsubEvent{
+	return s.gameStore.Publish(ctx, gameId, &pb.GameStorePubsubEvent{
 		GameId: gameId,
 		Event:  &pb.GameStorePubsubEvent_GameUpdated_{},
 	})
-	return nil
 }
 
 func (s *StatelessServer) goMakeCPUMove(g *GameRepr) {
@@ -609,7 +599,7 @@ func (s *StatelessServer) goMakeCPUMove(g *GameRepr) {
 			}
 			flagz = g.Engine().(*GameEngineFlagz)
 			ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
-			err = s.storeGameAndNotify(ctx, g)
+			err = s.storeGameAndNotify(ctx, "move", g)
 			cancel()
 			if err != nil {
 				hlog.Errorf("failed to store game after CPU move: %v", err)
@@ -667,7 +657,7 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Store new game state and notify other players.
-	if err := s.storeGameAndNotify(r.Context(), g); err != nil {
+	if err := s.storeGameAndNotify(r.Context(), "move", g); err != nil {
 		http.Error(w, "failed to save game state", http.StatusInternalServerError)
 		hlog.Errorf("Could not store game %s: %v", gameId, err)
 		return
@@ -756,15 +746,7 @@ func (s *StatelessServer) handleUndoRedo(w http.ResponseWriter, r *http.Request)
 		hlog.Errorf("Could not store game %s: %s", gameId, err)
 		return
 	}
-	if s.dbStore != nil {
-		if err := s.dbStore.InsertHistory(r.Context(), action, gameId, nil); err != nil {
-			hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
-		}
-	}
-	s.gameStore.Publish(r.Context(), gameId, &pb.GameStorePubsubEvent{
-		GameId: gameId,
-		Event:  &pb.GameStorePubsubEvent_GameUpdated_{},
-	})
+	s.storeGameAndNotify(r.Context(), action, g)
 }
 
 func (s *StatelessServer) handleGameSettings(w http.ResponseWriter, r *http.Request) {

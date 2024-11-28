@@ -9,6 +9,7 @@
     --light-text: #ececec;
     --medium-gray: #5f5f5f;
     --medium-dark-gray: #3a3a3a;
+    --orange-highlight: #da8100;
 }
 
 html {
@@ -83,7 +84,7 @@ div.hflow {
 #playerOneBadge.turn {
     color: var(--light-text);
     background-color: var(--blue-normal);
-    border: 3px solid var(--blue-light);
+    border: 3px solid var(--orange-highlight);
 }
 #playerOneBadge.no-turn {
     color: var(--dark-text);
@@ -92,7 +93,7 @@ div.hflow {
 #playerTwoBadge.turn {
     color: var(--dark-text);
     background-color: var(--yellow-normal);
-    border: 3px solid #da8100;
+    border: 3px solid var(--orange-highlight); /* #da8100; */
 }
 #playerTwoBadge.no-turn {
     color: var(--dark-text);
