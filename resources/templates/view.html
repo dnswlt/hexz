@@ -23,8 +23,18 @@
         </div>
         <div class="menurow">
             <div class="eqspaced">
-                <button id="prevMove" class="action-button">Prev</button>
-                <button id="nextMove" class="action-button">Next</button>
+                <button id="backwardFast" class="action-button">
+                    <i class="fa-solid fa-backward-fast"></i>
+                </button>
+                <button id="backward" class="action-button">
+                    <i class="fa-solid fa-backward-step"></i>
+                </button>
+                <button id="forward" class="action-button">
+                    <i class="fa-solid fa-forward-step"></i>
+                </button>
+                <button id="forwardFast" class="action-button">
+                    <i class="fa-solid fa-forward-fast"></i>
+                </button>
             </div>
         </div>
     </div>
@@ -64,10 +74,7 @@
                 await loadHistory(gameId);
             }
             const currentSeqNum = parseInt(pathSegs[pathSegs.length - 1]);
-            const newSeqNum = currentSeqNum + moveDelta;
-            if (newSeqNum < 0 || newSeqNum >= gameHistory.entries.length) {
-                return;
-            }
+            const newSeqNum = Math.max(0, Math.min(currentSeqNum + moveDelta, gameHistory.entries.length - 1));
             const entry = gameHistory.entries[newSeqNum];
             gstate.board = entry.board;
             gstate.moveScores = entry.moveScores;
@@ -91,12 +98,16 @@
                 e.preventDefault();
                 onCanvasClicked(e);
             });
-            document.getElementById("prevMove").addEventListener('click', async function () {
-                await updateMove(-1);
-            });
-            document.getElementById("nextMove").addEventListener('click', async function () {
-                await updateMove(1);
-            });
+            for (const [id, step] of [
+                ["backwardFast", -10],
+                ["backward", -1],
+                ["forward", 1],
+                ["forwardFast", 10],
+            ]) {
+                document.getElementById(id).addEventListener('click', () => {
+                    updateMove(step);
+                });
+            }
             document.addEventListener("keypress", function onPress(event) {
                 if (event.repeat) {
                     return;
