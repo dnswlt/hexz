@@ -2,9 +2,14 @@ package hexzmem
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/dnswlt/hexz/internal/api"
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
+)
+
+var (
+	ErrExists = fmt.Errorf("entity already exists")
 )
 
 type PlayerStore interface {
@@ -18,8 +23,8 @@ type PlayerStore interface {
 // GameStore is an interface for local or remote game stores, e.g. Redis.
 type GameStore interface {
 	// StoreNewGame stores a new game using the game ID s.GameInfo.Id.
-	// Returns false if a game with that ID exists, and does not store anything.
-	StoreNewGame(ctx context.Context, state *pb.GameState) (bool, error)
+	// Returns ErrExists if a game with that ID exists, and does not store anything.
+	StoreNewGame(ctx context.Context, state *pb.GameState) error
 	// LookupGame looks up the current game state for the given gameId.
 	LookupGame(ctx context.Context, gameId string) (*pb.GameState, error)
 	// UpdateGame updates the game state for game ID s.GameInfo.Id.

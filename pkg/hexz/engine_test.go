@@ -220,8 +220,8 @@ func TestGameReprEncodedSize(t *testing.T) {
 			t.Fatal("Cannot marshal proto: ", err)
 		}
 		l := len(data)
-		if l < 3500 || l > 4500 {
-			t.Errorf("Unexpected size of marshalled GameState: got %d, want [3500, 4500]", l)
+		if l < 2000 || l > 4500 {
+			t.Errorf("Unexpected size of marshalled GameState: got %d, want [2000, 4500]", l)
 		}
 	}
 

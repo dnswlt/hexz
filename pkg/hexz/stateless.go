@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"net/http"
 	"os"
 	"path"
@@ -25,6 +24,7 @@ import (
 	"github.com/dnswlt/hexz/internal/hexzmem"
 	"github.com/dnswlt/hexz/internal/hexzsql"
 	"github.com/dnswlt/hexz/internal/hlog"
+	"github.com/dnswlt/hexz/internal/xrand"
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 	"google.golang.org/protobuf/proto"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
@@ -122,19 +122,18 @@ func isValidPlayerName(name string) bool {
 	return len(name) >= 3 && len(name) <= 20 && playernameRegexp.MatchString(name)
 }
 
-// Generates a 6-letter game ID.
+const (
+	uppercaseLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+)
+
+// Generates a game ID consisting of 6 uppercase ASCII letters.
 func GenerateGameId() string {
-	var alphabet = []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	var b strings.Builder
+	var id [6]byte
 	for i := 0; i < 6; i++ {
-		max := big.NewInt(int64(len(alphabet)))
-		n, err := crand.Int(crand.Reader, max)
-		if err != nil {
-			panic(fmt.Sprintf("cannot generate random number: %s", err.Error()))
-		}
-		b.WriteRune(alphabet[n.Int64()])
+		j := xrand.Intn(len(uppercaseLetters))
+		id[i] = uppercaseLetters[j]
 	}
-	return b.String()
+	return string(id[:])
 }
 
 func isValidGameId(gameId string) bool {
@@ -142,7 +141,7 @@ func isValidGameId(gameId string) bool {
 		return false
 	}
 	for i := 0; i < len(gameId); i++ {
-		if gameId[i] < 'A' || gameId[i] > 'Z' {
+		if !(gameId[i] >= 'A' && gameId[i] <= 'Z') {
 			return false
 		}
 	}
@@ -236,8 +235,40 @@ func (s *StatelessServer) lookupPlayerFromCookie(r *http.Request) (api.Player, e
 	return s.playerStore.Lookup(r.Context(), api.PlayerId(cookie.Value))
 }
 
+// Stores the given game info and engineState as a new game in the game store.
+// The `GameInfo.Id` will be set to a new, random value in the provided gameInfo.
+func (s *StatelessServer) storeNewGame(ctx context.Context, gameInfo *pb.GameInfo, players []*pb.Player, engineState *pb.GameEngineState) (*GameRepr, error) {
+	// Try to find an unused gameId. This loop should usually exit after the first iteration.
+	maxAttempts := 100
+	gameState := &pb.GameState{
+		GameInfo:    gameInfo,
+		Players:     players,
+		EngineState: engineState,
+		UndoRedoState: &pb.GameState_UndoRedoState{
+			InitialState: engineState,
+		},
+	}
+	for i := 0; i < maxAttempts; i++ {
+		gameState.GameInfo.Id = GenerateGameId()
+		if err := s.gameStore.StoreNewGame(ctx, gameState); err != nil {
+			if errors.Is(err, hexzmem.ErrExists) {
+				continue // Try again with a new game ID
+			}
+			return nil, err
+		}
+		// Game was successfully stored in gameStore.
+		if s.dbStore != nil {
+			if err := s.dbStore.StoreGame(ctx, gameInfo.Host, gameState); err != nil {
+				hlog.Errorf("Cannot store game %s in database: %s", gameState.GameInfo.Id, err)
+			}
+		}
+		return NewGameRepr(gameState), nil
+	}
+	return nil, fmt.Errorf("failed to find a new game ID after %d attempts", maxAttempts)
+}
+
 // Stores a new game in the game store and returns the new game ID.
-func (s *StatelessServer) startNewGame(ctx context.Context, p *api.Player, gameType api.GameType, singlePlayer bool) (string, error) {
+func (s *StatelessServer) startNewGame(ctx context.Context, p *api.Player, gameType api.GameType, singlePlayer bool) (*GameRepr, error) {
 	engineState := NewGameEngine(gameType).Proto()
 	players := []*pb.Player{{Id: string(p.Id), Name: p.Name}}
 	if singlePlayer {
@@ -247,42 +278,16 @@ func (s *StatelessServer) startNewGame(ctx context.Context, p *api.Player, gameT
 	if singlePlayer {
 		cpuPlayer = s.config.CPUPlayerMode
 	}
-	// Try to find an unused gameId. This loop should usually exit after the first iteration.
-	var gameState *pb.GameState
-	for i := 0; i < 100; i++ {
-		gs := &pb.GameState{
-			GameInfo: &pb.GameInfo{
-				Id:        GenerateGameId(),
-				Host:      p.Name,
-				Started:   tpb.Now(),
-				Type:      string(gameType),
-				CpuPlayer: cpuPlayer,
-				Settings: &pb.GameInfo_Settings{
-					CpuThinkTimeMillis: s.config.CpuThinkTime.Milliseconds(),
-				},
-			},
-			Players:     players, // More players are registed in handleSSE.
-			EngineState: engineState,
-			UndoRedoState: &pb.GameState_UndoRedoState{
-				InitialState: engineState,
-			},
-		}
-		if ok, err := s.gameStore.StoreNewGame(ctx, gs); err != nil {
-			return "", err
-		} else if ok {
-			gameState = gs
-			break
-		}
+	gameInfo := &pb.GameInfo{
+		Host:      p.Name,
+		Started:   tpb.Now(),
+		Type:      string(gameType),
+		CpuPlayer: cpuPlayer,
+		Settings: &pb.GameInfo_Settings{
+			CpuThinkTimeMillis: s.config.CpuThinkTime.Milliseconds(),
+		},
 	}
-	if gameState == nil {
-		return "", fmt.Errorf("cannot find unused gameId")
-	}
-	if s.dbStore != nil {
-		if err := s.dbStore.StoreGame(ctx, string(p.Id), gameState); err != nil {
-			hlog.Errorf("Cannot store game %s in database: %s", gameState.GameInfo.Id, err)
-		}
-	}
-	return gameState.GameInfo.Id, nil
+	return s.storeNewGame(ctx, gameInfo, players, engineState)
 }
 
 // Sends the contents of filename to the ResponseWriter.
@@ -358,13 +363,13 @@ func (s *StatelessServer) handleNewGame(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	gameId, err := s.startNewGame(r.Context(), &p, api.GameType(typeParam), singlePlayer)
+	g, err := s.startNewGame(r.Context(), &p, api.GameType(typeParam), singlePlayer)
 	if err != nil {
 		hlog.Errorf("Cannot start new game: %s\n", err)
 		http.Error(w, "", http.StatusPreconditionFailed)
 		return
 	}
-	http.Redirect(w, r, s.prefix(gameId), http.StatusSeeOther)
+	http.Redirect(w, r, s.prefix(g.GameID()), http.StatusSeeOther)
 }
 
 func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
@@ -393,9 +398,21 @@ func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	g.Reset()
-
-	s.storeGameAndNotify(r.Context(), "reset", g)
+	newEngineState := NewGameEngine(api.GameType(g.State().GetGameInfo().Type)).Proto()
+	newG, err := s.storeNewGame(r.Context(), g.State().GameInfo, g.State().Players, newEngineState)
+	if err != nil {
+		hlog.Errorf("Reset: failed to store new game: %v", err)
+		http.Error(w, "could not store new game", http.StatusInternalServerError)
+		return
+	}
+	s.gameStore.Publish(r.Context(), gameId, &pb.GameStorePubsubEvent{
+		GameId: gameId,
+		Event: &pb.GameStorePubsubEvent_NewGameStarted_{
+			NewGameStarted: &pb.GameStorePubsubEvent_NewGameStarted{
+				GameId: newG.GameID(),
+			},
+		},
+	})
 }
 
 func (s *StatelessServer) handleHexz(w http.ResponseWriter, r *http.Request) {
@@ -559,9 +576,8 @@ func (s *StatelessServer) storeGameAndNotify(ctx context.Context, entryType stri
 }
 
 func (s *StatelessServer) goMakeCPUMove(g *GameRepr) {
-	_, ok := g.Engine().(*GameEngineFlagz)
-	if !ok {
-		hlog.Errorf("Cannot make move for game type %v", g.Engine().GameType())
+	if typ := g.State().GetGameInfo().Type; typ != string(gameTypeFlagz) {
+		hlog.Errorf("Cannot make move for game %v of type %v", g.GameID(), typ)
 		return
 	}
 	cpuThinkTime := s.config.CpuThinkTime
@@ -579,12 +595,19 @@ func (s *StatelessServer) goMakeCPUMove(g *GameRepr) {
 		hlog.Errorf("Async CPU move requested for CPU player type %v", g.State().GameInfo.CpuPlayer)
 		return
 	}
-	turn := g.Engine().Board().Turn
-	go func() {
+	go func(gameId string, turn int) {
 		// Play 1..N moves while it is CPU's turn and the game is not over.
-		flagz := g.Engine().(*GameEngineFlagz)
-		for !flagz.IsDone() && flagz.Board().Turn == turn {
-			gameId := g.State().GetGameInfo().GetId()
+		for {
+			// Always load the game from the store, it might have been modified concurrently (e.g. reset)
+			g, err := s.loadGame(context.Background(), gameId)
+			if err != nil {
+				hlog.Errorf("MakeCPUMove: Could not load game: %v", err)
+				return
+			}
+			flagz := g.Engine().(*GameEngineFlagz)
+			if flagz.IsDone() || flagz.Board().Turn != turn {
+				return
+			}
 			hlog.Infof("Requesting CPU move (%T) for game %s, move %d", cpuPlayer, gameId, flagz.Board().Move)
 			ctx, cancel := context.WithTimeout(context.Background(), max(cpuThinkTime*2, 1*time.Second))
 			move, _, err := cpuPlayer.SuggestMove(ctx, flagz)
@@ -597,15 +620,14 @@ func (s *StatelessServer) goMakeCPUMove(g *GameRepr) {
 				hlog.Errorf("failed to make a CPU move for game %s: %v", gameId, err)
 				return
 			}
-			flagz = g.Engine().(*GameEngineFlagz)
 			ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 			err = s.storeGameAndNotify(ctx, "move", g)
 			cancel()
 			if err != nil {
-				hlog.Errorf("failed to store game after CPU move: %v", err)
+				hlog.Errorf("failed to store game %s after CPU move: %v", gameId, err)
 			}
 		}
-	}()
+	}(g.GameID(), g.Engine().Board().Turn)
 }
 
 func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
@@ -1057,6 +1079,25 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 				PlayerNames:   g.PlayerNames(),
 				Winner:        winner,
 				Announcements: announcements,
+			})
+			if err != nil {
+				hlog.Errorf("Cannot send ServerEvent: %s", err)
+				return
+			}
+		case *pb.GameStorePubsubEvent_NewGameStarted_:
+			newGameId := event.NewGameStarted.GameId
+			g, err := s.loadGame(r.Context(), newGameId)
+			if err != nil {
+				hlog.Errorf("Cannot load game %s from NewGameStarted event: %v", newGameId, err)
+				return
+			}
+			err = sendSSEEvent(w, ServerEvent{
+				Timestamp:     time.Now(),
+				NewGameID:     newGameId,
+				Board:         g.Engine().Board().ViewFor(pNum),
+				Role:          pNum,
+				PlayerNames:   g.PlayerNames(),
+				Announcements: []string{fmt.Sprintf("New game %s has started!", newGameId)},
 			})
 			if err != nil {
 				hlog.Errorf("Cannot send ServerEvent: %s", err)

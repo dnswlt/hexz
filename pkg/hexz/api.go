@@ -23,13 +23,15 @@ type ServerEvent struct {
 	Role          int      `json:"role"`
 	PlayerNames   []string `json:"playerNames"`
 	Announcements []string `json:"announcements"`
-	DebugMessage  string   `json:"debugMessage"`
 	// Number of the player that wins. 0 if no winner yet or draw.
 	Winner int `json:"winner,omitempty"`
-	// Only sent in the first event to clients.
+	// Only populated in the first event.
 	GameInfo *ServerEventGameInfo `json:"gameInfo,omitempty"`
-	// Signals to clients that this is the last event they will receive.
-	LastEvent bool `json:"lastEvent"`
+	// Only populated if the game was reset and a new one starts under a
+	// new game ID. Clients are expected to maintain their SSE connection
+	// and start playing the new game.
+	// The new game's board and other data are part of the same message.
+	NewGameID string `json:"newGameId"`
 }
 
 // Sent in an initial message to clients.

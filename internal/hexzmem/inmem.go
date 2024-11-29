@@ -196,14 +196,14 @@ func (s *InMemoryGameStore) deleteOldGames() {
 	s.gameStatesSeq = s.gameStatesSeq[:j]
 }
 
-func (s *InMemoryGameStore) StoreNewGame(ctx context.Context, state *pb.GameState) (bool, error) {
+func (s *InMemoryGameStore) StoreNewGame(ctx context.Context, state *pb.GameState) error {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 	s.deleteOldGames()
 	state.Modified = tpb.Now()
 	gameId := state.GetGameInfo().GetId()
 	if _, ok := s.gameStates[gameId]; ok {
-		return false, nil
+		return ErrExists
 	}
 	// Create a copy, like the remote store would, to avoid nasty concurrent access problems.
 	s.gameStates[gameId] = &gameStoreEntry{
@@ -211,7 +211,7 @@ func (s *InMemoryGameStore) StoreNewGame(ctx context.Context, state *pb.GameStat
 		created:   time.Now(),
 	}
 	s.gameStatesSeq = append(s.gameStatesSeq, gameId)
-	return true, nil
+	return nil
 }
 
 func (s *InMemoryGameStore) LookupGame(ctx context.Context, gameId string) (*pb.GameState, error) {

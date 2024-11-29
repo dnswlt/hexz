@@ -2,7 +2,7 @@ syntax = "proto3";
 package hexzpb;
 
 import "google/protobuf/timestamp.proto";
-option go_package = "github.com/dnswlt/hexz/hexzpb";
+option go_package = "github.com/dnswlt/hexz/pkg/hexzpb";
 
 message Board {
     enum GameState {
@@ -131,36 +131,23 @@ message GameEngineMove {
 
 // GameStore (Redis) pubsub events
 message GameStorePubsubEvent {
+    // A new player joined the game.
     message PlayerJoined {
         string player_name = 1;
     }
-    message GameUpdated {
+    // The game state was updated in any way. All pllayers should reload the game state.
+    message GameUpdated {}
+    // The same players play a new game, under a new game ID.
+    message NewGameStarted {
+        string game_id = 1;
     }
+    
     string game_id = 1;
     oneof Event {
         PlayerJoined player_joined = 2;
         GameUpdated game_updated = 3;
+        NewGameStarted new_game_started = 4;
     }
-}
-
-// MCTSExample encodes all data that is necessary to generate a training example
-// for the NeuraMCTS model.
-// Normally, examples would be saved as HDF5 files, but to be facilitate the
-// generation of examples in our highly optimized Go implementation, we use
-// this message format instead. Python code can transform this into HDF5 files.
-message MCTSExample {
-    string game_id = 1;
-    // The board, at any step in a fully played game.
-    Board board = 2;
-    // The "value", i.e. the final result of the game. Always has two elements.
-    repeated int32 result = 3;
-    // The learnt "policy", i.e. the MCTS visit counts and win rates for each move.
-    message MoveStats {
-        GameEngineMove move = 1;
-        int32 visits = 2;
-        float win_rate = 3;
-    }
-    repeated MoveStats move_stats = 4;
 }
 
 //

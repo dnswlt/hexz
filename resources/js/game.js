@@ -113,6 +113,13 @@ function handleServerEvent(sse, serverEvent) {
             startWASMWebWorker();
         }
     }
+    if (serverEvent.newGameId) {
+        const url = new URL(window.location.href);
+        const segments = url.pathname.split('/');
+        segments[segments.length - 1] = serverEvent.newGameId;
+        url.pathname = segments.join('/');
+        history.replaceState(null, '', url);
+    }
     if (serverEvent.board != null) {
         // new board received.
         gstate.board = serverEvent.board;
@@ -136,14 +143,6 @@ function handleServerEvent(sse, serverEvent) {
     if (serverEvent.playerNames) {
         gstate.playerNames = serverEvent.playerNames;
         updatePlayerNames();
-    }
-    if (serverEvent.debugMessage.length > 0) {
-        console.log(serverEvent.timestamp + ": " + serverEvent.debugMessage);
-    }
-    if (serverEvent.lastEvent) {
-        console.log("Server sent last SSE. Closing the connection.");
-        gstate.done = true;
-        sse.close();
     }
     if (serverEvent.announcements && serverEvent.announcements.length > 0) {
         updateAnnouncements(serverEvent);

@@ -75,17 +75,20 @@ func (c *RedisClient) LoginPlayer(ctx context.Context, playerId api.PlayerId, na
 
 // Stores the given game state in Redis, unless a game with the same ID already exists.
 // This method updates the Modified fields of the game state.
-func (c *RedisClient) StoreNewGame(ctx context.Context, s *pb.GameState) (bool, error) {
+func (c *RedisClient) StoreNewGame(ctx context.Context, s *pb.GameState) error {
 	now := tpb.Now()
 	s.Modified = now
 	data, err := proto.Marshal(s)
 	if err != nil {
-		return false, err
+		return err
 	}
 	gameId := s.GetGameInfo().GetId()
-	ok, err := c.client.SetNX(ctx, "game:"+gameId, data, c.config.GameTTL).Result()
-	if !ok || err != nil {
-		return ok, err
+	set, err := c.client.SetNX(ctx, "game:"+gameId, data, c.config.GameTTL).Result()
+	if err != nil {
+		return err
+	}
+	if !set {
+		return ErrExists
 	}
 	mInfo, _ := proto.Marshal(s.GetGameInfo()) // We can always marshal a GameInfo.
 	if err := c.client.ZAdd(ctx, "recentgames", redis.Z{
@@ -94,7 +97,7 @@ func (c *RedisClient) StoreNewGame(ctx context.Context, s *pb.GameState) (bool, 
 	}).Err(); err != nil {
 		hlog.Errorf("Failed to add game %q to recent games: %v", gameId, err)
 	}
-	return true, nil
+	return nil
 }
 
 // Stores the given game state in Redis, overwriting any existing game with the same ID.

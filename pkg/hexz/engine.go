@@ -246,6 +246,10 @@ func (g *GameRepr) State() *pb.GameState {
 	return g.state
 }
 
+func (g *GameRepr) GameID() string {
+	return g.State().GetGameInfo().Id
+}
+
 func (g *GameRepr) isCPUGame() bool {
 	mode := g.State().GameInfo.CpuPlayer
 	return mode == pb.CPUPlayerMode_EMBEDDED_CPU ||
