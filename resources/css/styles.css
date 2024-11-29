@@ -153,6 +153,15 @@ div.login {
     border-radius: 5px;
 }
 
+.errormessage {
+    background-color: #fdecea;
+    color: #b71c1c;
+    border: 1px solid #b71c1c;
+    border-radius: 5px;
+    padding: 10px;
+    text-align: center;
+}
+
 /* New Game */
 
 div.spacer {

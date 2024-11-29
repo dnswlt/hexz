@@ -71,8 +71,8 @@ func newTestStatelessServer(t testing.TB, config *ServerConfig) (*StatelessServe
 
 func TestValidPlayerName(t *testing.T) {
 	tests := []struct {
-		name string
-		want bool
+		name   string
+		accept bool
 	}{
 		{"abc", true},
 		{"abc.def", true},
@@ -82,18 +82,21 @@ func TestValidPlayerName(t *testing.T) {
 		{"Mørän", true},
 		{"Jérôme", true},
 		{"Strüßenbähn", true},
-		{"123", true},
+		{"My Best", true},
+		{"My  Best", false}, // No consecutive spaces in the middle
+		{"123", false},      // Need at least one latin character
 		{"_letter-or.digit", true},
-		{"ab", false},      // Too short
-		{"jens$", false},   // Invalid character
-		{"dw@best", false}, // Invalid character
+		{"ab", false},       // Too short
+		{"jens$", false},    // Invalid character
+		{"dw@best", false},  // Invalid character
+		{" voodoo ", false}, // Spaces at the ends
 		{"", false},
 		{"verylongusernamesarenotallowedalright", false},
 	}
 	for i, test := range tests {
 		t.Run(fmt.Sprintf("#%d", i), func(t *testing.T) {
-			if got := isValidPlayerName(test.name); got != test.want {
-				t.Errorf("unexpected result %t for name %s", got, test.name)
+			if err := validatePlayerName(test.name); (err == nil) != test.accept {
+				t.Errorf("unexpected error result for name %s: %v", test.name, err)
 			}
 		})
 	}

@@ -11,6 +11,11 @@
         To play, please enter a user name.
     </p>
     <div class="login">
+        {{if .ErrorMessage}}
+        <div class="errormessage">
+            {{.ErrorMessage}}
+        </div>
+        {{end}}
         <form action="{{.URLPathPrefix}}/login" method="post">
             <div>
                 <input type="text" name="name" id="name" placeholder="Enter username" required>

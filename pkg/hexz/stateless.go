@@ -13,10 +13,10 @@ import (
 	"net/http"
 	"os"
 	"path"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/lpar/gzipped/v2"
 
@@ -52,11 +52,6 @@ type ServerConfig struct {
 	TlsPrivKey         string
 	DebugMode          bool
 }
-
-var (
-	// Regexp used to validate player names.
-	playernameRegexp = regexp.MustCompile(`^[\p{Latin}0-9_.-]+$`)
-)
 
 const (
 	playerIdCookieName = "playerId"
@@ -117,8 +112,31 @@ func generatePlayerId() api.PlayerId {
 	return api.PlayerId(hex.EncodeToString(p))
 }
 
-func isValidPlayerName(name string) bool {
-	return len(name) >= 3 && len(name) <= 20 && playernameRegexp.MatchString(name)
+func validatePlayerName(name string) error {
+	if len(name) < 3 || len(name) > 20 {
+		return fmt.Errorf("player names must be 3..20 characters long")
+	}
+	if name[0] == ' ' || name[len(name)-1] == ' ' {
+		return fmt.Errorf("player name starts or ends with a space")
+	}
+	letters := 0
+	var prev rune
+	for _, r := range name {
+		if unicode.Is(unicode.Latin, r) {
+			letters++
+		} else if r == ' ' {
+			if prev == ' ' {
+				return fmt.Errorf("player name %q contains consecutive spaces", name)
+			}
+		} else if !strings.ContainsRune("_.-", r) && !unicode.IsDigit(r) {
+			return fmt.Errorf("invalid character '%c' in player name %q", r, name)
+		}
+		prev = r
+	}
+	if letters == 0 {
+		return fmt.Errorf("player name must contain at least one latin letter")
+	}
+	return nil
 }
 
 func isValidGameId(gameId string) bool {
@@ -292,8 +310,10 @@ func (s *StatelessServer) handleLoginRequest(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "Missing 'name' form parameter", http.StatusBadRequest)
 		return
 	}
-	if !isValidPlayerName(name) {
-		http.Error(w, "Invalid username", http.StatusBadRequest)
+	if err := validatePlayerName(name); err != nil {
+		s.serveHtmlFileParams(w, loginHtmlFilename, map[string]any{
+			"ErrorMessage": fmt.Sprintf("Invalid username: %v", err),
+		})
 		return
 	}
 	playerId := generatePlayerId()
