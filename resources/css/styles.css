@@ -23,7 +23,10 @@ body {
     color: var(--light-text);
 }
 
-body, input, textarea, button {
+body,
+input,
+textarea,
+button {
     font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
     font-size: 16px;
 }
@@ -78,26 +81,32 @@ div.hflow {
     justify-content: center;
     padding: 10px 20px;
     border: none;
+    border-bottom: 4px transparent;
     border-radius: 5px;
 }
 
 #playerOneBadge.turn {
     color: var(--light-text);
     background-color: var(--blue-normal);
-    border: 3px solid var(--orange-highlight);
+    border-bottom: 4px solid var(--blue-light);
 }
+
 #playerOneBadge.no-turn {
-    color: var(--dark-text);
-    background-color: var(--blue-gray);
+    opacity: 0.6;
+    color: var(--light-text);
+    background-color: var(--blue-normal);
 }
+
 #playerTwoBadge.turn {
     color: var(--dark-text);
     background-color: var(--yellow-normal);
-    border: 3px solid var(--orange-highlight); /* #da8100; */
+    border-bottom: 4px solid var(--orange-highlight);
 }
+
 #playerTwoBadge.no-turn {
+    opacity: 0.5;
     color: var(--dark-text);
-    background-color: var(--yellow-gray);
+    background-color: var(--yellow-normal);
 }
 
 a:link,
@@ -227,10 +236,14 @@ input:focus {
     display: block;
 }
 
-button, input[type='submit'] {
+button,
+input[type='submit'] {
     -webkit-tap-highlight-color: transparent;
 }
 
-.ml-1 {
-    margin-left: 1ex;
+/* Vertically align icons and labels in buttons. */
+button.labelled-icons {
+    display: flex;
+    align-items: center;
+    gap: 1ex;
 }

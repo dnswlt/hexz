@@ -15,7 +15,6 @@ import (
 	"os"
 	"path"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -440,32 +439,6 @@ func (s *StatelessServer) handleGamez(w http.ResponseWriter, r *http.Request) {
 	w.Write(json)
 }
 
-type cpuThinkTimeOption struct {
-	Label  string
-	Millis int64
-}
-
-func cpuThinkTimes(maxThinkTime time.Duration) []cpuThinkTimeOption {
-	maxMillis := maxThinkTime.Milliseconds()
-	options := []cpuThinkTimeOption{
-		{Label: "100ms", Millis: 100},
-		{Label: "1s", Millis: 1000},
-		{Label: "3s", Millis: 3000},
-		{Label: "5s", Millis: 5000},
-		{Label: maxThinkTime.String(), Millis: maxMillis},
-	}
-	sort.Slice(options, func(i, j int) bool {
-		return options[i].Millis < options[j].Millis
-	})
-	for i := 0; i < len(options); i++ {
-		if options[i].Millis == maxMillis {
-			return options[:i+1]
-		}
-	}
-	hlog.Fatalf("program error: fell off the loop")
-	return nil
-}
-
 func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
@@ -485,7 +458,7 @@ func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 	// Game exists, serve HTML and prolong cookie ttl.
 	http.SetCookie(w, s.makePlayerCookie(p.Id, s.config.LoginTTL))
 	s.serveHtmlFileParams(w, gameHtmlFilename, map[string]any{
-		"CPUThinkTimes": cpuThinkTimes(s.config.CpuThinkTime),
+		"CPUThinkTimeOptions": cpuThinkTimeOptions(s.config.CpuThinkTime),
 	})
 }
 

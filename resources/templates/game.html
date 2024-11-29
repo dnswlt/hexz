@@ -32,25 +32,26 @@
                 <div class="dropup" id="dropup-think-time">
                     <button class="dropup-button">CPU Speed</button>
                     <div class="dropup-menu center">
-                        {{range .CPUThinkTimes}}
-                        <button data-millis="{{.Millis}}" data-label="{{.Label}}" class="dropup-option">{{.Label}}</button>
+                        {{range .CPUThinkTimeOptions}}
+                        <button data-millis="{{.Millis}}" data-label="{{.Label}}" class="dropup-option{{if .Selected}} selected{{end}}">{{.Label}}</button>
                         {{end}}
                     </div>
                 </div>
                 <div class="dropup" id="dropup-tridot">
-                    <button class="dropup-button">...</button>
+                    <button class="dropup-button"><i class="fa-solid fa-bars"></i></button>
                     <div class="dropup-menu">
-                        <button id="home" class="dropup-option">
-                            <i class="fa-solid fa-up-right-from-square"></i>
-                            <span class="ml-1">New</span>
+                        <button id="home" class="dropup-option labelled-icons">
+                            <i class="fa-solid fa-list"></i>
+                            <!-- <i class="fa-solid fa-up-right-from-square"></i> -->
+                            <span>Menu</span>
                         </button>
-                        <button id="reset" class="dropup-option">
+                        <button id="reset" class="dropup-option labelled-icons">
                             <i class="fa-solid fa-rotate-right"></i>
-                            <span class="ml-1">Reset</span>
+                            <span>Reset</span>
                         </button>
-                        <button id="shareLink" class="dropup-option">
+                        <button id="shareLink" class="dropup-option labelled-icons">
                             <i class="fa-solid fa-share"></i>
-                            <span class="ml-1">Share</span>
+                            <span>Share</span>
                         </button>
                     </div>
                 </div>
