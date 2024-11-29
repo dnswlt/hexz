@@ -116,7 +116,7 @@ func (g *GameEngineFreeform) Decode(s *pb.GameEngineState) error {
 		return fmt.Errorf("invalid game state: missing freeform")
 	}
 	freeform := s.GetFreeform()
-	if err := g.board.DecodeProto(freeform.Board); err != nil {
+	if err := g.board.FromProto(freeform.Board); err != nil {
 		return err
 	}
 	return nil

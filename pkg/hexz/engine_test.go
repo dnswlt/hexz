@@ -59,7 +59,7 @@ func TestBoardProto(t *testing.T) {
 	// Encode and decode
 	bp := board.Proto()
 	decoded := NewBoard()
-	err := decoded.DecodeProto(bp)
+	err := decoded.FromProto(bp)
 	if err != nil {
 		t.Fatal("cannot decode: ", err)
 	}
@@ -82,7 +82,7 @@ func BenchmarkBoardProtoMarshalUnmarshal(b *testing.B) {
 		if err != nil {
 			b.Fatal("cannot unmarshal: ", err)
 		}
-		err = board.DecodeProto(bp2)
+		err = board.FromProto(bp2)
 		if err != nil {
 			b.Fatal("cannot decode: ", err)
 		}

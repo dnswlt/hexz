@@ -246,14 +246,18 @@ func (g *GameRepr) State() *pb.GameState {
 	return g.state
 }
 
+func (g *GameRepr) isCPUGame() bool {
+	mode := g.State().GameInfo.CpuPlayer
+	return mode == pb.CPUPlayerMode_EMBEDDED_CPU ||
+		mode == pb.CPUPlayerMode_REMOTE_CPU
+}
+
 func (g *GameRepr) isCPUTurn() bool {
 	if g.Engine().IsDone() {
 		return false
 	}
 	turn := g.Engine().Board().Turn
-	mode := g.State().GameInfo.CpuPlayer
-	return turn == 2 && (mode == pb.CPUPlayerMode_EMBEDDED_CPU ||
-		mode == pb.CPUPlayerMode_REMOTE_CPU)
+	return turn == 2 && g.isCPUGame()
 }
 
 // Returns the most recent move made in the game, or nil if no move has been made yet.
@@ -520,7 +524,7 @@ func (b *Board) Proto() *pb.Board {
 	return bp
 }
 
-func (b *Board) DecodeProto(bp *pb.Board) error {
+func (b *Board) FromProto(bp *pb.Board) error {
 	b.Turn = int(bp.Turn)
 	b.Move = int(bp.Move)
 	b.LastRevealed = int(bp.LastRevealed)

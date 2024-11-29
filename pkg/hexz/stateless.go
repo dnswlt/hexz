@@ -450,16 +450,19 @@ func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
-	if _, err := s.gameStore.LookupGame(r.Context(), gameId); err != nil {
+	g, err := s.loadGame(r.Context(), gameId)
+	if err != nil {
 		// Game does not exist: offer to start a new game.
 		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
 		return
 	}
 	// Game exists, serve HTML and prolong cookie ttl.
 	http.SetCookie(w, s.makePlayerCookie(p.Id, s.config.LoginTTL))
-	s.serveHtmlFileParams(w, gameHtmlFilename, map[string]any{
-		"CPUThinkTimeOptions": cpuThinkTimeOptions(s.config.CpuThinkTime),
-	})
+	params := map[string]any{}
+	if g.isCPUGame() {
+		params["CPUThinkTimeOptions"] = cpuThinkTimeOptions(s.config.CpuThinkTime)
+	}
+	s.serveHtmlFileParams(w, gameHtmlFilename, params)
 }
 
 func (s *StatelessServer) handleWASMStats(w http.ResponseWriter, r *http.Request) {

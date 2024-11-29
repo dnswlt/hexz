@@ -267,7 +267,7 @@ func (g *GameEngineFlagz) Decode(s *pb.GameEngineState) error {
 		return fmt.Errorf("invalid game state: missing flagz")
 	}
 	flagz := s.GetFlagz()
-	if err := g.B.DecodeProto(flagz.Board); err != nil {
+	if err := g.B.FromProto(flagz.Board); err != nil {
 		return err
 	}
 	g.FreeCells = int(flagz.FreeCells)

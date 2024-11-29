@@ -378,7 +378,7 @@ func (g *GameEngineClassic) Decode(s *pb.GameEngineState) error {
 		return fmt.Errorf("invalid game state: missing classic")
 	}
 	classic := s.GetClassic()
-	if err := g.board.DecodeProto(classic.Board); err != nil {
+	if err := g.board.FromProto(classic.Board); err != nil {
 		return err
 	}
 	return nil

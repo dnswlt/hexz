@@ -29,6 +29,8 @@
         </div>
         <div class="menurow">
             <div class="hflow">
+                {{if .CPUThinkTimeOptions}}
+                {{/* <!-- Only shown for 1P games --> */}}
                 <div class="dropup" id="dropup-think-time">
                     <button class="dropup-button">CPU Speed</button>
                     <div class="dropup-menu center">
@@ -37,12 +39,12 @@
                         {{end}}
                     </div>
                 </div>
+                {{end}}
                 <div class="dropup" id="dropup-tridot">
                     <button class="dropup-button"><i class="fa-solid fa-bars"></i></button>
                     <div class="dropup-menu">
                         <button id="home" class="dropup-option labelled-icons">
                             <i class="fa-solid fa-list"></i>
-                            <!-- <i class="fa-solid fa-up-right-from-square"></i> -->
                             <span>Menu</span>
                         </button>
                         <button id="reset" class="dropup-option labelled-icons">
