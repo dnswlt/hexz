@@ -361,7 +361,7 @@ func (g *GameEngineClassic) MakeMove(m GameEngineMove) bool {
 	return true
 }
 
-func (g *GameEngineClassic) Encode() (*pb.GameEngineState, error) {
+func (g *GameEngineClassic) Proto() *pb.GameEngineState {
 	classic := &pb.GameEngineClassicState{
 		Board: g.Board().Proto(),
 	}
@@ -370,10 +370,10 @@ func (g *GameEngineClassic) Encode() (*pb.GameEngineState, error) {
 			Classic: classic,
 		},
 	}
-	return s, nil
+	return s
 }
 
-func (g *GameEngineClassic) Decode(s *pb.GameEngineState) error {
+func (g *GameEngineClassic) FromProto(s *pb.GameEngineState) error {
 	if s.GetClassic() == nil {
 		return fmt.Errorf("invalid game state: missing classic")
 	}

@@ -88,11 +88,7 @@ To reduce the CPU load on the server, CPU players of the *stateless server*
 run in the user's browser as WASM workers. Clients get notified about this
 via the `ServerEventGameInfo.ClientSideCPUPlayer` flag.
 
-To build the WASM module, run:
-
-```bash
-GOOS=js GOARCH=wasm go build -o ./resources/wasm/hexz.wasm cmd/wasm/main.go && gzip -f ./resources/wasm/hexz.wasm
-```
+To build the WASM module, run [scripts/build_wasm.sh](./scripts/build_wasm.sh).
 
 ### Docker and Cloud Run
 

@@ -286,12 +286,9 @@ func TestGobEncodeGameEngineFlagz(t *testing.T) {
 
 func TestEncodeDecode(t *testing.T) {
 	g1 := NewGameEngineFlagz()
-	encoded, err := g1.Encode()
-	if err != nil {
-		t.Fatal("Cannot encode: ", err)
-	}
+	enc := g1.Proto()
 	g2 := NewGameEngineFlagz()
-	if err := g2.Decode(encoded); err != nil {
+	if err := g2.FromProto(enc); err != nil {
 		t.Fatal("Cannot decode: ", err)
 	}
 	if g1.FreeCells != g2.FreeCells {

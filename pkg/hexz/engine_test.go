@@ -92,10 +92,7 @@ func BenchmarkBoardProtoMarshalUnmarshal(b *testing.B) {
 func testFlagzGameRepr(t testing.TB) *GameRepr {
 	t.Helper()
 	ge := NewGameEngineFlagz()
-	enc, err := ge.Encode()
-	if err != nil {
-		t.Fatal("Cannot encode GameEngineFlagz", err)
-	}
+	enc := ge.Proto()
 	return NewGameRepr(&pb.GameState{
 		GameInfo: &pb.GameInfo{
 			Id:      "TTESTT",

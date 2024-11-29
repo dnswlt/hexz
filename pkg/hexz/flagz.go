@@ -246,7 +246,7 @@ func (g *GameEngineFlagz) copyFrom(other *GameEngineFlagz) {
 }
 
 // Serializes the state of this game engine.
-func (g *GameEngineFlagz) Encode() (*pb.GameEngineState, error) {
+func (g *GameEngineFlagz) Proto() *pb.GameEngineState {
 	flagz := &pb.GameEngineFlagzState{
 		Board:       g.B.Proto(),
 		FreeCells:   int32(g.FreeCells),
@@ -257,12 +257,12 @@ func (g *GameEngineFlagz) Encode() (*pb.GameEngineState, error) {
 			Flagz: flagz,
 		},
 	}
-	return s, nil
+	return s
 }
 
 // Decodes the given encoded state of a game engine and sets this game engine to the given state.
 // The random source of the existing game engine is kept, since the serialized state does not contain one.
-func (g *GameEngineFlagz) Decode(s *pb.GameEngineState) error {
+func (g *GameEngineFlagz) FromProto(s *pb.GameEngineState) error {
 	if s.GetFlagz() == nil {
 		return fmt.Errorf("invalid game state: missing flagz")
 	}

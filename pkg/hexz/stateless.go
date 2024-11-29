@@ -238,10 +238,7 @@ func (s *StatelessServer) lookupPlayerFromCookie(r *http.Request) (api.Player, e
 
 // Stores a new game in the game store and returns the new game ID.
 func (s *StatelessServer) startNewGame(ctx context.Context, p *api.Player, gameType api.GameType, singlePlayer bool) (string, error) {
-	engineState, err := NewGameEngine(gameType).Encode()
-	if err != nil {
-		return "", err
-	}
+	engineState := NewGameEngine(gameType).Proto()
 	players := []*pb.Player{{Id: string(p.Id), Name: p.Name}}
 	if singlePlayer {
 		players = append(players, &pb.Player{Id: "CPU", Name: "CPU"})
@@ -395,11 +392,9 @@ func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "only players can reset a game", http.StatusForbidden)
 		return
 	}
-	if err := g.Reset(); err != nil {
-		http.Error(w, "cannot reset game", http.StatusInternalServerError)
-		hlog.Errorf("Cannot reset game %s: %v", gameId, err)
-		return
-	}
+
+	g.Reset()
+
 	s.storeGameAndNotify(r.Context(), "reset", g)
 }
 

@@ -99,7 +99,7 @@ func (g *GameEngineFreeform) MakeMove(m GameEngineMove) bool {
 	return true
 }
 
-func (g *GameEngineFreeform) Encode() (*pb.GameEngineState, error) {
+func (g *GameEngineFreeform) Proto() *pb.GameEngineState {
 	freeform := &pb.GameEngineFreeformState{
 		Board: g.Board().Proto(),
 	}
@@ -108,10 +108,10 @@ func (g *GameEngineFreeform) Encode() (*pb.GameEngineState, error) {
 			Freeform: freeform,
 		},
 	}
-	return s, nil
+	return s
 }
 
-func (g *GameEngineFreeform) Decode(s *pb.GameEngineState) error {
+func (g *GameEngineFreeform) FromProto(s *pb.GameEngineState) error {
 	if s.GetFreeform() == nil {
 		return fmt.Errorf("invalid game state: missing freeform")
 	}

@@ -35,9 +35,9 @@ type GameEngine interface {
 	Winner() (playerNum int) // Results are only meaningful if IsDone() is true. 0 for draw.
 	GameType() api.GameType
 	// Encodes the current state of the game engine.
-	Encode() (*pb.GameEngineState, error)
+	Proto() *pb.GameEngineState
 	// Sets this game engine into the state defined by the given encoded state.
-	Decode(s *pb.GameEngineState) error
+	FromProto(s *pb.GameEngineState) error
 }
 
 const (
@@ -206,7 +206,7 @@ func DecodeGameEngine(s *pb.GameEngineState) (GameEngine, error) {
 	default:
 		panic("unhandled game type")
 	}
-	if err := g.Decode(s); err != nil {
+	if err := g.FromProto(s); err != nil {
 		return nil, err
 	}
 	return g, nil
@@ -294,29 +294,21 @@ func (g *GameRepr) AllPlayersJoined() bool {
 	return len(g.State().Players) == g.Engine().NumPlayers()
 }
 
-func (g *GameRepr) Reset() error {
+func (g *GameRepr) Reset() {
 	g.Engine().Reset()
-	enc, err := g.Engine().Encode()
-	if err != nil {
-		return err
-	}
+	enc := g.Engine().Proto()
 	g.state.EngineState = enc
 	g.state.UndoRedoState.InitialState = enc
 	// Remove undo/redo stack on reset.
 	g.state.UndoRedoState.Moves = nil
 	g.state.UndoRedoState.RedoMoves = nil
-	return nil
 }
 
 func (g *GameRepr) MakeMove(move GameEngineMove) error {
 	if err := g.Engine().MakeMoveError(move); err != nil {
 		return err
 	}
-	enc, err := g.Engine().Encode()
-	if err != nil {
-		return err
-	}
-	g.state.EngineState = enc
+	g.state.EngineState = g.Engine().Proto()
 	g.state.UndoRedoState.Moves = append(g.state.UndoRedoState.Moves, move.Proto())
 	return nil
 }
@@ -349,12 +341,8 @@ func (g *GameRepr) Undo() error {
 			return fmt.Errorf("undo: error making move #%d: %v: %v", i, move, err)
 		}
 	}
-	enc, err := ge.Encode()
-	if err != nil {
-		return fmt.Errorf("failed to encode GameEngine: %v", err)
-	}
 	g.engine = ge
-	s.EngineState = enc
+	s.EngineState = ge.Proto()
 
 	return nil
 }

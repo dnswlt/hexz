@@ -107,14 +107,10 @@ func NewRemoteCPUPlayer(client pb.CPUPlayerServiceClient, playerId api.PlayerId,
 }
 
 func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz) (*GameEngineMove, *pb.SuggestMoveStats, error) {
-	state, err := ge.Encode()
-	if err != nil {
-		return nil, nil, fmt.Errorf("cannot encode GameEngineFlagz: %v", err)
-	}
 	req := &pb.SuggestMoveRequest{
 		MaxThinkTimeMs:  cpu.maxThinkTime.Milliseconds(),
 		MaxIterations:   int64(cpu.maxIterations),
-		GameEngineState: state,
+		GameEngineState: ge.Proto(),
 	}
 	// Allow the RPC at most the think time, plus some buffer. If think time is unbounded, don't set a deadline.
 	if cpu.maxThinkTime > 0 {
@@ -160,7 +156,7 @@ func (s *MoveSuggesterServer) SuggestMove(ctx context.Context, req *pb.SuggestMo
 	switch state := req.GameEngineState.State.(type) {
 	case *pb.GameEngineState_Flagz:
 		ge = NewGameEngineFlagz()
-		if err := ge.Decode(req.GameEngineState); err != nil {
+		if err := ge.FromProto(req.GameEngineState); err != nil {
 			return nil, fmt.Errorf("invalid game engine state")
 		}
 	default:
