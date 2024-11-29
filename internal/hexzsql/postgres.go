@@ -58,7 +58,7 @@ func (s *PostgresStore) StoreGame(ctx context.Context, hostId string, gs *pb.Gam
 		gs.GameInfo.Started.AsTime(),
 		gs.GameInfo.Id,
 		string(gs.GameInfo.Type),
-		gs.GameInfo.CpuPlayer.String(),
+		gs.GameInfo.CpuPlayerMode.String(),
 		gs.GameInfo.Host,
 		hostId)
 	if err != nil {
@@ -127,11 +127,11 @@ func (s *PostgresStore) ListRecentGames(ctx context.Context, offset int, limit i
 			return nil, fmt.Errorf("error reading row: %v", err)
 		}
 		result = append(result, &pb.GameInfo{
-			Id:        gameId,
-			Host:      host,
-			Started:   tpb.New(started),
-			Type:      gameType,
-			CpuPlayer: pb.CPUPlayerMode_Enum(pb.CPUPlayerMode_Enum_value[cpuPlayerMode]),
+			Id:            gameId,
+			Host:          host,
+			Started:       tpb.New(started),
+			Type:          gameType,
+			CpuPlayerMode: pb.CPUPlayerMode_Enum(pb.CPUPlayerMode_Enum_value[cpuPlayerMode]),
 		})
 	}
 	return result, nil

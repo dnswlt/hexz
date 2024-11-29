@@ -152,7 +152,7 @@ func (s *InMemoryPlayerStore) saveToFile() error {
 }
 
 var (
-	errGameNotExist = fmt.Errorf("game does not exist in store")
+	ErrGameNotExist = fmt.Errorf("game does not exist in store")
 )
 
 // An in-memory replacement for a RedisClient, to enable purely local, single-server
@@ -163,6 +163,7 @@ type InMemoryGameStore struct {
 	// Sequence of game IDs. Used to list the most recent games.
 	gameStatesSeq []string
 	mut           sync.Mutex
+	gamePubsubMap map[string]string
 	subscribers   map[string][]chan<- *pb.GameStorePubsubEvent
 }
 
@@ -173,9 +174,10 @@ type gameStoreEntry struct {
 
 func NewInMemoryGameStore(gameTTL time.Duration) *InMemoryGameStore {
 	return &InMemoryGameStore{
-		gameTTL:     gameTTL,
-		gameStates:  make(map[string]*gameStoreEntry),
-		subscribers: make(map[string][]chan<- *pb.GameStorePubsubEvent),
+		gameTTL:       gameTTL,
+		gameStates:    make(map[string]*gameStoreEntry),
+		gamePubsubMap: make(map[string]string),
+		subscribers:   make(map[string][]chan<- *pb.GameStorePubsubEvent),
 	}
 }
 
@@ -197,14 +199,28 @@ func (s *InMemoryGameStore) deleteOldGames() {
 }
 
 func (s *InMemoryGameStore) StoreNewGame(ctx context.Context, state *pb.GameState) error {
+	if state.GameInfo == nil {
+		return fmt.Errorf("game state must have GameInfo")
+	}
 	s.mut.Lock()
 	defer s.mut.Unlock()
 	s.deleteOldGames()
 	state.Modified = tpb.Now()
-	gameId := state.GetGameInfo().GetId()
-	if _, ok := s.gameStates[gameId]; ok {
-		return ErrExists
+	gameId := state.GameInfo.Id
+	if gameId == "" {
+		for {
+			gameId = GenerateGameID()
+			if _, ok := s.gameStates[gameId]; !ok {
+				break
+			}
+		}
 	}
+	state.GameInfo.Id = gameId
+	pubsubId := state.GameInfo.PubsubChannelId
+	if pubsubId == "" {
+		pubsubId = GeneratePubsubID()
+	}
+	state.GameInfo.PubsubChannelId = pubsubId
 	// Create a copy, like the remote store would, to avoid nasty concurrent access problems.
 	s.gameStates[gameId] = &gameStoreEntry{
 		gameState: proto.Clone(state).(*pb.GameState),
@@ -222,7 +238,7 @@ func (s *InMemoryGameStore) LookupGame(ctx context.Context, gameId string) (*pb.
 		state := proto.Clone(e.gameState).(*pb.GameState)
 		return state, nil
 	}
-	return nil, errGameNotExist
+	return nil, ErrGameNotExist
 }
 
 func (s *InMemoryGameStore) UpdateGame(ctx context.Context, state *pb.GameState) error {
@@ -254,23 +270,23 @@ func (s *InMemoryGameStore) ListRecentGames(ctx context.Context, limit int) ([]*
 	return infos, nil
 }
 
-func (s *InMemoryGameStore) Publish(ctx context.Context, gameId string, event *pb.GameStorePubsubEvent) error {
+func (s *InMemoryGameStore) Publish(ctx context.Context, pubsubId string, event *pb.GameStorePubsubEvent) error {
 	s.mut.Lock()
 	defer s.mut.Unlock()
-	for _, sub := range s.subscribers[gameId] {
+	for _, sub := range s.subscribers[pubsubId] {
 		eventCopy := proto.Clone(event).(*pb.GameStorePubsubEvent)
 		sub <- eventCopy
 	}
 	return nil
 }
 
-func (s *InMemoryGameStore) Subscribe(ctx context.Context, gameId string) <-chan *pb.GameStorePubsubEvent {
+func (s *InMemoryGameStore) Subscribe(ctx context.Context, pubsubId string) <-chan *pb.GameStorePubsubEvent {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
 	ch := make(chan *pb.GameStorePubsubEvent)
 	sub := make(chan *pb.GameStorePubsubEvent)
-	s.subscribers[gameId] = append(s.subscribers[gameId], sub)
+	s.subscribers[pubsubId] = append(s.subscribers[pubsubId], sub)
 
 	go func() {
 		defer close(ch)
@@ -279,21 +295,22 @@ func (s *InMemoryGameStore) Subscribe(ctx context.Context, gameId string) <-chan
 			s.mut.Lock()
 			defer s.mut.Unlock()
 
-			subs := s.subscribers[gameId]
+			subs := s.subscribers[pubsubId]
 			for i, s1 := range subs {
 				if s1 == sub {
 					l := len(subs)
 					subs[i] = subs[l-1]
 					subs = subs[:l-1]
 					if len(subs) > 0 {
-						s.subscribers[gameId] = subs
+						s.subscribers[pubsubId] = subs
 					} else {
-						delete(s.subscribers, gameId)
+						delete(s.subscribers, pubsubId)
 					}
 					return
 				}
 			}
 		}()
+		// Receive events on sub and forward them to ch.
 		for {
 			select {
 			case event := <-sub:

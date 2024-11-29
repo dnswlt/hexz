@@ -22,6 +22,7 @@ var (
 			}
 			return attr
 		},
+		Level: slog.LevelInfo,
 	}))
 	jsonLogger = slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		AddSource: true,
@@ -65,7 +66,7 @@ func Infof(format string, args ...any) {
 }
 
 func Errorf(format string, args ...any) {
-	if !L.Enabled(context.Background(), slog.LevelInfo) {
+	if !L.Enabled(context.Background(), slog.LevelError) {
 		return
 	}
 	var pcs [1]uintptr

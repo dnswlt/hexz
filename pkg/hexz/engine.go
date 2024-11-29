@@ -250,8 +250,12 @@ func (g *GameRepr) GameID() string {
 	return g.State().GetGameInfo().Id
 }
 
+func (g *GameRepr) PubsubID() string {
+	return g.State().GetGameInfo().PubsubChannelId
+}
+
 func (g *GameRepr) isCPUGame() bool {
-	mode := g.State().GameInfo.CpuPlayer
+	mode := g.State().GameInfo.CpuPlayerMode
 	return mode == pb.CPUPlayerMode_EMBEDDED_CPU ||
 		mode == pb.CPUPlayerMode_REMOTE_CPU
 }

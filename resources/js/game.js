@@ -114,6 +114,7 @@ function handleServerEvent(sse, serverEvent) {
         }
     }
     if (serverEvent.newGameId) {
+        // A new game was started. Change the URL.
         const url = new URL(window.location.href);
         const segments = url.pathname.split('/');
         segments[segments.length - 1] = serverEvent.newGameId;

@@ -57,14 +57,19 @@ message CPUPlayerMode {
         REMOTE_CPU = 3; // Use remote CPU engine
     }
 }
-// GameInfo is summary information about an ongoing game, used to 
-// display a list of games to the user.
+// GameInfo contains summary information about a game.
 message GameInfo {
     string id = 1;
-    string host = 2; // The player hosting the game.
+    // The player hosting the game.
+    string host = 2;
+    // The pubsub channel on which updates for this game are published.
+    string pubsub_channel_id = 7;
+    // Time when this game was started.
     google.protobuf.Timestamp started = 3;
-    string type = 4; // Expected to match a hexz.GameType value.
-    CPUPlayerMode.Enum cpu_player = 5; // True if this is a single player game against a CPU player.
+    // The type is expected to match a hexz.GameType value.
+    string type = 4;
+    // If playing against a CPU, indicates which CPU engine type is used.
+    CPUPlayerMode.Enum cpu_player_mode = 5;
     message Settings {
         int64 cpu_think_time_millis = 1;
     }
@@ -141,7 +146,7 @@ message GameStorePubsubEvent {
     message NewGameStarted {
         string game_id = 1;
     }
-    
+   
     string game_id = 1;
     oneof Event {
         PlayerJoined player_joined = 2;
@@ -181,7 +186,7 @@ message SuggestMoveStats {
         int32 col = 2;
         Field.CellType type = 3;
         // Should be between [0..1] and indicate the likelihood of choosing this move.
-        repeated Score scores = 4;     
+        repeated Score scores = 4;    
     }
     // All scores that the agent generated. If not empty, the first element
     // in the sequence MUST be the FINAL score.
@@ -304,7 +309,7 @@ message TrainingExample {
         float value = 2;
     }
     ModelPredictions model_predictions = 10;
-    
+   
     // The model that was used to generate this particular example.
     // Strictly speaking, the model can be updated even while a single
     // is generated (i.e. in the middle of a single MCTS tree search).
@@ -364,7 +369,7 @@ message FetchModelRequest {
 
 message FetchModelResponse {
     ModelKey model_key = 1;
-    // Serialized PyTorch model. 
+    // Serialized PyTorch model.
     bytes model_bytes = 2;
     // Encoding that was used to serializez the model.
     ModelEncoding.Enum encoding = 3;

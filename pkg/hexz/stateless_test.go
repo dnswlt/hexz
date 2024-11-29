@@ -69,13 +69,6 @@ func newTestStatelessServer(t testing.TB, config *ServerConfig) (*StatelessServe
 	return b.Build(), nil
 }
 
-func TestGenerateGameId(t *testing.T) {
-	got := GenerateGameId()
-	if !regexp.MustCompile(`^[A-Z]{6}$`).MatchString(got) {
-		t.Errorf("Wrong gameId: %q", got)
-	}
-}
-
 func TestValidPlayerName(t *testing.T) {
 	tests := []struct {
 		name string
