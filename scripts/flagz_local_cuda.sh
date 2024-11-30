@@ -33,7 +33,7 @@ cpu_pid=$!
 echo "Started cpuserver with PID $cpu_pid"
 popd > /dev/null
 
-go run ./cmd/server -url-path-prefix "$url_path_prefix" -remote-cpu-url "$cpuserver_addr" -cpu-think-time 5s -stateless=false -port=$server_port $tls_flags
+go build ./cmd/server && ./server -url-path-prefix "$url_path_prefix" -remote-cpu-url "$cpuserver_addr" -cpu-think-time 5s -stateless=false -port=$server_port $tls_flags
 
 echo "Terminating cpuserver process"
 kill $cpu_pid
