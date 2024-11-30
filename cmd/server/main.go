@@ -29,14 +29,14 @@ func redactPGPassword(url string) string {
 var vcsRevision = func() string {
 	if info, ok := debug.ReadBuildInfo(); ok {
 		for _, setting := range info.Settings {
-			fmt.Printf("setting.Key = %s\n", setting.Key)
 			if setting.Key == "vcs.revision" {
 				return setting.Value
 			}
 		}
 	}
-
-	return ""
+	// vcs.revision is not present when running with "go run".
+	// Just use a timestamp in such a case.
+	return fmt.Sprintf("%d", time.Now().Unix())
 }()
 
 func main() {

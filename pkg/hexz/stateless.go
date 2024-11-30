@@ -315,7 +315,7 @@ func (s *StatelessServer) serveHtmlTemplateParams(w http.ResponseWriter, filenam
 	w.Header().Set("Content-Type", "text/html")
 	templateParams := map[string]any{
 		"URLPathPrefix": s.config.URLPathPrefix,
-		"VCSRevision":   s.config.VCSRevision,
+		"VCSRevision":   s.config.VCSRevision[:8],
 	}
 	for k, v := range params {
 		templateParams[k] = v
