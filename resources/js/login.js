@@ -35,6 +35,7 @@ async function initLogin() {
     const input = document.querySelector("#name");
     if (input) {
         input.addEventListener("focus", () => {
+            const textLength = input.value.length;
             input.select();
         })
     }

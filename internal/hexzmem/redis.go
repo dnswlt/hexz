@@ -41,6 +41,10 @@ func (s *RemotePlayerStore) Login(ctx context.Context, playerId api.PlayerId, na
 	return s.LoginPlayer(ctx, playerId, name)
 }
 
+func (s *RemotePlayerStore) Logout(ctx context.Context, playerId api.PlayerId) error {
+	return s.LogoutPlayer(ctx, playerId)
+}
+
 func NewRedisClient(config *RedisClientConfig) (*RedisClient, error) {
 	rc := &RedisClient{
 		config: config,
@@ -85,6 +89,10 @@ func (c *RedisClient) LookupPlayer(ctx context.Context, playerId api.PlayerId) (
 
 func (c *RedisClient) LoginPlayer(ctx context.Context, playerId api.PlayerId, name string) error {
 	return c.client.SetEx(ctx, rkey("/login", string(playerId)), name, c.config.LoginTTL).Err()
+}
+
+func (c *RedisClient) LogoutPlayer(ctx context.Context, playerId api.PlayerId) error {
+	return c.client.Del(ctx, rkey("/login", string(playerId))).Err()
 }
 
 // Stores the given game state in Redis.

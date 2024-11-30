@@ -34,8 +34,6 @@ func main() {
 	flag.StringVar(&cfg.URLPathPrefix, "url-path-prefix", "/hexz", "Path prefix for all server URLs")
 	flag.StringVar(&cfg.GameHistoryRoot, "history-dir", "",
 		"Root directory in whicih to read/write history files. If empty, history is disabled.")
-	flag.StringVar(&cfg.LoginDatabasePath, "userdb", "_logins.json",
-		"File in which to store login information if the local in-memory login store is used.")
 	flag.StringVar(&cfg.RemoteCPUPlayerURL, "remote-cpu-url", "",
 		"Base URL of the CPU player server. If empty, the in-process or WASM CPU engine is used.")
 	flag.StringVar(&cfg.RedisAddr, "redis-addr", "",
@@ -142,8 +140,8 @@ func main() {
 		gameStore = rc
 	} else {
 		// Local stores
-		hlog.Infof("Using in memory player and game stores. Login DB: %s", cfg.LoginDatabasePath)
-		playerStore, err = hexzmem.NewInMemoryPlayerStore(cfg.LoginTTL, cfg.LoginDatabasePath)
+		hlog.Infof("Using in memory player and game stores.")
+		playerStore, err = hexzmem.NewInMemoryPlayerStore(cfg.LoginTTL)
 		if err != nil {
 			hlog.Fatalf("error creating in-memory player store: %v", err)
 		}

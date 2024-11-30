@@ -144,7 +144,7 @@ div.login {
     padding: 10px;
 }
 
-.login button {
+.login button[type='submit'] {
     padding: 10px 20px;
     background-color: var(--blue-light);
     color: var(--dark-text);
@@ -162,10 +162,28 @@ div.login {
     text-align: center;
 }
 
+.inputlike {
+    background-color: white;
+    color: var(--dark-text);
+    border-radius: 5px;
+    padding: 10px;
+}
+
+.labelonly {
+    /* background: none; */
+    border: none;
+    cursor: pointer;
+    font: inherit;
+}
+
 /* New Game */
 
 div.spacer {
     margin-top: 1ex;
+}
+
+div.xlspacer {
+    margin-top: 2ex;
 }
 
 .gameButton {
@@ -187,6 +205,24 @@ td {
 #joingame {
     /* Initially hidden */
     display: none;
+}
+
+#login-info {
+    color: var(--medium-gray);
+}
+
+.inline-form {
+    display: inline;
+}
+
+.inline-form button {
+    background: none;
+    border: none;
+    color: var(--medium-gray);
+    text-decoration: underline;
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
 }
 
 /* Dropup menu for CPU think time */

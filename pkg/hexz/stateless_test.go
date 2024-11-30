@@ -52,7 +52,7 @@ func newTestStatelessServer(t testing.TB, config *ServerConfig) (*StatelessServe
 		absPath, _ := filepath.Abs(templateDir)
 		return nil, fmt.Errorf("failed to created renderer in directory %s: %v", absPath, err)
 	}
-	playerStore, err := hexzmem.NewInMemoryPlayerStore(config.LoginTTL, config.LoginDatabasePath)
+	playerStore, err := hexzmem.NewInMemoryPlayerStore(config.LoginTTL)
 	if err != nil {
 		return nil, err
 	}

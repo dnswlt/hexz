@@ -40,7 +40,6 @@ type ServerConfig struct {
 	URLPathPrefix      string
 	DocumentRoot       string                // Path to static resource files.
 	GameHistoryRoot    string                // Path to game history files.
-	LoginDatabasePath  string                // Path to the file where the player DB is stored. If empty, no persistent storage is used.
 	RemoteCPUPlayerURL string                // Base URL of the remote CPU player server. If emtpy, a local CPU player is used.
 	CPUPlayerMode      pb.CPUPlayerMode_Enum // Type of CPU player to use.
 	RedisAddr          string                // Address of the Redis server. If empty, local storage is used.
@@ -238,6 +237,18 @@ func (s *StatelessServer) makePlayerCookie(playerId api.PlayerId, ttl time.Durat
 	}
 }
 
+func (s *StatelessServer) deletePlayerCookie() *http.Cookie {
+	return &http.Cookie{
+		Name:     playerIdCookieName,
+		Value:    "",
+		Path:     s.prefix(""),
+		MaxAge:   -1,    // Delete immediately
+		HttpOnly: true,  // Don't let JS access the cookie
+		Secure:   false, // also allow plain http
+		SameSite: http.SameSiteLaxMode,
+	}
+}
+
 func (s *StatelessServer) lookupPlayerFromCookie(r *http.Request) (api.Player, error) {
 	cookie, err := r.Cookie(playerIdCookieName)
 	if err != nil {
@@ -345,6 +356,25 @@ func (s *StatelessServer) handleLoginRequest(w http.ResponseWriter, r *http.Requ
 	http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
 }
 
+func (s *StatelessServer) handleLogoutRequest(w http.ResponseWriter, r *http.Request) {
+	p, err := s.lookupPlayerFromCookie(r)
+	if err != nil {
+		http.Error(w, "Player not logged in", http.StatusPreconditionFailed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form", http.StatusBadRequest)
+		return
+	}
+	if err := s.playerStore.Logout(r.Context(), p.Id); err != nil {
+		hlog.Infof("Rejected logout for player %s: %s", p.Name, err)
+		http.Error(w, "Cannot log out right now", http.StatusPreconditionFailed)
+		return
+	}
+	http.SetCookie(w, s.deletePlayerCookie())
+	http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+}
+
 func (s *StatelessServer) handleNewGame(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
@@ -424,7 +454,9 @@ func (s *StatelessServer) handleHexz(w http.ResponseWriter, r *http.Request) {
 	}
 	// Prolong cookie ttl.
 	http.SetCookie(w, s.makePlayerCookie(p.Id, s.config.LoginTTL))
-	s.serveHtmlFile(w, newGameHtmlFilename)
+	s.serveHtmlFileParams(w, newGameHtmlFilename, map[string]any{
+		"PlayerName": p.Name,
+	})
 }
 
 func (s *StatelessServer) handleGamez(w http.ResponseWriter, r *http.Request) {
@@ -1011,7 +1043,7 @@ func (s *StatelessServer) handleLoginNames(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "no suggestions available", http.StatusNotFound)
 		return
 	}
-	n := 100
+	n := 100 // Return a few suggestions, so clients don't have to request them one by one.
 	var names []string
 	for i := 0; i < n; i++ {
 		adj := adjectives[xrand.Intn(len(adjectives))]
@@ -1208,6 +1240,7 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 		gzipped.FileServer(gzipped.Dir(s.config.DocumentRoot))))
 	// POST method API
 	handleFunc("/login", postHandlerFunc(s.handleLoginRequest))
+	handleFunc("/logout", postHandlerFunc(s.handleLogoutRequest))
 	handleFunc("/new", postHandlerFunc(s.handleNewGame))
 	handleFunc("/move/{gameId}", postHandlerFunc(s.handleMove))
 	handleFunc("/reset/{gameId}", postHandlerFunc(s.handleReset))

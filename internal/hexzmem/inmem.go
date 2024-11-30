@@ -2,16 +2,12 @@ package hexzmem
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
 	"sync"
 	"time"
 
 	"github.com/dnswlt/hexz/internal/api"
-	"github.com/dnswlt/hexz/internal/hlog"
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 	"google.golang.org/protobuf/proto"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
@@ -32,26 +28,18 @@ var (
 
 type InMemoryPlayerStore struct {
 	// Contains all logged in players, mapped by their (cookie) playerId.
-	players  map[api.PlayerId]*api.Player
-	mut      sync.Mutex
-	loginTTL time.Duration // How long a login is valid.
-	// Configuration for persistent storage.
-	dbPath      string // Path to the file where the player DB is stored. If empty, no persistent storage is used.
+	players     map[api.PlayerId]*api.Player
+	mut         sync.Mutex
+	loginTTL    time.Duration // How long a login is valid.
 	lastCleanup time.Time
 }
 
 // Creates a new in-memory player store and loads the player DB from the given file.
 // If dbPath is empty, no persistent storage is used.
-func NewInMemoryPlayerStore(loginTTL time.Duration, dbPath string) (*InMemoryPlayerStore, error) {
+func NewInMemoryPlayerStore(loginTTL time.Duration) (*InMemoryPlayerStore, error) {
 	s := &InMemoryPlayerStore{
 		players:  make(map[api.PlayerId]*api.Player),
-		dbPath:   dbPath,
 		loginTTL: loginTTL,
-	}
-	if dbPath != "" {
-		if err := s.loadFromFile(); err != nil {
-			return nil, err
-		}
 	}
 	return s, nil
 }
@@ -68,13 +56,6 @@ func (s *InMemoryPlayerStore) Lookup(ctx context.Context, playerId api.PlayerId)
 			}
 		}
 		s.lastCleanup = now
-		if s.dbPath != "" {
-			go func() {
-				if err := s.saveToFile(); err != nil {
-					hlog.Errorf("Failed to save player DB: %v", err)
-				}
-			}()
-		}
 	}
 	p, ok := s.players[playerId]
 	if !ok {
@@ -98,57 +79,17 @@ func (s *InMemoryPlayerStore) Login(ctx context.Context, playerId api.PlayerId, 
 	return nil
 }
 
+func (s *InMemoryPlayerStore) Logout(ctx context.Context, playerId api.PlayerId) error {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+	delete(s.players, playerId)
+	return nil
+}
+
 func (s *InMemoryPlayerStore) NumPlayers() int {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 	return len(s.players)
-}
-
-func (s *InMemoryPlayerStore) loadFromFile() error {
-	r, err := os.Open(s.dbPath)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil // No file yet, that's fine.
-	}
-	if err != nil {
-		return err
-	}
-	defer r.Close()
-	dec := json.NewDecoder(r)
-	var players []*api.Player
-	if err := dec.Decode(&players); err != nil {
-		return fmt.Errorf("corrupted user database: %w", err)
-	}
-	s.mut.Lock()
-	defer s.mut.Unlock()
-	for _, p := range players {
-		if _, ok := s.players[p.Id]; !ok {
-			// Only add players, don't overwrite anything already in memory.
-			s.players[p.Id] = p
-		}
-	}
-	return nil
-}
-
-func (s *InMemoryPlayerStore) saveToFile() error {
-	w, err := os.Create(s.dbPath)
-	if err != nil {
-		return err
-	}
-	defer w.Close()
-	enc := json.NewEncoder(w)
-	players := func() []*api.Player {
-		s.mut.Lock()
-		defer s.mut.Unlock()
-		ps := make([]*api.Player, 0, len(s.players))
-		for _, p := range s.players {
-			ps = append(ps, p)
-		}
-		return ps
-	}()
-	if err := enc.Encode(players); err != nil {
-		return err
-	}
-	return nil
 }
 
 var (

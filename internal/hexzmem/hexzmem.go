@@ -13,6 +13,8 @@ type PlayerStore interface {
 	// Login logs in the given player. If the player is already logged in,
 	// the existing data will be overwritten with the new data.
 	Login(ctx context.Context, playerId api.PlayerId, name string) error
+	// Deletes the player from the store.
+	Logout(ctx context.Context, playerId api.PlayerId) error
 }
 
 // GameStore is an interface for local or remote game stores, e.g. Redis.

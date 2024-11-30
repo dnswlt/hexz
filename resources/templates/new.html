@@ -53,6 +53,12 @@
         </div>
     </div>
 
+    <div id="login-info" class="centered xlspacer">
+        Logged in as {{.PlayerName}}. &nbsp; 
+        <form action="{{.URLPathPrefix}}/logout" method="POST" class="inline-form">
+            <button type="submit">Logout</button>
+        </form>
+    </div>
     <script src="{{.URLPathPrefix}}/static/js/game.js"></script>
     <script>
         getActiveGames("joingame");
