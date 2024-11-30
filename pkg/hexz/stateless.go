@@ -534,7 +534,8 @@ func (s *StatelessServer) handleWASMStats(w http.ResponseWriter, r *http.Request
 	if s.dbStore != nil {
 		s.dbStore.InsertStats(r.Context(), &req)
 	}
-	hlog.Infof("CPU stats: %s", string(body))
+	hlog.Infof("Received CPU stats for game %s: iterations=%d elapsed=%.3f totalAllocMiB=%.3f",
+		req.GameId, req.Stats.Iterations, req.Stats.Elapsed.Seconds(), req.Stats.TotalAllocMiB)
 }
 
 // Download the full game state as an encoded protobuf. This is used to run a CPU player in
