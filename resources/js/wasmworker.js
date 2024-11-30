@@ -1,11 +1,13 @@
 // CPU Player in WASM.
 
 let URL_PREFIX = "";
+let VCS_REVISION = "";
 let initialized = false;
 
 onmessage = async (e) => {
     if (!initialized) {
         URL_PREFIX = e.data.urlPrefix;
+        VCS_REVISION = e.data.vcsRevision;
         initWASM();
         initialized = true;
         return;
@@ -33,7 +35,10 @@ async function initWASM() {
     importScripts(`${URL_PREFIX}/static/js/wasm_exec.js`);
     const go = new Go();
     // Load WASM module. Avoid caching by adding a timestamp.
-    const result = await WebAssembly.instantiateStreaming(fetch(`${URL_PREFIX}/static/wasm/hexz.wasm`), go.importObject);
+    const result = await WebAssembly.instantiateStreaming(
+        fetch(`${URL_PREFIX}/static/wasm/hexz.wasm?v=${VCS_REVISION}`),
+        go.importObject
+    );
     const wasm = result.instance;
     // This will make the goWasmSuggestMove function globally available.
     go.run(wasm);

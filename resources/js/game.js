@@ -2,6 +2,7 @@
 // as well as communicating with the server.
 
 const URL_PREFIX = document.querySelector('meta[name="hexz-url-prefix"]')?.content || "";
+const VCS_REVISION = document.querySelector('meta[name="hexz-vcs-revision"]')?.content || "";
 
 const styles = {
     colors: {
@@ -655,10 +656,11 @@ function reset() {
 
 let wasmWorker = null;
 function startWASMWebWorker() {
-    wasmWorker = new Worker(`${URL_PREFIX}/static/js/wasmworker.js`);
+    wasmWorker = new Worker(`${URL_PREFIX}/static/js/wasmworker.js?v=${VCS_REVISION}`);
     // First message is initialization (FMII) (since you cannot pass arguments to worker):
     wasmWorker.postMessage({
         urlPrefix: URL_PREFIX,
+        vcsRevision: VCS_REVISION,
     })
     // wasmWorker.onmessage gets called when the worker posts a message,
     // which contains the suggested move.

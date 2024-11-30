@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"path"
 	"regexp"
+	"runtime/debug"
 	"strconv"
 	"time"
 
@@ -24,8 +26,23 @@ func redactPGPassword(url string) string {
 	return reURL.ReplaceAllString(url, "$1<redacted>$2")
 }
 
+var vcsRevision = func() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range info.Settings {
+			fmt.Printf("setting.Key = %s\n", setting.Key)
+			if setting.Key == "vcs.revision" {
+				return setting.Value
+			}
+		}
+	}
+
+	return ""
+}()
+
 func main() {
-	cfg := &hexz.ServerConfig{}
+	cfg := &hexz.ServerConfig{
+		VCSRevision: vcsRevision,
+	}
 
 	flag.StringVar(&cfg.ServerHost, "host", "", "Hostname/IP on which to listen. Leave empty to listen on all interfaces.")
 	flag.IntVar(&cfg.ServerPort, "port", 8080, "Port on which to listen")

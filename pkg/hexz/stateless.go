@@ -53,6 +53,10 @@ type ServerConfig struct {
 	TlsCertChain       string
 	TlsPrivKey         string
 	DebugMode          bool
+	// The VCS (typically: git) revision that the binary was built at.
+	// Can be used in .js / .wasm URLs as a query parameter to avoid
+	// the usual browser caching problems.
+	VCSRevision string
 }
 
 const (
@@ -303,14 +307,15 @@ func (s *StatelessServer) startNewGame(ctx context.Context, p *api.Player, gameT
 }
 
 // Sends the contents of filename to the ResponseWriter.
-func (s *StatelessServer) serveHtmlFile(w http.ResponseWriter, filename string) {
-	s.serveHtmlFileParams(w, filename, nil)
+func (s *StatelessServer) serveHtmlTemplate(w http.ResponseWriter, filename string) {
+	s.serveHtmlTemplateParams(w, filename, nil)
 }
 
-func (s *StatelessServer) serveHtmlFileParams(w http.ResponseWriter, filename string, params map[string]any) {
+func (s *StatelessServer) serveHtmlTemplateParams(w http.ResponseWriter, filename string, params map[string]any) {
 	w.Header().Set("Content-Type", "text/html")
 	templateParams := map[string]any{
 		"URLPathPrefix": s.config.URLPathPrefix,
+		"VCSRevision":   s.config.VCSRevision,
 	}
 	for k, v := range params {
 		templateParams[k] = v
@@ -341,7 +346,7 @@ func (s *StatelessServer) handleLoginRequest(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if err := validatePlayerName(name); err != nil {
-		s.serveHtmlFileParams(w, loginHtmlFilename, map[string]any{
+		s.serveHtmlTemplateParams(w, loginHtmlFilename, map[string]any{
 			"ErrorMessage": fmt.Sprintf("Invalid username: %v", err),
 		})
 		return
@@ -449,12 +454,12 @@ func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
 func (s *StatelessServer) handleHexz(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
-		s.serveHtmlFile(w, loginHtmlFilename)
+		s.serveHtmlTemplate(w, loginHtmlFilename)
 		return
 	}
 	// Prolong cookie ttl.
 	http.SetCookie(w, s.makePlayerCookie(p.Id, s.config.LoginTTL))
-	s.serveHtmlFileParams(w, newGameHtmlFilename, map[string]any{
+	s.serveHtmlTemplateParams(w, newGameHtmlFilename, map[string]any{
 		"PlayerName": p.Name,
 	})
 }
@@ -507,7 +512,7 @@ func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 	if g.isCPUGame() {
 		params["CPUThinkTimeOptions"] = cpuThinkTimeOptions(s.config.CpuThinkTime)
 	}
-	s.serveHtmlFileParams(w, gameHtmlFilename, params)
+	s.serveHtmlTemplateParams(w, gameHtmlFilename, params)
 }
 
 func (s *StatelessServer) handleWASMStats(w http.ResponseWriter, r *http.Request) {
@@ -534,8 +539,8 @@ func (s *StatelessServer) handleWASMStats(w http.ResponseWriter, r *http.Request
 	if s.dbStore != nil {
 		s.dbStore.InsertStats(r.Context(), &req)
 	}
-	hlog.Infof("Received CPU stats for game %s: iterations=%d elapsed=%.3f totalAllocMiB=%.3f",
-		req.GameId, req.Stats.Iterations, req.Stats.Elapsed.Seconds(), req.Stats.TotalAllocMiB)
+	hlog.Infof("Received CPU stats for game %s: iterations=%d elapsed=%.3f heapAllocMiB=%.3f",
+		req.GameId, req.Stats.Iterations, req.Stats.Elapsed.Seconds(), req.Stats.HeapAllocMiB)
 }
 
 // Download the full game state as an encoded protobuf. This is used to run a CPU player in
@@ -874,7 +879,7 @@ func (s *StatelessServer) handleView(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid seqNum", http.StatusBadRequest)
 		return
 	}
-	s.serveHtmlFile(w, viewHtmlFilename)
+	s.serveHtmlTemplate(w, viewHtmlFilename)
 }
 
 func replayForGameHistoryResponse(gameState *pb.GameState) (*GameHistoryResponse, error) {
@@ -953,7 +958,7 @@ func (s *StatelessServer) handleHistoryList(w http.ResponseWriter, r *http.Reque
 	if prevOffset < 0 {
 		prevOffset = 0
 	}
-	s.serveHtmlFileParams(w, historyHtmlFilename, map[string]any{
+	s.serveHtmlTemplateParams(w, historyHtmlFilename, map[string]any{
 		"Games":      games,
 		"Offset":     offset,
 		"HasPrev":    offset > 0,
