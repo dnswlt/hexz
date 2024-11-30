@@ -14,18 +14,20 @@
             <th>Host</th>
             <th>Started</th>
             <th>Game</th>
-            <th>Mode</th>
+            <th>Move</th>
+            <th>Score</th>
         </tr>
     </thead>
     <tbody>
         {{$urlPathPrefix := .URLPathPrefix}}
         {{range .Games}}
         <tr>
-            <td><a href="{{$urlPathPrefix}}/view/{{.Id}}">{{.Id}}</a></td>
+            <td><a href="{{$urlPathPrefix}}/view/{{.GameID}}">{{.GameID}}</a></td>
             <td>{{.Host}}</td>
-            <td>{{protodate .Started}}</td>
-            <td>{{.Type}}</td>
-            <td>{{cpuPlayerMode .CpuPlayerMode}}</td>
+            <td>{{shortdate .Started}}</td>
+            <td>{{.GameType}} ({{cpuPlayerMode .CPUPlayerMode}})</td>
+            <td>{{.Move}}</td>
+            <td>{{.ScoreP1}} &ndash; {{.ScoreP2}}{{if not .Done}}*{{end}}</td>
         </tr>
         {{end}}
     </tbody>

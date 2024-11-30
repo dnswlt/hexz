@@ -306,7 +306,11 @@ func (s *StatelessServer) serveHtmlFileParams(w http.ResponseWriter, filename st
 	err := s.renderer.Render(&data, filename, templateParams)
 	if err != nil {
 		http.Error(w, "failed to render template", http.StatusInternalServerError)
-		hlog.Errorf("Error rendering template %s with params %v: %v", filename, templateParams, err)
+		var keys []string
+		for k := range params {
+			keys = append(keys, k)
+		}
+		hlog.Errorf("Error rendering template %s with parameters %v: %v", filename, keys, err)
 		return
 	}
 	w.Write(data.Bytes())
@@ -559,7 +563,7 @@ func (s *StatelessServer) storeGameAndNotify(ctx context.Context, entryType stri
 	}
 	gameId := g.State().GetGameInfo().GetId()
 	if s.dbStore != nil {
-		if err := s.dbStore.InsertHistory(ctx, entryType, gameId, g.State()); err != nil {
+		if err := s.dbStore.InsertHistory(ctx, entryType, gameId, g.State(), boardStatus(g.Engine())); err != nil {
 			hlog.Errorf("Cannot add history entry for entry type %s, game %s in database: %s", entryType, gameId, err)
 			return err
 		}
@@ -816,7 +820,7 @@ func (s *StatelessServer) handleGameSettings(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if s.dbStore != nil {
-		if err := s.dbStore.InsertHistory(r.Context(), "settings", q.gameId, g.State()); err != nil {
+		if err := s.dbStore.InsertHistory(r.Context(), "settings", q.gameId, g.State(), nil); err != nil {
 			hlog.Errorf("Cannot add history entry for game %s in database: %s", q.gameId, err)
 		}
 	}
@@ -998,7 +1002,7 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if s.dbStore != nil {
-			if err := s.dbStore.InsertHistory(r.Context(), "join", gameId, g.State()); err != nil {
+			if err := s.dbStore.InsertHistory(r.Context(), "join", gameId, g.State(), nil); err != nil {
 				hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
 			}
 		}

@@ -62,6 +62,16 @@ func supportsSinglePlayer(t api.GameType) bool {
 	return t == gameTypeFlagz
 }
 
+func boardStatus(ge GameEngine) *api.BoardStatus {
+	b := ge.Board()
+	return &api.BoardStatus{
+		Done:  ge.IsDone(),
+		Score: b.Score,
+		Move:  b.Move,
+		Turn:  b.Turn,
+	}
+}
+
 // Each player has a different view of the board. In particular, player A
 // should not see the hidden moves of player B. To not give cheaters a chance,
 // we should never send the hidden moves out to other players at all

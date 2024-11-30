@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"io"
 	"path"
+	"time"
 
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
@@ -28,7 +29,10 @@ const (
 func commonFuncs() template.FuncMap {
 	return map[string]any{
 		"protodate": func(t *tpb.Timestamp) string {
-			return t.AsTime().Local().Format("02/01 15:04")
+			return t.AsTime().Local().Format("2006-01-02 15:04:05")
+		},
+		"shortdate": func(t time.Time) string {
+			return t.Local().Format("02/01 15:04")
 		},
 		"cpuPlayerMode": func(e pb.CPUPlayerMode_Enum) string {
 			switch e {

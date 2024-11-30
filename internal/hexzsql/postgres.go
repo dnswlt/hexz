@@ -8,11 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // Needed to register pgx as a database/sql driver.
 	"google.golang.org/protobuf/proto"
-	tpb "google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/dnswlt/hexz/internal/api"
 	"github.com/dnswlt/hexz/internal/hlog"
@@ -44,9 +42,13 @@ func (s *PostgresStore) StoreGame(ctx context.Context, hostId string, gs *pb.Gam
 			game_type,
 			cpu_player_mode,
 			host_name,
-			host_id
+			host_id,
+			move,
+			score_p1,
+			score_p2,
+			done
 		) 
-		VALUES ($1, $2, $3, $4, $5, $6)
+		VALUES ($1, $2, $3, $4, $5, $6, 0, 0, 0, FALSE)
 		ON CONFLICT (game_id) DO UPDATE
 			SET 
 				started = $1,
@@ -64,7 +66,7 @@ func (s *PostgresStore) StoreGame(ctx context.Context, hostId string, gs *pb.Gam
 	if err != nil {
 		return fmt.Errorf("failed to store game: %v", err)
 	}
-	return s.InsertHistory(ctx, "reset", gs.GameInfo.Id, gs)
+	return s.InsertHistory(ctx, "reset", gs.GameInfo.Id, gs, nil)
 }
 
 func (s *PostgresStore) LoadGame(ctx context.Context, gameId string) (*pb.GameState, error) {
@@ -100,15 +102,22 @@ func (s *PostgresStore) LoadGame(ctx context.Context, gameId string) (*pb.GameSt
 	return gameState, nil
 }
 
-func (s *PostgresStore) ListRecentGames(ctx context.Context, offset int, limit int) ([]*pb.GameInfo, error) {
+func (s *PostgresStore) ListRecentGames(ctx context.Context, offset int, limit int) ([]*GameRow, error) {
 	rows, err := s.pool.QueryContext(ctx, `
 		SELECT
+			created,
 			game_id,
 			started,
 			game_type,
 			cpu_player_mode,
-			host_name
+			host_name,
+			host_id,
+			COALESCE(move, 0) AS move,
+			COALESCE(score_p1, 0) AS score_p1,
+			COALESCE(score_p2, 0) AS score_p2,
+			COALESCE(done, FALSE) AS done
 		FROM games
+		WHERE move > 0
 		ORDER BY started DESC
 		LIMIT $1 OFFSET $2
 	`, limit, offset)
@@ -116,28 +125,32 @@ func (s *PostgresStore) ListRecentGames(ctx context.Context, offset int, limit i
 		return nil, fmt.Errorf("failed to read games: %v", err)
 	}
 	defer rows.Close()
-	result := []*pb.GameInfo{}
+	result := []*GameRow{}
 	for rows.Next() {
-		var gameId string
-		var started time.Time
-		var gameType string
+		var game GameRow
 		var cpuPlayerMode string
-		var host string
-		if err := rows.Scan(&gameId, &started, &gameType, &cpuPlayerMode, &host); err != nil {
+		err := rows.Scan(
+			&game.Created,
+			&game.GameID,
+			&game.Started,
+			&game.GameType,
+			&cpuPlayerMode,
+			&game.Host,
+			&game.HostID,
+			&game.Move,
+			&game.ScoreP1,
+			&game.ScoreP2,
+			&game.Done,
+		)
+		game.CPUPlayerMode = pb.CPUPlayerMode_Enum(pb.CPUPlayerMode_Enum_value[cpuPlayerMode])
+		if err != nil {
 			return nil, fmt.Errorf("error reading row: %v", err)
 		}
-		result = append(result, &pb.GameInfo{
-			Id:            gameId,
-			Host:          host,
-			Started:       tpb.New(started),
-			Type:          gameType,
-			CpuPlayerMode: pb.CPUPlayerMode_Enum(pb.CPUPlayerMode_Enum_value[cpuPlayerMode]),
-		})
+		result = append(result, &game)
 	}
 	return result, nil
 }
-
-func (s *PostgresStore) InsertHistory(ctx context.Context, entryType string, gameId string, gs *pb.GameState) error {
+func (s *PostgresStore) InsertHistory(ctx context.Context, entryType string, gameId string, gs *pb.GameState, boardStatus *api.BoardStatus) error {
 	var gameStateBytes []byte
 	if gs != nil {
 		var buf bytes.Buffer
@@ -163,6 +176,23 @@ func (s *PostgresStore) InsertHistory(ctx context.Context, entryType string, gam
 		gameId, gameStateBytes, entryType)
 	if err != nil {
 		return fmt.Errorf("failed to store game history: %v", err)
+	}
+	if boardStatus == nil {
+		return nil
+	}
+	var score [2]int
+	copy(score[:], boardStatus.Score) // In case boardStatus has only 0 or 1 scores.
+	_, err = s.pool.ExecContext(ctx, `
+		UPDATE games
+		SET
+			move = $2,
+			score_p1 = $3,
+			score_p2 = $4,
+			done = $5
+		WHERE game_id = $1`,
+		gameId, boardStatus.Move, score[0], score[1], boardStatus.Done)
+	if err != nil {
+		return fmt.Errorf("failed to update game status: %v", err)
 	}
 	return nil
 }
