@@ -68,10 +68,13 @@ func (c *HexzTestClient) newFlagzGame(singlePlayer bool) (gameId string, err err
 }
 
 func (c *HexzTestClient) makeMove(gameId string, m *MoveRequest) error {
-	data, _ := json.Marshal(m)
+	data, err := json.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("cannot marshal MoveRequest: %v", err)
+	}
 	resp, err := c.client.Post(c.serverURL+"/hexz/move/"+gameId, "application/json", bytes.NewReader(data))
 	if err != nil {
-		return fmt.Errorf("failed to make a move: %s", err)
+		return fmt.Errorf("failed to make a move: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to make a move: %s", resp.Status)
@@ -82,7 +85,7 @@ func (c *HexzTestClient) makeMove(gameId string, m *MoveRequest) error {
 func (c *HexzTestClient) validMoves(gameId string) ([]*MoveRequest, error) {
 	validMovesResp, err := c.client.Get(c.serverURL + "/hexz/moves/" + gameId)
 	if err != nil {
-		return nil, fmt.Errorf("cannot get valid moves: %s", err)
+		return nil, fmt.Errorf("cannot get valid moves: %v", err)
 	}
 	if validMovesResp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("cannot get valid moves: %s", validMovesResp.Status)
@@ -91,31 +94,40 @@ func (c *HexzTestClient) validMoves(gameId string) ([]*MoveRequest, error) {
 	dec := json.NewDecoder(validMovesResp.Body)
 	var validMoves []*MoveRequest
 	if err := dec.Decode(&validMoves); err != nil {
-		return nil, fmt.Errorf("cannot unmarshal MoveRequest: %s", err)
+		return nil, fmt.Errorf("cannot unmarshal MoveRequest: %v", err)
 	}
 	return validMoves, nil
 }
 
-func (c *HexzTestClient) undo(gameId string) error {
-	resp, err := c.client.Post(c.serverURL+"/hexz/undo/"+gameId, "application/json", nil)
+func (c *HexzTestClient) undoRedo(action string, gameId string, move int) error {
+	data, err := json.Marshal(UndoRedoRequest{
+		GameId:      gameId,
+		Action:      action,
+		CurrentMove: move,
+	})
 	if err != nil {
-		return fmt.Errorf("failed to undo: %w", err)
+		return fmt.Errorf("cannot marshal UndoRedoRequest: %v", err)
+	}
+	resp, err := c.client.Post(c.serverURL+"/hexz/"+action+"/"+gameId, "application/json", bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("failed to %s: %v", action, err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to undo a move: %s", resp.Status)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("cannot read body of %s reponse: %v", action, err)
+		}
+		return fmt.Errorf("failed to %s a move: %s %q", action, resp.Status, string(body))
 	}
 	return nil
 }
 
-func (c *HexzTestClient) redo(gameId string) error {
-	resp, err := c.client.Post(c.serverURL+"/hexz/redo/"+gameId, "application/json", nil)
-	if err != nil {
-		return fmt.Errorf("failed to undo: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to redo a move: %s", resp.Status)
-	}
-	return nil
+func (c *HexzTestClient) undo(gameId string, move int) error {
+	return c.undoRedo("undo", gameId, move)
+}
+
+func (c *HexzTestClient) redo(gameId string, move int) error {
+	return c.undoRedo("redo", gameId, move)
 }
 
 func (c *HexzTestClient) history(gameId string) (*GameHistoryResponse, error) {

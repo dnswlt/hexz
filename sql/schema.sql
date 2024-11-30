@@ -18,6 +18,12 @@ CREATE TABLE games (
     -- Player (cookie) ID of the player hosting the game.
     host_id TEXT,
 
+    -- These fields are updated during the game and represent the last seen state.
+    move INTEGER,
+    score_p1 INTEGER,
+    score_p2 INTEGER,
+    done BOOLEAN,
+
     PRIMARY KEY (game_id)
 );
 CREATE INDEX games_started_desc_idx ON games (started DESC);

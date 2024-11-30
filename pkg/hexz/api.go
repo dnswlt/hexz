@@ -129,12 +129,10 @@ type ResetRequest struct {
 	Message string `json:"message"`
 }
 
-type UndoRequest struct {
-	Move int `json:"move"`
-}
-
-type RedoRequest struct {
-	Move int `json:"move"`
+type UndoRedoRequest struct {
+	GameId      string `json:"gameId"`
+	Action      string `json:"action"`      // One of {"undo", "redo"}
+	CurrentMove int    `json:"currentMove"` // The current move number (not the one to be undone)
 }
 
 type GameSettingsRequest struct {

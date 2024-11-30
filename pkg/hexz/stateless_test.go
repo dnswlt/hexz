@@ -322,15 +322,15 @@ func TestFlagzUndo(t *testing.T) {
 		t.Fatalf("could not make move: %v", err)
 	}
 	// Undo the move:
-	if err := c.undo(gameId); err != nil {
+	if err := c.undo(gameId, 1); err != nil {
 		t.Fatalf("undo failed: %v", err)
 	}
 	// Redo the move:
-	if err := c.redo(gameId); err != nil {
+	if err := c.redo(gameId, 0); err != nil {
 		t.Fatalf("undo failed: %v", err)
 	}
 	// Undo the move (again):
-	if err := c.undo(gameId); err != nil {
+	if err := c.undo(gameId, 1); err != nil {
 		t.Fatalf("undo failed: %v", err)
 	}
 	// Now make a different first move:

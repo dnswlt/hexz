@@ -28,18 +28,18 @@ const (
 func commonFuncs() template.FuncMap {
 	return map[string]any{
 		"protodate": func(t *tpb.Timestamp) string {
-			return t.AsTime().Local().Format("2006-01-02 15:04:05")
+			return t.AsTime().Local().Format("02/01 15:04")
 		},
 		"cpuPlayerMode": func(e pb.CPUPlayerMode_Enum) string {
 			switch e {
 			case pb.CPUPlayerMode_NONE:
 				return "2P"
 			case pb.CPUPlayerMode_EMBEDDED_CPU:
-				return "1P (embedded CPU)"
+				return "1P e"
 			case pb.CPUPlayerMode_REMOTE_CPU:
-				return "1P (remote CPU)"
+				return "1P r"
 			case pb.CPUPlayerMode_WASM:
-				return "1P (WASM)"
+				return "1P w"
 			default:
 				return "?"
 			}

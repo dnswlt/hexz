@@ -1,6 +1,7 @@
 package hexz
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	crand "crypto/rand"
@@ -55,6 +56,11 @@ type ServerConfig struct {
 
 const (
 	playerIdCookieName = "playerId"
+)
+
+var (
+	errInvalidGameID = fmt.Errorf("invalid game ID")
+	errMissingCookie = fmt.Errorf("missing cookie")
 )
 
 // This file contains the implementation of the stateless hexz game server.
@@ -233,7 +239,7 @@ func (s *StatelessServer) makePlayerCookie(playerId api.PlayerId, ttl time.Durat
 func (s *StatelessServer) lookupPlayerFromCookie(r *http.Request) (api.Player, error) {
 	cookie, err := r.Cookie(playerIdCookieName)
 	if err != nil {
-		return api.Player{}, fmt.Errorf("missing cookie")
+		return api.Player{}, errMissingCookie
 	}
 	return s.playerStore.Lookup(r.Context(), api.PlayerId(cookie.Value))
 }
@@ -296,7 +302,14 @@ func (s *StatelessServer) serveHtmlFileParams(w http.ResponseWriter, filename st
 	for k, v := range params {
 		templateParams[k] = v
 	}
-	s.renderer.Render(w, filename, templateParams)
+	var data bytes.Buffer
+	err := s.renderer.Render(&data, filename, templateParams)
+	if err != nil {
+		http.Error(w, "failed to render template", http.StatusInternalServerError)
+		hlog.Errorf("Error rendering template %s with params %v: %v", filename, templateParams, err)
+		return
+	}
+	w.Write(data.Bytes())
 }
 
 func (s *StatelessServer) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
@@ -368,27 +381,12 @@ func (s *StatelessServer) handleNewGame(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
-	p, err := s.lookupPlayerFromCookie(r)
+	q, err := readActiveGameRequest[ResetRequest](s, w, r)
 	if err != nil {
-		http.Error(w, "unknown player", http.StatusForbidden)
 		return
 	}
-	gameId := r.PathValue("gameId")
-	if !isValidGameId(gameId) {
-		http.Error(w, "invalid game ID", http.StatusBadRequest)
-		return
-	}
-	g, err := s.loadGame(r.Context(), gameId)
-	if err != nil {
-		http.Error(w, "game does not exist", http.StatusNotFound)
-		return
-	}
-	var req ResetRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "unmarshal error", http.StatusBadRequest)
-		return
-	}
-	if g.PlayerNum(string(p.Id)) <= 0 {
+	g := q.gameRepr
+	if g.PlayerNum(string(q.player.Id)) <= 0 {
 		http.Error(w, "only players can reset a game", http.StatusForbidden)
 		return
 	}
@@ -403,7 +401,7 @@ func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.gameStore.Publish(r.Context(), newG.PubsubID(), &pb.GameStorePubsubEvent{
-		GameId: gameId,
+		GameId: q.gameId,
 		Event: &pb.GameStorePubsubEvent_NewGameStarted_{
 			NewGameStarted: &pb.GameStorePubsubEvent_NewGameStarted{
 				GameId: newG.GameID(),
@@ -627,35 +625,57 @@ func (s *StatelessServer) goMakeCPUMove(g *GameRepr) {
 	}(g.GameID(), g.Engine().Board().Turn)
 }
 
-func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
+type GameRequest[R any] struct {
+	player   api.Player
+	gameId   string
+	request  *R
+	gameRepr *GameRepr
+}
+
+func readActiveGameRequest[R any](s *StatelessServer, w http.ResponseWriter, r *http.Request) (*GameRequest[R], error) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
 		http.Error(w, "Player not logged in", http.StatusPreconditionFailed)
-		return
+		return nil, err
 	}
 	gameId := r.PathValue("gameId")
 	if !isValidGameId(gameId) {
 		http.Error(w, "Invalid game ID", http.StatusBadRequest)
-		return
+		return nil, errInvalidGameID
 	}
+	// Parse request as JSON.
+	dec := json.NewDecoder(r.Body)
+	request := new(R)
+	if err := dec.Decode(request); err != nil {
+		http.Error(w, "invalid request data", http.StatusBadRequest)
+		return nil, err
+	}
+	// Load game.
 	g, err := s.loadGame(r.Context(), gameId)
 	if err != nil {
 		http.Error(w, "No such game", http.StatusNotFound)
+		return nil, err
+	}
+	return &GameRequest[R]{
+		player:   p,
+		gameId:   gameId,
+		request:  request,
+		gameRepr: g,
+	}, nil
+}
+
+func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
+	q, err := readActiveGameRequest[MoveRequest](s, w, r)
+	if err != nil {
 		return
 	}
-	// Get move request.
-	dec := json.NewDecoder(r.Body)
-	var req MoveRequest
-	if err := dec.Decode(&req); err != nil {
-		http.Error(w, "unmarshal error", http.StatusBadRequest)
-		return
-	}
-	if !req.Type.valid() {
+	if !q.request.Type.valid() {
 		http.Error(w, "Invalid cell type", http.StatusBadRequest)
 		return
 	}
+	g := q.gameRepr
 	// Is it the player's turn?
-	pNum := g.PlayerNum(string(p.Id))
+	pNum := g.PlayerNum(string(q.player.Id))
 	isWASM := g.State().GetGameInfo().CpuPlayerMode == pb.CPUPlayerMode_WASM
 	if pNum == 1 && isWASM && g.Engine().Board().Turn == 2 {
 		// TODO: fix this mess. Clients should explicitly tell us that this is a WASM move for P2.
@@ -666,10 +686,10 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := g.MakeMove(GameEngineMove{
 		PlayerNum: pNum,
-		Move:      req.Move,
-		Row:       req.Row,
-		Col:       req.Col,
-		CellType:  req.Type,
+		Move:      q.request.Move,
+		Row:       q.request.Row,
+		Col:       q.request.Col,
+		CellType:  q.request.Type,
 	}); err != nil {
 		http.Error(w, "invalid move", http.StatusBadRequest)
 		return
@@ -678,7 +698,7 @@ func (s *StatelessServer) handleMove(w http.ResponseWriter, r *http.Request) {
 	// Store new game state and notify other players.
 	if err := s.storeGameAndNotify(r.Context(), "move", g); err != nil {
 		http.Error(w, "failed to save game state", http.StatusInternalServerError)
-		hlog.Errorf("Could not store game %s: %v", gameId, err)
+		hlog.Errorf("Could not store game %s: %v", q.gameId, err)
 		return
 	}
 
@@ -723,29 +743,25 @@ func (s *StatelessServer) handleValidMoves(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *StatelessServer) handleUndoRedo(w http.ResponseWriter, r *http.Request) {
-	action := "undo"
-	if strings.Contains(r.URL.Path, "/redo/") {
-		action = "redo"
-	}
-	p, err := s.lookupPlayerFromCookie(r)
+	q, err := readActiveGameRequest[UndoRedoRequest](s, w, r)
 	if err != nil {
-		http.Error(w, "", http.StatusBadRequest)
-	}
-	gameId := r.PathValue("gameId")
-	if !isValidGameId(gameId) {
-		http.Error(w, "Invalid game ID", http.StatusBadRequest)
-		return
-	}
-	g, err := s.loadGame(r.Context(), gameId)
-	if err != nil {
-		http.Error(w, "No such game", http.StatusNotFound)
-		return
-	}
-	if g.PlayerNum(string(p.Id)) == 0 {
-		http.Error(w, "Only players can undo a move", http.StatusForbidden)
 		return
 	}
 
+	action := q.request.Action
+	if action != "undo" && action != "redo" {
+		http.Error(w, "invalid action", http.StatusBadRequest)
+		return
+	}
+	g := q.gameRepr
+	if g.PlayerNum(string(q.player.Id)) == 0 {
+		http.Error(w, "Only players can undo a move", http.StatusForbidden)
+		return
+	}
+	if q.request.CurrentMove != g.Engine().Board().Move {
+		http.Error(w, fmt.Sprintf("wrong move number: got %d, want %d", q.request.CurrentMove, g.Engine().Board().Move), http.StatusBadRequest)
+		return
+	}
 	if action == "undo" {
 		err = g.Undo()
 	} else {
@@ -762,35 +778,20 @@ func (s *StatelessServer) handleUndoRedo(w http.ResponseWriter, r *http.Request)
 	}
 	if err := s.gameStore.UpdateGame(r.Context(), g.State()); err != nil {
 		http.Error(w, "failed to save game state", http.StatusInternalServerError)
-		hlog.Errorf("Could not store game %s: %s", gameId, err)
+		hlog.Errorf("Could not store game %s: %s", q.gameId, err)
 		return
 	}
 	s.storeGameAndNotify(r.Context(), action, g)
 }
 
 func (s *StatelessServer) handleGameSettings(w http.ResponseWriter, r *http.Request) {
-	p, err := s.lookupPlayerFromCookie(r)
+	q, err := readActiveGameRequest[GameSettingsRequest](s, w, r)
 	if err != nil {
-		http.Error(w, "", http.StatusBadRequest)
-	}
-	gameId := r.PathValue("gameId")
-	if !isValidGameId(gameId) {
-		http.Error(w, "Invalid game ID", http.StatusBadRequest)
 		return
 	}
-	g, err := s.loadGame(r.Context(), gameId)
-	if err != nil {
-		http.Error(w, "No such game", http.StatusNotFound)
-		return
-	}
-	if g.PlayerNum(string(p.Id)) == 0 {
+	g := q.gameRepr
+	if g.PlayerNum(string(q.player.Id)) == 0 {
 		http.Error(w, "Only players can update game settings", http.StatusForbidden)
-		return
-	}
-	var req GameSettingsRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "unmarshal error", http.StatusBadRequest)
-		hlog.Infof("bad request for game settings: %v", err)
 		return
 	}
 	settings := g.State().GetGameInfo().Settings
@@ -798,24 +799,25 @@ func (s *StatelessServer) handleGameSettings(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "game has no settings", http.StatusNotImplemented)
 		return
 	}
-	if req.GameId != gameId {
+	if q.request.GameId != q.gameId {
 		http.Error(w, "wrong game ID in request", http.StatusBadRequest)
 		return
 	}
+	req := q.request
 	if req.CPUThinkTimeMillis > 0 && req.CPUThinkTimeMillis <= s.config.CpuThinkTime.Milliseconds() {
-		hlog.Infof("Updating CPU think time to %dms for game %v", req.CPUThinkTimeMillis, gameId)
+		hlog.Infof("Updating CPU think time to %dms for game %v", req.CPUThinkTimeMillis, q.gameId)
 		settings.CpuThinkTimeMillis = req.CPUThinkTimeMillis
 	} else if req.CPUThinkTimeMillis != 0 {
-		hlog.Infof("Ignoring request to set CpuThinkTimeMillis to %dms for game %v", req.CPUThinkTimeMillis, gameId)
+		hlog.Infof("Ignoring request to set CpuThinkTimeMillis to %dms for game %v", req.CPUThinkTimeMillis, q.gameId)
 	}
 	if err := s.gameStore.UpdateGame(r.Context(), g.State()); err != nil {
 		http.Error(w, "failed to save game state", http.StatusInternalServerError)
-		hlog.Errorf("Could not store game %s: %s", gameId, err)
+		hlog.Errorf("Could not store game %s: %s", q.gameId, err)
 		return
 	}
 	if s.dbStore != nil {
-		if err := s.dbStore.InsertHistory(r.Context(), "settings", gameId, g.State()); err != nil {
-			hlog.Errorf("Cannot add history entry for game %s in database: %s", gameId, err)
+		if err := s.dbStore.InsertHistory(r.Context(), "settings", q.gameId, g.State()); err != nil {
+			hlog.Errorf("Cannot add history entry for game %s in database: %s", q.gameId, err)
 		}
 	}
 

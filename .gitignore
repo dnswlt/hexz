@@ -26,3 +26,4 @@ main
 .vscode/
 a.out
 nbench.html
+.DS_Store

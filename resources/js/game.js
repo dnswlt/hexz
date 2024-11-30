@@ -85,18 +85,19 @@ async function resetGame() {
     });
 }
 
-function undoRedoMove(command) {
+function undoRedoMove(action) {
     return async function () {
         if (!gstate.board) {
             return
         }
-        return fetch(`${URL_PREFIX}/${command}/${gameId()}`, {
+        return fetch(`${URL_PREFIX}/${action}/${gameId()}`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                move: gstate.board.move,
+                action: action,
+                currentMove: gstate.board.move,
             }),
         });
     };
