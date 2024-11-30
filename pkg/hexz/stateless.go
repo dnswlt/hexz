@@ -1048,7 +1048,7 @@ func (s *StatelessServer) handleLoginNames(w http.ResponseWriter, r *http.Reques
 	for i := 0; i < n; i++ {
 		adj := adjectives[xrand.Intn(len(adjectives))]
 		animal := animals[xrand.Intn(len(animals))]
-		name := adj + animal // No spaces in between is more 1337.
+		name := adj + " " + animal // Add spaces so names can be wrapped.
 		if len(name) <= 20 {
 			// Ignore invalid names
 			names = append(names, name)

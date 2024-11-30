@@ -668,6 +668,7 @@ function startWASMWebWorker() {
         move = e.data;
         if (!move) {
             console.log("CPU did not find a move.");
+            return;
         }
         const moveResponse = await fetch(`${URL_PREFIX}/move/${gameId()}`, {
             method: "POST",
