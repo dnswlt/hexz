@@ -140,6 +140,10 @@ type GameSettingsRequest struct {
 	CPUThinkTimeMillis int64  `json:"cpuThinkTimeMillis"`
 }
 
+type LoginNamesResponse struct {
+	Names []string `json:"names"`
+}
+
 // Used in /hexz/status responses.
 type GameStateResponse struct {
 	GameId           string `json:"gameId"`

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // Needed to register pgx as a database/sql driver.
 	"google.golang.org/protobuf/proto"
@@ -102,8 +103,8 @@ func (s *PostgresStore) LoadGame(ctx context.Context, gameId string) (*pb.GameSt
 	return gameState, nil
 }
 
-func (s *PostgresStore) ListRecentGames(ctx context.Context, offset int, limit int) ([]*GameRow, error) {
-	rows, err := s.pool.QueryContext(ctx, `
+func (s *PostgresStore) listRecentGamesForPlayer(ctx context.Context, playerId string, offset int, limit int) ([]*GameRow, error) {
+	queryTmpl := `
 		SELECT
 			created,
 			game_id,
@@ -117,10 +118,17 @@ func (s *PostgresStore) ListRecentGames(ctx context.Context, offset int, limit i
 			COALESCE(score_p2, 0) AS score_p2,
 			COALESCE(done, FALSE) AS done
 		FROM games
-		WHERE move > 0
+		WHERE %s
 		ORDER BY started DESC
-		LIMIT $1 OFFSET $2
-	`, limit, offset)
+		LIMIT $1 OFFSET $2`
+	args := []any{limit, offset}
+	clauses := []string{"move > 0"}
+	if playerId != "" {
+		args = append(args, playerId)
+		clauses = append(clauses, fmt.Sprintf("host_id=$%d", len(args)))
+	}
+	query := fmt.Sprintf(queryTmpl, strings.Join(clauses, " AND "))
+	rows, err := s.pool.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read games: %v", err)
 	}
@@ -142,14 +150,19 @@ func (s *PostgresStore) ListRecentGames(ctx context.Context, offset int, limit i
 			&game.ScoreP2,
 			&game.Done,
 		)
-		game.CPUPlayerMode = pb.CPUPlayerMode_Enum(pb.CPUPlayerMode_Enum_value[cpuPlayerMode])
 		if err != nil {
 			return nil, fmt.Errorf("error reading row: %v", err)
 		}
+		game.CPUPlayerMode = pb.CPUPlayerMode_Enum(pb.CPUPlayerMode_Enum_value[cpuPlayerMode])
 		result = append(result, &game)
 	}
 	return result, nil
 }
+
+func (s *PostgresStore) ListRecentGames(ctx context.Context, offset int, limit int) ([]*GameRow, error) {
+	return s.listRecentGamesForPlayer(ctx, "", offset, limit)
+}
+
 func (s *PostgresStore) InsertHistory(ctx context.Context, entryType string, gameId string, gs *pb.GameState, boardStatus *api.BoardStatus) error {
 	var gameStateBytes []byte
 	if gs != nil {

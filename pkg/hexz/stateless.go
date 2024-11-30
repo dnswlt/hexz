@@ -1,6 +1,7 @@
 package hexz
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -25,6 +26,7 @@ import (
 	"github.com/dnswlt/hexz/internal/hexzmem"
 	"github.com/dnswlt/hexz/internal/hexzsql"
 	"github.com/dnswlt/hexz/internal/hlog"
+	"github.com/dnswlt/hexz/internal/xrand"
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 	"google.golang.org/protobuf/proto"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
@@ -970,6 +972,74 @@ func (s *StatelessServer) handleHistory(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+func readLines(path string) ([]string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	var lines []string
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		// Skip emtpy lines and comment lines starting with '#'.
+		if line != "" && line[0] != '#' {
+			lines = append(lines, line)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading file: %w", err)
+	}
+
+	return lines, nil
+}
+
+func (s *StatelessServer) handleLoginNames(w http.ResponseWriter, r *http.Request) {
+	animals, err := readLines(path.Join(s.config.DocumentRoot, "data", "animals.txt"))
+	if err != nil {
+		http.Error(w, "no suggestions available", http.StatusNotFound)
+		return
+	}
+	adjectives, err := readLines(path.Join(s.config.DocumentRoot, "data", "adjectives.txt"))
+	if err != nil {
+		http.Error(w, "no suggestions available", http.StatusNotFound)
+		return
+	}
+	if len(animals) == 0 || len(adjectives) == 0 {
+		http.Error(w, "no suggestions available", http.StatusNotFound)
+		return
+	}
+	n := 100
+	var names []string
+	for i := 0; i < n; i++ {
+		adj := adjectives[xrand.Intn(len(adjectives))]
+		animal := animals[xrand.Intn(len(animals))]
+		name := adj + animal // No spaces in between is more 1337.
+		if len(name) <= 20 {
+			// Ignore invalid names
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		// this should never happen: all combinations are too long!?
+		http.Error(w, "no suggestions generated", http.StatusNotFound)
+		hlog.Errorf("No valid login suggestions generated. Data corruption?")
+		return
+	}
+	json, err := json.Marshal(LoginNamesResponse{
+		Names: names,
+	})
+	if err != nil {
+		http.Error(w, "marshal error", http.StatusInternalServerError)
+		hlog.Errorf("JSON marshal error: %s", err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(json)
+}
+
 func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
@@ -1160,6 +1230,10 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	handleFunc("/history", s.handleHistoryList)
 	handleFunc("/history/{gameId}", s.handleHistory)
 	handleFunc("/moves/{gameId}", s.handleValidMoves)
+
+	handleFunc("/loginnames", s.handleLoginNames)
+
+	// Must come last to avoid capturing other paths:
 	handleFunc("/{gameId}", s.handleGame)
 	// Technical services
 	// mux.Handle("/statusz", s.basicAuthHandlerFunc(s.handleStatusz))
