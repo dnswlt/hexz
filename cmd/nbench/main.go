@@ -32,7 +32,7 @@ var (
 	p2Eval           = flag.Bool("p2-eval", false, "If true, P1's max iterations are doubled until P2 loses")
 )
 
-func playGame(gameNum int, p1, p2 hexz.CPUPlayer) (winner int, err error) {
+func playGame(gameNum int, wins [2]int, p1, p2 hexz.CPUPlayer) (winner int, err error) {
 	ge := hexz.NewGameEngineFlagz()
 	cpuPlayers := []hexz.CPUPlayer{p1, p2}
 	scoreKind, found := pb.SuggestMoveStats_ScoreKind_value[*svgMoveScoreKind]
@@ -78,7 +78,7 @@ func playGame(gameNum int, p1, p2 hexz.CPUPlayer) (winner int, err error) {
 			return 0, fmt.Errorf("make move for P%d: %s %w", turn, mv.String(), err)
 		}
 		numMoves++
-		log.Printf("Game %d: score after %d moves: %v", gameNum, numMoves, ge.B.Score)
+		log.Printf("Wins: %v. Game %d: score after %d moves: %v", wins, gameNum, numMoves, ge.B.Score)
 	}
 	// TODO: one more ExportSVGWithStats for the final board with no added stats or moves.
 	log.Printf("Game %d ended after %d moves. Winner: %d. Final result: %v\n", gameNum, numMoves, ge.Winner(), ge.B.Score)
@@ -89,7 +89,7 @@ type EvalResult struct {
 	p1Iterations int
 	p2Iterations int
 	games        int
-	score        [2]int
+	wins         [2]int
 	done         bool
 }
 
@@ -129,7 +129,7 @@ func startHttpServer(ch <-chan EvalResult) *http.Server {
 				if !r.done {
 					suffix = fmt.Sprintf(" *%d", r.games)
 				}
-				fmt.Fprintf(w, "  @(%d:%d): %d-%d%s\n", r.p1Iterations, r.p2Iterations, r.score[0], r.score[1], suffix)
+				fmt.Fprintf(w, "  @(%d:%d): %d-%d%s\n", r.p1Iterations, r.p2Iterations, r.wins[0], r.wins[1], suffix)
 			}
 		}),
 	}
@@ -168,22 +168,22 @@ func evalP2() {
 		}
 		resultCh <- result
 		for i := 0; i < *numGames; i++ {
-			winner, err := playGame(i, p1, p2)
+			winner, err := playGame(i, result.wins, p1, p2)
 			if err != nil {
 				fmt.Printf("playing game failed: %v\n", err)
 				os.Exit(1)
 			}
 			if winner > 0 {
-				result.score[winner-1]++
+				result.wins[winner-1]++
 			}
 			result.games++
 			resultCh <- result
 		}
 		result.done = true
-		fmt.Printf("Final result after %d games: %d-%d\n", *numGames, result.score[0], result.score[1])
+		fmt.Printf("Final result after %d games: %d-%d\n", *numGames, result.wins[0], result.wins[1])
 		resultCh <- result
 		results = append(results, result)
-		if result.score[1] == 0 {
+		if result.wins[1] == 0 {
 			fmt.Printf("P2 did not win a single game with iterations limits %d : %d\n", p1Iterations, p2Iterations)
 			p2Lost = true
 			break
@@ -196,7 +196,7 @@ func evalP2() {
 	}
 	fmt.Printf("All results:\n")
 	for _, r := range results {
-		fmt.Printf("  @(%d:%d): %d-%d\n", r.p1Iterations, r.p2Iterations, r.score[0], r.score[1])
+		fmt.Printf("  @(%d:%d): %d-%d\n", r.p1Iterations, r.p2Iterations, r.wins[0], r.wins[1])
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -250,7 +250,7 @@ func main() {
 	}
 	var wins [2]int
 	for i := 0; i < *numGames; i++ {
-		winner, err := playGame(i, p1, p2)
+		winner, err := playGame(i, wins, p1, p2)
 		if err != nil {
 			fmt.Printf("playing game failed: %v\n", err)
 			os.Exit(1)

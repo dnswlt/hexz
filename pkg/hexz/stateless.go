@@ -354,8 +354,10 @@ func (s *StatelessServer) serveHtmlTemplate(w http.ResponseWriter, filename stri
 
 func (s *StatelessServer) defaultTemplateParams() map[string]any {
 	vcsRevision := s.config.VCSRevision
-	if len(s.config.VCSRevision) > 8 {
-		vcsRevision = vcsRevision[:8]
+	if len(s.config.VCSRevision) > 12 {
+		// Avoid overly long revision IDs in cache-busting URLs
+		// (But avoid truncating timestamps, which are 10 digits.)
+		vcsRevision = vcsRevision[:12]
 	}
 	return map[string]any{
 		"URLPathPrefix": s.config.URLPathPrefix,
@@ -1323,6 +1325,11 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	// Technical services
 	// mux.Handle("/statusz", s.basicAuthHandlerFunc(s.handleStatusz))
 
+	// If we're not behind a reverse proxy and serve the root URL ourselves:
+	// Redirect to prefix path
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, s.prefix(""), http.StatusTemporaryRedirect)
+	})
 	return mux
 }
 
