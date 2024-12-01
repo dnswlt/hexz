@@ -198,7 +198,18 @@ func urlJoinPath(prefix, urlPath string) string {
 func (s *StatelessServer) loggingHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.config.DebugMode {
-			hlog.Infof("Incoming request: %s %s %s", r.RemoteAddr, r.Method, r.URL.String())
+			var proxyHeaders []string
+			if xRealIP := r.Header.Get("X-Real-IP"); xRealIP != "" {
+				proxyHeaders = append(proxyHeaders, "X-Real-IP: "+xRealIP)
+			}
+			if xForwardedFor := r.Header.Get("X-Forwarded-For"); xForwardedFor != "" {
+				proxyHeaders = append(proxyHeaders, "X-Forwarded-For: "+xForwardedFor)
+			}
+			var proxyInfo string
+			if len(proxyHeaders) > 0 {
+				proxyInfo = fmt.Sprintf(" (via proxy: %s)", strings.Join(proxyHeaders, "; "))
+			}
+			hlog.Infof("Incoming request: %s %s %s%s", r.RemoteAddr, r.Method, r.URL.String(), proxyInfo)
 		}
 		h.ServeHTTP(w, r)
 	})
@@ -261,22 +272,35 @@ func (s *StatelessServer) lookupPlayerFromCookie(r *http.Request) (api.Player, e
 	return s.playerStore.Lookup(r.Context(), api.PlayerId(cookie.Value))
 }
 
-// Stores the given game info and engineState as a new game in the game store.
-func (s *StatelessServer) storeNewGame(ctx context.Context, gameInfo *pb.GameInfo, players []*pb.Player, engineState *pb.GameEngineState) (*GameRepr, error) {
-	gameState := &pb.GameState{
-		GameInfo:    gameInfo,
-		Players:     players,
-		EngineState: engineState,
-		UndoRedoState: &pb.GameState_UndoRedoState{
-			InitialState: engineState,
-		},
+func (s *StatelessServer) storeNewGameFromExisting(ctx context.Context, inputGameState *pb.GameState) (*GameRepr, error) {
+	if len(inputGameState.Players) == 0 {
+		return nil, fmt.Errorf("cannot start new game from existing: input game has no players or no GameInfo")
+	}
+	if inputGameState.GameInfo == nil {
+		return nil, fmt.Errorf("cannot start new game from existing: input game has no GameInfo")
+	}
+	if !validGameType(inputGameState.GameInfo.Type) {
+		return nil, fmt.Errorf("cannot start new game from existing: invalid game type: %s", inputGameState.GameInfo.Type)
+	}
+	// Copy input game state and only modify the copy.
+	gameState := proto.Clone(inputGameState).(*pb.GameState)
+
+	// Reset game ID, but keep pubsub ID, so the same topic gets reused. The game ID will be set in StoreNewGame below.
+	gameState.GameInfo.Id = ""
+	gameState.GameInfo.Started = tpb.Now()
+	engineState := NewGameEngine(api.GameType(gameState.GameInfo.Type)).Proto()
+
+	// Reset game engine and undo/redo states.
+	gameState.EngineState = engineState
+	gameState.UndoRedoState = &pb.GameState_UndoRedoState{
+		InitialState: engineState,
 	}
 	if err := s.gameStore.StoreNewGame(ctx, gameState); err != nil {
 		return nil, err
 	}
-	// Game was successfully stored in gameStore.
+	// Game was successfully stored in gameStore. Add to DB as well.
 	if s.dbStore != nil {
-		if err := s.dbStore.StoreGame(ctx, gameInfo.Host, gameState); err != nil {
+		if err := s.dbStore.StoreGame(ctx, gameState.Players[0].Id, gameState); err != nil {
 			hlog.Errorf("Cannot store game %s in database: %s", gameState.GameInfo.Id, err)
 		}
 	}
@@ -284,7 +308,7 @@ func (s *StatelessServer) storeNewGame(ctx context.Context, gameInfo *pb.GameInf
 }
 
 // Stores a new game in the game store and returns the new game ID.
-func (s *StatelessServer) startNewGame(ctx context.Context, p *api.Player, gameType api.GameType, singlePlayer bool) (*GameRepr, error) {
+func (s *StatelessServer) startNewGame(r *http.Request, p *api.Player, gameType api.GameType, singlePlayer bool) (*GameRepr, error) {
 	engineState := NewGameEngine(gameType).Proto()
 	players := []*pb.Player{{Id: string(p.Id), Name: p.Name}}
 	if singlePlayer {
@@ -303,7 +327,24 @@ func (s *StatelessServer) startNewGame(ctx context.Context, p *api.Player, gameT
 			CpuThinkTimeMillis: s.config.CpuThinkTime.Milliseconds(),
 		},
 	}
-	return s.storeNewGame(ctx, gameInfo, players, engineState)
+	gameState := &pb.GameState{
+		GameInfo:    gameInfo,
+		Players:     players,
+		EngineState: engineState,
+		UndoRedoState: &pb.GameState_UndoRedoState{
+			InitialState: engineState,
+		},
+	}
+	if err := s.gameStore.StoreNewGame(r.Context(), gameState); err != nil {
+		return nil, err
+	}
+	// Game was successfully stored in gameStore.
+	if s.dbStore != nil {
+		if err := s.dbStore.StoreGame(r.Context(), string(p.Id), gameState); err != nil {
+			hlog.Errorf("Cannot store game %s in database: %s", gameState.GameInfo.Id, err)
+		}
+	}
+	return NewGameRepr(gameState), nil
 }
 
 // Sends the contents of filename to the ResponseWriter.
@@ -311,12 +352,19 @@ func (s *StatelessServer) serveHtmlTemplate(w http.ResponseWriter, filename stri
 	s.serveHtmlTemplateParams(w, filename, nil)
 }
 
-func (s *StatelessServer) serveHtmlTemplateParams(w http.ResponseWriter, filename string, params map[string]any) {
-	w.Header().Set("Content-Type", "text/html")
-	templateParams := map[string]any{
-		"URLPathPrefix": s.config.URLPathPrefix,
-		"VCSRevision":   s.config.VCSRevision[:8],
+func (s *StatelessServer) defaultTemplateParams() map[string]any {
+	vcsRevision := s.config.VCSRevision
+	if len(s.config.VCSRevision) > 8 {
+		vcsRevision = vcsRevision[:8]
 	}
+	return map[string]any{
+		"URLPathPrefix": s.config.URLPathPrefix,
+		"VCSRevision":   vcsRevision,
+	}
+}
+
+func (s *StatelessServer) serveHtmlTemplateParams(w http.ResponseWriter, filename string, params map[string]any) {
+	templateParams := s.defaultTemplateParams()
 	for k, v := range params {
 		templateParams[k] = v
 	}
@@ -331,6 +379,7 @@ func (s *StatelessServer) serveHtmlTemplateParams(w http.ResponseWriter, filenam
 		hlog.Errorf("Error rendering template %s with parameters %v: %v", filename, keys, err)
 		return
 	}
+	w.Header().Set("Content-Type", "text/html")
 	w.Write(data.Bytes())
 }
 
@@ -412,7 +461,7 @@ func (s *StatelessServer) handleNewGame(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	g, err := s.startNewGame(r.Context(), &p, api.GameType(typeParam), singlePlayer)
+	g, err := s.startNewGame(r, &p, api.GameType(typeParam), singlePlayer)
 	if err != nil {
 		hlog.Errorf("Cannot start new game: %s\n", err)
 		http.Error(w, "", http.StatusPreconditionFailed)
@@ -432,10 +481,7 @@ func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Reset game ID, but keep pubsub ID, so the same topic gets reused.
-	g.State().GetGameInfo().Id = ""
-	newEngineState := NewGameEngine(api.GameType(g.State().GetGameInfo().Type)).Proto()
-	newG, err := s.storeNewGame(r.Context(), g.State().GameInfo, g.State().Players, newEngineState)
+	newG, err := s.storeNewGameFromExisting(r.Context(), g.State())
 	if err != nil {
 		hlog.Errorf("Reset: failed to store new game: %v", err)
 		http.Error(w, "could not store new game", http.StatusInternalServerError)
