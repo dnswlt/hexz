@@ -3,17 +3,6 @@
 # Starts a local C++ CUDA cpuserver and a local stateful Go Flagz server.
 # This script is intended for quickly playing games locally.
 
-tls_flags=""
-
-# Process flags
-for arg in "$@"; do
-    case "$arg" in
-        tls|-tls|--tls)
-        tls_flags='-tls-cert=./fullchain.pem -tls-key=./privkey.pem'
-        ;;
-    esac
-done
-
 cd $(dirname $0)/..
 
 # Run under different path from non-ML server.
@@ -33,7 +22,13 @@ cpu_pid=$!
 echo "Started cpuserver with PID $cpu_pid"
 popd > /dev/null
 
-go build ./cmd/server && ./server -url-path-prefix "$url_path_prefix" -remote-cpu-url "$cpuserver_addr" -cpu-think-time 5s -stateless=false -port=$server_port $tls_flags
+go build ./cmd/server && \
+./server \
+  -cpu-player-mode remote \
+  -url-path-prefix "$url_path_prefix" \
+  -remote-cpu-url "$cpuserver_addr" \
+  -cpu-think-time 5s \
+  -port=$server_port
 
 echo "Terminating cpuserver process"
 kill $cpu_pid
