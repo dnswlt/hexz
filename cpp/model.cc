@@ -113,6 +113,8 @@ FiberTorchModel::~FiberTorchModel() {
     std::scoped_lock<std::mutex> lk(request_mut_);
     ABSL_CHECK(active_fibers_ == 0)
         << "FiberTorchModel is being destroyed while fibers are active";
+    shutdown_ = true;
+    request_queue_cv_.notify_all();
   }
   if (gpu_pipeline_thread_.joinable()) {
     gpu_pipeline_thread_.join();
@@ -164,13 +166,17 @@ int FiberTorchModel::ReadBatch(std::vector<PredictionRequest>& batch) {
   int batch_size = std::min(active_fibers_, max_batch_size_);
   int k = 0;
   while (batch.size() < batch_size) {
-    request_queue_cv_.wait(
-        lock, [this] { return !request_queue_.empty() || fiber_left_; });
+    request_queue_cv_.wait(lock, [this] {
+      return !request_queue_.empty() || fiber_left_ || shutdown_;
+    });
     if (fiber_left_) {
-      fiber_left_ = false;
+      fiber_left_ = false;  // acknowledge receipt of "fiber left" condition.
       if (active_fibers_ < batch_size) {
         batch_size = active_fibers_;
       }
+    }
+    if (shutdown_) {
+      return k;  // We're done. Return last batch, if any.
     }
     while (batch.size() < batch_size && !request_queue_.empty()) {
       batch.push_back(std::move(request_queue_.front()));
@@ -189,24 +195,22 @@ void FiberTorchModel::RunGPUPipeline() {
   ABSL_LOG(INFO) << "FiberTorchModel::GPUPipeline started";
   std::vector<PredictionRequest> batch;
   batch.reserve(max_batch_size_);
-  {
-    // Wait for initial fiber to join
-    std::unique_lock<std::mutex> init_lk(request_mut_);
-    request_queue_cv_.wait(
-        init_lk, [this] { return active_fibers_ > 0 || fiber_left_; });
-    if (fiber_left_) {
-      ABSL_LOG(ERROR) << "Fiber registered and unregistered from GPU pipeline "
-                         "without ever calling Predict. Terminating.";
-      return;
-    }
-  }
   while (true) {
     // Collect requests for batching
-    ReadBatch(batch);
-    if (batch.empty()) {
-      ABSL_LOG(INFO) << "Nothing left to read from the queue. Exiting.";
-      return;
+    while (ReadBatch(batch) == 0) {
+      // If ReadBatch returns zero, either all active fibers left or we're
+      // shutting down entirely. In the former case, we'll wait for new
+      // fibers to arrive. In the latter case, we quit.
+      ABSL_LOG(INFO) << "No items in the queue. Waiting for fibers.";
+      std::unique_lock<std::mutex> lk(request_mut_);
+      request_queue_cv_.wait(
+          lk, [this] { return active_fibers_ > 0 || shutdown_; });
+      if (shutdown_) {
+        ABSL_LOG(INFO) << "GPU pipeline is shutting down.";
+        return;
+      }
     }
+    ABSL_LOG(INFO) << "Processing batch of size " << batch.size();
     const size_t n_inputs = batch.size();
     std::vector<torch::Tensor> boards;
     boards.reserve(n_inputs);

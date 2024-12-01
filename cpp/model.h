@@ -84,7 +84,7 @@ class TorchModel : public Model {
   explicit TorchModel(torch::jit::Module&& module)
       : module_{std::move(module)} {}
   TorchModel(hexzpb::ModelKey key, torch::jit::Module&& module,
-             torch::Device device)
+             torch::DeviceType device)
       : key_{std::move(key)}, module_{std::move(module)}, device_(device) {
     module_.eval();
     module_.to(device_);
@@ -106,7 +106,7 @@ class TorchModel : public Model {
  private:
   hexzpb::ModelKey key_;
   torch::jit::Module module_;
-  torch::Device device_ = torch::kCPU;
+  torch::DeviceType device_ = torch::kCPU;
 };
 
 // Implementation of Model that uses an actual PyTorch ScriptModule.
@@ -229,6 +229,8 @@ class FiberTorchModel : public Model {
   int active_fibers_ = 0;
   // Used to signal that a fiber has left the building.
   bool fiber_left_ = false;
+  // Used to signal that the GPU pipeline thread should shut down.
+  bool shutdown_ = false;
   // Whether the model supports being suspended. This is used to pause workers
   // when training locally on the same machine as the training server.
   const bool support_suspension_;

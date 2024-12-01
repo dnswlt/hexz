@@ -32,13 +32,14 @@ done
 
 if [[ $gen_go == 1 ]]; then
     echo "Generating proto and gRPC files for Go..."
-    protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative pkg/hexzpb/hexz.proto
+    protoc --go_out=. --go-grpc_out=. proto/hexz.proto
+    protoc --go_out=. --go_opt=module=github.com/dnswlt/hexz --go-grpc_out=. --go-grpc_opt=module=github.com/dnswlt/hexz proto/hexz.proto
 fi
 
 if [[ $gen_cpp == 1 ]]; then
     echo "Generating proto and gRPC files for C++..."
-    protoc -Ihexzpb --cpp_out=cpp/ --grpc_out=cpp/ --plugin=protoc-gen-grpc=$(which grpc_cpp_plugin) hexzpb/hexz.proto
-    protoc -Ihexzpb --cpp_out=cpp/ --grpc_out=cpp/ --plugin=protoc-gen-grpc=$(which grpc_cpp_plugin) hexzpb/health.proto
+    protoc -Iproto --cpp_out=cpp/ --grpc_out=cpp/ --plugin=protoc-gen-grpc=$(which grpc_cpp_plugin) proto/hexz.proto
+    protoc -Iproto --cpp_out=cpp/ --grpc_out=cpp/ --plugin=protoc-gen-grpc=$(which grpc_cpp_plugin) proto/health.proto
 fi
 
 if [[ $gen_py == 1 ]]; then
@@ -52,7 +53,7 @@ if [[ $gen_py == 1 ]]; then
     # in the generated _grpc.py file.
     # https://stackoverflow.com/questions/62818183/protobuf-grpc-relative-import-path-discrepancy-in-python/76946302#76946302
     cd pyhexz/src
-    cp ../../hexzpb/hexz.proto pyhexz/
+    cp ../../proto/hexz.proto pyhexz/
     python3 -m grpc_tools.protoc --proto_path=. --python_out=. --pyi_out=. --grpc_python_out=. pyhexz/hexz.proto
     rm pyhexz/hexz.proto
 fi

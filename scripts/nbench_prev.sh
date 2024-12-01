@@ -28,11 +28,11 @@ fi
 cd $(dirname $0)/..
 
 pushd cpp/build > /dev/null
-echo './cpuserver --device=cuda --max_think_time_ms=0 --model_path="$benchmark_model" --server_addr=$server_addr1  >> /tmp/cpuserver1.log 2>&1 &'
+echo "Starting cpuserver for P2 using model $p1_model and address $server_addr1"
 ./cpuserver --device=cuda --max_think_time_ms=0 --model_path="$p1_model" --server_addr=$server_addr1  >> /tmp/cpuserver1.log 2>&1 &
 cpu1_pid=$!
 
-echo './cpuserver --device=cuda --max_think_time_ms=0 --model_path="$latest_model" --server_addr=$server_addr2  >> /tmp/cpuserver2.log 2>&1 &'
+echo "Starting cpuserver for P2 using model $p2_model and address $server_addr2"
 ./cpuserver --device=cuda --max_think_time_ms=0 --model_path="$p2_model" --server_addr=$server_addr2  >> /tmp/cpuserver2.log 2>&1 &
 cpu2_pid=$!
 

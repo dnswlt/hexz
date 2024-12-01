@@ -48,9 +48,9 @@ int main(int argc, char* argv[]) {
   };
   std::string device = absl::GetFlag(FLAGS_device);
   if (device == "cuda") {
-    config.device = torch::kCUDA;
+    config.device_type = torch::kCUDA;
   } else if (device == "mps") {
-    config.device = torch::kMPS;
+    config.device_type = torch::kMPS;
   }
   hexz::CPUPlayerServiceImpl service(config);
 

@@ -536,12 +536,11 @@ TEST(MCTSTest, SelfplayRun) {
 class MCTSScriptModuleTest : public testing::Test {
  protected:
   MCTSScriptModuleTest()
-      : scriptmodule_(torch::jit::load("testdata/scriptmodule.pt")) {
+      : scriptmodule_(torch::jit::load("testdata/scriptmodule.pt", torch::kCPU)) {
     // The file "testdata/scriptmodule.pt" is expected to be a ScriptModule of
     // the right shape to be used by NeuralMCTS.
     //
     // It can be generated with the regenerate.sh sidecar script.
-    scriptmodule_.to(torch::kCPU);
     scriptmodule_.eval();
   }
 

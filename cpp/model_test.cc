@@ -9,8 +9,7 @@ namespace hexz {
 namespace {
 
 torch::jit::Module LoadModule() {
-  auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt");
-  scriptmodule.to(torch::kCPU);
+  auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt", torch::kCPU);
   scriptmodule.eval();
   return scriptmodule;
 }
