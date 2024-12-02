@@ -31,7 +31,7 @@ class CPUPlayerServiceImpl final : public hexzpb::CPUPlayerService::Service {
                             hexzpb::SuggestMovesResponse* response) override;
 
  private:
-  absl::StatusOr<hexzpb::SuggestMoveResponse> SuggestMoveFiber(
+  absl::StatusOr<hexzpb::SuggestMoveResponse> DoSuggestMove(
       const hexzpb::GameEngineState& state, int64_t max_think_time_ms,
       int64_t max_iterations);
 

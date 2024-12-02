@@ -201,7 +201,6 @@ void FiberTorchModel::RunGPUPipeline() {
       // If ReadBatch returns zero, either all active fibers left or we're
       // shutting down entirely. In the former case, we'll wait for new
       // fibers to arrive. In the latter case, we quit.
-      ABSL_LOG(INFO) << "No items in the queue. Waiting for fibers.";
       std::unique_lock<std::mutex> lk(request_mut_);
       request_queue_cv_.wait(
           lk, [this] { return active_fibers_ > 0 || shutdown_; });
@@ -210,7 +209,6 @@ void FiberTorchModel::RunGPUPipeline() {
         return;
       }
     }
-    ABSL_LOG(INFO) << "Processing batch of size " << batch.size();
     const size_t n_inputs = batch.size();
     std::vector<torch::Tensor> boards;
     boards.reserve(n_inputs);

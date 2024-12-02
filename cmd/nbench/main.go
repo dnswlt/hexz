@@ -1,7 +1,7 @@
-// nbench lets a Go MCTS player play against a remote CPU player
-// which will usually be a Neural MCTS player. (nbench itself does
-// not care about which kind of opponent it is, it just makes RPC
-// calls.)
+// nbench lets Go MCTS players and remote CPU players play against each other.
+// Remote players will usually be Neural MCTS players.
+// This tool is also used to evaluate progress in ML training,
+// by letting the latest model checkpoint play against previous ones.
 package main
 
 import (
@@ -10,8 +10,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"sync"
 	"time"
 
 	"github.com/dnswlt/hexz/internal/api"
@@ -19,19 +17,37 @@ import (
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 )
 
+type PlayerOptions struct {
+	URL           string
+	thinkTime     time.Duration
+	MaxIterations int
+}
+
+func (o *PlayerOptions) ThinkTime() time.Duration {
+	if o.MaxIterations > 0 {
+		return 0
+	}
+	return o.thinkTime
+}
+
 var (
-	player1URL       = flag.String("p1-addr", "", "Address for player 1 (empty for the built-in CPU player).")
-	player2URL       = flag.String("p2-addr", "localhost:50051", "Address for player 2 (empty for the built-in CPU player).")
-	p1ThinkTime      = flag.Duration("p1-think-time", 1*time.Second, "Maximum thinking time per move for P1.")
-	p2ThinkTime      = flag.Duration("p2-think-time", 1*time.Second, "Maximum thinking time per move for P2.")
-	p1MaxIterations  = flag.Int("p1-max-iter", 0, "Maximum MCTS iterations per move for P1 (overrides p1-think-time if >0).")
-	p2MaxIterations  = flag.Int("p2-max-iter", 0, "Maximum MCTS iterations per move for P2 (overrides p2-think-time if >0).")
+	p1Options        PlayerOptions
+	p2Options        PlayerOptions
 	svgMoveScoreKind = flag.String("score-kind", "FINAL", "Kind of move scores to add to the SVG output.")
 	svgOutputFile    = flag.String("svg-file", "/tmp/nbench.html", "File to which SVG output is written.")
 	skipMoves        = flag.Int("skip-moves", 0, "Number of initial moves to make randomly before using the suggestions")
 	numGames         = flag.Int("num-games", 1, "Number of games to play")
 	p2Eval           = flag.Bool("p2-eval", false, "If true, P1's max iterations are doubled until P2 loses")
 )
+
+func init() {
+	flag.StringVar(&p1Options.URL, "p1-addr", "", "Address for player 1 (empty for the built-in CPU player).")
+	flag.StringVar(&p2Options.URL, "p2-addr", "localhost:50051", "Address for player 2 (empty for the built-in CPU player).")
+	flag.DurationVar(&p1Options.thinkTime, "p1-think-time", 0, "Maximum thinking time per move for P1.")
+	flag.DurationVar(&p2Options.thinkTime, "p2-think-time", 0, "Maximum thinking time per move for P2.")
+	flag.IntVar(&p1Options.MaxIterations, "p1-max-iter", 800, "Maximum MCTS iterations per move for P1 (overrides p1-think-time if >0).")
+	flag.IntVar(&p2Options.MaxIterations, "p2-max-iter", 800, "Maximum MCTS iterations per move for P2 (overrides p2-think-time if >0).")
+}
 
 func playGame(gameNum int, wins [2]int, p1, p2 hexz.CPUPlayer) (winner int, err error) {
 	ge := hexz.NewGameEngineFlagz()
@@ -151,14 +167,13 @@ func evalP2() {
 	var p1, p2 hexz.CPUPlayer
 	var err error
 	thinkTime := time.Duration(0)
-	p1Iterations := *p1MaxIterations
-	p2Iterations := *p2MaxIterations
+	p1Iterations := p1Options.MaxIterations
+	p2Iterations := p2Options.MaxIterations
 	results := []EvalResult{}
 	p2Lost := false
-	remoteCPUClient, err := hexz.NewCPUPlayerServiceClient(*player2URL)
+	remoteCPUClient, err := hexz.NewCPUPlayerServiceClient(p2Options.URL)
 	if err != nil {
-		fmt.Printf("Failed to create P2 as remote player: %v", err)
-		os.Exit(1)
+		log.Fatalf("Failed to create P2 as remote player: %v", err)
 	}
 	for rounds := 0; rounds < 7; rounds++ {
 		p1 = hexz.NewLocalCPUPlayer(api.PlayerId("P1"), thinkTime, p1Iterations)
@@ -171,8 +186,7 @@ func evalP2() {
 		for i := 0; i < *numGames; i++ {
 			winner, err := playGame(i, result.wins, p1, p2)
 			if err != nil {
-				fmt.Printf("playing game failed: %v\n", err)
-				os.Exit(1)
+				log.Fatalf("playing game failed: %v\n", err)
 			}
 			if winner > 0 {
 				result.wins[winner-1]++
@@ -207,180 +221,57 @@ func evalP2() {
 	}
 }
 
-func playConcurrent(p1, p2 *hexz.RemoteCPUPlayer, numGames int) {
-	ctx := context.Background()
-	var wg sync.WaitGroup
-	type request struct {
-		ge *hexz.GameEngineFlagz
-		ch chan *hexz.GameEngineMove
+func createPlayer(playerId api.PlayerId, opts *PlayerOptions) (hexz.CPUPlayer, error) {
+	if opts.URL == "" {
+		return hexz.NewLocalCPUPlayer(playerId, opts.ThinkTime(), opts.MaxIterations), nil
+	} else {
+		remoteCPUClient, err := hexz.NewCPUPlayerServiceClient(opts.URL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create remote player: %v", err)
+		}
+		return hexz.NewRemoteCPUPlayer(remoteCPUClient, playerId, opts.ThinkTime(), opts.MaxIterations), nil
 	}
-	registerChan := make(chan int)
-	unregisterChan := make(chan int)
-	requestChan := make(chan request)
-
-	for i := 0; i < numGames; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			registerChan <- i
-			defer func() {
-				unregisterChan <- i
-			}()
-			ge := hexz.NewGameEngineFlagz()
-			for !ge.IsDone() {
-				replyChan := make(chan *hexz.GameEngineMove)
-				requestChan <- request{
-					ge: ge,
-					ch: replyChan,
-				}
-				mv, ok := <-replyChan
-				if !ok {
-					// Channel was closed, abort
-					return
-				}
-				if err := ge.MakeMoveError(*mv); err != nil {
-					fmt.Printf("Failed to make a move: %v\n", err)
-					return
-				}
-				fmt.Printf("[worker %d] score at move %d: %v\n", i, ge.Board().Move, ge.Board().Score)
-			}
-			fmt.Printf("[worker %d] Game over after %d moves. Final score: %v", i, ge.Board().Move, ge.Board().Score)
-		}(i)
-	}
-
-	done := make(chan bool)
-
-	go func(numWorkers int) {
-		processBatch := func(batch []request) {
-			p1Indices := make(map[int]bool)
-			var ges1, ges2 []*hexz.GameEngineFlagz
-			for i, r := range batch {
-				if r.ge.Board().Turn == 1 {
-					ges1 = append(ges1, r.ge)
-					p1Indices[i] = true
-				} else {
-					ges2 = append(ges2, r.ge)
-				}
-			}
-			started := time.Now()
-			moves1, err := p1.SuggestMoves(ctx, ges1)
-			if err != nil {
-				fmt.Printf("SuggestMoves failed (P1): %v\n", err)
-				// Tell all clients waiting for a response we failed.
-				for _, b := range batch {
-					close(b.ch)
-				}
-				return
-			}
-			moves2, err := p2.SuggestMoves(ctx, ges2)
-			if err != nil {
-				fmt.Printf("SuggestMoves failed (P2): %v\n", err)
-				// Tell all clients waiting for a response we failed.
-				for _, b := range batch {
-					close(b.ch)
-				}
-				return
-			}
-			fmt.Printf("Received %d (%d+%d) move suggestions after %.3f\n", len(batch), len(moves1), len(moves2), time.Since(started).Seconds())
-			var j1, j2 int
-			for i := 0; i < len(batch); i++ {
-				if p1Indices[i] {
-					batch[i].ch <- moves1[j1]
-					j1++
-				} else {
-					batch[i].ch <- moves2[j2]
-					j2++
-				}
-			}
-		}
-		activeWorkers := 0
-		// Let all workers register before sending any requests.
-		// Otherwise, the first worker might already trigger a request
-		// for its first move and become out of sync (w.r.t. its active turn) with the others.
-		for activeWorkers < numWorkers {
-			<-registerChan
-			activeWorkers++
-		}
-		var batch []request
-		for {
-			select {
-			case <-done:
-				return
-			case r := <-requestChan:
-				batch = append(batch, r)
-				if len(batch) >= activeWorkers {
-					processBatch(batch)
-					batch = nil
-				}
-			case <-unregisterChan:
-				activeWorkers--
-				if len(batch) > 0 && len(batch) >= activeWorkers {
-					processBatch(batch)
-					batch = nil
-				}
-			}
-		}
-	}(numGames)
-	wg.Wait()
-	done <- true
 }
 
-func main() {
-	flag.Parse()
-	if len(flag.Args()) > 0 {
-		fmt.Printf("Unexpected extra args: %v\n", flag.Args())
-		os.Exit(1)
-	}
-	if *p2Eval {
-		if *p1MaxIterations == 0 || *p2MaxIterations == 0 {
-			fmt.Printf("For --p2-eval mode you have to specify max iterations")
-			os.Exit(2)
-		}
-		evalP2()
-		return
-	}
-	var p1, p2 hexz.CPUPlayer
-	if *p1MaxIterations > 0 {
-		*p1ThinkTime = 0
-	}
-	if *p2MaxIterations > 0 {
-		*p2ThinkTime = 0
-	}
-	if *player1URL == "" {
-		p1 = hexz.NewLocalCPUPlayer(api.PlayerId("P1"), *p1ThinkTime, *p1MaxIterations)
-	} else {
-		remoteCPUClient, err := hexz.NewCPUPlayerServiceClient(*player1URL)
-		if err != nil {
-			fmt.Printf("Failed to create P1 as remote player: %v", err)
-			os.Exit(1)
-		}
-		p1 = hexz.NewRemoteCPUPlayer(remoteCPUClient, api.PlayerId("P1"), *p1ThinkTime, *p1MaxIterations)
-	}
-	if *player2URL == "" {
-		p2 = hexz.NewLocalCPUPlayer(api.PlayerId("P2"), *p2ThinkTime, *p2MaxIterations)
-	} else {
-		remoteCPUClient, err := hexz.NewCPUPlayerServiceClient(*player1URL)
-		if err != nil {
-			fmt.Printf("Failed to create P2 as remove player: %v", err)
-			os.Exit(1)
-		}
-		p2 = hexz.NewRemoteCPUPlayer(remoteCPUClient, api.PlayerId("P2"), *p2ThinkTime, *p2MaxIterations)
-	}
-	if *player1URL != "" && *player2URL != "" && *numGames > 1 {
-		// This is ML model evaluation mode. Play concurrently to benefit from concurrent requests to the GPU.
-		playConcurrent(p1.(*hexz.RemoteCPUPlayer), p2.(*hexz.RemoteCPUPlayer), *numGames)
-		return
-	}
+func playSequential(p1, p2 hexz.CPUPlayer, numGames int) {
 	var wins [2]int
-	for i := 0; i < *numGames; i++ {
+	for i := 0; i < numGames; i++ {
 		winner, err := playGame(i, wins, p1, p2)
 		if err != nil {
-			fmt.Printf("playing game failed: %v\n", err)
-			os.Exit(1)
+			log.Fatalf("playing game failed: %v\n", err)
 		}
 		if winner > 0 {
 			wins[winner-1]++
 		}
 	}
-	fmt.Printf("Final result after %d games: %d-%d\n", *numGames, wins[0], wins[1])
+	fmt.Printf("Final result after %d games: %d-%d\n", numGames, wins[0], wins[1])
+}
+
+func main() {
+	flag.Parse()
+	if len(flag.Args()) > 0 {
+		log.Fatalf("Unexpected extra args: %v\n", flag.Args())
+	}
+	if *p2Eval {
+		if p1Options.MaxIterations == 0 || p2Options.MaxIterations == 0 {
+			log.Fatalf("For --p2-eval mode you have to specify max iterations")
+		}
+		evalP2()
+		return
+	}
+	p1, err := createPlayer(api.PlayerId("P1"), &p1Options)
+	if err != nil {
+		log.Fatal(err)
+	}
+	p2, err := createPlayer(api.PlayerId("P2"), &p2Options)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if p1Options.URL != "" && p2Options.URL != "" && *numGames > 1 {
+		// This is ML model evaluation mode. Play concurrently to benefit from concurrent requests to the GPU.
+		playConcurrent(p1.(*hexz.RemoteCPUPlayer), p2.(*hexz.RemoteCPUPlayer), *numGames)
+		return
+	}
+	// Play games sequentially
+	playSequential(p1, p2, *numGames)
 }
