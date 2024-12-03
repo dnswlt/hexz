@@ -142,46 +142,6 @@ func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz
 	return geMove, resp.MoveStats, nil
 }
 
-func (cpu *RemoteCPUPlayer) SuggestMoves(ctx context.Context, ges []*GameEngineFlagz) ([]*GameEngineMove, error) {
-	states := make([]*pb.GameEngineState, len(ges))
-	for i, ge := range ges {
-		states[i] = ge.Proto()
-	}
-	req := &pb.SuggestMovesRequest{
-		MaxThinkTimeMs:   cpu.maxThinkTime.Milliseconds(),
-		MaxIterations:    int64(cpu.maxIterations),
-		GameEngineStates: states,
-	}
-	if cpu.maxThinkTime > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, cpu.maxThinkTime+time.Duration(1)*time.Second)
-		defer cancel()
-	}
-	resp, err := cpu.client.SuggestMoves(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("gRPC SuggestMoves request failed: %v", err)
-	}
-	l := len(ges)
-	if len(resp.MoveSuggestions) != l {
-		return nil, fmt.Errorf("gRPC SuggestMoves did not return all requested move suggestions")
-	}
-	result := make([]*GameEngineMove, l)
-	seen := map[int]bool{}
-	for _, s := range resp.MoveSuggestions {
-		i := int(s.RequestIndex)
-		if seen[i] {
-			return nil, fmt.Errorf("gRPC SuggestMoves returned a duplicate request index: %d", s.RequestIndex)
-		}
-		if i >= l {
-			return nil, fmt.Errorf("gRPC SuggestMoves returned an invalid request index: %d (>= %d)", s.RequestIndex, l)
-		}
-		seen[i] = true
-		result[i] = &GameEngineMove{}
-		result[i].FromProto(s.Move)
-	}
-	return result, nil
-}
-
 type MoveSuggesterServerConfig struct {
 	Addr         string // e.g. "localhost:50051".
 	CpuThinkTime time.Duration

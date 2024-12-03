@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/dnswlt/hexz/pkg/hexz"
-	"golang.org/x/sync/errgroup"
 )
 
 type ResultStats struct {
@@ -46,7 +45,7 @@ func (r *ResultStats) String() string {
 
 func playConcurrent(p1, p2 *hexz.RemoteCPUPlayer, numGames int) {
 	// Get model keys for logging
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	p1Key, err := p1.ModelKey(ctx)
 	if err != nil {
@@ -58,162 +57,60 @@ func playConcurrent(p1, p2 *hexz.RemoteCPUPlayer, numGames int) {
 	}
 	p1Name := fmt.Sprintf("P1(%s:%d)", p1Key.Name, p1Key.Checkpoint)
 	p2Name := fmt.Sprintf("P2(%s:%d)", p2Key.Name, p2Key.Checkpoint)
-	cancel()
 	log.Printf("Playing %s vs. %s\n", p1Name, p2Name)
 
 	var wg sync.WaitGroup
-	type request struct {
-		ge *hexz.GameEngineFlagz
-		ch chan *hexz.GameEngineMove
-	}
-	registerChan := make(chan int)
-	unregisterChan := make(chan int)
-	requestChan := make(chan request)
 
 	stats := &ResultStats{}
+
 	// Start "worker" goroutines playing games.
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	defer workerCancel()
 	for i := 0; i < numGames; i++ {
 		wg.Add(1)
-		go func(i int) {
+		go func(ctx context.Context, i int) {
 			defer wg.Done()
-			registerChan <- i
-			defer func() {
-				unregisterChan <- i
-			}()
 			ge := hexz.NewGameEngineFlagz()
 			for !ge.IsDone() {
-				replyChan := make(chan *hexz.GameEngineMove)
-				requestChan <- request{
-					ge: ge,
-					ch: replyChan,
+				var mv *hexz.GameEngineMove
+				// Make a direct RPC, relying on batching on the server side.
+				p := p1
+				if ge.Board().Turn == 2 {
+					p = p2
 				}
-				mv, ok := <-replyChan
-				if !ok {
-					// Channel was closed, abort
+				var err error
+				mv, _, err = p.SuggestMove(ctx, ge)
+				if err != nil {
+					log.Printf("Worker %d: RPC failed: %v", i, err)
+					workerCancel() // Kill all workers, we want all or nothing.
 					return
 				}
 				if err := ge.MakeMoveError(*mv); err != nil {
 					log.Printf("Failed to make a move: %v\n", err)
+					workerCancel()
 					return
 				}
 				log.Printf("[worker %d] score at move %d: %v\n", i, ge.Board().Move, ge.Board().Score)
 			}
 			log.Printf("[worker %d] Game over after %d moves. Final score: %v\n", i, ge.Board().Move, ge.Board().Score)
 			stats.Add(ge.Winner())
-		}(i)
+		}(workerCtx, i)
 	}
 
-	// Channel to signal termination to the batching RPC goroutine.
-	bgCtx, cancel := context.WithCancel(context.Background())
-	var bgWg sync.WaitGroup
-	bgWg.Add(1)
-	// Batching RPC goroutine:
-	go func(ctx context.Context, numWorkers int) {
-		defer bgWg.Done()
-		// Helper function to process a full batch.
-		processBatch := func(batch []request) {
-			// Requests can be for P1 or P2 moves. We need to split them
-			// and merge the results.
-			p1Indices := make(map[int]bool)
-			var ges1, ges2 []*hexz.GameEngineFlagz
-			for i, r := range batch {
-				if r.ge.Board().Turn == 1 {
-					ges1 = append(ges1, r.ge)
-					p1Indices[i] = true
-				} else {
-					ges2 = append(ges2, r.ge)
-				}
-			}
-			started := time.Now()
-			moves := [][]*hexz.GameEngineMove{nil, nil}
-			g, ctx := errgroup.WithContext(ctx)
-			if len(ges1) > 0 {
-				g.Go(func() error {
-					ms, err := p1.SuggestMoves(ctx, ges1)
-					if err != nil {
-						log.Printf("SuggestMoves failed (P1): %v\n", err)
-						return err
-					}
-					moves[0] = ms
-					return nil
-				})
-			}
-			if len(ges2) > 0 {
-				g.Go(func() error {
-					ms, err := p2.SuggestMoves(ctx, ges2)
-					if err != nil {
-						log.Printf("SuggestMoves failed (P2): %v\n", err)
-						return err
-					}
-					moves[1] = ms
-					return nil
-				})
-			}
-			err := g.Wait()
-			if err != nil {
-				// Fatal: RPC failed. Tell all worker that we're done.
-				for _, b := range batch {
-					close(b.ch)
-				}
-				return
-			}
-			log.Printf("Received %d (%d+%d) move suggestions after %.3f\n", len(batch), len(moves[0]), len(moves[1]), time.Since(started).Seconds())
-			var j1, j2 int
-			for i := 0; i < len(batch); i++ {
-				if p1Indices[i] {
-					batch[i].ch <- moves[0][j1]
-					j1++
-				} else {
-					batch[i].ch <- moves[1][j2]
-					j2++
-				}
-			}
-		}
-		activeWorkers := 0
-		// Let all workers register before making any RPC requests.
-		// Otherwise, the first worker might already trigger a request
-		// for its first move and get out of sync (w.r.t. its active turn) with the others,
-		// resulting in suboptimal batching.
-		for activeWorkers < numWorkers {
-			<-registerChan
-			activeWorkers++
-		}
-		// Now receive requests, batch them and make a SuggestMoves RPC.
-		var batch []request
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case r := <-requestChan:
-				batch = append(batch, r)
-				if len(batch) >= activeWorkers {
-					processBatch(batch)
-					batch = nil
-				}
-			case <-unregisterChan:
-				activeWorkers--
-				if len(batch) > 0 && len(batch) >= activeWorkers {
-					processBatch(batch)
-					batch = nil
-				}
-			}
-		}
-	}(bgCtx, numGames)
 	// Wait until all workers are done.
 	wg.Wait()
-	// Tell the GPU pipeline thread we're done.
-	cancel()
-	bgWg.Wait()
 
 	// Print results.
 	if stats.Games() != numGames {
 		log.Printf("Benchmark was aborted. Intermediate result: %v", stats)
 		return
 	}
-	result := "P1 wins"
-	if stats.wins[0] == stats.wins[1] {
+	var result string
+	if stats.wins[0] > stats.wins[1] {
+		result = "P1 wins"
+	} else if stats.wins[0] == stats.wins[1] {
 		result = "draw"
-	} else if stats.wins[1] > stats.wins[0] {
+	} else {
 		result = "P2 wins"
 	}
 

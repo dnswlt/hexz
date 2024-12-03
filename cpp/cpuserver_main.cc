@@ -46,6 +46,8 @@ int main(int argc, char* argv[]) {
       .model_path = absl::GetFlag(FLAGS_model_path),
       .model_key = ParseModelKey(absl::GetFlag(FLAGS_model_key)),
       .max_think_time_ms = absl::GetFlag(FLAGS_max_think_time_ms),
+      .max_batch_size = 128,
+      .max_concurrent_requests = 128,
   };
   std::string device = absl::GetFlag(FLAGS_device);
   if (device == "cuda") {

@@ -1,5 +1,6 @@
 #include "cpuserver.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/log/absl_log.h>
 #include <absl/status/statusor.h>
 #include <absl/strings/str_cat.h>
@@ -18,7 +19,8 @@ CPUPlayerServiceImpl::CPUPlayerServiceImpl(CPUPlayerServiceConfig config)
     : config_{config},
       model_{config.model_key,
              torch::jit::load(config.model_path, config.device_type),
-             config.device_type, config.batch_size} {}
+             config.device_type, config.max_batch_size},
+      concurrent_rpc_sem_(config.max_concurrent_requests) {}
 
 grpc::Status CPUPlayerServiceImpl::ServerInfo(
     grpc::ServerContext*, const hexzpb::ServerInfoRequest*,
@@ -111,6 +113,13 @@ grpc::Status CPUPlayerServiceImpl::SuggestMove(
         absl::StrCat(
             "one of max_think_time_ms or max_iterations must be positive"));
   }
+  // Only allow this request if there aren't too many ongoing RPCs already.
+  bool allow_request = concurrent_rpc_sem_.try_acquire();
+  if (!allow_request) {
+    return grpc::Status(grpc::RESOURCE_EXHAUSTED,
+                        absl::StrCat("too many active RPCs"));
+  }
+  absl::Cleanup sem_releaser = [this] { concurrent_rpc_sem_.release(); };
 
   // Required: Register this request as a "thread" in the model.
   auto token = model_.RegisterThread();
@@ -122,71 +131,6 @@ grpc::Status CPUPlayerServiceImpl::SuggestMove(
     return grpc::Status(status, std::string(r.status().message()));
   }
   *response = *std::move(r);
-  return grpc::Status::OK;
-}
-
-grpc::Status CPUPlayerServiceImpl::SuggestMoves(
-    grpc::ServerContext*, const hexzpb::SuggestMovesRequest* request,
-    hexzpb::SuggestMovesResponse* response) {
-  int64_t max_think_time_ms = request->max_think_time_ms();
-  int64_t max_iterations = request->max_iterations();
-  if (max_think_time_ms <= 0 && max_iterations <= 0) {
-    return grpc::Status(
-        grpc::INVALID_ARGUMENT,
-        absl::StrCat(
-            "one of max_think_time_ms or max_iterations must be positive"));
-  }
-  if (request->game_engine_states_size() > kMaxRequestBatchSize) {
-    return grpc::Status(
-        grpc::INVALID_ARGUMENT,
-        absl::StrCat("too many game_engine_states; maximum allowed: ",
-                     kMaxRequestBatchSize));
-  }
-  // For now, acquire a lock for single module on each request.
-  // We don't intend to let cpuserver serve multiple requests in parallel.
-  std::unique_lock<std::mutex> module_lock(module_mut_);
-
-  std::vector<boost::fibers::fiber> fibers;
-  absl::Status final_status = absl::OkStatus();
-  std::mutex mut;
-
-  for (int i = 0; i < request->game_engine_states_size(); i++) {
-    fibers.emplace_back([&, i] {
-      auto token = model_.RegisterThread();
-
-      auto r = DoSuggestMove(request->game_engine_states(i), max_think_time_ms,
-                             max_iterations);
-      if (r.ok()) {
-        std::scoped_lock<std::mutex> lk(mut);
-        auto& suggestion = *response->add_move_suggestions();
-        suggestion.set_request_index(i);
-        *suggestion.mutable_move() = r->move();
-        *suggestion.mutable_move_stats() = r->move_stats();
-      } else {
-        ABSL_LOG(ERROR) << "Failed to suggest move: " << r.status();
-        std::scoped_lock<std::mutex> lk(mut);
-        if (r.status().code() == absl::StatusCode::kInternal &&
-            final_status.code() != absl::StatusCode::kInternal) {
-          // Use first INTERNAL error.
-          final_status = r.status();
-        } else if (final_status.code() == absl::StatusCode::kOk) {
-          // Use first non-OK status.
-          final_status = r.status();
-        }
-      }
-    });
-  }
-  for (auto& fiber : fibers) {
-    if (fiber.joinable()) {
-      fiber.join();
-    }
-  }
-
-  if (final_status.ok()) {
-    auto status = static_cast<grpc::StatusCode>(final_status.code());
-    return grpc::Status(status, std::string(final_status.message()));
-  }
-
   return grpc::Status::OK;
 }
 

@@ -212,24 +212,6 @@ message SuggestMoveResponse {
     SuggestMoveStats move_stats = 2;
 }
 
-
-message SuggestMovesResponse {
-
-    message MoveSuggestion {
-        // The index of the corresponding game_engine_state in the request.
-        int32 request_index = 1;
-
-        // Suggested move.
-        GameEngineMove move = 2;
-
-        // Stats for the suggested move.
-        SuggestMoveStats move_stats = 3;
-    }
-
-    // List of successful move suggestions and their associated stats.
-    repeated MoveSuggestion move_suggestions = 1;
-}
-
 message ServerInfoRequest {
 }
 
@@ -254,8 +236,6 @@ service CPUPlayerService {
     // Returns a move suggestion for a single game engine state.
     rpc SuggestMove(SuggestMoveRequest) returns (SuggestMoveResponse) {}
 
-    // Returns move suggestions for multiple game engine states.
-    rpc SuggestMoves(SuggestMovesRequest) returns (SuggestMovesResponse) {}
 }
 
 //

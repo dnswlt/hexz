@@ -3,6 +3,7 @@
 #include <torch/torch.h>
 
 #include <optional>
+#include <semaphore>
 
 #include "hexz.grpc.pb.h"
 #include "model.h"
@@ -18,7 +19,12 @@ struct CPUPlayerServiceConfig {
   hexzpb::ModelKey model_key;
   torch::DeviceType device_type = torch::kCPU;
   int64_t max_think_time_ms = 0;
-  int batch_size = 16;
+  int max_batch_size = 128;
+  // Maximum number of concurrent requests that the server will accept.
+  // Any further request will be denied with a RESOURCE_EXHAUSTED error.
+  // SuggestMovesRequest count as N multiple requests, where N is the
+  // number of contained game engine states.
+  int max_concurrent_requests = 128;
 };
 
 // Implementation of the gRPC server for the CPUPlayerService.
@@ -34,10 +40,6 @@ class CPUPlayerServiceImpl final : public hexzpb::CPUPlayerService::Service {
                            const hexzpb::SuggestMoveRequest* request,
                            hexzpb::SuggestMoveResponse* response) override;
 
-  grpc::Status SuggestMoves(grpc::ServerContext* context,
-                            const hexzpb::SuggestMovesRequest* request,
-                            hexzpb::SuggestMovesResponse* response) override;
-
  private:
   absl::StatusOr<hexzpb::SuggestMoveResponse> DoSuggestMove(
       const hexzpb::GameEngineState& state, int64_t max_think_time_ms,
@@ -46,6 +48,7 @@ class CPUPlayerServiceImpl final : public hexzpb::CPUPlayerService::Service {
   CPUPlayerServiceConfig config_;
   std::mutex module_mut_;
   FiberTorchModel model_;
+  std::counting_semaphore<> concurrent_rpc_sem_;
 };
 
 }  // namespace hexz

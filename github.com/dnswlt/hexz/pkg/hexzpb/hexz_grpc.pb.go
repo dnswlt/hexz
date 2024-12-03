@@ -19,9 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CPUPlayerService_ServerInfo_FullMethodName   = "/hexzpb.CPUPlayerService/ServerInfo"
-	CPUPlayerService_SuggestMove_FullMethodName  = "/hexzpb.CPUPlayerService/SuggestMove"
-	CPUPlayerService_SuggestMoves_FullMethodName = "/hexzpb.CPUPlayerService/SuggestMoves"
+	CPUPlayerService_ServerInfo_FullMethodName  = "/hexzpb.CPUPlayerService/ServerInfo"
+	CPUPlayerService_SuggestMove_FullMethodName = "/hexzpb.CPUPlayerService/SuggestMove"
 )
 
 // CPUPlayerServiceClient is the client API for CPUPlayerService service.
@@ -35,8 +34,6 @@ type CPUPlayerServiceClient interface {
 	ServerInfo(ctx context.Context, in *ServerInfoRequest, opts ...grpc.CallOption) (*ServerInfoResponse, error)
 	// Returns a move suggestion for a single game engine state.
 	SuggestMove(ctx context.Context, in *SuggestMoveRequest, opts ...grpc.CallOption) (*SuggestMoveResponse, error)
-	// Returns move suggestions for multiple game engine states.
-	SuggestMoves(ctx context.Context, in *SuggestMovesRequest, opts ...grpc.CallOption) (*SuggestMovesResponse, error)
 }
 
 type cPUPlayerServiceClient struct {
@@ -67,16 +64,6 @@ func (c *cPUPlayerServiceClient) SuggestMove(ctx context.Context, in *SuggestMov
 	return out, nil
 }
 
-func (c *cPUPlayerServiceClient) SuggestMoves(ctx context.Context, in *SuggestMovesRequest, opts ...grpc.CallOption) (*SuggestMovesResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SuggestMovesResponse)
-	err := c.cc.Invoke(ctx, CPUPlayerService_SuggestMoves_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // CPUPlayerServiceServer is the server API for CPUPlayerService service.
 // All implementations must embed UnimplementedCPUPlayerServiceServer
 // for forward compatibility.
@@ -88,8 +75,6 @@ type CPUPlayerServiceServer interface {
 	ServerInfo(context.Context, *ServerInfoRequest) (*ServerInfoResponse, error)
 	// Returns a move suggestion for a single game engine state.
 	SuggestMove(context.Context, *SuggestMoveRequest) (*SuggestMoveResponse, error)
-	// Returns move suggestions for multiple game engine states.
-	SuggestMoves(context.Context, *SuggestMovesRequest) (*SuggestMovesResponse, error)
 	mustEmbedUnimplementedCPUPlayerServiceServer()
 }
 
@@ -105,9 +90,6 @@ func (UnimplementedCPUPlayerServiceServer) ServerInfo(context.Context, *ServerIn
 }
 func (UnimplementedCPUPlayerServiceServer) SuggestMove(context.Context, *SuggestMoveRequest) (*SuggestMoveResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SuggestMove not implemented")
-}
-func (UnimplementedCPUPlayerServiceServer) SuggestMoves(context.Context, *SuggestMovesRequest) (*SuggestMovesResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SuggestMoves not implemented")
 }
 func (UnimplementedCPUPlayerServiceServer) mustEmbedUnimplementedCPUPlayerServiceServer() {}
 func (UnimplementedCPUPlayerServiceServer) testEmbeddedByValue()                          {}
@@ -166,24 +148,6 @@ func _CPUPlayerService_SuggestMove_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
-func _CPUPlayerService_SuggestMoves_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SuggestMovesRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(CPUPlayerServiceServer).SuggestMoves(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: CPUPlayerService_SuggestMoves_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CPUPlayerServiceServer).SuggestMoves(ctx, req.(*SuggestMovesRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // CPUPlayerService_ServiceDesc is the grpc.ServiceDesc for CPUPlayerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -198,10 +162,6 @@ var CPUPlayerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SuggestMove",
 			Handler:    _CPUPlayerService_SuggestMove_Handler,
-		},
-		{
-			MethodName: "SuggestMoves",
-			Handler:    _CPUPlayerService_SuggestMoves_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
