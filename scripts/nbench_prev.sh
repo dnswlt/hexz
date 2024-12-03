@@ -39,7 +39,6 @@ cpu2_pid=$!
 sleep 2  # let cpuservers become available
 popd > /dev/null
 
-echo 'go run ./cmd/nbench -num-games 5 -p1-addr $server_addr1 -p2-addr $server_addr2 -p1-max-iter $iterations -p2-max-iter $iterations'
 go run ./cmd/nbench -num-games 5 -p1-addr $server_addr1 -p2-addr $server_addr2 -p1-max-iter $iterations -p2-max-iter $iterations -svg-file '' #./nbench_prev.html
 
 echo "Terminating cpuserver processes"

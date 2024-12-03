@@ -9,6 +9,10 @@
 
 namespace hexz {
 
+// Maximum number of items in a SuggestMovesRequest.
+// Requests containing more items will be rejected.
+inline constexpr int kMaxRequestBatchSize = 128;
+
 struct CPUPlayerServiceConfig {
   std::string model_path;
   hexzpb::ModelKey model_key;
@@ -21,6 +25,10 @@ struct CPUPlayerServiceConfig {
 class CPUPlayerServiceImpl final : public hexzpb::CPUPlayerService::Service {
  public:
   CPUPlayerServiceImpl(CPUPlayerServiceConfig config);
+
+  grpc::Status ServerInfo(grpc::ServerContext* context,
+                          const hexzpb::ServerInfoRequest* request,
+                          hexzpb::ServerInfoResponse* response) override;
 
   grpc::Status SuggestMove(grpc::ServerContext* context,
                            const hexzpb::SuggestMoveRequest* request,

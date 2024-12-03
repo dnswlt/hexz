@@ -6,7 +6,10 @@ require github.com/google/go-cmp v0.6.0
 
 require google.golang.org/protobuf v1.35.1
 
-require google.golang.org/grpc v1.67.1
+require (
+	golang.org/x/sync v0.8.0
+	google.golang.org/grpc v1.67.1
+)
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect

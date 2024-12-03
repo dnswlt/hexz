@@ -230,9 +230,31 @@ message SuggestMovesResponse {
     repeated MoveSuggestion move_suggestions = 1;
 }
 
+message ServerInfoRequest {
+}
+
+message ServerInfoResponse {
+    enum ServerType {
+        TYPE_UNSPECIFIED = 0;
+        TYPE_MCTS = 1;
+        TYPE_NEURAL_MCTS = 2;
+    }
+    ServerType server_type = 1;
+    
+    // Only populated for TYPE_NEURAL_MCTS.
+    ModelKey model_key = 2;
+}
+
 // CPUPlayerService is the service to obtain move suggestions from remote CPU players.
 service CPUPlayerService {
+    // Returns the ModelKey of the ML model that the CPU Player engine uses.
+    // If the remote engine does not use an ML model
+    rpc ServerInfo(ServerInfoRequest) returns (ServerInfoResponse) {}
+
+    // Returns a move suggestion for a single game engine state.
     rpc SuggestMove(SuggestMoveRequest) returns (SuggestMoveResponse) {}
+
+    // Returns move suggestions for multiple game engine states.
     rpc SuggestMoves(SuggestMovesRequest) returns (SuggestMovesResponse) {}
 }
 

@@ -106,6 +106,18 @@ func NewRemoteCPUPlayer(client pb.CPUPlayerServiceClient, playerId api.PlayerId,
 	}
 }
 
+func (cpu *RemoteCPUPlayer) ModelKey(ctx context.Context) (*pb.ModelKey, error) {
+	req := &pb.ServerInfoRequest{}
+	resp, err := cpu.client.ServerInfo(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("gRPC ServerInfo request failed: %v", err)
+	}
+	if resp.ServerType != pb.ServerInfoResponse_TYPE_NEURAL_MCTS {
+		return nil, fmt.Errorf("server has unexpected type %v", resp.ServerType)
+	}
+	return resp.ModelKey, nil
+}
+
 func (cpu *RemoteCPUPlayer) SuggestMove(ctx context.Context, ge *GameEngineFlagz) (*GameEngineMove, *pb.SuggestMoveStats, error) {
 	req := &pb.SuggestMoveRequest{
 		MaxThinkTimeMs:  cpu.maxThinkTime.Milliseconds(),

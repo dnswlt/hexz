@@ -19,6 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	CPUPlayerService_ServerInfo_FullMethodName   = "/hexzpb.CPUPlayerService/ServerInfo"
 	CPUPlayerService_SuggestMove_FullMethodName  = "/hexzpb.CPUPlayerService/SuggestMove"
 	CPUPlayerService_SuggestMoves_FullMethodName = "/hexzpb.CPUPlayerService/SuggestMoves"
 )
@@ -29,7 +30,12 @@ const (
 //
 // CPUPlayerService is the service to obtain move suggestions from remote CPU players.
 type CPUPlayerServiceClient interface {
+	// Returns the ModelKey of the ML model that the CPU Player engine uses.
+	// If the remote engine does not use an ML model
+	ServerInfo(ctx context.Context, in *ServerInfoRequest, opts ...grpc.CallOption) (*ServerInfoResponse, error)
+	// Returns a move suggestion for a single game engine state.
 	SuggestMove(ctx context.Context, in *SuggestMoveRequest, opts ...grpc.CallOption) (*SuggestMoveResponse, error)
+	// Returns move suggestions for multiple game engine states.
 	SuggestMoves(ctx context.Context, in *SuggestMovesRequest, opts ...grpc.CallOption) (*SuggestMovesResponse, error)
 }
 
@@ -39,6 +45,16 @@ type cPUPlayerServiceClient struct {
 
 func NewCPUPlayerServiceClient(cc grpc.ClientConnInterface) CPUPlayerServiceClient {
 	return &cPUPlayerServiceClient{cc}
+}
+
+func (c *cPUPlayerServiceClient) ServerInfo(ctx context.Context, in *ServerInfoRequest, opts ...grpc.CallOption) (*ServerInfoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ServerInfoResponse)
+	err := c.cc.Invoke(ctx, CPUPlayerService_ServerInfo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *cPUPlayerServiceClient) SuggestMove(ctx context.Context, in *SuggestMoveRequest, opts ...grpc.CallOption) (*SuggestMoveResponse, error) {
@@ -67,7 +83,12 @@ func (c *cPUPlayerServiceClient) SuggestMoves(ctx context.Context, in *SuggestMo
 //
 // CPUPlayerService is the service to obtain move suggestions from remote CPU players.
 type CPUPlayerServiceServer interface {
+	// Returns the ModelKey of the ML model that the CPU Player engine uses.
+	// If the remote engine does not use an ML model
+	ServerInfo(context.Context, *ServerInfoRequest) (*ServerInfoResponse, error)
+	// Returns a move suggestion for a single game engine state.
 	SuggestMove(context.Context, *SuggestMoveRequest) (*SuggestMoveResponse, error)
+	// Returns move suggestions for multiple game engine states.
 	SuggestMoves(context.Context, *SuggestMovesRequest) (*SuggestMovesResponse, error)
 	mustEmbedUnimplementedCPUPlayerServiceServer()
 }
@@ -79,6 +100,9 @@ type CPUPlayerServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedCPUPlayerServiceServer struct{}
 
+func (UnimplementedCPUPlayerServiceServer) ServerInfo(context.Context, *ServerInfoRequest) (*ServerInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ServerInfo not implemented")
+}
 func (UnimplementedCPUPlayerServiceServer) SuggestMove(context.Context, *SuggestMoveRequest) (*SuggestMoveResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SuggestMove not implemented")
 }
@@ -104,6 +128,24 @@ func RegisterCPUPlayerServiceServer(s grpc.ServiceRegistrar, srv CPUPlayerServic
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&CPUPlayerService_ServiceDesc, srv)
+}
+
+func _CPUPlayerService_ServerInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ServerInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CPUPlayerServiceServer).ServerInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CPUPlayerService_ServerInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CPUPlayerServiceServer).ServerInfo(ctx, req.(*ServerInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _CPUPlayerService_SuggestMove_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -149,6 +191,10 @@ var CPUPlayerService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "hexzpb.CPUPlayerService",
 	HandlerType: (*CPUPlayerServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ServerInfo",
+			Handler:    _CPUPlayerService_ServerInfo_Handler,
+		},
 		{
 			MethodName: "SuggestMove",
 			Handler:    _CPUPlayerService_SuggestMove_Handler,

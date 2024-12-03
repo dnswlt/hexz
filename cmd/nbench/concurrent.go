@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
 	"github.com/dnswlt/hexz/pkg/hexz"
+	"golang.org/x/sync/errgroup"
 )
 
 type ResultStats struct {
@@ -43,7 +45,22 @@ func (r *ResultStats) String() string {
 }
 
 func playConcurrent(p1, p2 *hexz.RemoteCPUPlayer, numGames int) {
-	ctx := context.Background()
+	// Get model keys for logging
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	p1Key, err := p1.ModelKey(ctx)
+	if err != nil {
+		log.Fatalf("Cannot get model key for P1: %v", err)
+	}
+	p2Key, err := p2.ModelKey(ctx)
+	if err != nil {
+		log.Fatalf("Cannot get model key for P2: %v", err)
+	}
+	p1Name := fmt.Sprintf("P1(%s:%d)", p1Key.Name, p1Key.Checkpoint)
+	p2Name := fmt.Sprintf("P2(%s:%d)", p2Key.Name, p2Key.Checkpoint)
+	cancel()
+	log.Printf("Playing %s vs. %s\n", p1Name, p2Name)
+
 	var wg sync.WaitGroup
 	type request struct {
 		ge *hexz.GameEngineFlagz
@@ -76,20 +93,23 @@ func playConcurrent(p1, p2 *hexz.RemoteCPUPlayer, numGames int) {
 					return
 				}
 				if err := ge.MakeMoveError(*mv); err != nil {
-					fmt.Printf("Failed to make a move: %v\n", err)
+					log.Printf("Failed to make a move: %v\n", err)
 					return
 				}
-				fmt.Printf("[worker %d] score at move %d: %v\n", i, ge.Board().Move, ge.Board().Score)
+				log.Printf("[worker %d] score at move %d: %v\n", i, ge.Board().Move, ge.Board().Score)
 			}
-			fmt.Printf("[worker %d] Game over after %d moves. Final score: %v\n", i, ge.Board().Move, ge.Board().Score)
+			log.Printf("[worker %d] Game over after %d moves. Final score: %v\n", i, ge.Board().Move, ge.Board().Score)
 			stats.Add(ge.Winner())
 		}(i)
 	}
 
 	// Channel to signal termination to the batching RPC goroutine.
-	done := make(chan bool)
+	bgCtx, cancel := context.WithCancel(context.Background())
+	var bgWg sync.WaitGroup
+	bgWg.Add(1)
 	// Batching RPC goroutine:
-	go func(numWorkers int) {
+	go func(ctx context.Context, numWorkers int) {
+		defer bgWg.Done()
 		// Helper function to process a full batch.
 		processBatch := func(batch []request) {
 			// Requests can be for P1 or P2 moves. We need to split them
@@ -105,40 +125,46 @@ func playConcurrent(p1, p2 *hexz.RemoteCPUPlayer, numGames int) {
 				}
 			}
 			started := time.Now()
-			var moves1, moves2 []*hexz.GameEngineMove
-			var err error
+			moves := [][]*hexz.GameEngineMove{nil, nil}
+			g, ctx := errgroup.WithContext(ctx)
 			if len(ges1) > 0 {
-				fmt.Printf("Making %d requests for P1\n", len(ges1))
-				moves1, err = p1.SuggestMoves(ctx, ges1)
-				if err != nil {
-					fmt.Printf("SuggestMoves failed (P1): %v\n", err)
-					// Tell all clients waiting for a response we failed.
-					for _, b := range batch {
-						close(b.ch)
+				g.Go(func() error {
+					ms, err := p1.SuggestMoves(ctx, ges1)
+					if err != nil {
+						log.Printf("SuggestMoves failed (P1): %v\n", err)
+						return err
 					}
-					return
-				}
+					moves[0] = ms
+					return nil
+				})
 			}
 			if len(ges2) > 0 {
-				fmt.Printf("Making %d requests for P2\n", len(ges2))
-				moves2, err = p2.SuggestMoves(ctx, ges2)
-				if err != nil {
-					fmt.Printf("SuggestMoves failed (P2): %v\n", err)
-					// Tell all clients waiting for a response we failed.
-					for _, b := range batch {
-						close(b.ch)
+				g.Go(func() error {
+					ms, err := p2.SuggestMoves(ctx, ges2)
+					if err != nil {
+						log.Printf("SuggestMoves failed (P2): %v\n", err)
+						return err
 					}
-					return
-				}
+					moves[1] = ms
+					return nil
+				})
 			}
-			fmt.Printf("Received %d (%d+%d) move suggestions after %.3f\n", len(batch), len(moves1), len(moves2), time.Since(started).Seconds())
+			err := g.Wait()
+			if err != nil {
+				// Fatal: RPC failed. Tell all worker that we're done.
+				for _, b := range batch {
+					close(b.ch)
+				}
+				return
+			}
+			log.Printf("Received %d (%d+%d) move suggestions after %.3f\n", len(batch), len(moves[0]), len(moves[1]), time.Since(started).Seconds())
 			var j1, j2 int
 			for i := 0; i < len(batch); i++ {
 				if p1Indices[i] {
-					batch[i].ch <- moves1[j1]
+					batch[i].ch <- moves[0][j1]
 					j1++
 				} else {
-					batch[i].ch <- moves2[j2]
+					batch[i].ch <- moves[1][j2]
 					j2++
 				}
 			}
@@ -156,7 +182,7 @@ func playConcurrent(p1, p2 *hexz.RemoteCPUPlayer, numGames int) {
 		var batch []request
 		for {
 			select {
-			case <-done:
+			case <-ctx.Done():
 				return
 			case r := <-requestChan:
 				batch = append(batch, r)
@@ -172,16 +198,24 @@ func playConcurrent(p1, p2 *hexz.RemoteCPUPlayer, numGames int) {
 				}
 			}
 		}
-	}(numGames)
+	}(bgCtx, numGames)
 	// Wait until all workers are done.
 	wg.Wait()
+	// Tell the GPU pipeline thread we're done.
+	cancel()
+	bgWg.Wait()
+
+	// Print results.
+	if stats.Games() != numGames {
+		log.Printf("Benchmark was aborted. Intermediate result: %v", stats)
+		return
+	}
 	result := "P1 wins"
 	if stats.wins[0] == stats.wins[1] {
 		result = "draw"
 	} else if stats.wins[1] > stats.wins[0] {
 		result = "P2 wins"
 	}
-	fmt.Printf("Best of %d final result after %d games: %s: %v\n", numGames, stats.games, result, stats.wins)
-	// Tell the GPU pipeline thread we're done.
-	done <- true
+
+	log.Printf("Final result: best of %d: %s vs %s: %s %d-%d\n", numGames, p1Name, p2Name, result, stats.wins[0], stats.wins[1])
 }

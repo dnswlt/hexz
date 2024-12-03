@@ -16,7 +16,8 @@ ABSL_FLAG(std::string, server_addr, "localhost:50051",
 ABSL_FLAG(std::string, model_path, "./scriptmodule.pt",
           "path to the PyTorch module");
 ABSL_FLAG(std::string, model_key, "local:0",
-          "optional model key (name:checkpoint) for logging purposes");
+          "optional model key (name:checkpoint) for logging purposes and "
+          "ServerInfo responses");
 ABSL_FLAG(std::string, device, "cpu", "PyTorch device (cpu, cuda, mps)");
 ABSL_FLAG(int64_t, max_think_time_ms, 1000,
           "maximum thinking time for SuggestMove requests");

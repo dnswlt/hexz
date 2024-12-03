@@ -20,6 +20,14 @@ CPUPlayerServiceImpl::CPUPlayerServiceImpl(CPUPlayerServiceConfig config)
              torch::jit::load(config.model_path, config.device_type),
              config.device_type, config.batch_size} {}
 
+grpc::Status CPUPlayerServiceImpl::ServerInfo(
+    grpc::ServerContext*, const hexzpb::ServerInfoRequest*,
+    hexzpb::ServerInfoResponse* response) {
+  response->set_server_type(hexzpb::ServerInfoResponse::TYPE_NEURAL_MCTS);
+  *response->mutable_model_key() = model_.Key();
+  return grpc::Status::OK;
+}
+
 absl::StatusOr<hexzpb::SuggestMoveResponse> CPUPlayerServiceImpl::DoSuggestMove(
     const hexzpb::GameEngineState& state, int64_t max_think_time_ms,
     int64_t max_iterations) {
@@ -128,7 +136,12 @@ grpc::Status CPUPlayerServiceImpl::SuggestMoves(
         absl::StrCat(
             "one of max_think_time_ms or max_iterations must be positive"));
   }
-
+  if (request->game_engine_states_size() > kMaxRequestBatchSize) {
+    return grpc::Status(
+        grpc::INVALID_ARGUMENT,
+        absl::StrCat("too many game_engine_states; maximum allowed: ",
+                     kMaxRequestBatchSize));
+  }
   // For now, acquire a lock for single module on each request.
   // We don't intend to let cpuserver serve multiple requests in parallel.
   std::unique_lock<std::mutex> module_lock(module_mut_);
@@ -141,8 +154,8 @@ grpc::Status CPUPlayerServiceImpl::SuggestMoves(
     fibers.emplace_back([&, i] {
       auto token = model_.RegisterThread();
 
-      auto r = DoSuggestMove(request->game_engine_states(i),
-                                max_think_time_ms, max_iterations);
+      auto r = DoSuggestMove(request->game_engine_states(i), max_think_time_ms,
+                             max_iterations);
       if (r.ok()) {
         std::scoped_lock<std::mutex> lk(mut);
         auto& suggestion = *response->add_move_suggestions();
