@@ -256,7 +256,6 @@ message TrainingParameters {
     float dirichlet_concentration = 5;
     float fast_move_prob = 6;
     float runs_per_fast_move = 7;
-    bool random_playouts = 8;
 }
 
 // A subset of configuration parameters from hexz::Config that

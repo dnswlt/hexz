@@ -55,11 +55,9 @@ absl::StatusOr<hexzpb::SuggestMoveResponse> CPUPlayerServiceImpl::DoSuggestMove(
       // disable fast moves and Dirichlet noise explicitly.
       .fast_move_prob = 0,
       .dirichlet_concentration = 0,
-      // Random playouts should only be used during self-play.
-      .random_playouts = 0,
   };
 
-  NeuralMCTS mcts(model_, /*playout_runner=*/nullptr, config);
+  NeuralMCTS mcts(model_, config);
 
   absl::StatusOr<std::unique_ptr<Node>> node;
   try {

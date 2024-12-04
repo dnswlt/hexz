@@ -171,7 +171,6 @@ absl::Status UpdateConfigFromTrainingServer(hexz::TrainingServiceClient& client,
   config.dirichlet_concentration = resp->dirichlet_concentration();
   config.fast_move_prob = resp->fast_move_prob();
   config.runs_per_fast_move = resp->runs_per_fast_move();
-  config.random_playouts = resp->random_playouts();
   ABSL_LOG(INFO) << "Updated training parameters from training server:\n"
                  << resp->DebugString();
   return absl::OkStatus();

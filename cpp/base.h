@@ -60,14 +60,6 @@ struct Config {
   // or 0.3 to use the setting that was used for chess.
   // Set this to zero to disable Dirichlet noise.
   float dirichlet_concentration = 0;
-  // Number of random playouts to play at each leaf node to improve the
-  // (initially totally useless) model value predictions. Random playouts
-  // are also used to resign early.
-  // Set this to zero to disable random playouts.
-  int random_playouts = 0;
-  // Threshold Q value above which a game will be resigned, to speed up
-  // self-play. Currently this is only used for random playouts.
-  float resign_threshold = std::numeric_limits<float>::max();
   // Maximum delay at startup before generating and sending examples.
   // The delay will be uniformly randomized between 0 and startup_delay_seconds.
   // The idea is to avoid a "thundering herd" of workers delivering results

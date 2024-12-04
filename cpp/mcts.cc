@@ -370,37 +370,10 @@ absl::Status WriteDotGraph(const Node& root, const std::string& path) {
   return absl::OkStatus();
 }
 
-inline void PlayoutRunner::Stats::Add(float result) noexcept {
-  result_sum += result;
-  runs++;
-}
+NeuralMCTS::NeuralMCTS(Model& model, const Config& config)
+    : config_{config}, model_{model} {}
 
-std::string PlayoutRunner::Stats::DebugString() const noexcept {
-  return absl::StrFormat("PlayoutRunner::Stats{.runs=%d, .avg=%.3f}", runs,
-                         Avg());
-}
-
-PlayoutRunner::Stats RandomPlayoutRunner::Run(const Board& board, int turn,
-                                              int runs) {
-  PlayoutRunner::Stats stats;
-  for (int i = 0; i < runs; i++) {
-    Perfm::Scope perfm(Perfm::RandomPlayout);
-    float r = FastRandomPlayout(turn, board, rng_);
-    stats.Add(r);
-  }
-  aggregated_stats_.Merge(stats);
-  return stats;
-}
-
-NeuralMCTS::NeuralMCTS(Model& model,
-                       std::unique_ptr<PlayoutRunner> playout_runner,
-                       const Config& config)
-    : config_{config},
-      model_{model},
-      playout_runner_{std::move(playout_runner)} {}
-
-bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
-                             bool run_playouts) {
+bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise) {
   Board board(b);
   Node* n = &root;
   if (add_noise && !n->IsLeaf()) {
@@ -472,14 +445,6 @@ bool NeuralMCTS::SelfplayRun(Node& root, const Board& b, bool add_noise,
     n->AddDirichletNoise(kNoiseWeight, config_.dirichlet_concentration, rng_);
   }
   float value = pred.value;
-  if (run_playouts) {
-    auto stats =
-        playout_runner_->Run(board, n->NextTurn(), config_.random_playouts);
-    random_playouts_count_++;
-    // 50% weight for model predictions and 50% for random playouts.
-    float playout_value = (n->NextTurn() == 0 ? 1 : -1) * stats.Avg();
-    value = (value + playout_value) / 2;
-  }
   n->SetValue(value);
   // Backpropagate the model prediction. Need to reorient it s.t. 1 means
   // player 0 won.
@@ -566,29 +531,14 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     const auto [runs, is_fast_run] = NumRuns(n);
     int n_runs = 0;
     int n_reused = 0;
-    bool run_playouts = !is_fast_run && config_.random_playouts > 0;
     bool add_noise = !is_fast_run && config_.dirichlet_concentration > 0;
-    playout_runner_->ResetStats();
     while ((n_runs - n_reused) < runs) {
-      if (SelfplayRun(*root, board, add_noise, run_playouts)) {
+      if (SelfplayRun(*root, board, add_noise)) {
         // Re-used previous prediction, so don't count as a full run.
         n_reused++;
       }
       n_runs++;
       add_noise = false;  // Only add noise on first run.
-    }
-    if (run_playouts && std::abs(playout_runner_->AggregatedStats().Avg()) >
-                            config_.resign_threshold) {
-      const auto [s0, s1] = board.Score();
-      ABSL_LOG(INFO) << "Resigning on move " << n << " at score " << s0 << "-"
-                     << s1 << " and playout result "
-                     << playout_runner_->AggregatedStats().DebugString()
-                     << " and root->value " << root->value()
-                     << " and root->turn " << root->NextTurn();
-      // Ensure the result is a whole number.
-      result = std::round(playout_runner_->AggregatedStats().Avg());
-      game_over = true;
-      break;
     }
     // if (n < 10)
     //   WriteDotGraph(*root, "/tmp/searchtree_" + std::to_string(n) +
@@ -603,8 +553,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
                      << " and " << n << " moves. Final score: " << board.Score()
                      << ". Result: " << result
                      << ". Examples: " << examples.size()
-                     << ". Predictions: " << PredictionsCount()
-                     << ". RandomPlayouts: " << RandomPlayoutsCount();
+                     << ". Predictions: " << predictions_count_;
       game_over = true;
       break;
     }
@@ -664,17 +613,7 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
 
     // Replace root with selected child.
     root = root->SelectChildAsRoot(child_idx);
-    if (is_fast_run && config_.random_playouts > 0) {
-      // Gnarf, this "fast run" code proliferates...
-      // If we make a fast run and use random playouts,
-      // we should not re-use the .value of child nodes
-      // as it interferes badly with value updates done due to random
-      // playouts: the .value of a fast run was generated using only model
-      // predictions. For simplicity, just don't re-use the tree at all.
-      root = std::make_unique<Node>(root->NextTurn());
-    } else {
-      root->ResetTree();
-    }
+    root->ResetTree();
   }
   if (game_over) {
     for (auto& ex : examples) {

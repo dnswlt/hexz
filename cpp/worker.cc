@@ -337,7 +337,7 @@ void Worker::RunSingle(Model& model, AsyncExampleSender& sender) {
     if (now >= end_micros) {
       break;  // Time's up
     }
-    NeuralMCTS mcts{model, std::make_unique<RandomPlayoutRunner>(), config_};
+    NeuralMCTS mcts{model, config_};
     Board b = Board::RandomBoard();
     int64_t max_runtime_seconds =
         config_.max_runtime_seconds - (now - started_micros) / 1'000'000;
@@ -389,7 +389,6 @@ void Worker::PopulateWorkerConfig(hexzpb::WorkerConfig& config) const {
   tp.set_uct_c(Node::uct_c);
   tp.set_initial_root_q_value(Node::initial_root_q_value);
   tp.set_initial_q_penalty(Node::initial_q_penalty);
-  tp.set_random_playouts(config_.random_playouts);
 }
 
 torch::DeviceType Worker::DeviceType() const {

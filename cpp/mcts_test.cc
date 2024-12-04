@@ -86,37 +86,6 @@ class ConstantFakeModel final : public FakeModel {
   float value_;
 };
 
-// A PlayoutRunner useful for tests. You can specify the results
-// it is supposed to return.
-// The runner will return the same specified result for each call to Run,
-// and advance its position in the results by one on each call to ResetStats.
-// This is an unfortunate implementation detail leak - we know that
-// NeuralMCTS::PlayGame call ResetStats on each move.
-class FakePlayoutRunner final : public PlayoutRunner {
- public:
-  explicit FakePlayoutRunner(std::vector<float> results) : results_{results} {}
-  Stats Run(const Board&, int, int runs) override {
-    ABSL_CHECK(iteration_ >= 0 && iteration_ < results_.size());
-    float r = results_[iteration_];
-    Stats s{
-        .result_sum = runs * r,
-        .runs = runs,
-    };
-    stats_.Merge(s);
-    return s;
-  }
-  const Stats& AggregatedStats() const override { return stats_; }
-  void ResetStats() override {
-    iteration_++;
-    stats_ = Stats{};
-  }
-
- private:
-  Stats stats_;
-  std::vector<float> results_;
-  int iteration_ = -1;
-};
-
 TEST(NodeTest, InitializedToZero) {
   Node n(nullptr, 0, Move{});
   EXPECT_EQ(n.visit_count(), 0);
@@ -389,7 +358,7 @@ TEST(MCTSTest, NumRuns) {
       .runs_per_move = 100,
   };
   UniformFakeModel fake_model;
-  NeuralMCTS mcts(fake_model, /*playout_runner=*/nullptr, config);
+  NeuralMCTS mcts(fake_model, config);
   EXPECT_EQ(mcts.NumRuns(0).first, 100);
   EXPECT_EQ(mcts.NumRuns(25).first, 100);
   // Fast run config should return # of fast runs, but only after the
@@ -398,7 +367,7 @@ TEST(MCTSTest, NumRuns) {
       .runs_per_fast_move = 10,
       .fast_move_prob = 1.0,  // only fast moves
   };
-  NeuralMCTS mcts_fast(fake_model, /*playout_runner=*/nullptr, config);
+  NeuralMCTS mcts_fast(fake_model, config);
   EXPECT_EQ(mcts_fast.NumRuns(0).first, 100);
   EXPECT_EQ(mcts_fast.NumRuns(kFirstFastMove).first, 10);
 }
@@ -413,7 +382,7 @@ TEST(MCTSTest, RemainingFlagsAreNotNegative) {
   };
   internal::RNG rng;
   UniformFakeModel fake_model;
-  NeuralMCTS mcts(fake_model, /*playout_runner=*/nullptr, config);
+  NeuralMCTS mcts(fake_model, config);
   Board b = Board::RandomBoard();
   auto root = std::make_unique<Node>(0);
   for (int i = 0; i < 50; i++) {
@@ -457,11 +426,11 @@ TEST(MCTSTest, NoMoveLowerScoreIsTerminal) {
   b.MakeMove(0, next_moves[0]);
 
   UniformFakeModel fake_model(1.0);
-  NeuralMCTS mcts(fake_model, /*playout_runner=*/nullptr, config);
+  NeuralMCTS mcts(fake_model, config);
   auto root = std::make_unique<Node>(/*turn=*/1);
 
   EXPECT_FALSE(root->terminal());
-  mcts.SelfplayRun(*root, b, /*add_noise=*/false, /*run_playouts=*/false);
+  mcts.SelfplayRun(*root, b, /*add_noise=*/false);
   EXPECT_TRUE(root->terminal());
 }
 
@@ -474,12 +443,12 @@ TEST(MCTSTest, SelfplayRun) {
   Node::UpdateStaticParams(config);
   // The model thinks that the current player always wins.
   UniformFakeModel fake_model(1.0);
-  NeuralMCTS mcts(fake_model, /*playout_runner=*/nullptr, config);
+  NeuralMCTS mcts(fake_model, config);
   Board b = Board::RandomBoard();
   auto root = std::make_unique<Node>(0);
   // First run
   bool reused =
-      mcts.SelfplayRun(*root, b, /*add_noise=*/false, /*run_playouts=*/false);
+      mcts.SelfplayRun(*root, b, /*add_noise=*/false);
   EXPECT_FALSE(reused);
   EXPECT_EQ(root->visit_count(), 1);
   EXPECT_GT(root->children().size(), 80);
@@ -500,7 +469,7 @@ TEST(MCTSTest, SelfplayRun) {
 
   // Second run
   reused =
-      mcts.SelfplayRun(*root, b, /*add_noise=*/false, /*run_playouts=*/false);
+      mcts.SelfplayRun(*root, b, /*add_noise=*/false);
   EXPECT_FALSE(reused);
 
   auto c_it =
@@ -517,7 +486,7 @@ TEST(MCTSTest, SelfplayRun) {
   EXPECT_EQ(root->wins(), 0.0);
   // Third run
   reused =
-      mcts.SelfplayRun(*root, b, /*add_noise=*/false, /*run_playouts=*/false);
+      mcts.SelfplayRun(*root, b, /*add_noise=*/false);
   EXPECT_FALSE(reused);
   // The child chosen previously led to a loss from P0's perspective,
   // so a different child should have been chosen in the third run.
@@ -552,11 +521,9 @@ TEST_F(MCTSScriptModuleTest, PlayGame) {
   Config config{
       .runs_per_move = 50,
       .dirichlet_concentration = 0.3,
-      .random_playouts = 10,
-      .resign_threshold = std::numeric_limits<float>::max(),  // never resign
   };
   TorchModel model(std::move(scriptmodule_));
-  NeuralMCTS mcts(model, std::make_unique<RandomPlayoutRunner>(), config);
+  NeuralMCTS mcts(model, config);
   auto b = Board::RandomBoard();
 
   auto examples = mcts.PlayGame("test", b, /*max_runtime_seconds=*/0);
@@ -597,13 +564,11 @@ TEST_F(MCTSScriptModuleTest, PlayGameFiberTorchModel) {
   Config config{
       .runs_per_move = 50,
       .dirichlet_concentration = 0.3,
-      .random_playouts = 10,
-      .resign_threshold = std::numeric_limits<float>::max(),  // never resign
   };
   hexzpb::ModelKey key;
   FiberTorchModel model(key, std::move(scriptmodule_), torch::kCPU, 1);
   auto token = model.RegisterThread();
-  NeuralMCTS mcts(model, std::make_unique<RandomPlayoutRunner>(), config);
+  NeuralMCTS mcts(model, config);
   auto b = Board::RandomBoard();
 
   auto examples = mcts.PlayGame("test", b, /*max_runtime_seconds=*/0);
@@ -616,14 +581,12 @@ TEST(MCTSTest, PlayGameStats) {
   Config config{
       .runs_per_move = 50,
       .dirichlet_concentration = 0.0,
-      .random_playouts = 0,
-      .resign_threshold = std::numeric_limits<float>::max(),  // never resign
   };
   auto move_probs = torch::ones({2, 11, 10});
   move_probs /= move_probs.sum();
   float value = 1.0;  // P0 always wins.
   ConstantFakeModel fake_model(move_probs, value);
-  NeuralMCTS mcts(fake_model, std::make_unique<RandomPlayoutRunner>(), config);
+  NeuralMCTS mcts(fake_model, config);
   auto b = Board::RandomBoard();
 
   auto examples = mcts.PlayGame("test", b, /*max_runtime_seconds=*/0);
@@ -647,42 +610,16 @@ TEST(MCTSTest, PlayGameStats) {
   EXPECT_GT(stats.max_visit_count_per_depth(0), 0);
 }
 
-TEST(MCTSTest, PlayGameResign) {
-  // If all random playouts indicate the same winner, the game should be
-  // resigned.
-  Config config{
-      .runs_per_move = 50,
-      .fast_move_prob = 0.0,  // but no fast moves (to avoid interference)
-      // Avoid penalties in this test: with fake models returning uniform values
-      // for all nodes, the search would otherwise just go down a single path.
-      .initial_root_q_value = 0.0,
-      .initial_q_penalty = 0.0,
-      .dirichlet_concentration = 0.0,
-      .random_playouts = 10,  // use random playouts
-      .resign_threshold = 0.999,
-  };
-  UniformFakeModel model;
-  // Playouts yield a draw on move 0, a very weak value on move 1,
-  // then player 1 wins every game in move 2, which should lead to resignation.
-  auto runner =
-      std::make_unique<FakePlayoutRunner>(std::vector<float>{0.0, -0.01, -1});
-  NeuralMCTS mcts(model, std::move(runner), config);
-  auto b = Board::RandomBoard();
-  auto examples = mcts.PlayGame("test", b, /*max_runtime_seconds=*/0);
-  ASSERT_TRUE(examples.ok());
-  EXPECT_EQ(examples->size(), 2) << "Should have resigned on the third move";
-}
-
 TEST_F(MCTSScriptModuleTest, WriteDotGraph) {
   TorchModel model(std::move(scriptmodule_));
-  NeuralMCTS mcts(model, /*playout_runner=*/nullptr, Config{});
+  NeuralMCTS mcts(model, Config{});
   auto b = Board::RandomBoard();
   auto dot_path =
       fs::temp_directory_path() / fs::path("_MCTSTest_WriteDotGraph.dot");
   absl::Cleanup cleanup = [&dot_path]() { fs::remove(dot_path); };
   Node root(nullptr, 0, Move{});
   for (int i = 0; i < 100; i++) {
-    mcts.SelfplayRun(root, b, /*add_noise=*/false, /*run_playouts=*/false);
+    mcts.SelfplayRun(root, b, /*add_noise=*/false);
   }
   ASSERT_GT(root.children().size(), 0);
   auto status = WriteDotGraph(root, dot_path.string());

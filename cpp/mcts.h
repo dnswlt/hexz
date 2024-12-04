@@ -238,47 +238,11 @@ class Node {
 // Writes the subtree starting at root to path as a GraphViz .dot file.
 absl::Status WriteDotGraph(const Node& root, const std::string& path);
 
-// PlayoutRunner is an interface class for (typically random) playouts.
-class PlayoutRunner {
- public:
-  struct Stats {
-    float result_sum = 0;
-    int runs = 0;
-    void Add(float result) noexcept;
-    float Avg() const noexcept { return runs > 0 ? result_sum / runs : 0; }
-    Stats& Merge(const Stats& other) {
-      runs += other.runs;
-      result_sum += other.result_sum;
-      return *this;
-    }
-    std::string DebugString() const noexcept;
-  };
-
-  virtual Stats Run(const Board& board, int turn, int runs) = 0;
-  virtual const Stats& AggregatedStats() const = 0;
-  virtual void ResetStats() = 0;
-  virtual ~PlayoutRunner() = default;
-};
-
-// RandomPlayoutRunner can run entirely random playouts. No MCTS or
-// other refinements, just one random move after the other.
-class RandomPlayoutRunner : public PlayoutRunner {
- public:
-  Stats Run(const Board& board, int turn, int runs) override;
-  const Stats& AggregatedStats() const override { return aggregated_stats_; };
-  void ResetStats() override { aggregated_stats_ = Stats{}; };
-
- private:
-  Stats aggregated_stats_;
-  internal::RNG rng_;
-};
-
 class NeuralMCTS {
  public:
   // The model is not owned. Owners of the NeuralMCTS instance must ensure it
   // outlives this instance.
-  NeuralMCTS(Model& model, std::unique_ptr<PlayoutRunner> playout_runner,
-             const Config& config);
+  NeuralMCTS(Model& model, const Config& config);
 
   // Plays a full game using the given Board (which gets mutated).
   // game_id can be any string and is only used for logging.
@@ -301,8 +265,7 @@ class NeuralMCTS {
   // move probs.
   // If run_playouts is true, the PlayoutRunner will be used in the value
   // computation.
-  bool SelfplayRun(Node& root, const Board& b, bool add_noise,
-                   bool run_playouts);
+  bool SelfplayRun(Node& root, const Board& b, bool add_noise);
 
   // SuggestMove returns the best move suggestion that the NeuralMCTS algorithm
   // comes up with in think_time_millis milliseconds.
@@ -313,19 +276,13 @@ class NeuralMCTS {
                                                     int64_t think_time_millis,
                                                     int64_t max_iterations);
 
-  int PredictionsCount() const { return predictions_count_; }
-  int RandomPlayoutsCount() const { return random_playouts_count_; }
-
  private:
   Config config_;
   // Not owned.
   Model& model_;
-  // Used for refining model predictions with random playouts.
-  std::unique_ptr<PlayoutRunner> playout_runner_;
 
   // Stats
   int predictions_count_ = 0;
-  int random_playouts_count_ = 0;
 
   mutable internal::Xoshiro256Plus rng_;
 };
