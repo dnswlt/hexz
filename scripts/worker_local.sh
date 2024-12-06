@@ -5,6 +5,11 @@ log_dir="$base_dir/log"
 
 test -d "$log_dir" || mkdir "$log_dir"
 
+device=cuda
+if [[ "$(uname)" = "Darwin" ]]; then
+    device=mps
+fi
+
 cd "$base_dir/cpp/build"
 # Run the worker for proper self-play training LOCALLY.
 # Run for 1 hour.
@@ -12,6 +17,6 @@ cd "$base_dir/cpp/build"
 env \
 HEXZ_TRAINING_SERVER_ADDR=localhost:50051 \
 HEXZ_MAX_RUNTIME_SECONDS=3600 \
-HEXZ_WORKER_SPEC=cuda@4:128:256 \
+HEXZ_WORKER_SPEC="$device@4:128:256" \
 HEXZ_SUSPEND_WHILE_TRAINING=true \
 ./worker 2>&1 | tee -a "$log_dir/worker.log"

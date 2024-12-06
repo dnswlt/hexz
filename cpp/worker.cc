@@ -403,7 +403,16 @@ torch::DeviceType Worker::DeviceType() const {
 std::unique_ptr<Model> Worker::CreateModel(hexzpb::ModelKey model_key,
                                            torch::jit::Module&& model) {
   torch::DeviceType device = DeviceType();
-  if (config_.fibers_per_thread > 0) {
+  if (config_.fibers_per_thread > 0 && config_.prediction_batch_size == -1) {
+    ABSL_CHECK(config_.worker_threads == 1)
+        << "YarnTorchModel does not support multi-threading yet";
+    // Use the yarn fiber-based model.
+    ABSL_LOG(INFO) << "Using YarnTorchModel for " << config_.worker_threads
+                   << " threads and " << config_.fibers_per_thread
+                   << " fibers per thread on device " << config_.device;
+    return std::make_unique<YarnTorchModel>(model_key, std::move(model),
+                                            device);
+  } else if (config_.fibers_per_thread > 0) {
     // Use the fiber-based model.
     ABSL_LOG(INFO) << "Using FiberTorchModel for " << config_.worker_threads
                    << " threads and " << config_.fibers_per_thread

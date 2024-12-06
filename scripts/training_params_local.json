@@ -5,6 +5,5 @@
     "initialQPenalty": 0.3,
     "dirichletConcentration": 0.55,
     "fastMoveProb": 0,
-    "runsPerFastMove": 100,
-    "randomPlayouts": false
+    "runsPerFastMove": 100
   }

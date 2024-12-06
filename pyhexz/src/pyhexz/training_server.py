@@ -181,7 +181,6 @@ def read_training_params() -> str:
             dirichlet_concentration=0.55,
             fast_move_prob=0,
             runs_per_fast_move=100,
-            random_playouts=False,
         )
         # print(json_format.MessageToJson(ps))
         return ps

@@ -274,7 +274,11 @@ void FiberTorchModel::Resume() {
 YarnTorchModel::YarnTorchModel(hexzpb::ModelKey key,
                                torch::jit::Module&& module,
                                torch::DeviceType device)
-    : module_{std::move(module)}, key_{key}, device_{device} {}
+    : module_{std::move(module)}, key_{key}, device_{device} {
+  std::scoped_lock<std::mutex> lk(module_mut_);
+  module_.eval();
+  module_.to(device_);
+}
 
 YarnTorchModel::~YarnTorchModel() {
   ABSL_CHECK(active_fibers_ == 0)
@@ -316,6 +320,8 @@ void YarnTorchModel::ClearBuffers() {
 }
 
 void YarnTorchModel::ComputePredictions() {
+  // Don't calculate gradients: self-play only needs model evaluation.
+  torch::NoGradGuard no_grad;
   // All fibers have made their request. Let's predict!
   std::vector<torch::jit::IValue> model_inputs = {
       torch::stack(boards_).to(device_),
@@ -340,7 +346,7 @@ void YarnTorchModel::ComputePredictions() {
 
 Model::Prediction YarnTorchModel::Predict(torch::Tensor board,
                                           torch::Tensor action_mask) {
-  {
+  if (results_ready_ > 0) {
     // Wait until next batch round opens.
     std::unique_lock<boost::fibers::mutex> enter_lk(enter_mut_);
     enter_cv_.wait(enter_lk, [this]() { return results_ready_ == 0; });

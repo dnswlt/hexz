@@ -31,7 +31,6 @@ gcloud beta batch jobs submit hexz-worker-batch-$(date +"%Y%m%d%H%M") --location
                 "HEXZ_FAST_MOVE_PROB": "0.5",
                 "HEXZ_UCT_C": "1.5",
                 "HEXZ_DIRICHLET_CONCENTRATION": "0.35",
-                "HEXZ_RANDOM_PLAYOUTS": "0",
                 "HEXZ_STARTUP_DELAY_SECONDS": "0",
                 "HEXZ_SUSPEND_WHILE_TRAINING": "false",
               },
