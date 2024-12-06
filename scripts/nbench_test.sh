@@ -2,7 +2,7 @@
 cd $(dirname $0)/..
 
 cpp/build/cpuserver \
-    --device mps \
+    --device cuda \
    --max_think_time_ms 0 \
    --model_path ~/tmp/hexz-models/models/flagz/res10/checkpoints/58/scriptmodule.pt \
    --model_key res10:50 \
@@ -12,7 +12,7 @@ echo "CPU server started (PID $cpu_pid)"
 
 # Let CPU server come alive
 sleep 3
-go run ./cmd/nbench -num-games 10 -p1-addr localhost:50091 -p2-addr localhost:50091 -p1-max-iter 200 -p2-max-iter 200
+go run ./cmd/nbench -num-games 10 -p1-addr localhost:50091 -p2-addr localhost:50091 -p1-max-iter 3200 -p2-max-iter 3200
 
 echo "Terminating CPU server (PID $cpu_pid)"
 kill $cpu_pid

@@ -71,6 +71,10 @@ FetchContent_MakeAvailable(googlebenchmark)
 
 add_compile_options(-Wall -Wextra -pedantic -Werror -Wnon-virtual-dtor -Wno-sign-compare -Wno-error=unused-parameter)
 
+# For ASAN:
+# add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+# add_link_options(-fsanitize=address)
+
 # Debug output for some vars that were relevant getting this whole mess to work:
 message(CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}")
 message(CMAKE_CXX_FLAGS_RELEASE="${CMAKE_CXX_FLAGS_RELEASE}")
