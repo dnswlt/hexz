@@ -4,6 +4,8 @@
 #include <gtest/gtest.h>
 #include <torch/torch.h>
 
+#include <boost/fiber/barrier.hpp>
+
 namespace hexz {
 
 namespace {
@@ -164,6 +166,33 @@ TEST(FiberTorchModelTest, SmokeTestMultipleFibers) {
     });
   }
   std::for_each(threads.begin(), threads.end(), [](auto& t) { t.join(); });
+  // Validate.
+  EXPECT_THAT(sum_pr, testing::Each(testing::FloatNear(1, 1e-2)));
+}
+
+TEST(YarnTorchModelTest, SmokeTestMultipleFibers) {
+  const int num_fibers = 4;
+  YarnTorchModel model(hexzpb::ModelKey(), LoadModule(), torch::kCPU);
+  std::vector<float> sum_pr;
+  std::vector<boost::fibers::fiber> fibers;
+  boost::fibers::barrier barr(num_fibers);
+  for (int j = 0; j < num_fibers; j++) {
+    fibers.emplace_back([&, j] {
+      auto token = model.RegisterThread();
+      barr.wait(); // Ensure all fibers have registered before any one computes.
+      auto board = torch::randn({11, 11, 10});
+      auto action_mask = torch::rand({2, 11, 10}) < 0.5;
+      for (int k = 0; k < num_fibers - j; k++) {
+        // different # of predictions per fiber
+        auto pred = model.Predict(board, action_mask);
+        sum_pr.push_back(pred.move_probs.sum().item<float>());
+      }
+      if (j == num_fibers - 1) {
+        boost::this_fiber::sleep_for(std::chrono::milliseconds(100));
+      }
+    });
+  }
+  std::for_each(fibers.begin(), fibers.end(), [](auto& f) { f.join(); });
   // Validate.
   EXPECT_THAT(sum_pr, testing::Each(testing::FloatNear(1, 1e-2)));
 }

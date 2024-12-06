@@ -16,7 +16,6 @@
 
 namespace hexz {
 
-
 // BatchPrediction is a container for batch model prediction results.
 struct BatchPrediction {
   // A (N, 2, 11, 10) batch predition tensor for the move policy.
@@ -34,7 +33,7 @@ struct BatchPrediction {
 // See BatchPrediction's field comments for details about the result
 // structure.
 BatchPrediction PredictBatch(torch::jit::Module& module,
-                                    std::vector<torch::jit::IValue>&& inputs);
+                             std::vector<torch::jit::IValue>&& inputs);
 
 // Interface class for a model than can make predictions for
 // move likelihoods and board evaluations.
@@ -94,7 +93,7 @@ class TorchModel : public Model {
   TorchModel& operator=(const TorchModel&) = delete;
   TorchModel(TorchModel&&) = delete;
   TorchModel& operator=(TorchModel&&) = delete;
-  
+
   void UpdateModel(hexzpb::ModelKey key, torch::jit::Module&& model) override;
 
   Prediction Predict(torch::Tensor board, torch::Tensor action_mask) override;
@@ -178,7 +177,7 @@ class FiberTorchModel : public Model {
   FiberTorchModel& operator=(const FiberTorchModel&) = delete;
   FiberTorchModel(FiberTorchModel&&) = delete;
   FiberTorchModel& operator=(FiberTorchModel&&) = delete;
-  
+
   void UpdateModel(hexzpb::ModelKey key, torch::jit::Module&& model) override;
 
   Prediction Predict(torch::Tensor board, torch::Tensor action_mask) override;
@@ -243,6 +242,62 @@ class FiberTorchModel : public Model {
   torch::jit::Module module_;
   hexzpb::ModelKey key_;
   const int max_batch_size_;
+  const torch::DeviceType device_;
+};
+
+// Implementation of Model that expects clients to run as independent fibers.
+class YarnTorchModel : public Model {
+ public:
+  YarnTorchModel(hexzpb::ModelKey key, torch::jit::Module&& module,
+                 torch::DeviceType device);
+  // YarnTorchModel is neither moveable nor copyable.
+  YarnTorchModel(const FiberTorchModel&) = delete;
+  YarnTorchModel& operator=(const FiberTorchModel&) = delete;
+  YarnTorchModel(YarnTorchModel&&) = delete;
+  YarnTorchModel& operator=(YarnTorchModel&&) = delete;
+
+  void UpdateModel(hexzpb::ModelKey key, torch::jit::Module&& model) override;
+
+  Prediction Predict(torch::Tensor board, torch::Tensor action_mask) override;
+
+  hexzpb::ModelKey Key() const override;
+
+  // Each fiber using this model must call this method first and may only
+  // use the model while the returned ScopeGuard is alive.
+  // TODO: Rename to just Register, since here we don't expect threads, but
+  // fibers?
+  ScopeGuard RegisterThread() override;
+
+  ~YarnTorchModel();
+
+ private:
+  // Called by the ScopeGuard returned by RegisterThread.
+  void Unregister();
+
+  void ComputePredictions();
+  // Called by the last fiber retrieving its result from the batch.
+  void ClearBuffers();
+
+  std::vector<torch::Tensor> boards_;
+  std::vector<torch::Tensor> action_masks_;
+  std::vector<Model::Prediction> predictions_;
+
+  // Mutex and CV for access to the prediction queue.
+  mutable boost::fibers::mutex prediction_queue_mut_;
+  mutable boost::fibers::condition_variable prediction_queue_cv_;
+  // Mutex and CV for entering into the next batch.
+  mutable boost::fibers::mutex enter_mut_;
+  mutable boost::fibers::condition_variable enter_cv_;
+
+  int active_fibers_ = 0;
+  int results_ready_ = 0;
+  int waiting_ = 0;
+  bool force_compute_ = false;
+
+  // Mutex for the access to the model.
+  mutable std::mutex module_mut_;
+  torch::jit::Module module_;
+  hexzpb::ModelKey key_;
   const torch::DeviceType device_;
 };
 

@@ -156,7 +156,7 @@ GRPCTrainingServiceClient::FetchLatestModel(const std::string& model_name) {
   try {
     std::istringstream model_is(resp.model_bytes());
     auto model = torch::jit::load(model_is, torch::kCPU);
-    return std::make_pair(resp.model_key(), model);
+    return std::make_pair(resp.model_key(), std::move(model));
   } catch (const c10::Error& e) {
     return absl::InternalError(
         absl::StrCat("Failed to torch::jit::load module: ", e.msg()));
