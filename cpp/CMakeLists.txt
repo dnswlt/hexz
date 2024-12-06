@@ -165,3 +165,6 @@ target_link_libraries(base_bench base benchmark::benchmark absl::random_random)
 
 add_executable(perfm_bench perfm_bench.cc)
 target_link_libraries(perfm_bench base benchmark::benchmark)
+
+add_executable(model_bench model_bench.cc)
+target_link_libraries(model_bench model GTest::gtest benchmark::benchmark)
