@@ -42,6 +42,15 @@ set(Boost_USE_STATIC_LIBS ON)
 find_package(Boost CONFIG REQUIRED COMPONENTS fiber)
 
 #
+# CUDA
+#
+if(CMAKE_CUDA_COMPILER)
+    add_compile_definitions(HEXZ_USE_CUDA)
+else()
+    message("CUDA not found. Will build without CUDA optimizations.")
+endif()
+
+#
 # libtorch
 #
 # See README.md for instructions on installing libtorch.

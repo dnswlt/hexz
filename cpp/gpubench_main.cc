@@ -29,8 +29,11 @@ leave all other parameters fixed.
 #include <absl/log/absl_log.h>
 #include <absl/log/globals.h>
 #include <absl/log/initialize.h>
+
+#ifdef HEXZ_USE_CUDA
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
+#endif  // HEXZ_USE_CUDA
 
 #include <atomic>
 #include <boost/fiber/all.hpp>
@@ -426,15 +429,17 @@ void RunGPUBenchmarkSingle(Options options) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// STREAM
+// CUDA STREAM
 ///////////////////////////////////////////////////////////////////////////////
+
+#ifdef HEXZ_USE_CUDA
 
 std::atomic<int64_t> t_stream_started;
 std::atomic<int64_t> t_stream_done;
 
-void StreamProducer(Options options, torch::DeviceType device,
-                    torch::jit::Module& model,
-                    BoundedConcurrentQueue<c10::IValue>& queue) {
+void CUDAStreamProducer(Options options, torch::DeviceType device,
+                        torch::jit::Module& model,
+                        BoundedConcurrentQueue<c10::IValue>& queue) {
   torch::NoGradGuard no_grad;
   torch::Tensor tb = torch::randn({options.prediction_batch_size, 11, 11, 10},
                                   torch::dtype(torch::kFloat32));
@@ -467,8 +472,8 @@ void StreamProducer(Options options, torch::DeviceType device,
   }
 }
 
-void StreamConsumer(Options options,
-                    BoundedConcurrentQueue<c10::IValue>& queue) {
+void CUDAStreamConsumer(Options options,
+                        BoundedConcurrentQueue<c10::IValue>& queue) {
   torch::NoGradGuard no_grad;
   int n_runs = options.warmup_rounds + options.rounds;
   float sum = 0.0;
@@ -490,7 +495,7 @@ void StreamConsumer(Options options,
   ABSL_DLOG(INFO) << "sum = " << sum;
 }
 
-void RunGPUBenchmarkStream(Options options) {
+void RunGPUBenchmarkCUDAStream(Options options) {
   EmbeddedTrainingServiceClient client(options.model_path);
   auto km = client.FetchLatestModel("");
   if (!km.ok()) {
@@ -510,9 +515,10 @@ void RunGPUBenchmarkStream(Options options) {
   // computations are sequential per stream, so there is no benefit in having
   // the producer send more than two items (one active, one in the queue).
   BoundedConcurrentQueue<c10::IValue> predictions_queue(1);
-  std::thread producer(StreamProducer, options, device, std::ref(model),
+  std::thread producer(CUDAStreamProducer, options, device, std::ref(model),
                        std::ref(predictions_queue));
-  std::thread consumer(StreamConsumer, options, std::ref(predictions_queue));
+  std::thread consumer(CUDAStreamConsumer, options,
+                       std::ref(predictions_queue));
 
   if (producer.joinable()) {
     producer.join();
@@ -529,6 +535,8 @@ void RunGPUBenchmarkStream(Options options) {
                      duration * 1e6)
                  << " ops/s)";
 }
+
+#endif  // HEXZ_USE_CUDA
 
 ///////////////////////////////////////////////////////////////////////////////
 // FIBER
@@ -736,7 +744,11 @@ int main(int argc, char** argv) {
   } else if (mode == "single") {
     hexz::RunGPUBenchmarkSingle(options);
   } else if (mode == "stream") {
-    hexz::RunGPUBenchmarkStream(options);
+#ifdef HEXZ_USE_CUDA
+    hexz::RunGPUBenchmarkCUDAStream(options);
+#else
+    ABSL_LOG(ERROR) << "Mode 'stream' is disabled: No CUDA support.";
+#endif  // HEXZ_USE_CUDA
   } else if (mode == "fiber") {
     hexz::RunGPUBenchmarkFiber(options);
   } else {
