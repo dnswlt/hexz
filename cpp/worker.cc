@@ -279,7 +279,7 @@ void Worker::Run() {
         fibers.reserve(config_.fibers_per_thread);
         for (int j = 0; j < config_.fibers_per_thread; ++j) {
           fibers.emplace_back([&, fiber_num = j] {
-            auto token = model->RegisterThread();
+            auto token = model->Enter();
             RunSingle(*model, sender);
             ABSL_LOG(INFO) << "Fiber " << thread_num << ":" << fiber_num
                            << " is done";
@@ -292,7 +292,7 @@ void Worker::Run() {
         }
       } else {
         // No fibers, run directly in thread.
-        auto guard = model->RegisterThread();
+        auto guard = model->Enter();
         RunSingle(*model, sender);
       }
       ABSL_LOG(INFO) << "Thread #" << thread_num << "("

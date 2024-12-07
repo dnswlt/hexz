@@ -151,7 +151,7 @@ Model::Prediction FiberTorchModel::Predict(torch::Tensor board,
 void FiberTorchModel::PushRequest(PredictionRequest&& request) {
   std::scoped_lock<std::mutex> lk(request_mut_);
   ABSL_CHECK(active_fibers_ > 0)
-      << "Called PushRequest with zero active fibers. Must call RegisterThread "
+      << "Called PushRequest with zero active fibers. Must call Enter "
          "for each fiber first.";
   request_queue_.push(std::move(request));
   request_queue_cv_.notify_one();
@@ -242,14 +242,14 @@ void FiberTorchModel::RunGPUPipeline() {
   }
 }
 
-ScopeGuard FiberTorchModel::RegisterThread() {
+ScopeGuard FiberTorchModel::Enter() {
   std::scoped_lock<std::mutex> lk(request_mut_);
   active_fibers_++;
   request_queue_cv_.notify_one();
-  return ScopeGuard([this] { Unregister(); });
+  return ScopeGuard([this] { Leave(); });
 }
 
-void FiberTorchModel::Unregister() {
+void FiberTorchModel::Leave() {
   std::scoped_lock<std::mutex> lk(request_mut_);
   ABSL_CHECK(active_fibers_ > 0);
   active_fibers_--;
@@ -270,6 +270,5 @@ void FiberTorchModel::Resume() {
   suspended_ = false;
   suspension_cv_.notify_one();
 }
-
 
 }  // namespace hexz

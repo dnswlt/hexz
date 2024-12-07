@@ -49,7 +49,7 @@ TEST(BatchedTorchModelTest, SmokeTestSingleThreaded) {
   constexpr int64_t timeout_micros = 1'000'000;
   BatchedTorchModel m(hexzpb::ModelKey(), std::move(scriptmodule), torch::kCPU,
                       batch_size, timeout_micros);
-  auto token = m.RegisterThread();
+  auto token = m.Enter();
   // Prepare inputs.
   auto board = torch::randn({11, 11, 10});
   auto action_mask = torch::rand({2, 11, 10}) < 0.5;
@@ -74,7 +74,7 @@ TEST(BatchedTorchModelTest, SmokeTestMultiThreaded) {
   std::mutex mut;
   for (int i = 0; i < batch_size; i++) {
     ts[i] = std::thread([&, i] {
-      auto token = m.RegisterThread();
+      auto token = m.Enter();
       // Prepare inputs.
       auto board = torch::randn({11, 11, 10});
       auto action_mask = torch::rand({2, 11, 10}) < 0.5;
@@ -100,7 +100,7 @@ TEST(FiberTorchModelTest, FiberTorchModelRegisterUnregister) {
   const int batch_size = 1;
   FiberTorchModel model(hexzpb::ModelKey(), std::move(scriptmodule),
                         torch::kCPU, batch_size, false);
-  { auto token = model.RegisterThread(); }
+  { auto token = model.Enter(); }
 }
 
 TEST(FiberTorchModelTest, SmokeTestSingleFiber) {
@@ -111,7 +111,7 @@ TEST(FiberTorchModelTest, SmokeTestSingleFiber) {
   const int batch_size = 16;
   FiberTorchModel model(hexzpb::ModelKey(), std::move(scriptmodule),
                         torch::kCPU, batch_size, false);
-  auto token = model.RegisterThread();
+  auto token = model.Enter();
   auto board = torch::randn({11, 11, 10});
   auto action_mask = torch::rand({2, 11, 10}) < 0.5;
   auto pred = model.Predict(board, action_mask);
@@ -128,13 +128,13 @@ TEST(FiberTorchModelDeathTest, CheckFailIfNotRegistered) {
         const int batch_size = 1;
         FiberTorchModel model(hexzpb::ModelKey(), std::move(scriptmodule),
                               torch::kCPU, batch_size, false);
-        // Not calling RegisterThread here. This should lead to a failure.
-        // auto token = model.RegisterThread();
+        // Not calling Enter here. This should lead to a failure.
+        // auto token = model.Enter();
         auto board = torch::randn({11, 11, 10});
         auto action_mask = torch::rand({2, 11, 10}) < 0.5;
         auto pred = model.Predict(board, action_mask);
       },
-      "RegisterThread");
+      "Enter");
 }
 
 TEST(FiberTorchModelTest, SmokeTestMultipleFibers) {
@@ -152,7 +152,7 @@ TEST(FiberTorchModelTest, SmokeTestMultipleFibers) {
       std::vector<boost::fibers::fiber> fibers;
       for (int j = 0; j < fibers_per_thread; j++) {
         fibers.emplace_back([&] {
-          auto token = model.RegisterThread();
+          auto token = model.Enter();
           auto board = torch::randn({11, 11, 10});
           auto action_mask = torch::rand({2, 11, 10}) < 0.5;
           auto pred = model.Predict(board, action_mask);

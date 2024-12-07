@@ -47,22 +47,22 @@ class Model {
   // Updates the Model's underlying torch Module.
   virtual void UpdateModel(hexzpb::ModelKey key,
                            torch::jit::Module&& module) = 0;
-  // Models tend to be used in a multi-threaded environment. Each thread must
-  // register itself with the model by calling RegisterThread. The thread can
+  // Models tend to be used in a multi-threaded environment. Each thread or fiber
+  // must register itself with the model by calling Enter. The thread can
   // assume that all necessary cleanup/unregistration is done by the d'tor of
   // the returned ScopeGuard. This means that the Model MUST ONLY BE USED
   // while the ScopeGuard is in scope. A typical usage looks thus:
   //
   // {
-  //   auto guard = model->RegisterThread();
+  //   auto guard = model->Enter();
   //   // ...
   //   auto prediction = model->Predict(board, node);
   //   // ...
   // }
   //
-  // The ScopeGuard returned by the default implementation of RegisterThread
+  // The ScopeGuard returned by the default implementation of Enter
   // does nothing.
-  virtual ScopeGuard RegisterThread() {
+  virtual ScopeGuard Enter() {
     return ScopeGuard([] {});
   }
   // This is the core method of any model, that returns a model prediction
@@ -149,7 +149,7 @@ class BatchedTorchModel : public Model {
   // Access to this method must be synchronized across threads by callers!
   hexzpb::ModelKey Key() const override;
 
-  ScopeGuard RegisterThread() override { return batcher_.RegisterThread(); }
+  ScopeGuard Enter() override { return batcher_.RegisterThread(); }
 
  private:
   hexzpb::ModelKey key_;
@@ -186,9 +186,7 @@ class FiberTorchModel : public Model {
 
   // Each fiber using this model must call this method first and may only
   // use the model while the returned ScopeGuard is alive.
-  // TODO: Rename to just Register, since here we don't expect threads, but
-  // fibers?
-  ScopeGuard RegisterThread() override;
+  ScopeGuard Enter() override;
 
   // Terminates the gpu_pipeline_thread_.
   ~FiberTorchModel();
@@ -205,9 +203,9 @@ class FiberTorchModel : public Model {
   // to the GPU in batches.
   // The GPU pipeline thread is terminated when there are no fibers left.
   void RunGPUPipeline();
-  // Called by the ScopeGuard returned by RegisterThread. Notifies
+  // Called by the ScopeGuard returned by Enter. Notifies
   // the GPU pipeline thread.
-  void Unregister();
+  void Leave();
 
   // Moves up to max_batch_size_ elements from the request queue into buf.
   // This method takes the number of active threads into account and

@@ -567,7 +567,7 @@ TEST_F(MCTSScriptModuleTest, PlayGameFiberTorchModel) {
   };
   hexzpb::ModelKey key;
   FiberTorchModel model(key, std::move(scriptmodule_), torch::kCPU, 1);
-  auto token = model.RegisterThread();
+  auto token = model.Enter();
   NeuralMCTS mcts(model, config);
   auto b = Board::RandomBoard();
 

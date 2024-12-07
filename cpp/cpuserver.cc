@@ -119,8 +119,8 @@ grpc::Status CPUPlayerServiceImpl::SuggestMove(
   }
   absl::Cleanup sem_releaser = [this] { concurrent_rpc_sem_.release(); };
 
-  // Required: Register this request as a "thread" in the model.
-  auto token = model_.RegisterThread();
+  // Required before making any calls to the model.
+  auto token = model_.Enter();
 
   absl::StatusOr<hexzpb::SuggestMoveResponse> r = DoSuggestMove(
       request->game_engine_state(), max_think_time_ms, max_iterations);
