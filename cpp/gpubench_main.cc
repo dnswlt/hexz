@@ -12,13 +12,16 @@ Example run (from the build/ subdirectory):
   --warmup_rounds=1000 \
   --rounds=10000
 
-I1103 10:15:32.722977  874130 gpubench_main.cc:601] Performed 1280000 computations in 10940ms (116994 ops/s). batch size:128
+I1103 10:15:32.722977  874130 gpubench_main.cc:601] Performed 1280000
+computations in 10940ms (116994 ops/s). batch size:128
 
-The tool was initially written to compare task-based, fiber-based, and Batcher-based
-approaches to GPU pipelining (i.e., sending multiple prediction requests to the model in batches).
+The tool was initially written to compare task-based, fiber-based, and
+Batcher-based approaches to GPU pipelining (i.e., sending multiple prediction
+requests to the model in batches).
 
-It can also be used to compare the execution time of different "shape compatible" models:
-Just pass different models via the --model_path flag, and leave all other parameters fixed.
+It can also be used to compare the execution time of different "shape
+compatible" models: Just pass different models via the --model_path flag, and
+leave all other parameters fixed.
 */
 #include <absl/flags/flag.h>
 #include <absl/flags/parse.h>
@@ -26,7 +29,10 @@ Just pass different models via the --model_path flag, and leave all other parame
 #include <absl/log/absl_log.h>
 #include <absl/log/globals.h>
 #include <absl/log/initialize.h>
+#include <c10/cuda/CUDAGuard.h>
+#include <c10/cuda/CUDAStream.h>
 
+#include <atomic>
 #include <boost/fiber/all.hpp>
 #include <iostream>
 #include <string>
@@ -39,13 +45,11 @@ Just pass different models via the --model_path flag, and leave all other parame
 #include "queue.h"
 
 ABSL_FLAG(std::string, mode, "single",
-          "GPU benchmark mode (single, batch, task, fiber)");
+          "GPU benchmark mode (single, stream, batch, task, fiber)");
 ABSL_FLAG(std::string, device, "cpu", "PyTorch device (cpu, cuda, mps)");
-ABSL_FLAG(int, warmup_rounds, 10,
-          "number of warm-up rounds to run in a GPU benchmark");
-ABSL_FLAG(int, rounds, 100, "number of rounds to run in a GPU benchmark");
-ABSL_FLAG(std::string, model_path, "",
-          "path to a torch::jit::load'able model (for benchmarks)");
+ABSL_FLAG(int, warmup_rounds, 10, "number of warm-up rounds to run");
+ABSL_FLAG(int, rounds, 100, "number of rounds to run");
+ABSL_FLAG(std::string, model_path, "", "path to a torch::jit::load'able model");
 ABSL_FLAG(int, worker_threads, 1, "number of threads");
 ABSL_FLAG(int, prediction_batch_size, 1,
           "batch size for GPU model predictions");
@@ -367,7 +371,7 @@ void RunGPUBenchmarkBatch(Options options) {
 // SINGLE
 ///////////////////////////////////////////////////////////////////////////////
 
-void RunGPUBenchmark(Options options) {
+void RunGPUBenchmarkSingle(Options options) {
   EmbeddedTrainingServiceClient client(options.model_path);
   auto km = client.FetchLatestModel("");
   if (!km.ok()) {
@@ -383,48 +387,147 @@ void RunGPUBenchmark(Options options) {
   }
   model.to(device);
   torch::NoGradGuard no_grad;
-  std::vector<int> batch_sizes;
-  for (int b = 1; b < options.prediction_batch_size; b *= 2) {
-    batch_sizes.push_back(b);
-  }
-  batch_sizes.push_back(options.prediction_batch_size);
+  // Run benchmark for 4 different batch sizes, halving the requested one each
+  // time.
+  int batch_size = options.prediction_batch_size;
   const int n_rounds = options.rounds;
-  for (int batch_size : batch_sizes) {
-    int64_t t_start = 0;
-    const int n_warmups = options.warmup_rounds;
-    const int n_runs = n_warmups + n_rounds;
-    float sum = 0;
-    torch::Tensor tb =
-        torch::randn({batch_size, 11, 11, 10}, torch::dtype(torch::kFloat32));
-    torch::Tensor ta = (torch::rand({batch_size, 2, 11, 10}) < 0.5);
-    for (int i = 0; i < n_runs; i++) {
-      if (i == n_warmups) {
-        // Warmup done, start measuring time.
-        t_start = UnixMicros();
-      }
-      std::vector<torch::jit::IValue> inputs{tb.to(device), ta.to(device)};
-      auto output = model.forward(inputs);
-      ABSL_CHECK(output.isTuple());
-      const auto output_tuple = output.toTuple();
-      ABSL_CHECK(output_tuple->size() == 2);
-      const auto logits =
-          output_tuple->elements()[0].toTensor().to(torch::kCPU);
-      const auto dim = logits.sizes();
-      ABSL_CHECK(dim.size() == 2 && dim[0] == batch_size &&
-                 dim[1] == 2 * 11 * 10);
-      const auto value =
-          torch::sum(output_tuple->elements()[1].toTensor().to(torch::kCPU))
-              .item<float>();
-      sum += value;  // Just to avoid dead code pruning.
+  int64_t t_start = 0;
+  const int n_warmups = options.warmup_rounds;
+  const int n_runs = n_warmups + n_rounds;
+  float sum = 0;
+  torch::Tensor tb =
+      torch::randn({batch_size, 11, 11, 10}, torch::dtype(torch::kFloat32));
+  torch::Tensor ta = (torch::rand({batch_size, 2, 11, 10}) < 0.5);
+  for (int i = 0; i < n_runs; i++) {
+    if (i == n_warmups) {
+      // Warmup done, start measuring time.
+      t_start = UnixMicros();
     }
-    ABSL_DLOG(INFO) << "sum = " << sum;
-    int64_t duration = UnixMicros() - t_start;
-    ABSL_LOG(INFO) << "batch_size=" << batch_size << ": finished " << n_rounds
-                   << " iterations in " << (duration / 1000) << "ms ("
-                   << (static_cast<float>(n_rounds * batch_size) / duration *
-                       1e6)
-                   << " ops/s)";
+    std::vector<torch::jit::IValue> inputs{tb.to(device), ta.to(device)};
+    auto output = model.forward(inputs);
+    ABSL_CHECK(output.isTuple());
+    const auto output_tuple = output.toTuple();
+    ABSL_CHECK(output_tuple->size() == 2);
+    const auto logits = output_tuple->elements()[0].toTensor().to(torch::kCPU);
+    const auto dim = logits.sizes();
+    ABSL_CHECK(dim.size() == 2 && dim[0] == batch_size &&
+               dim[1] == 2 * 11 * 10);
+    const auto value =
+        torch::sum(output_tuple->elements()[1].toTensor().to(torch::kCPU))
+            .item<float>();
+    sum += value;  // Just to avoid dead code pruning.
   }
+  ABSL_DLOG(INFO) << "sum = " << sum;
+  int64_t duration = UnixMicros() - t_start;
+  ABSL_LOG(INFO) << "batch_size=" << batch_size << ": finished " << n_rounds
+                 << " iterations in " << (duration / 1000) << "ms ("
+                 << (static_cast<float>(n_rounds * batch_size) / duration * 1e6)
+                 << " ops/s)";
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// STREAM
+///////////////////////////////////////////////////////////////////////////////
+
+std::atomic<int64_t> t_stream_started;
+std::atomic<int64_t> t_stream_done;
+
+void StreamProducer(Options options, torch::DeviceType device,
+                    torch::jit::Module& model,
+                    BoundedConcurrentQueue<c10::IValue>& queue) {
+  torch::NoGradGuard no_grad;
+  torch::Tensor tb = torch::randn({options.prediction_batch_size, 11, 11, 10},
+                                  torch::dtype(torch::kFloat32));
+  torch::Tensor ta =
+      (torch::rand({options.prediction_batch_size, 2, 11, 10}) < 0.5);
+
+  auto transfer_stream = at::cuda::getStreamFromPool(true);
+  auto compute_stream = at::cuda::getStreamFromPool(true);
+
+  int n_runs = options.warmup_rounds + options.rounds;
+  for (int i = 0; i < n_runs; i++) {
+    torch::Tensor gpu_tb;
+    torch::Tensor gpu_ta;
+    // Transfer data to GPU.
+    {
+      c10::cuda::CUDAStreamGuard transfer_guard(transfer_stream);
+      gpu_tb = tb.to(device, /*non_blocking=*/true);
+      gpu_ta = ta.to(device, /*non_blocking=*/true);
+    }
+    // Trigger GPU computation.
+    {
+      c10::cuda::CUDAStreamGuard compute_guard(compute_stream);
+      queue.push(model.forward({gpu_tb, gpu_ta}));
+    }
+    if (i == options.warmup_rounds) {
+      transfer_stream.synchronize();
+      compute_stream.synchronize();
+      t_stream_started = UnixMicros();
+    }
+  }
+}
+
+void StreamConsumer(Options options,
+                    BoundedConcurrentQueue<c10::IValue>& queue) {
+  torch::NoGradGuard no_grad;
+  int n_runs = options.warmup_rounds + options.rounds;
+  float sum = 0.0;
+  for (int i = 0; i < n_runs; i++) {
+    torch::IValue output = queue.pop();
+    ABSL_CHECK(output.isTuple());
+    const auto output_tuple = output.toTuple();
+    ABSL_CHECK(output_tuple->size() == 2);
+    const auto logits = output_tuple->elements()[0].toTensor().to(torch::kCPU);
+    const auto dim = logits.sizes();
+    ABSL_CHECK(dim.size() == 2 && dim[0] == options.prediction_batch_size &&
+               dim[1] == 2 * 11 * 10);
+    const auto value =
+        torch::sum(output_tuple->elements()[1].toTensor().to(torch::kCPU))
+            .item<float>();
+    sum += value;  // Just to avoid dead code pruning.
+  }
+  t_stream_done = UnixMicros();
+  ABSL_DLOG(INFO) << "sum = " << sum;
+}
+
+void RunGPUBenchmarkStream(Options options) {
+  EmbeddedTrainingServiceClient client(options.model_path);
+  auto km = client.FetchLatestModel("");
+  if (!km.ok()) {
+    ABSL_LOG(ERROR) << "Failed to fetch model: " << km.status();
+    return;
+  }
+  auto& [key, model] = *km;
+  auto device = torch::kCPU;
+  if (options.device == "mps") {
+    device = torch::kMPS;
+  } else if (options.device == "cuda") {
+    device = torch::kCUDA;
+  }
+  model.to(device);
+  // Testing showed that a bounded 1-element queue yields the same results
+  // as one with larger capacity. I guess it makes sense: GPU transfers and
+  // computations are sequential per stream, so there is no benefit in having
+  // the producer send more than two items (one active, one in the queue).
+  BoundedConcurrentQueue<c10::IValue> predictions_queue(1);
+  std::thread producer(StreamProducer, options, device, std::ref(model),
+                       std::ref(predictions_queue));
+  std::thread consumer(StreamConsumer, options, std::ref(predictions_queue));
+
+  if (producer.joinable()) {
+    producer.join();
+  }
+  if (consumer.joinable()) {
+    consumer.join();
+  }
+  int64_t duration = t_stream_done - t_stream_started;
+  ABSL_LOG(INFO) << "batch_size=" << options.prediction_batch_size
+                 << ": finished " << options.rounds << " iterations in "
+                 << (duration / 1000) << "ms ("
+                 << (static_cast<float>(options.rounds *
+                                        options.prediction_batch_size) /
+                     duration * 1e6)
+                 << " ops/s)";
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -568,7 +671,8 @@ void RunGPUBenchmarkFiber(Options options) {
 
   const int n_threads = options.worker_threads;
   const int fibers_per_thread = options.prediction_batch_size / n_threads;
-  int64_t t_start = 0; // Will be set by a fiber once they all finished their warm-up.
+  int64_t t_start =
+      0;  // Will be set by a fiber once they all finished their warm-up.
   boost::fibers::barrier warmup_barrier(n_threads * fibers_per_thread);
   std::once_flag start_time_flag;
   FiberWorkerArgs fiber_worker_args{
@@ -630,7 +734,9 @@ int main(int argc, char** argv) {
   } else if (mode == "task") {
     hexz::RunGPUBenchmarkMultiTasked(options);
   } else if (mode == "single") {
-    hexz::RunGPUBenchmark(options);
+    hexz::RunGPUBenchmarkSingle(options);
+  } else if (mode == "stream") {
+    hexz::RunGPUBenchmarkStream(options);
   } else if (mode == "fiber") {
     hexz::RunGPUBenchmarkFiber(options);
   } else {
