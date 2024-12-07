@@ -8,7 +8,7 @@ The Python version is too slow for this task.
 
 **NOTE**: Make sure you are NOT inside a conda environment when building the C++ libs.
 
-**TIP**: See the Docker section below if you just want to run the workers, not build them.
+**TIP**: See the Docker section below if you just want to run the workers, not develop them.
 
 All commands assume you are in the `cpp` subdirectory.
 
@@ -152,8 +152,14 @@ docker push europe-west4-docker.pkg.dev/hexz-cloud-run/hexz/worker-cuda:latest
 
 To run the Docker image locally (remove `--gpus all` when running the CPU-only container):
 
-Adjust `HEXZ_MAX_RUNTIME_SECONDS`, `HEXZ_WORKER_THREADS`, `HEXZ_FIBERS_PER_THREAD` as needed
-to optimize GPU utilization. `HEXZ_PREDICTION_BATCH_SIZE` should be at most #threads * #fibers.
+Adjust `HEXZ_MAX_RUNTIME_SECONDS` to your liking, but make sure to run long enough
+to deliver any results to the training server at all. Depending on your worker spec
+settings, it can take several minutes until the first games have finished.
+
+Adjust `HEXZ_WORKER_SPEC` as needed to optimize GPU utilization. The format is
+`{device}@{num_threads}:{num_fibers_per_thread}:{prediction_batch_size}`.
+For an RTX 4080, `cuda@4:128:256` is the recommended setting for "full throttle"
+self-play.
 
 Set `HEXZ_TRAINING_SERVER_ADDR` to the address of a running training server (see
 [../pyhexz/README.md](../pyhexz/README.md)).
@@ -161,16 +167,8 @@ Set `HEXZ_TRAINING_SERVER_ADDR` to the address of a running training server (see
 ```bash
 docker run \
   -e HEXZ_TRAINING_SERVER_ADDR=$HOSTNAME:50051 \
-  -e HEXZ_DEVICE=cuda \
   -e HEXZ_MAX_RUNTIME_SECONDS=120 \
-  -e HEXZ_WORKER_THREADS=8 \
-  -e HEXZ_FIBERS_PER_THREAD=16 \
-  -e HEXZ_PREDICTION_BATCH_SIZE=128 \
-  -e HEXZ_RUNS_PER_MOVE=800 \
-  -e HEXZ_UCT_C=1.5 \
-  -e HEXZ_RUNS_PER_FAST_MOVE=100 \
-  -e HEXZ_DIRICHLET_CONCENTRATION=0.35 \
-  -e HEXZ_FAST_MOVE_PROB=0.5 \
+  -e HEXZ_WORKER_SPEC="cuda@4:128:256" \
   -e HEXZ_STARTUP_DELAY_SECONDS=0 \
   --gpus all \
   europe-west4-docker.pkg.dev/hexz-cloud-run/hexz/worker-cuda:latest
