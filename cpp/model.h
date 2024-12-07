@@ -184,7 +184,7 @@ class FiberTorchModel : public Model {
 
   hexzpb::ModelKey Key() const override;
 
-  // Each fiber using this model must call this method first and may only
+  // Each fiber using this model MUST call this method first and MAY ONLY
   // use the model while the returned ScopeGuard is alive.
   ScopeGuard Enter() override;
 

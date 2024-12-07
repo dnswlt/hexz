@@ -1,5 +1,6 @@
 #include "model.h"
 
+#include <absl/cleanup/cleanup.h>
 #include <absl/log/absl_log.h>
 
 #include "perfm.h"
@@ -192,9 +193,67 @@ void FiberTorchModel::RunGPUPipeline() {
   torch::NoGradGuard no_grad;
   // Ensure this thread's perfm stats are accumulated into total stats.
   Perfm::ThreadScope perfm_thread_scope;
-  ABSL_LOG(INFO) << "FiberTorchModel::GPUPipeline started";
+  ABSL_LOG(INFO) << "FiberTorchModel: GPU pipeline started";
+  bool has_pred = false;
+  bool done = false;
+
+  std::mutex pred_mut;
+  std::condition_variable pred_cv;
+
+  // Shared memory between producer and consumer.
+  std::vector<PredictionRequest> q_batch;
+  torch::IValue q_pred;
+
+  std::thread consumer([&] {
+    torch::NoGradGuard no_grad;
+    std::vector<PredictionRequest> c_batch;
+    torch::IValue c_pred;
+    while (true) {
+      {
+        std::unique_lock<std::mutex> pred_lk(pred_mut);
+        pred_cv.wait(pred_lk, [&]() { return has_pred || done; });
+        if (done) {
+          ABSL_LOG(INFO) << "GPU Pipeline consumer thread is done.";
+          return;
+        }
+        // Move data from shared memory to private space.
+        c_pred = std::move(q_pred);
+        c_batch = std::move(q_batch);
+        q_batch.clear();
+        has_pred = false;
+        pred_lk.unlock();
+        pred_cv.notify_one();
+      }
+      auto tuple = c_pred.toTuple();
+      const auto policies = torch::softmax(tuple->elements()[0].toTensor(), 1)
+                                .to(torch::kCPU)
+                                .reshape({-1, 2, 11, 10})
+                                .unbind(0);
+      const auto values =
+          tuple->elements()[1].toTensor().to(torch::kCPU).unbind(0);
+      for (int i = 0; i < c_batch.size(); i++) {
+        c_batch[i].result_promise.set_value(Model::Prediction{
+            .move_probs = policies[i],
+            .value = values[i].item<float>(),
+        });
+      }
+    }
+  });
+
+  absl::Cleanup consumer_cleanup([&consumer, &done, &pred_mut, &pred_cv] {
+    {
+      std::scoped_lock<std::mutex> pred_lk(pred_mut);
+      done = true;
+    }
+    pred_cv.notify_one();
+    if (consumer.joinable()) {
+      consumer.join();
+    }
+  });
+
   std::vector<PredictionRequest> batch;
   batch.reserve(max_batch_size_);
+
   while (true) {
     // Collect requests for batching
     while (ReadBatch(batch) == 0) {
@@ -220,24 +279,26 @@ void FiberTorchModel::RunGPUPipeline() {
     }
 
     std::vector<torch::jit::IValue> model_inputs = {
-        torch::stack(boards).to(device_),
-        torch::stack(action_masks).to(device_),
+        torch::stack(boards).to(device_, /*non_blocking=*/true),
+        torch::stack(action_masks).to(device_, /*non_blocking=*/true),
     };
     {
-      Perfm::Scope perfm(Perfm::PredictBatch);
       // Need to guard access to module_ b/c it might get updated concurrently.
       std::unique_lock<std::mutex> lk(module_mut_);
-      BatchPrediction pred = PredictBatch(module_, std::move(model_inputs));
+
+      std::unique_lock<std::mutex> pred_lk(pred_mut);
+      auto p = module_.forward(std::move(model_inputs));
       lk.unlock();
-      auto policies = pred.policy.unbind(0);
-      auto values = pred.values.unbind(0);
-      for (int i = 0; i < n_inputs; i++) {
-        batch[i].result_promise.set_value(Model::Prediction{
-            .move_probs = policies[i],
-            .value = values[i].item<float>(),
-        });
-      }
+
+      pred_cv.wait(pred_lk, [&has_pred]() { return !has_pred; });
+      // Move to shared memory.
+      q_batch = std::move(batch);
       batch.clear();
+      q_pred = std::move(p);
+      // Tell consumer there is data.
+      has_pred = true;
+      pred_lk.unlock();
+      pred_cv.notify_one();
     }
   }
 }
