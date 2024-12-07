@@ -198,7 +198,6 @@ void FiberTorchModel::RunGPUPipeline() {
   ABSL_LOG(INFO) << "FiberTorchModel: GPU pipeline started";
 
   // Semaphore for producer/consumer synchronization.
-  std::mutex cp_mut;
   std::binary_semaphore sem_full(0);
   std::binary_semaphore sem_empty(1);
   // Used to signal to the consumer to exit.
@@ -216,17 +215,14 @@ void FiberTorchModel::RunGPUPipeline() {
     torch::IValue c_pred;
     while (true) {
       sem_full.acquire();
-      {
-        std::scoped_lock<std::mutex> lk(cp_mut);
-        if (done) {
-          ABSL_LOG(INFO) << "GPU Pipeline consumer thread is done.";
-          return;
-        }
-        // Move predition results from shared memory to private space.
-        c_pred = std::move(q_pred);
-        c_batch = std::move(q_batch);
-        q_batch.clear();
+      if (done) {
+        ABSL_LOG(INFO) << "GPU Pipeline consumer thread is done.";
+        return;
       }
+      // Move predition results from shared memory to private space.
+      c_pred = std::move(q_pred);
+      c_batch = std::move(q_batch);
+      q_batch.clear();
       // Allow producer to use the slot again.
       sem_empty.release();
       // Transfer model prediction to CPU and dispatch results to fibers.
@@ -248,10 +244,7 @@ void FiberTorchModel::RunGPUPipeline() {
 
   // Scope guard to shut down the consumer thread on exit.
   absl::Cleanup consumer_cleanup([&] {
-    {
-      std::scoped_lock<std::mutex> lk(cp_mut);
-      done = true;
-    }
+    done = true;
     sem_full.release();
     if (consumer.joinable()) {
       consumer.join();
@@ -296,14 +289,11 @@ void FiberTorchModel::RunGPUPipeline() {
       lk.unlock();
 
       sem_empty.acquire();
-      {
-        std::scoped_lock<std::mutex> lk(cp_mut);
-        // Move to shared memory.
-        q_batch = std::move(batch);
-        batch.clear();
-        q_pred = std::move(p);
-        // Tell consumer there is data.
-      }
+      // Move to shared memory.
+      q_batch = std::move(batch);
+      batch.clear();
+      q_pred = std::move(p);
+      // Tell consumer there is data.
       sem_full.release();
     }
   }
