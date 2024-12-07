@@ -3,6 +3,8 @@
 #include <absl/cleanup/cleanup.h>
 #include <absl/log/absl_log.h>
 
+#include <semaphore>
+
 #include "perfm.h"
 
 namespace hexz {
@@ -194,36 +196,40 @@ void FiberTorchModel::RunGPUPipeline() {
   // Ensure this thread's perfm stats are accumulated into total stats.
   Perfm::ThreadScope perfm_thread_scope;
   ABSL_LOG(INFO) << "FiberTorchModel: GPU pipeline started";
-  bool has_pred = false;
-  bool done = false;
 
-  std::mutex pred_mut;
-  std::condition_variable pred_cv;
+  // Semaphore for producer/consumer synchronization.
+  std::mutex cp_mut;
+  std::binary_semaphore sem_full(0);
+  std::binary_semaphore sem_empty(1);
+  // Used to signal to the consumer to exit.
+  bool done = false;
 
   // Shared memory between producer and consumer.
   std::vector<PredictionRequest> q_batch;
   torch::IValue q_pred;
 
+  // Start the consumer thread.
   std::thread consumer([&] {
     torch::NoGradGuard no_grad;
+    // Consumer's copies of the shared data.
     std::vector<PredictionRequest> c_batch;
     torch::IValue c_pred;
     while (true) {
+      sem_full.acquire();
       {
-        std::unique_lock<std::mutex> pred_lk(pred_mut);
-        pred_cv.wait(pred_lk, [&]() { return has_pred || done; });
+        std::scoped_lock<std::mutex> lk(cp_mut);
         if (done) {
           ABSL_LOG(INFO) << "GPU Pipeline consumer thread is done.";
           return;
         }
-        // Move data from shared memory to private space.
+        // Move predition results from shared memory to private space.
         c_pred = std::move(q_pred);
         c_batch = std::move(q_batch);
         q_batch.clear();
-        has_pred = false;
-        pred_lk.unlock();
-        pred_cv.notify_one();
       }
+      // Allow producer to use the slot again.
+      sem_empty.release();
+      // Transfer model prediction to CPU and dispatch results to fibers.
       auto tuple = c_pred.toTuple();
       const auto policies = torch::softmax(tuple->elements()[0].toTensor(), 1)
                                 .to(torch::kCPU)
@@ -240,12 +246,13 @@ void FiberTorchModel::RunGPUPipeline() {
     }
   });
 
-  absl::Cleanup consumer_cleanup([&consumer, &done, &pred_mut, &pred_cv] {
+  // Scope guard to shut down the consumer thread on exit.
+  absl::Cleanup consumer_cleanup([&] {
     {
-      std::scoped_lock<std::mutex> pred_lk(pred_mut);
+      std::scoped_lock<std::mutex> lk(cp_mut);
       done = true;
     }
-    pred_cv.notify_one();
+    sem_full.release();
     if (consumer.joinable()) {
       consumer.join();
     }
@@ -285,20 +292,19 @@ void FiberTorchModel::RunGPUPipeline() {
     {
       // Need to guard access to module_ b/c it might get updated concurrently.
       std::unique_lock<std::mutex> lk(module_mut_);
-
-      std::unique_lock<std::mutex> pred_lk(pred_mut);
       auto p = module_.forward(std::move(model_inputs));
       lk.unlock();
 
-      pred_cv.wait(pred_lk, [&has_pred]() { return !has_pred; });
-      // Move to shared memory.
-      q_batch = std::move(batch);
-      batch.clear();
-      q_pred = std::move(p);
-      // Tell consumer there is data.
-      has_pred = true;
-      pred_lk.unlock();
-      pred_cv.notify_one();
+      sem_empty.acquire();
+      {
+        std::scoped_lock<std::mutex> lk(cp_mut);
+        // Move to shared memory.
+        q_batch = std::move(batch);
+        batch.clear();
+        q_pred = std::move(p);
+        // Tell consumer there is data.
+      }
+      sem_full.release();
     }
   }
 }
