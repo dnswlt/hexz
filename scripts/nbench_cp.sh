@@ -1,36 +1,24 @@
 #!/bin/bash
 
-# Validate the latest checkpoint against a previous one.
-# The latest model will play as P2, unless play_as_p1 is set to 1 below.
+# Validate the two explicitly specified checkpoints against each other.
 
 iterations=3200
 num_games=10
-play_as_p1=0
 
 server_addr1=localhost:50071
 server_addr2=localhost:50072
 
 model_base_dir="$HOME/tmp/hexz-models/models/flagz"
 model_name=res10
-latest_cp=$(ls "$model_base_dir/$model_name/checkpoints" | awk -F'/' '{print $NF}' | sort -nr | head -n 1)
-benchmark_cp=$((latest_cp - 10))
 
-latest_model="$model_base_dir/$model_name/checkpoints/$latest_cp/scriptmodule.pt"
-benchmark_model="$model_base_dir/$model_name/checkpoints/$benchmark_cp/scriptmodule.pt"
+p1_cp="$1"
+p2_cp="$2"
 
-if [[ $play_as_p1 -eq 1 ]]; then
-    # Latest model plays as blue (P1)
-    p1_model="$latest_model"
-    p1_model_key="$model_name:$latest_cp"
-    p2_model="$benchmark_model"
-    p2_model_key="$model_name:$benchmark_cp"
-else
-    # Latest model plays as yellow (P2)
-    p1_model="$benchmark_model"
-    p1_model_key="$model_name:$benchmark_cp"
-    p2_model="$latest_model"
-    p2_model_key="$model_name:$latest_cp"
-fi
+p1_model="$model_base_dir/$model_name/checkpoints/$p1_cp/scriptmodule.pt"
+p2_model="$model_base_dir/$model_name/checkpoints/$p2_cp/scriptmodule.pt"
+
+p1_model_key="$model_name:$p1_cp"
+p2_model_key="$model_name:$p2_cp"
 
 cd $(dirname $0)/..
 
