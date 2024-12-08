@@ -27,11 +27,12 @@ type CLIArgs struct {
 	CPUServerFile string
 	NumGames      int
 	Iterations    int
-	LogFile       string
+	StatsFile     string
 	ModelRepo     string
 	ModelKey1     string
 	ModelKey2     string
 	Device        string
+	PlayBothSides bool
 }
 
 func createRemotePlayer(playerId api.PlayerId, url string, iterations int) (*hexz.RemoteCPUPlayer, error) {
@@ -48,11 +49,13 @@ func parseArgs() (*CLIArgs, error) {
 	flag.StringVar(&args.CPUServerFile, "cpuserver", "./cpp/build/cpuserver", "cpuserver binary to execute")
 	flag.IntVar(&args.NumGames, "games", 1, "Number of games to play")
 	flag.IntVar(&args.Iterations, "iterations", 800, "Maximum MCTS iterations per move for both players")
-	flag.StringVar(&args.LogFile, "logfile", "./stats/nbench.jsonl", "JSONlines file to which results are append")
+	flag.StringVar(&args.StatsFile, "stats-file", "./stats/nbench.jsonl", "JSONlines file to which results are append")
 	flag.StringVar(&args.ModelRepo, "model-repo", ".", "Base folder of hexz model repository")
 	flag.StringVar(&args.ModelKey1, "key1", "", "Model key (e.g. \"res10:58\") of the first model to evaluate")
 	flag.StringVar(&args.ModelKey2, "key2", "", "Model key (e.g. \"res10:23\") of the second model to evaluate")
 	flag.StringVar(&args.Device, "device", "cuda", "PyTorch device type (cuda, cpu, mps)")
+	flag.BoolVar(&args.PlayBothSides, "both-sides", false,
+		"Whether to play both as P1 and P2. If true, twice as many games are played as specified in --games.")
 
 	flag.Parse()
 	if len(flag.Args()) > 0 {
@@ -114,7 +117,7 @@ func waitForCompletion(cmd *exec.Cmd, ch chan bool) {
 				// We expect exit code -1, which indicates the subprocess was killed by a (our) signal.
 				log.Printf("Unexpected exit code while waiting for cpuserver[1]: %v", err)
 			} else {
-				log.Printf("Terminated subprocess %s %s", cmd.Path, strings.Join(cmd.Args, " "))
+				log.Printf("Terminated subprocess %s %s: %v", cmd.Path, strings.Join(cmd.Args, " "), err)
 			}
 		} else {
 			log.Printf("Error while waiting for cpuserver[1]: %v", err)
@@ -128,6 +131,10 @@ func waitForCompletion(cmd *exec.Cmd, ch chan bool) {
 func terminateSubprocesses(doneCh chan bool, cancel context.CancelFunc, cmds ...*exec.Cmd) {
 	// Try to kill the subprocesses gracefully.
 	for _, cmd := range cmds {
+		if cmd.ProcessState != nil {
+			log.Printf("Process has already terminated (exit code: %v)", cmd.ProcessState.ExitCode())
+			continue
+		}
 		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
 			log.Printf("Sending SIGTERM failed: %v", err)
 		}
@@ -144,6 +151,15 @@ func terminateSubprocesses(doneCh chan bool, cancel context.CancelFunc, cmds ...
 			return
 		}
 	}
+}
+
+func playConcurrent(ctx context.Context, p1, p2 *hexz.RemoteCPUPlayer, numGames int, logfile string) error {
+	// This is ML model evaluation mode. Play concurrently to benefit from concurrent requests to the GPU.
+	nb, err := NewConcurrentNBench(p1, p2, numGames, logfile)
+	if err != nil {
+		return fmt.Errorf("failed to create ConcurrentNBench: %v", err)
+	}
+	return nb.Play(ctx)
 }
 
 func main() {
@@ -202,15 +218,14 @@ func main() {
 		return
 	}
 
-	// This is ML model evaluation mode. Play concurrently to benefit from concurrent requests to the GPU.
-	nb, err := NewConcurrentNBench(p1, p2, args.NumGames, args.LogFile)
-	if err != nil {
-		log.Printf("Failed to create ConcurrentNBench: %v", err)
-		return
-	}
-	err = nb.Play()
-	if err != nil {
+	if err := playConcurrent(ctx, p1, p2, args.NumGames, args.StatsFile); err != nil {
 		log.Printf("Play failed: %v", err)
 		return
+	}
+	if args.PlayBothSides {
+		if err := playConcurrent(ctx, p2, p1, args.NumGames, args.StatsFile); err != nil {
+			log.Printf("Reverse play failed: %v", err)
+			return
+		}
 	}
 }

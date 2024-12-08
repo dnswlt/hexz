@@ -15,6 +15,7 @@ message BenchmarkResult  {
 	int32 games = 3;
     message PlayerResult {
         hexzpb.ModelKey model_key = 1;
+        int32 iterations = 3;
         int32 wins = 2;
     }
     PlayerResult p1_result = 4;

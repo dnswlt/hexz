@@ -106,6 +106,10 @@ func NewRemoteCPUPlayer(client pb.CPUPlayerServiceClient, playerId api.PlayerId,
 	}
 }
 
+func (cpu *RemoteCPUPlayer) MaxIterations() int {
+	return cpu.maxIterations
+}
+
 func (cpu *RemoteCPUPlayer) ModelKey(ctx context.Context) (*pb.ModelKey, error) {
 	req := &pb.ServerInfoRequest{}
 	resp, err := cpu.client.ServerInfo(ctx, req)

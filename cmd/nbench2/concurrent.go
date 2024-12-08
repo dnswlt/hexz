@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"sync"
 	"time"
 
@@ -52,14 +53,14 @@ type ConcurrentNBench struct {
 	p1 *hexz.RemoteCPUPlayer
 	p2 *hexz.RemoteCPUPlayer
 	// These are populated when the game is started
-	p1Key    *hexzpb.ModelKey
-	p2Key    *hexzpb.ModelKey
-	numGames int
-	stats    *ResultStats
-	logfile  string
+	p1Key     *hexzpb.ModelKey
+	p2Key     *hexzpb.ModelKey
+	numGames  int
+	stats     *ResultStats
+	statsFile string
 }
 
-func NewConcurrentNBench(p1, p2 *hexz.RemoteCPUPlayer, numGames int, logfile string) (*ConcurrentNBench, error) {
+func NewConcurrentNBench(p1, p2 *hexz.RemoteCPUPlayer, numGames int, statsFile string) (*ConcurrentNBench, error) {
 	// Get model keys for logging
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
@@ -73,18 +74,21 @@ func NewConcurrentNBench(p1, p2 *hexz.RemoteCPUPlayer, numGames int, logfile str
 	}
 
 	return &ConcurrentNBench{
-		p1:       p1,
-		p2:       p2,
-		p1Key:    p1Key,
-		p2Key:    p2Key,
-		numGames: numGames,
-		stats:    &ResultStats{},
-		logfile:  logfile,
+		p1:        p1,
+		p2:        p2,
+		p1Key:     p1Key,
+		p2Key:     p2Key,
+		numGames:  numGames,
+		stats:     &ResultStats{},
+		statsFile: statsFile,
 	}, nil
 }
 
-func (nb *ConcurrentNBench) logResult(started, done time.Time) error {
-	f, err := os.OpenFile(nb.logfile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+func (nb *ConcurrentNBench) appendStats(started, done time.Time) error {
+	if err := os.MkdirAll(path.Base(nb.statsFile), 0755); err != nil {
+		return fmt.Errorf("cannot create directory for logfile: %v", err)
+	}
+	f, err := os.OpenFile(nb.statsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
@@ -94,12 +98,14 @@ func (nb *ConcurrentNBench) logResult(started, done time.Time) error {
 		DurationSeconds: done.Sub(started).Seconds(),
 		Games:           int32(nb.stats.games),
 		P1Result: &npb.BenchmarkResult_PlayerResult{
-			ModelKey: nb.p1Key,
-			Wins:     int32(nb.stats.wins[0]),
+			ModelKey:   nb.p1Key,
+			Wins:       int32(nb.stats.wins[0]),
+			Iterations: int32(nb.p1.MaxIterations()),
 		},
 		P2Result: &npb.BenchmarkResult_PlayerResult{
-			ModelKey: nb.p2Key,
-			Wins:     int32(nb.stats.wins[1]),
+			ModelKey:   nb.p2Key,
+			Wins:       int32(nb.stats.wins[1]),
+			Iterations: int32(nb.p2.MaxIterations()),
 		},
 		Args: os.Args[1:],
 	}
@@ -124,14 +130,14 @@ func (nb *ConcurrentNBench) P2Name() string {
 	return fmt.Sprintf("P2(%s:%d)", nb.p2Key.Name, nb.p2Key.Checkpoint)
 }
 
-func (nb *ConcurrentNBench) Play() error {
+func (nb *ConcurrentNBench) Play(ctx context.Context) error {
 	log.Printf("Playing %s vs. %s\n", nb.P1Name(), nb.P2Name())
 
 	var wg sync.WaitGroup
 
 	started := time.Now()
 	// Start "worker" goroutines playing games.
-	workerCtx, workerCancel := context.WithCancel(context.Background())
+	workerCtx, workerCancel := context.WithCancel(ctx)
 	defer workerCancel()
 	for i := 0; i < nb.numGames; i++ {
 		wg.Add(1)
@@ -181,10 +187,10 @@ func (nb *ConcurrentNBench) Play() error {
 	}
 
 	log.Printf("Final result: best of %d: %s vs %s: %s %d-%d\n", nb.numGames, nb.P1Name(), nb.P2Name(), result, nb.stats.wins[0], nb.stats.wins[1])
-	if nb.logfile != "" {
-		err := nb.logResult(started, done)
+	if nb.statsFile != "" {
+		err := nb.appendStats(started, done)
 		if err != nil {
-			return fmt.Errorf("failed to append results to %q: %v", nb.logfile, err)
+			return fmt.Errorf("failed to append results to %q: %v", nb.statsFile, err)
 		}
 	}
 	return nil

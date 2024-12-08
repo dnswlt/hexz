@@ -28,7 +28,8 @@ go build ./cmd/server && \
   -url-path-prefix "$url_path_prefix" \
   -remote-cpu-url "$cpuserver_addr" \
   -cpu-think-time 5s \
-  -port=$server_port
+  -port=$server_port \
+  -debug
 
 echo "Terminating cpuserver process"
 kill $cpu_pid
