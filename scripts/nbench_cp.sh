@@ -5,8 +5,8 @@
 iterations=3200
 num_games=10
 
-server_addr1=localhost:50071
-server_addr2=localhost:50072
+server_addr1=localhost:50171
+server_addr2=localhost:50172
 
 model_base_dir="$HOME/tmp/hexz-models/models/flagz"
 model_name=res10

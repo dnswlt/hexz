@@ -41,10 +41,11 @@ int main(int argc, char* argv[]) {
   absl::InitializeLog();
 
   std::string addr = absl::GetFlag(FLAGS_server_addr);
+  hexzpb::ModelKey model_key = ParseModelKey(absl::GetFlag(FLAGS_model_key));
 
   hexz::CPUPlayerServiceConfig config{
       .model_path = absl::GetFlag(FLAGS_model_path),
-      .model_key = ParseModelKey(absl::GetFlag(FLAGS_model_key)),
+      .model_key = model_key,
       .max_think_time_ms = absl::GetFlag(FLAGS_max_think_time_ms),
       .max_batch_size = 128,
       .max_concurrent_requests = 128,
@@ -58,14 +59,22 @@ int main(int argc, char* argv[]) {
   hexz::CPUPlayerServiceImpl service(config);
 
   grpc::ServerBuilder builder;
+  // gRPC sets SO_REUSEPORT to true by default. This cost me an hour of
+  // wondering why a model would not behave the way it should, when
+  // in fact I received responses from an old server running on the same port.
+  // Deactivate!
+  builder.AddChannelArgument(GRPC_ARG_ALLOW_REUSEPORT, 0);
+  
   builder.AddListeningPort(addr, grpc::InsecureServerCredentials());
   builder.RegisterService(&service);
   std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
   if (!server) {
-    ABSL_LOG(ERROR) << "Cannot instantiate server. Invalid address? Try "
-                       "[::]:<port> to listen on any interface.";
+    ABSL_LOG(ERROR)
+        << "Cannot instantiate server. Invalid address or address "
+           "already in use? Use [::]:<port> to listen on any interface.";
     return 1;
   }
-  std::cout << "Server listening on " << addr << std::endl;
+  ABSL_LOG(INFO) << "Server listening on " << addr << " with model key "
+                 << model_key.name() << ":" << model_key.checkpoint();
   server->Wait();
 }
