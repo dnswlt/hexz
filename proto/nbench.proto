@@ -1,0 +1,24 @@
+syntax = "proto3";
+package nbenchpb;
+
+option go_package = "github.com/dnswlt/hexz/pkg/nbenchpb";
+
+import "google/protobuf/timestamp.proto";
+import "proto/hexz.proto";
+
+// Results of an nbench comparison between two model-based hexz CPU players.
+// These entries can be stored in a JSONlines file to evaluate how
+// a model-based player evolves over time (i.e. across training checkpoints).
+message BenchmarkResult  {
+	google.protobuf.Timestamp started = 1;
+	double duration_seconds = 2;
+	int32 games = 3;
+    message PlayerResult {
+        hexzpb.ModelKey model_key = 1;
+        int32 wins = 2;
+    }
+    PlayerResult p1_result = 4;
+    PlayerResult p2_result = 5;
+    // Arguments that nbench was called with.
+    repeated string args = 6;
+}

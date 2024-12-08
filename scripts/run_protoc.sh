@@ -32,8 +32,8 @@ done
 
 if [[ $gen_go == 1 ]]; then
     echo "Generating proto and gRPC files for Go..."
-    protoc --go_out=. --go-grpc_out=. proto/hexz.proto
-    protoc --go_out=. --go_opt=module=github.com/dnswlt/hexz --go-grpc_out=. --go-grpc_opt=module=github.com/dnswlt/hexz proto/hexz.proto
+    protoc --go_out=. --go_opt=module=github.com/dnswlt/hexz --go-grpc_out=. --go-grpc_opt=module=github.com/dnswlt/hexz \
+      proto/hexz.proto proto/nbench.proto 
 fi
 
 if [[ $gen_cpp == 1 ]]; then
@@ -53,7 +53,7 @@ if [[ $gen_py == 1 ]]; then
     # in the generated _grpc.py file.
     # https://stackoverflow.com/questions/62818183/protobuf-grpc-relative-import-path-discrepancy-in-python/76946302#76946302
     cd pyhexz/src
-    cp ../../proto/hexz.proto pyhexz/
+    cp ../../protso/hexz.proto pyhexz/
     python3 -m grpc_tools.protoc --proto_path=. --python_out=. --pyi_out=. --grpc_python_out=. pyhexz/hexz.proto
     rm pyhexz/hexz.proto
 fi
