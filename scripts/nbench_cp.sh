@@ -3,7 +3,7 @@
 # Validate the two explicitly specified checkpoints against each other.
 
 iterations=3200
-num_games=10
+num_games=50
 
 server_addr1=localhost:50171
 server_addr2=localhost:50172
