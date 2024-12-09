@@ -9,6 +9,7 @@
 #include <random>
 
 #ifdef __linux__
+// For thread pinning
 #include <pthread.h>
 #include <sched.h>
 #include <unistd.h>
@@ -18,6 +19,7 @@
 #include "hexz.pb.h"
 #include "mcts.h"
 #include "queue.h"
+#include "version.h"
 
 namespace hexz {
 
@@ -359,6 +361,7 @@ void Worker::RunSingle(Model& model, AsyncExampleSender& sender) {
     hexzpb::AddTrainingExamplesRequest req;
     req.set_execution_id(execution_id_);
     req.set_game_id(game_id);
+    req.set_commit_hash(GitCommitHash(8));
     PopulateWorkerConfig(*req.mutable_worker_config());
     std::move(examples->begin(), examples->end(),
               RepeatedPtrFieldBackInserter(req.mutable_examples()));

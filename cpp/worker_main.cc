@@ -204,13 +204,13 @@ void StartHealthServiceThread() {
 int main(int argc, char* argv[]) {
   // Initialization
   // absl::SetMinLogLevel(absl::LogSeverityAtLeast::kInfo);
-  absl::SetProgramUsageMessage(
+  absl::SetProgramUsageMessage(absl::StrCat(
       "Generate training examples."
-      "\n\nTag: " GIT_TAG
-      "\nCommit: " GIT_COMMIT_HASH
+      "\n\nTag: ",
+      hexz::GitTag(), "\nCommit: ", hexz::GitCommitHash(),
       "\n\n"
       "Configure using HEXZ_* environment variables, optionally overriding "
-      "them with these flags:");
+      "them with these flags:"));
   absl::ParseCommandLine(argc, argv);
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
   absl::InitializeLog();
@@ -227,8 +227,9 @@ int main(int argc, char* argv[]) {
     ABSL_LOG(ERROR) << "training_server_addr must be set";
     return 1;
   }
-  ABSL_LOG(INFO) << "Worker (tag:" << GIT_TAG << ", " << GIT_COMMIT_HASH
-                 << ") running with " << config->String();
+  ABSL_LOG(INFO) << "Worker (tag:" << hexz::GitTag() << ", "
+                 << hexz::GitCommitHash() << ") running with "
+                 << config->String();
 
   // Memory usage monitoring, if requested.
   std::thread memmon;

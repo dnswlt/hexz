@@ -1,5 +1,23 @@
 #pragma once
 
+#include <string>
+
 // These #define's are populated from CMake.
 #define GIT_COMMIT_HASH "@GIT_COMMIT_HASH@"
 #define GIT_TAG "@GIT_TAG@"
+
+namespace hexz {
+
+inline std::string GitCommitHash(int prefix_length = -1) {
+  std::string commit_hash(GIT_COMMIT_HASH);
+  if (prefix_length < 0 || prefix_length >= commit_hash.size()) {
+    return commit_hash;
+  }
+  return commit_hash.substr(0, prefix_length);
+}
+
+inline std::string GitTag() {
+  return std::string(GIT_TAG);
+}
+
+} // namespace hexz
