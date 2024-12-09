@@ -12,7 +12,7 @@ cd $(dirname $0)/..
 model_name=res10
 device=cuda
 iterations=3200
-num_games=50
+num_games=20
 model_repo="$HOME/tmp/hexz-models"
 
 go run ./cmd/nbench2 \
