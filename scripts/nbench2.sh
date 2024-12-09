@@ -11,6 +11,9 @@ cd $(dirname $0)/..
 
 model_name=res10
 device=cuda
+if [[ "$(uname)" = "Darwin" ]]; then
+    device=mps
+fi
 iterations=3200
 num_games=20
 model_repo="$HOME/tmp/hexz-models"

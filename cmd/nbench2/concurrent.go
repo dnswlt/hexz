@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path"
 	"sync"
 	"time"
 
+	"github.com/dnswlt/hexz/internal/elo"
 	"github.com/dnswlt/hexz/pkg/hexz"
 	"github.com/dnswlt/hexz/pkg/hexzpb"
 	npb "github.com/dnswlt/hexz/pkg/nbenchpb"
-	"google.golang.org/protobuf/encoding/protojson"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -85,14 +84,6 @@ func NewConcurrentNBench(p1, p2 *hexz.RemoteCPUPlayer, numGames int, statsFile s
 }
 
 func (nb *ConcurrentNBench) appendStats(started, done time.Time) error {
-	if err := os.MkdirAll(path.Base(nb.statsFile), 0755); err != nil {
-		return fmt.Errorf("cannot create directory for logfile: %v", err)
-	}
-	f, err := os.OpenFile(nb.statsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
 	res := &npb.BenchmarkResult{
 		Started:         tpb.New(started),
 		DurationSeconds: done.Sub(started).Seconds(),
@@ -109,18 +100,7 @@ func (nb *ConcurrentNBench) appendStats(started, done time.Time) error {
 		},
 		Args: os.Args[1:],
 	}
-	m := protojson.MarshalOptions{
-		Multiline: false,
-	}
-	data, err := m.Marshal(res)
-	if err != nil {
-		return fmt.Errorf("failed to marshal BenchmarkResult: %v", err)
-	}
-	data = append(data, '\n')
-	if _, err := f.Write(data); err != nil {
-		return fmt.Errorf("failed to append BenchmarkResult: %v", err)
-	}
-	return nil
+	return elo.AppendStats(nb.statsFile, res)
 }
 
 func (nb *ConcurrentNBench) P1Name() string {

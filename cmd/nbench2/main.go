@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/dnswlt/hexz/internal/api"
+	"github.com/dnswlt/hexz/internal/elo"
 	"github.com/dnswlt/hexz/pkg/hexz"
 )
 
@@ -33,6 +34,11 @@ type CLIArgs struct {
 	ModelKey2     string
 	Device        string
 	PlayBothSides bool
+
+	// Elo related flags
+
+	// Print Elo scores and exit.
+	PrintElo bool
 }
 
 func createRemotePlayer(playerId api.PlayerId, url string, iterations int) (*hexz.RemoteCPUPlayer, error) {
@@ -56,6 +62,8 @@ func parseArgs() (*CLIArgs, error) {
 	flag.StringVar(&args.Device, "device", "cuda", "PyTorch device type (cuda, cpu, mps)")
 	flag.BoolVar(&args.PlayBothSides, "both-sides", false,
 		"Whether to play both as P1 and P2. If true, twice as many games are played as specified in --games.")
+	flag.BoolVar(&args.PrintElo, "print-elo", false,
+		"If true, print Elo scores resulting from all results in --stats-file, and exit.")
 
 	flag.Parse()
 	if len(flag.Args()) > 0 {
@@ -153,9 +161,9 @@ func terminateSubprocesses(doneCh chan bool, cancel context.CancelFunc, cmds ...
 	}
 }
 
-func playConcurrent(ctx context.Context, p1, p2 *hexz.RemoteCPUPlayer, numGames int, logfile string) error {
+func playConcurrent(ctx context.Context, p1, p2 *hexz.RemoteCPUPlayer, numGames int, statsFile string) error {
 	// This is ML model evaluation mode. Play concurrently to benefit from concurrent requests to the GPU.
-	nb, err := NewConcurrentNBench(p1, p2, numGames, logfile)
+	nb, err := NewConcurrentNBench(p1, p2, numGames, statsFile)
 	if err != nil {
 		return fmt.Errorf("failed to create ConcurrentNBench: %v", err)
 	}
@@ -163,6 +171,28 @@ func playConcurrent(ctx context.Context, p1, p2 *hexz.RemoteCPUPlayer, numGames 
 }
 
 func main() {
+	args, err := parseArgs()
+	if err != nil {
+		log.Printf("Error parsing command line arguments: %v", err)
+		return
+	}
+
+	if args.PrintElo {
+		if args.StatsFile == "" {
+			log.Fatalf("Must specifiy --stats-file for --print-elo")
+		}
+		results, err := elo.ReadResults(args.StatsFile)
+		if err != nil {
+			log.Fatalf("Failed to read results from %q: %v", args.StatsFile, err)
+		}
+		elos := elo.Scores(results)
+		fmt.Printf("Elo scores from %d records in %s:\n", len(elos), args.StatsFile)
+		for i, e := range elos {
+			fmt.Printf("#%d %s:%d %.1f (%d/%d/%d)\n", i+1, e.Key.Name, e.Key.Checkpoint, e.Score, e.Wins, e.Draws, e.Games-e.Wins-e.Draws)
+		}
+		os.Exit(0)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
 		cancel()
@@ -176,12 +206,6 @@ func main() {
 		log.Printf("Received interrupt, canceling context...")
 		cancel()
 	}()
-
-	args, err := parseArgs()
-	if err != nil {
-		log.Printf("Error parsing command line arguments: %v", err)
-		return
-	}
 
 	subDoneCh := make(chan bool, 2)
 
@@ -203,8 +227,11 @@ func main() {
 
 	defer terminateSubprocesses(subDoneCh, cancel, cmd1, cmd2)
 
-	log.Printf("Waiting for servers to come alive")
-	time.Sleep(4 * time.Second)
+	log.Printf("Waiting for servers to come alive:")
+	for i := 4; i > 0; i-- {
+		log.Printf("%d ...", i)
+		time.Sleep(1 * time.Second)
+	}
 	log.Printf("Let's go!")
 
 	p1, err := createRemotePlayer(api.PlayerId("P1"), p1URL, args.Iterations)
