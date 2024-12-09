@@ -53,7 +53,9 @@ if [[ $gen_py == 1 ]]; then
     # in the generated _grpc.py file.
     # https://stackoverflow.com/questions/62818183/protobuf-grpc-relative-import-path-discrepancy-in-python/76946302#76946302
     cd pyhexz/src
-    cp ../../protso/hexz.proto pyhexz/
-    python3 -m grpc_tools.protoc --proto_path=. --python_out=. --pyi_out=. --grpc_python_out=. pyhexz/hexz.proto
-    rm pyhexz/hexz.proto
+    cp ../../proto/hexz.proto ../../proto/nbench.proto pyhexz/
+    # Replace proto/ prefix by pyhexz/ in imports ... what a mess.
+    sed -i -e 's|^import "proto/\([^"]*\).proto"|import "pyhexz/\1.proto"|g' pyhexz/*.proto
+    python3 -m grpc_tools.protoc --proto_path=. --python_out=. --pyi_out=. --grpc_python_out=. pyhexz/hexz.proto pyhexz/nbench.proto
+    rm -f pyhexz/hexz.proto pyhexz/nbench.proto
 fi

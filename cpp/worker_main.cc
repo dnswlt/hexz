@@ -34,6 +34,7 @@
 #include "hexz.pb.h"
 #include "mcts.h"
 #include "perfm.h"
+#include "version.h"
 #include "worker.h"
 
 // In Docker, you should override conig defaults using HEXZ_* environment
@@ -205,7 +206,10 @@ int main(int argc, char* argv[]) {
   // absl::SetMinLogLevel(absl::LogSeverityAtLeast::kInfo);
   absl::SetProgramUsageMessage(
       "Generate training examples."
-      "\nConfigure using HEXZ_* environment variables, optionally overriding "
+      "\n\nTag: " GIT_TAG
+      "\nCommit: " GIT_COMMIT_HASH
+      "\n\n"
+      "Configure using HEXZ_* environment variables, optionally overriding "
       "them with these flags:");
   absl::ParseCommandLine(argc, argv);
   absl::SetStderrThreshold(absl::LogSeverityAtLeast::kInfo);
@@ -223,7 +227,8 @@ int main(int argc, char* argv[]) {
     ABSL_LOG(ERROR) << "training_server_addr must be set";
     return 1;
   }
-  ABSL_LOG(INFO) << "Worker started with " << config->String();
+  ABSL_LOG(INFO) << "Worker (tag:" << GIT_TAG << ", " << GIT_COMMIT_HASH
+                 << ") running with " << config->String();
 
   // Memory usage monitoring, if requested.
   std::thread memmon;

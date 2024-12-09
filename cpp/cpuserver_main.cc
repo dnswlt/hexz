@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string>
 
+#include "version.h"
 #include "cpuserver.h"
 
 ABSL_FLAG(std::string, server_addr, "localhost:50051",

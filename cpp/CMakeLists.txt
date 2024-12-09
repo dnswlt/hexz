@@ -78,6 +78,32 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(googlebenchmark)
 
+# Embed Git version information in generated version.h
+find_package(Git REQUIRED)
+execute_process(
+    COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
+    OUTPUT_VARIABLE GIT_COMMIT_HASH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+execute_process(
+    COMMAND ${GIT_EXECUTABLE} describe --tags --always --dirty
+    OUTPUT_VARIABLE GIT_TAG
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+# Generate a version header file
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/version.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/version.h
+    @ONLY
+)
+
+# Include the binary directory for generated headers
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+
+# Compiler warning options
+
 add_compile_options(-Wall -Wextra -pedantic -Werror -Wnon-virtual-dtor -Wno-sign-compare -Wno-error=unused-parameter)
 
 # For ASAN:

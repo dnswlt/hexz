@@ -1,0 +1,5 @@
+#pragma once
+
+// These #define's are populated from CMake.
+#define GIT_COMMIT_HASH "@GIT_COMMIT_HASH@"
+#define GIT_TAG "@GIT_TAG@"
