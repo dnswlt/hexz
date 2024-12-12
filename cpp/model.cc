@@ -207,6 +207,10 @@ void FiberTorchModel::RunGPUPipeline() {
   std::vector<PredictionRequest> q_batch;
   torch::IValue q_pred;
 
+  // Only CUDA properly synchronizes non-blocking transfers:
+  // https://pytorch.org/tutorials/intermediate/pinmem_nonblock.html#other-copy-directions-gpu-cpu-cpu-mps
+  bool non_blocking = device_ == torch::kCUDA;
+
   // Start the consumer thread.
   std::thread consumer([&] {
     torch::NoGradGuard no_grad;
@@ -277,10 +281,9 @@ void FiberTorchModel::RunGPUPipeline() {
       boards.emplace_back(std::move(req.board));
       action_masks.emplace_back(std::move(req.action_mask));
     }
-
     std::vector<torch::jit::IValue> model_inputs = {
-        torch::stack(boards).to(device_, /*non_blocking=*/true),
-        torch::stack(action_masks).to(device_, /*non_blocking=*/true),
+        torch::stack(boards).to(device_, non_blocking),
+        torch::stack(action_masks).to(device_, non_blocking),
     };
     {
       // Need to guard access to module_ b/c it might get updated concurrently.

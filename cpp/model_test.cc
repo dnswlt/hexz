@@ -6,6 +6,8 @@
 
 #include <boost/fiber/barrier.hpp>
 
+#include "board.h"
+
 namespace hexz {
 
 namespace {
@@ -14,6 +16,24 @@ torch::jit::Module LoadModule() {
   auto scriptmodule = torch::jit::load("testdata/scriptmodule.pt", torch::kCPU);
   scriptmodule.eval();
   return scriptmodule;
+}
+
+torch::jit::Module LoadModuleRes10(torch::DeviceType device) {
+  auto scriptmodule =
+      torch::jit::load("testdata/scriptmodule_res10.pt", device);
+  scriptmodule.eval();
+  return scriptmodule;
+}
+
+torch::Tensor ActionMask(const Board& board, int player) {
+  auto moves = board.NextMoves(player);
+  auto action_mask =
+      torch::zeros({2, 11, 10}, c10::TensorOptions().dtype(torch::kBool));
+  auto action_mask_acc = action_mask.accessor<bool, 3>();
+  for (const auto& m : moves) {
+    action_mask_acc[static_cast<size_t>(m.typ)][m.r][m.c] = true;
+  }
+  return action_mask;
 }
 
 TEST(PredictBatchTest, Shape) {
@@ -40,6 +60,22 @@ TEST(PredictBatchTest, Shape) {
   // values should be in [-1, 1].
   EXPECT_THAT(values, testing::Each(testing::Ge(-1)));
   EXPECT_THAT(values, testing::Each(testing::Le(1)));
+}
+
+TEST(TorchModelTest, Deterministic) {
+  // Checks that model predictions are deterministic.
+  hexzpb::ModelKey dummy_key;
+  TorchModel model(dummy_key, LoadModule(), torch::kCPU);
+  // Prepare inputs.
+  auto board = torch::randn({11, 11, 10});
+  auto action_mask = torch::rand({2, 11, 10}) < 0.5;
+
+  auto pred_0 = model.Predict(board, action_mask);
+  for (int i = 0; i < 10; i++) {
+    auto pred = model.Predict(board, action_mask);
+    EXPECT_FLOAT_EQ(pred_0.value, pred.value);
+    EXPECT_TRUE(pred_0.move_probs.equal(pred.move_probs));
+  }
 }
 
 TEST(BatchedTorchModelTest, SmokeTestSingleThreaded) {
@@ -168,6 +204,114 @@ TEST(FiberTorchModelTest, SmokeTestMultipleFibers) {
   std::for_each(threads.begin(), threads.end(), [](auto& t) { t.join(); });
   // Validate.
   EXPECT_THAT(sum_pr, testing::Each(testing::FloatNear(1, 1e-2)));
+}
+
+testing::AssertionResult TensorsApproxEq(torch::Tensor t1, torch::Tensor t2,
+                                         float eps_max, float eps_mean) {
+  auto d = torch::abs(t1 - t2);
+  float max_d = torch::max(d).item<float>();
+  auto nonzero_values = d.masked_select(torch::logical_or(t1 != 0, t2 != 0));
+  float mean_d = 0.0;
+  if (nonzero_values.numel() > 0) {
+    mean_d = torch::mean(nonzero_values).item<float>();
+  }
+  if (max_d < eps_max && mean_d < eps_mean) {
+    return testing::AssertionSuccess();
+  }
+
+  return testing::AssertionFailure()
+         << "max delta is " << max_d << " (mean: " << mean_d
+         << ") for tensors (*100) " << (t1 * 100) << "\n=== VS ===\n"
+         << (t2 * 100);
+}
+
+TEST(FiberTorchModelTest, ConcurrentResultsDeviceCorrect) {
+  // Tests that FiberTorchModel's concurrent results are approx. equal
+  // to those we get from a sequential TorchModel.
+
+  // We cannot fully enable deterministic algorithms, since our network uses
+  // CUBLAS
+  // https://docs.nvidia.com/cuda/cublas/index.html#results-reproducibility
+  //   at::globalContext().setDeterministicCuDNN(true);
+  //   at::globalContext().setDeterministicAlgorithms(true,
+  //   /*warn_only=*/false);
+  torch::DeviceType device;
+  if (torch::cuda::is_available()) {
+    device = torch::kCUDA;
+  } else if (torch::mps::is_available()) {
+    device = torch::kMPS;
+  } else {
+    // We could also run the test on the CPU, but I'd rather see a skip
+    // warning than silently run it on the CPU, which is a non-use case.
+    GTEST_SKIP() << "Skipping test: no applicable device available (cuda, mps)";
+  }
+  hexzpb::ModelKey dummy_key;
+  TorchModel torch_model(dummy_key, LoadModuleRes10(device), device);
+  // Prepare inputs.
+  const int N = 128;
+  // boards is populated with valid random boards.
+  auto boards = torch::zeros({N, 11, 11, 10});
+  auto action_masks =
+      torch::zeros({N, 2, 11, 10}, c10::TensorOptions().dtype(torch::kBool));
+  for (int i = 0; i < N; i++) {
+    int player = 0;
+    Board board = Board::RandomBoard();
+    boards[i] = board.Tensor(player);
+    action_masks[i] = ActionMask(board, player);
+  }
+
+  // Compute sequential predictions.
+  std::vector<hexz::Model::Prediction> seq_preds;
+  for (int i = 0; i < N; i++) {
+    auto pred = torch_model.Predict(boards[i], action_masks[i]);
+    seq_preds.push_back(pred);
+  }
+
+  // Compute concurrent predictions.
+  const int n_threads = 2;
+  const int fibers_per_thread = N / n_threads;
+  const int batch_size = 2 * fibers_per_thread;
+  FiberTorchModel fiber_torch_model(hexzpb::ModelKey(), LoadModuleRes10(device),
+                                    device, batch_size, false);
+  std::mutex mut;
+  std::vector<std::thread> threads;
+  std::vector<hexz::Model::Prediction> conc_preds(n_threads *
+                                                  fibers_per_thread);
+  boost::fibers::barrier barrier(n_threads * fibers_per_thread);
+  int idx = 0;
+  for (int i = 0; i < n_threads; i++) {
+    threads.emplace_back([&, thread_start_idx = idx] {
+      std::vector<boost::fibers::fiber> fibers;
+      for (int j = 0; j < fibers_per_thread; j++) {
+        fibers.emplace_back([&, fiber_idx = thread_start_idx + j] {
+          barrier.wait();
+          auto token = fiber_torch_model.Enter();
+          auto pred = fiber_torch_model.Predict(boards[fiber_idx],
+                                                action_masks[fiber_idx]);
+          {
+            std::scoped_lock<std::mutex> lk(mut);
+            conc_preds[fiber_idx] = pred;
+          }
+        });
+      }
+      std::for_each(fibers.begin(), fibers.end(), [](auto& f) { f.join(); });
+    });
+    idx += fibers_per_thread;
+  }
+  std::for_each(threads.begin(), threads.end(), [](auto& t) { t.join(); });
+
+  ASSERT_EQ(seq_preds.size(), conc_preds.size());
+
+  // The results are almost shockingly coarsely equal. eps == 1e-4 routinely
+  // fails. So instead, we reuqire a max 0.5 % points absolute deviation,
+  // and a mean 0.01 % points absolute deviation (among non-zero entries).
+  const float eps_max = 0.005;
+  const float eps_mean = 0.0001;
+  for (int i = 0; i < seq_preds.size(); i++) {
+    EXPECT_LT(std::abs(seq_preds[i].value - conc_preds[i].value), eps_max);
+    ASSERT_TRUE(TensorsApproxEq(seq_preds[i].move_probs,
+                                conc_preds[i].move_probs, eps_max, eps_mean));
+  }
 }
 
 }  // namespace

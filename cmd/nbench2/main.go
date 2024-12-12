@@ -188,7 +188,7 @@ func main() {
 		elos := elo.Scores(results)
 		fmt.Printf("Elo scores from %d records in %s:\n", len(results), args.StatsFile)
 		for i, e := range elos {
-			fmt.Printf("#%d %s:%d %.1f (%d/%d/%d)\n", i+1, e.Key.Name, e.Key.Checkpoint, e.Score, e.Wins, e.Draws, e.Games-e.Wins-e.Draws)
+			fmt.Printf("#%d %s:%d %.1f (%d/%d/%d)\n", i+1, e.Key.Name, e.Key.Checkpoint, e.Rating, e.Wins, e.Draws, e.Games-e.Wins-e.Draws)
 		}
 		os.Exit(0)
 	}
