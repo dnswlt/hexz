@@ -21,7 +21,9 @@ import (
 
 	"github.com/dnswlt/hexz/internal/api"
 	"github.com/dnswlt/hexz/internal/elo"
+	"github.com/dnswlt/hexz/internal/xrand"
 	"github.com/dnswlt/hexz/pkg/hexz"
+	"google.golang.org/protobuf/proto"
 )
 
 type CLIArgs struct {
@@ -32,6 +34,7 @@ type CLIArgs struct {
 	ModelRepo     string
 	ModelKey1     string
 	ModelKey2     string
+	ModelKeys     []string
 	Device        string
 	PlayBothSides bool
 
@@ -59,6 +62,7 @@ func parseArgs() (*CLIArgs, error) {
 	flag.StringVar(&args.ModelRepo, "model-repo", ".", "Base folder of hexz model repository")
 	flag.StringVar(&args.ModelKey1, "key1", "", "Model key (e.g. \"res10:58\") of the first model to evaluate")
 	flag.StringVar(&args.ModelKey2, "key2", "", "Model key (e.g. \"res10:23\") of the second model to evaluate")
+	modelKeys := flag.String("keys", "", "Model keys (e.g. \"res10:23,res10:24,res10:25\") ")
 	flag.StringVar(&args.Device, "device", "cuda", "PyTorch device type (cuda, cpu, mps)")
 	flag.BoolVar(&args.PlayBothSides, "both-sides", false,
 		"Whether to play both as P1 and P2. If true, twice as many games are played as specified in --games.")
@@ -66,6 +70,9 @@ func parseArgs() (*CLIArgs, error) {
 		"If true, print Elo scores resulting from all results in --stats-file, and exit.")
 
 	flag.Parse()
+	if *modelKeys != "" {
+		args.ModelKeys = strings.Split(*modelKeys, ",")
+	}
 	if len(flag.Args()) > 0 {
 		return nil, fmt.Errorf("unexpected extra args: %v", flag.Args())
 	}
@@ -170,6 +177,63 @@ func playConcurrent(ctx context.Context, p1, p2 *hexz.RemoteCPUPlayer, numGames 
 	return nb.Play(ctx)
 }
 
+func printEloRatings(statsFile string) {
+	results, err := elo.ReadResults(statsFile)
+	if err != nil {
+		log.Fatalf("Failed to read results from %q: %v", statsFile, err)
+	}
+	eloRatings := elo.Ratings(results)
+	fmt.Printf("Elo Ratings from %d records in %s:\n", len(results), statsFile)
+	for i, e := range eloRatings {
+		fmt.Printf("#%d %s:%d %.1f (%d/%d/%d)\n", i+1, e.Key.Name, e.Key.Checkpoint, e.Rating, e.Wins, e.Draws, e.Games-e.Wins-e.Draws)
+	}
+	fmt.Println()
+	btRatings, err := elo.BradleyTerry(results)
+	if err != nil {
+		fmt.Printf("Bradley-Terry did not converge: %v\n", err)
+		return
+	}
+	fmt.Printf("Bradley-Terry ratings from %d records in %s:\n", len(results), statsFile)
+	for i, e := range btRatings {
+		fmt.Printf("#%d %s:%d %.1f (%d/%d/%d)\n", i+1, e.Key.Name, e.Key.Checkpoint, e.Rating, e.Wins, e.Draws, e.Games-e.Wins-e.Draws)
+	}
+}
+
+func chooseModels(args *CLIArgs) (string, string, error) {
+	if args.ModelKey1 != "" {
+		return args.ModelKey1, args.ModelKey2, nil
+	}
+	if len(args.ModelKeys) == 0 {
+		return "", "", fmt.Errorf("no models to choose from")
+	}
+	if len(args.ModelKeys) == 1 {
+		return args.ModelKeys[0], args.ModelKeys[0], nil
+	}
+	// Choose model keys randomly, proportional to the inverse number of times they were used previously.
+	counts := make(map[string]int)
+	if args.StatsFile != "" {
+		// Increase weights based on number of games the model was used in.
+		results, err := elo.ReadResults(args.StatsFile)
+		if err != nil {
+			return "", "", fmt.Errorf("invalid stats file: %v", err)
+		}
+		for _, r := range results {
+			k1 := r.P1Result.ModelKey
+			k2 := r.P2Result.ModelKey
+			counts[fmt.Sprintf("%s:%d", k1.Name, k1.Checkpoint)] += int(r.Games)
+			if !proto.Equal(k1, k2) {
+				counts[fmt.Sprintf("%s:%d", k2.Name, k2.Checkpoint)] += int(r.Games)
+			}
+		}
+	}
+	weights := make([]float64, len(args.ModelKeys))
+	for i, m := range args.ModelKeys {
+		weights[i] = 1 / (1 + float64(counts[m]))
+	}
+	ks := xrand.SampleWeighted(args.ModelKeys, weights, 2)
+	return ks[0], ks[1], nil
+}
+
 func main() {
 	args, err := parseArgs()
 	if err != nil {
@@ -181,16 +245,13 @@ func main() {
 		if args.StatsFile == "" {
 			log.Fatalf("Must specifiy --stats-file for --print-elo")
 		}
-		results, err := elo.ReadResults(args.StatsFile)
-		if err != nil {
-			log.Fatalf("Failed to read results from %q: %v", args.StatsFile, err)
-		}
-		elos := elo.Scores(results)
-		fmt.Printf("Elo scores from %d records in %s:\n", len(results), args.StatsFile)
-		for i, e := range elos {
-			fmt.Printf("#%d %s:%d %.1f (%d/%d/%d)\n", i+1, e.Key.Name, e.Key.Checkpoint, e.Rating, e.Wins, e.Draws, e.Games-e.Wins-e.Draws)
-		}
-		os.Exit(0)
+		printEloRatings(args.StatsFile)
+		return
+	}
+
+	modelKey1, modelKey2, err := chooseModels(args)
+	if err != nil {
+		log.Fatalf("Could not choose model keys: %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -210,7 +271,7 @@ func main() {
 	subDoneCh := make(chan bool, 2)
 
 	p1URL := "localhost:50171"
-	cmd1, err := launchCPUPlayer(ctx, args, args.ModelKey1, p1URL)
+	cmd1, err := launchCPUPlayer(ctx, args, modelKey1, p1URL)
 	if err != nil {
 		log.Printf("Failed to start cpuserver[1]: %v", err)
 		return
@@ -218,7 +279,7 @@ func main() {
 	go waitForCompletion(cmd1, subDoneCh)
 
 	p2URL := "localhost:50172"
-	cmd2, err := launchCPUPlayer(ctx, args, args.ModelKey2, p2URL)
+	cmd2, err := launchCPUPlayer(ctx, args, modelKey2, p2URL)
 	if err != nil {
 		log.Printf("Failed to start cpuserver[2]: %v", err)
 		return

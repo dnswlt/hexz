@@ -114,7 +114,7 @@ func TestEloScores(t *testing.T) {
 	tests := []struct {
 		name  string
 		input []*npb.BenchmarkResult
-		want  []*EloRating
+		want  []*Rating
 	}{
 		{
 			name:  "empty",
@@ -130,7 +130,7 @@ func TestEloScores(t *testing.T) {
 					P2Result: pRes(keys[1], 0),
 				},
 			},
-			want: []*EloRating{
+			want: []*Rating{
 				{Key: keys[0], Games: 1, Wins: 1, Rating: 1516},
 				{Key: keys[1], Games: 1, Rating: 1484},
 			},
@@ -144,7 +144,7 @@ func TestEloScores(t *testing.T) {
 					P2Result: pRes(keys[1], 0),
 				},
 			},
-			want: []*EloRating{
+			want: []*Rating{
 				{Key: keys[0], Games: 10, Wins: 10, Rating: 1660},
 				{Key: keys[1], Games: 10, Rating: 1340},
 			},
@@ -168,7 +168,7 @@ func TestEloScores(t *testing.T) {
 					P2Result: pRes(keys[2], 0),
 				},
 			},
-			want: []*EloRating{
+			want: []*Rating{
 				{Key: keys[0], Games: 2, Wins: 2, Rating: 1530.496882},
 				{Key: keys[1], Games: 2, Wins: 1, Rating: 1500.736306},
 				{Key: keys[2], Games: 2, Wins: 0, Rating: 1468.766810},
@@ -177,7 +177,7 @@ func TestEloScores(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			elos := Scores(tc.input)
+			elos := Ratings(tc.input)
 			if diff := cmp.Diff(tc.want, elos, cmp.Comparer(proto.Equal), cmpopts.EquateApprox(1e-3, 1e-3)); diff != "" {
 				t.Errorf("Unexpected Scores() result (-want +got): %s", diff)
 			}

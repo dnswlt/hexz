@@ -1,6 +1,9 @@
 package xrand
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestRand64(t *testing.T) {
 	// all bits in a rand64 should be uniformly distributed and independent.
@@ -37,5 +40,33 @@ func TestRandIntn(t *testing.T) {
 		if r < 0 || r >= i {
 			t.Errorf("randIntn returned %d, want [0,%d)", r, i)
 		}
+	}
+}
+
+func TestSampleWeightedFrequency(t *testing.T) {
+	items := []string{
+		"A", "B", "C", "D", "E", "F", "G", "H",
+	}
+	weights := []float64{
+		1, 2, 3, 4, 5, 6, 7, 8,
+	}
+	counts := make(map[string]float64)
+	for i := 0; i < 10_000; i++ {
+		s := SampleWeighted(items, weights, 3)
+		if len(s) != 3 {
+			t.Fatalf("Wrong length: want 3, got %d", len(s))
+		}
+		for _, t := range s {
+			counts[t] += 1
+		}
+	}
+	// Item counts should be ordered by weights after so many runs.
+	ncounts := make([]float64, len(weights))
+	for i := range weights {
+		ncounts[i] = counts[items[i]]
+	}
+
+	if !slices.IsSorted(ncounts) {
+		t.Errorf("ncounts not sorted: %v", ncounts)
 	}
 }

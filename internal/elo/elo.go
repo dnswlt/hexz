@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-type EloRating struct {
+type Rating struct {
 	Key    *hexzpb.ModelKey
 	Games  int
 	Wins   int
@@ -35,38 +35,46 @@ func expected(eloPlayer, eloOpponent float64) float64 {
 	return 1 / (1 + math.Pow(10, (eloOpponent-eloPlayer)/scalingFactor))
 }
 
-func Scores(results []*npb.BenchmarkResult) []*EloRating {
-	var initialScore float64 = 1500
-	var k float64 = 32
-
-	var models []*hexzpb.ModelKey
-	seenModels := make(map[string]bool)
+// initialRatings returns initial ratings for all models found in results.
+func initialRatings(results []*npb.BenchmarkResult, initialRating float64) map[string]*Rating {
+	ratings := make(map[string]*Rating)
 	for _, r := range results {
 		m1 := mkey(r.P1Result.ModelKey)
-		if !seenModels[m1] {
-			seenModels[m1] = true
-			models = append(models, r.P1Result.ModelKey)
+		if ratings[m1] == nil {
+			ratings[m1] = &Rating{
+				Key:    r.P1Result.ModelKey,
+				Rating: initialRating,
+			}
 		}
 		m2 := mkey(r.P2Result.ModelKey)
-		if !seenModels[m2] {
-			seenModels[m2] = true
-			models = append(models, r.P2Result.ModelKey)
+		if ratings[m2] == nil {
+			ratings[m2] = &Rating{
+				Key:    r.P2Result.ModelKey,
+				Rating: initialRating,
+			}
 		}
+		// Update game stats
+		draws := int(r.Games - (r.P1Result.Wins + r.P2Result.Wins))
+		ratings[m1].Games += int(r.Games)
+		ratings[m2].Games += int(r.Games)
+		ratings[m1].Wins += int(r.P1Result.Wins)
+		ratings[m2].Wins += int(r.P2Result.Wins)
+		ratings[m1].Draws += draws
+		ratings[m2].Draws += draws
 	}
+	return ratings
+}
 
-	elos := make(map[string]*EloRating)
-	for _, m := range models {
-		elos[mkey(m)] = &EloRating{
-			Key:    m,
-			Rating: initialScore,
-		}
-	}
+func Ratings(results []*npb.BenchmarkResult) []*Rating {
+	var initialRating float64 = 1500
+	var k float64 = 32
+	ratings := initialRatings(results, initialRating)
 
 	for _, r := range results {
 		m1 := mkey(r.P1Result.ModelKey)
 		m2 := mkey(r.P2Result.ModelKey)
 		// Expected scores
-		expectedM1 := float64(r.Games) * expected(elos[m1].Rating, elos[m2].Rating)
+		expectedM1 := float64(r.Games) * expected(ratings[m1].Rating, ratings[m2].Rating)
 		expectedM2 := float64(r.Games) - expectedM1
 		// Actual scores
 		draws := float64(r.Games - (r.P1Result.Wins + r.P2Result.Wins))
@@ -76,23 +84,16 @@ func Scores(results []*npb.BenchmarkResult) []*EloRating {
 		// fmt.Printf("Match %d: %s - %s: %.1f/%.0f/%.1f\n", i, m1, m2, scoreM1, draws, scoreM2)
 		// Update Elo scores
 		// fmt.Printf(" Elos before: %.1f - %.1f\n", elos[m1].Rating, elos[m2].Rating)
-		elos[m1].Rating += k * (scoreM1 - expectedM1)
-		elos[m2].Rating += k * (scoreM2 - expectedM2)
+		ratings[m1].Rating += k * (scoreM1 - expectedM1)
+		ratings[m2].Rating += k * (scoreM2 - expectedM2)
 		// fmt.Printf(" Elos after: %.1f - %.1f\n", elos[m1].Rating, elos[m2].Rating)
-		// Update other stats
-		elos[m1].Games += int(r.Games)
-		elos[m2].Games += int(r.Games)
-		elos[m1].Wins += int(r.P1Result.Wins)
-		elos[m2].Wins += int(r.P2Result.Wins)
-		elos[m1].Draws += int(draws)
-		elos[m2].Draws += int(draws)
 	}
 
-	var result []*EloRating
-	for _, e := range elos {
+	var result []*Rating
+	for _, e := range ratings {
 		result = append(result, e)
 	}
-	slices.SortFunc(result, func(a, b *EloRating) int {
+	slices.SortFunc(result, func(a, b *Rating) int {
 		if c := cmp.Compare(b.Rating, a.Rating); c != 0 {
 			return c
 		}
