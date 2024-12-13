@@ -206,7 +206,7 @@ func chooseModels(args *CLIArgs) (string, string, error) {
 	if len(args.ModelKeys) == 0 {
 		return "", "", fmt.Errorf("no models to choose from")
 	}
-	if len(args.ModelKeys) == 1 {
+	if len(args.ModelKeys) == 1 && args.ModelKeys[0] != "any" {
 		return args.ModelKeys[0], args.ModelKeys[0], nil
 	}
 	// Choose model keys randomly, proportional to the inverse number of times they were used previously.
@@ -223,6 +223,12 @@ func chooseModels(args *CLIArgs) (string, string, error) {
 			counts[fmt.Sprintf("%s:%d", k1.Name, k1.Checkpoint)] += int(r.Games)
 			if !proto.Equal(k1, k2) {
 				counts[fmt.Sprintf("%s:%d", k2.Name, k2.Checkpoint)] += int(r.Games)
+			}
+		}
+		if args.ModelKeys[0] == "any" {
+			args.ModelKeys = make([]string, len(counts))
+			for k := range counts {
+				args.ModelKeys = append(args.ModelKeys, k)
 			}
 		}
 	}
