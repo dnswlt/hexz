@@ -115,7 +115,7 @@ func TestHandleNewGame(t *testing.T) {
 	// Create request with login form parameters.
 	form := url.Values{}
 	form.Add("type", string(gameTypeFlagz))
-	form.Add("singlePlayer", "true")
+	// form.Add("singlePlayer", "true")
 	r := httptest.NewRequest(http.MethodPost, "/hexz/new", strings.NewReader(form.Encode()))
 	r.AddCookie(s.makePlayerCookie(testPlayerId, 24*time.Hour))
 	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
@@ -133,12 +133,12 @@ func TestHandleNewGame(t *testing.T) {
 	if pattern := `/hexz/[A-Z]{6}`; !regexp.MustCompile(pattern).MatchString(loc) {
 		t.Errorf("Wrong Location header: want: %s, got: %q", pattern, loc)
 	}
-	recentGames, err := s.gameStore.ListRecentGames(context.Background(), 100)
+	openGames, err := s.gameStore.ListOpenGames(context.Background(), 100)
 	if err != nil {
-		t.Fatal("Could not get recent games:", err)
+		t.Fatal("Could not get open games:", err)
 	}
-	if len(recentGames) != 1 {
-		t.Errorf("Ongoing games: %d, want: 1", len(recentGames))
+	if len(openGames) != 1 {
+		t.Errorf("Open games: %d, want: 1", len(openGames))
 	}
 }
 

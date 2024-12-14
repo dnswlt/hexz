@@ -150,7 +150,7 @@ type GameStateResponse struct {
 	EncodedGameState []byte `json:"encodedGameState"`
 }
 
-// Used in responses to list active games (/hexz/gamez).
+// Used in responses to list open and active games (/hexz/opengames, /hexz/activegames).
 type GameInfo struct {
 	Id       string       `json:"id"`
 	Host     string       `json:"host"`

@@ -2,6 +2,7 @@ package hexzmem
 
 import (
 	"context"
+	"time"
 
 	"github.com/dnswlt/hexz/internal/api"
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
@@ -17,6 +18,15 @@ type PlayerStore interface {
 	Logout(ctx context.Context, playerId api.PlayerId) error
 }
 
+// GameInfo contains essential summary info about a game.
+// It is stored in serialized form for open and active games.
+type GameInfo struct {
+	Id       string
+	Host     string
+	Started  time.Time
+	GameType api.GameType
+}
+
 // GameStore is an interface for local or remote game stores, e.g. Redis.
 type GameStore interface {
 	// StoreNewGame stores a new game under a randomly chosen new game ID.
@@ -29,8 +39,10 @@ type GameStore interface {
 	// UpdateGame updates the game state for game ID s.GameInfo.Id.
 	// Existing states are overwritten unconditionally.
 	UpdateGame(ctx context.Context, state *pb.GameState) error
-	// ListRecentGames lists the limit most recently played games.
-	ListRecentGames(ctx context.Context, limit int) ([]*pb.GameInfo, error)
+	// ListOpenGames lists games that are waiting for more players to join.
+	ListOpenGames(ctx context.Context, limit int) ([]*GameInfo, error)
+	// ListActiveGames lists the limit most recently played games.
+	ListActiveGames(ctx context.Context, limit int) ([]*GameInfo, error)
 
 	// Publish publishes the given game event on the GameStore's pubsub topic.
 	Publish(ctx context.Context, pubsubId string, event *pb.GameStorePubsubEvent) error

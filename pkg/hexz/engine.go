@@ -306,6 +306,9 @@ func (g *GameRepr) PlayerNum(playerId string) int {
 
 func (g *GameRepr) AddPlayer(p *pb.Player) {
 	g.State().Players = append(g.State().Players, p)
+	if g.AllPlayersJoined() {
+		g.State().AllPlayersJoined = true
+	}
 }
 
 func (g *GameRepr) AllPlayersJoined() bool {

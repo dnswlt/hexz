@@ -311,8 +311,10 @@ func (s *StatelessServer) storeNewGameFromExisting(ctx context.Context, inputGam
 func (s *StatelessServer) startNewGame(r *http.Request, p *api.Player, gameType api.GameType, singlePlayer bool) (*GameRepr, error) {
 	engineState := NewGameEngine(gameType).Proto()
 	players := []*pb.Player{{Id: string(p.Id), Name: p.Name}}
+	allJoined := false
 	if singlePlayer {
 		players = append(players, &pb.Player{Id: "CPU", Name: "CPU"})
+		allJoined = true
 	}
 	cpuPlayerMode := pb.CPUPlayerMode_NONE
 	if singlePlayer {
@@ -328,9 +330,10 @@ func (s *StatelessServer) startNewGame(r *http.Request, p *api.Player, gameType 
 		},
 	}
 	gameState := &pb.GameState{
-		GameInfo:    gameInfo,
-		Players:     players,
-		EngineState: engineState,
+		GameInfo:         gameInfo,
+		Players:          players,
+		AllPlayersJoined: allJoined,
+		EngineState:      engineState,
 		UndoRedoState: &pb.GameState_UndoRedoState{
 			InitialState: engineState,
 		},
@@ -512,11 +515,11 @@ func (s *StatelessServer) handleHexz(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *StatelessServer) handleGamez(w http.ResponseWriter, r *http.Request) {
-	gameInfos, err := s.gameStore.ListRecentGames(r.Context(), 10)
+func (s *StatelessServer) handleOpenGames(w http.ResponseWriter, r *http.Request) {
+	gameInfos, err := s.gameStore.ListOpenGames(r.Context(), 10)
 	if err != nil {
-		http.Error(w, "list recent games", http.StatusInternalServerError)
-		hlog.Errorf("Cannot list recent games: %s", err)
+		http.Error(w, "list open games", http.StatusInternalServerError)
+		hlog.Errorf("Cannot list open games: %s", err)
 		return
 	}
 	resp := make([]*GameInfo, len(gameInfos))
@@ -524,8 +527,8 @@ func (s *StatelessServer) handleGamez(w http.ResponseWriter, r *http.Request) {
 		resp[i] = &GameInfo{
 			Id:       g.Id,
 			Host:     g.Host,
-			Started:  g.Started.AsTime(),
-			GameType: api.GameType(g.Type),
+			Started:  g.Started,
+			GameType: g.GameType,
 		}
 	}
 	json, err := json.Marshal(resp)
@@ -1309,7 +1312,7 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 
 	// GET method API
 	handleFunc("", s.handleHexz)
-	handleFunc("/gamez", s.handleGamez)
+	handleFunc("/opengames", s.handleOpenGames)
 	handleFunc("/view/{gameId}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, r.URL.Path+"/0", http.StatusTemporaryRedirect)
 	})

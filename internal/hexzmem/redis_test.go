@@ -18,6 +18,15 @@ var (
 	testRedisAddr = flag.String("test-redis-addr", "", "Address of Redis server used for integration tests")
 )
 
+type FakeClock struct {
+	now time.Time
+}
+
+func (c *FakeClock) Now() time.Time          { return c.now }
+func (c *FakeClock) SetNow(now time.Time)    { c.now = now }
+func (c *FakeClock) Advance(d time.Duration) { c.now = c.now.Add(d) }
+func NewFakeClock(now time.Time) *FakeClock  { return &FakeClock{now: now} }
+
 func TestGenerateGameId(t *testing.T) {
 	got := GenerateGameID()
 	if !regexp.MustCompile(`^[A-Z]{6}$`).MatchString(got) {
@@ -137,16 +146,19 @@ func TestRedisPubsub(t *testing.T) {
 	}
 }
 
-func TestRedisListRecentGamesCleanup(t *testing.T) {
+func TestRedisListOpenGamesCleanup(t *testing.T) {
+	// White-box test. Checks that old and deleted entries get purged.
 	if *testRedisAddr == "" {
 		t.Skip("Skipping integration test because -test-redis-addr is not set")
 	}
 	rc, err := NewRedisClient(&RedisClientConfig{
 		Addr:     *testRedisAddr,
 		LoginTTL: 24 * time.Hour,
-		GameTTL:  24 * time.Hour,
+		GameTTL:  12 * time.Hour,
 		DB:       1, // Use test DB
 	})
+	fakeClock := NewFakeClock(time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC))
+	rc.clock = fakeClock
 	if err != nil {
 		t.Fatal("Failed to connect to Redis: ", err)
 	}
@@ -156,13 +168,14 @@ func TestRedisListRecentGamesCleanup(t *testing.T) {
 	if err := rc.client.FlushDB(ctx).Err(); err != nil {
 		t.Fatal("Failed to flush Redis DB: ", err)
 	}
-	started := tpb.Now()
-	for i := 0; i < 110; i++ {
+	started := rc.clock.Now()
+	// Add one game every hour, 24 hours.
+	for i := 0; i < 24; i++ {
 		gameId := fmt.Sprintf("%d", i)
 		gameState := &pb.GameState{
 			GameInfo: &pb.GameInfo{
 				Id:      gameId,
-				Started: started,
+				Started: tpb.New(started.Add(time.Duration(i) * time.Hour)),
 			},
 		}
 		err := rc.StoreNewGame(ctx, gameState)
@@ -170,30 +183,37 @@ func TestRedisListRecentGamesCleanup(t *testing.T) {
 			t.Fatal("Failed to store game: ", err)
 		}
 	}
-	games, err := rc.ListRecentGames(ctx, 10)
+	// Advance the clock by 24h and list open games. Only the last 11 should be returned.
+	fakeClock.Advance(time.Duration(24) * time.Hour)
+	games, err := rc.ListOpenGames(ctx, 24)
 	if err != nil {
 		t.Fatal("Failed to list recent games: ", err)
 	}
-	if len(games) != 10 {
-		t.Errorf("Want %d games, got %d", 10, len(games))
+	wantGames := 11
+	if len(games) != wantGames {
+		t.Errorf("Want %d games, got %d", wantGames, len(games))
 	}
-	// We only want 20 games in the list now (2*limit). White-box test.
-	n, _ := rc.client.ZCard(ctx, "/recentgames").Result()
-	if n != 20 {
-		t.Errorf("Want %d games in recent games list, got %d", 20, n)
+	// We only want 12 games in the /opengames set now in Redis.
+	n, _ := rc.client.ZCard(ctx, "/opengames").Result()
+	if n != int64(wantGames) {
+		t.Errorf("Want %d games in /opengames set, got %d", wantGames, n)
 	}
 }
 
-func TestRedisListRecentGamesTTL(t *testing.T) {
+func TestRedisListOpenGamesSkipActive(t *testing.T) {
+	// White-box test.
+	// Checks that games that have become active in the meantime are not returned as open games.
 	if *testRedisAddr == "" {
 		t.Skip("Skipping integration test because -test-redis-addr is not set")
 	}
 	rc, err := NewRedisClient(&RedisClientConfig{
 		Addr:     *testRedisAddr,
 		LoginTTL: 24 * time.Hour,
-		GameTTL:  24 * time.Hour,
+		GameTTL:  12 * time.Hour,
 		DB:       1, // Use test DB
 	})
+	fakeClock := NewFakeClock(time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC))
+	rc.clock = fakeClock
 	if err != nil {
 		t.Fatal("Failed to connect to Redis: ", err)
 	}
@@ -203,18 +223,64 @@ func TestRedisListRecentGamesTTL(t *testing.T) {
 	if err := rc.client.FlushDB(ctx).Err(); err != nil {
 		t.Fatal("Failed to flush Redis DB: ", err)
 	}
-	now := time.Now()
-	started := []*tpb.Timestamp{
-		tpb.New(now),
-		tpb.New(now.Add(-1 * time.Minute)),
-		tpb.New(now.Add(-48 * time.Hour)),
+	started := rc.clock.Now()
+	gameState := &pb.GameState{
+		GameInfo: &pb.GameInfo{
+			Id:      "game",
+			Started: tpb.New(started),
+		},
 	}
-	for i, st := range started {
+	if err := rc.StoreNewGame(ctx, gameState); err != nil {
+		t.Fatal("Failed to store game: ", err)
+	}
+	// Mark the game as active:
+	gameState.AllPlayersJoined = true
+	rc.UpdateGame(ctx, gameState)
+	games, err := rc.ListOpenGames(ctx, 1)
+	if err != nil {
+		t.Fatal("Failed to list recent games: ", err)
+	}
+	if len(games) != 0 {
+		t.Fatalf("Want 0 games, got %d", len(games))
+	}
+	n, _ := rc.client.ZCard(ctx, "/opengames").Result()
+	if n != 0 {
+		t.Errorf("Want %d games in /opengames set, got %d", 0, n)
+	}
+}
+
+func TestRedisListOpenGamesSkipDeleted(t *testing.T) {
+	// Checks that deleted games are not returned as open games.
+	if *testRedisAddr == "" {
+		t.Skip("Skipping integration test because -test-redis-addr is not set")
+	}
+	rc, err := NewRedisClient(&RedisClientConfig{
+		Addr:     *testRedisAddr,
+		LoginTTL: 24 * time.Hour,
+		GameTTL:  12 * time.Hour,
+		DB:       1, // Use test DB
+	})
+	fakeClock := NewFakeClock(time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC))
+	rc.clock = fakeClock
+	if err != nil {
+		t.Fatal("Failed to connect to Redis: ", err)
+	}
+	defer rc.client.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := rc.client.FlushDB(ctx).Err(); err != nil {
+		t.Fatal("Failed to flush Redis DB: ", err)
+	}
+	started := rc.clock.Now()
+	// Add one game every hour, 24 hours.
+	var gameIds []string
+	for i := 0; i < 24; i++ {
 		gameId := fmt.Sprintf("%d", i)
+		gameIds = append(gameIds, gameId)
 		gameState := &pb.GameState{
 			GameInfo: &pb.GameInfo{
 				Id:      gameId,
-				Started: st,
+				Started: tpb.New(started.Add(time.Duration(i) * time.Hour)),
 			},
 		}
 		err := rc.StoreNewGame(ctx, gameState)
@@ -222,19 +288,20 @@ func TestRedisListRecentGamesTTL(t *testing.T) {
 			t.Fatal("Failed to store game: ", err)
 		}
 	}
-	// The third game should be ignored, since its TTL is expired.
-	games, err := rc.ListRecentGames(ctx, 3)
+	// Delete the last game that was added.
+	if err := rc.DeleteGame(ctx, gameIds[len(gameIds)-1]); err != nil {
+		t.Fatalf("Could not delete game %s: %v", gameIds[len(gameIds)-1], err)
+	}
+	// Advance the clock by 24h and list open games. Only the last 10 should be returned.
+	fakeClock.Advance(time.Duration(24) * time.Hour)
+	games, err := rc.ListOpenGames(ctx, 1)
 	if err != nil {
 		t.Fatal("Failed to list recent games: ", err)
 	}
-	if len(games) != 2 {
-		t.Errorf("Want %d games, got %d", 2, len(games))
+	if len(games) != 1 {
+		t.Fatalf("Want 1 game, got %d", len(games))
 	}
-	// Want them in descending order of .Started time:
-	if games[0].Started.AsTime() != started[0].AsTime() {
-		t.Errorf("Want game 0 to be %v, got %v", started[0], games[0].Started)
-	}
-	if games[1].Started.AsTime() != started[1].AsTime() {
-		t.Errorf("Want game 0 to be %v, got %v", started[1], games[1].Started)
+	if games[0].Id != gameIds[len(gameIds)-2] {
+		t.Errorf("ListOpenGames returned wrong gameId: want %s, got %s", gameIds[len(gameIds)-2], games[0].Id)
 	}
 }

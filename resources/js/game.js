@@ -712,12 +712,12 @@ function sendWASMWorkerMoveRequest() {
     })
 }
 
-async function getActiveGames(joingameDivId) {
-    const resp = await fetch(`${URL_PREFIX}/gamez`);
+async function getOpenGames(joingameDivId) {
+    const resp = await fetch(`${URL_PREFIX}/opengames`);
     const games = await resp.json();
     const div = document.getElementById(joingameDivId);
     if (!div) {
-        console.error(`getActiveGames: no element with ID ${joingameDivId}`);
+        console.error(`getOpenGames: no element with ID ${joingameDivId}`);
         return;
     }
     if (games && games.length > 0) {

@@ -16,10 +16,12 @@ func mk(cp int) *pb.ModelKey {
 
 func TestBradleyTerry(t *testing.T) {
 	tests := []struct {
+		name    string
 		results []*npb.BenchmarkResult
 		want    []*Rating
 	}{
 		{
+			name: "2 players, 2-1 results",
 			results: []*npb.BenchmarkResult{
 				{
 					Games:    3,
@@ -33,18 +35,19 @@ func TestBradleyTerry(t *testing.T) {
 					Games:  3,
 					Wins:   2,
 					Draws:  0,
-					Rating: 2.0 / 3,
+					Rating: 1.2896,
 				},
 				{
 					Key:    mk(2),
 					Games:  3,
 					Wins:   1,
 					Draws:  0,
-					Rating: 1.0 / 3,
+					Rating: 0.7754,
 				},
 			},
 		},
 		{
+			name: "3 players, 2-1 result chain",
 			results: []*npb.BenchmarkResult{
 				{
 					Games:    3,
@@ -63,33 +66,38 @@ func TestBradleyTerry(t *testing.T) {
 					Games:  3,
 					Wins:   2,
 					Draws:  0,
-					Rating: 0.571428,
+					Rating: 1.5,
 				},
 				{
 					Key:    mk(2),
 					Games:  6,
 					Wins:   3,
 					Draws:  0,
-					Rating: 0.285714,
+					Rating: 1.0,
 				},
 				{
 					Key:    mk(3),
 					Games:  3,
 					Wins:   1,
 					Draws:  0,
-					Rating: 0.142857,
+					Rating: 0.6667,
 				},
 			},
 		},
 	}
 	for _, tc := range tests {
-		ratings := BradleyTerry(tc.results)
-		if len(ratings) != len(tc.want) {
-			t.Fatalf("Wrong number of ratings: want %d, got %d", len(tc.want), len(ratings))
-		}
-		if diff := cmp.Diff(tc.want, ratings, cmpopts.EquateApprox(1e-3, 1e-3), protocmp.Transform()); diff != "" {
-			t.Errorf("Wrong model in position 0 (-want +got): %v", diff)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			ratings, err := BradleyTerry(tc.results)
+			if err != nil {
+				t.Fatalf("BradleyTerry error: %v", err)
+			}
+			if len(ratings) != len(tc.want) {
+				t.Fatalf("Wrong number of ratings: want %d, got %d", len(tc.want), len(ratings))
+			}
+			if diff := cmp.Diff(tc.want, ratings, cmpopts.EquateApprox(1e-3, 1e-3), protocmp.Transform()); diff != "" {
+				t.Errorf("Wrong model in position 0 (-want +got): %v", diff)
+			}
+		})
 	}
 }
 
@@ -142,7 +150,10 @@ func TestBradleyTerryRatings(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ratings := BradleyTerry(tc.results)
+			ratings, err := BradleyTerry(tc.results)
+			if err != nil {
+				t.Fatalf("BradleyTerry error: %v", err)
+			}
 			if len(ratings) != len(tc.want) {
 				t.Fatalf("Wrong number of ratings: want %d, got %d", len(tc.want), len(ratings))
 			}

@@ -13,10 +13,9 @@ import (
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// When run as a standalone app, we can store all logged in users
-// in memory and sporadically dump the list to disk.
+// When run as a standalone app, we can store all logged in users.
 // When running as a container, we can't do that, so we need to
-// store logins in some external storage.
+// store logins in some external storage (Redis).
 
 const (
 	maxLoggedInPlayers = 10000
@@ -195,7 +194,7 @@ func (s *InMemoryGameStore) UpdateGame(ctx context.Context, state *pb.GameState)
 	return nil
 }
 
-func (s *InMemoryGameStore) ListRecentGames(ctx context.Context, limit int) ([]*pb.GameInfo, error) {
+func (s *InMemoryGameStore) listGames(limit int, accept func(*pb.GameState) bool) ([]*GameInfo, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 	s.deleteOldGames()
@@ -203,12 +202,36 @@ func (s *InMemoryGameStore) ListRecentGames(ctx context.Context, limit int) ([]*
 	if limit > l {
 		limit = l
 	}
-	infos := []*pb.GameInfo{}
-	for i := 0; i < limit; i++ {
-		id := s.gameStatesSeq[l-i-1]
-		infos = append(infos, s.gameStates[id].gameState.GetGameInfo())
+	var infos []*GameInfo
+	for i := l - 1; i >= 0; i-- {
+		id := s.gameStatesSeq[i]
+		e := s.gameStates[id]
+		if accept(e.gameState) {
+			gi := e.gameState.GetGameInfo()
+			infos = append(infos, &GameInfo{
+				Id:       gi.Id,
+				Host:     gi.Host,
+				Started:  gi.Started.AsTime(),
+				GameType: api.GameType(gi.Type),
+			})
+		}
+		if len(infos) >= limit {
+			break
+		}
 	}
 	return infos, nil
+}
+
+func (s *InMemoryGameStore) ListOpenGames(ctx context.Context, limit int) ([]*GameInfo, error) {
+	return s.listGames(limit, func(gs *pb.GameState) bool {
+		return !gs.AllPlayersJoined
+	})
+}
+
+func (s *InMemoryGameStore) ListActiveGames(ctx context.Context, limit int) ([]*GameInfo, error) {
+	return s.listGames(limit, func(gs *pb.GameState) bool {
+		return gs.AllPlayersJoined
+	})
 }
 
 func (s *InMemoryGameStore) Publish(ctx context.Context, pubsubId string, event *pb.GameStorePubsubEvent) error {

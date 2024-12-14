@@ -38,8 +38,8 @@
 
     <div id="joingame">
         <h1 class="center">Join a game</h1>
-        <div class="centered" id="activeGames">
-            <table id="activeGamesTable">
+        <div class="centered">
+            <table>
                 <thead>
                     <tr>
                         <th>Game</th>
@@ -61,7 +61,7 @@
     </div>
     <script src="{{.URLPathPrefix}}/static/js/game.js?v={{.VCSRevision}}"></script>
     <script>
-        getActiveGames("joingame");
+        getOpenGames("joingame");
     </script>
 
 </body>

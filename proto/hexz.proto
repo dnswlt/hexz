@@ -83,6 +83,9 @@ message GameState {
     google.protobuf.Timestamp modified = 2;
     // Players in this game, in the order they joined.
     repeated Player players = 3;
+    // Flag indicating whether this game is still waiting for more players to join.
+    bool all_players_joined = 6;
+
     GameEngineState engine_state = 4;
 
     message UndoRedoState {
