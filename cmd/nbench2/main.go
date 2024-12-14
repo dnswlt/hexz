@@ -199,34 +199,50 @@ func printEloRatings(statsFile string) {
 	}
 }
 
+func countsFromStatsFile(statsFile string) (map[string]int, error) {
+	// Choose model keys randomly, proportional to the inverse number of times they were used previously.
+	counts := make(map[string]int)
+	// Increase weights based on number of games the model was used in.
+	results, err := elo.ReadResults(statsFile)
+	if err != nil {
+		return nil, fmt.Errorf("invalid stats file: %v", err)
+	}
+	for _, r := range results {
+		k1 := r.P1Result.ModelKey
+		k2 := r.P2Result.ModelKey
+		counts[fmt.Sprintf("%s:%d", k1.Name, k1.Checkpoint)] += int(r.Games)
+		if !proto.Equal(k1, k2) {
+			counts[fmt.Sprintf("%s:%d", k2.Name, k2.Checkpoint)] += int(r.Games)
+		}
+	}
+	return counts, nil
+}
+
 func chooseModels(args *CLIArgs) (string, string, error) {
 	if args.ModelKey1 != "" {
+		// Explicitly selected models.
 		return args.ModelKey1, args.ModelKey2, nil
 	}
 	if len(args.ModelKeys) == 0 {
 		return "", "", fmt.Errorf("no models to choose from")
 	}
-	if len(args.ModelKeys) == 1 && args.ModelKeys[0] != "any" {
-		return args.ModelKeys[0], args.ModelKeys[0], nil
+	if len(args.ModelKeys) == 1 {
+		if args.ModelKeys[0] != "any" {
+			return args.ModelKeys[0], args.ModelKeys[0], nil
+		}
+		if args.StatsFile == "" {
+			return "", "", fmt.Errorf("must specify --stats-file when using --keys=any")
+		}
 	}
-	// Choose model keys randomly, proportional to the inverse number of times they were used previously.
 	counts := make(map[string]int)
 	if args.StatsFile != "" {
-		// Increase weights based on number of games the model was used in.
-		results, err := elo.ReadResults(args.StatsFile)
+		var err error
+		counts, err = countsFromStatsFile(args.StatsFile)
 		if err != nil {
-			return "", "", fmt.Errorf("invalid stats file: %v", err)
-		}
-		for _, r := range results {
-			k1 := r.P1Result.ModelKey
-			k2 := r.P2Result.ModelKey
-			counts[fmt.Sprintf("%s:%d", k1.Name, k1.Checkpoint)] += int(r.Games)
-			if !proto.Equal(k1, k2) {
-				counts[fmt.Sprintf("%s:%d", k2.Name, k2.Checkpoint)] += int(r.Games)
-			}
+			return "", "", err
 		}
 		if args.ModelKeys[0] == "any" {
-			args.ModelKeys = make([]string, len(counts))
+			args.ModelKeys = make([]string, 0, len(counts))
 			for k := range counts {
 				args.ModelKeys = append(args.ModelKeys, k)
 			}
@@ -259,6 +275,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not choose model keys: %v", err)
 	}
+	log.Printf("Using model keys %v - %v", modelKey1, modelKey2)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
