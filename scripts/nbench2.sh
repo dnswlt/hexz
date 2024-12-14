@@ -20,8 +20,7 @@ model_repo="$HOME/tmp/hexz-models"
 
 go run ./cmd/nbench2 \
     -model-repo "$model_repo" \
-    -key1 "$model_name:$1" \
-    -key2 "$model_name:$2" \
+    -keys any \
     -games $num_games \
     -both-sides \
     -iterations $iterations \
