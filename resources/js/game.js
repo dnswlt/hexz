@@ -723,6 +723,7 @@ async function loadGames(div, urlSuffix) {
         div.style.display = "block";
     }
     const tbody = div.querySelector("table.gamelist > tbody");
+    tbody.replaceChildren();
     for (const g of games) {
         tbody.insertAdjacentHTML("beforeend",
             `<tr>
