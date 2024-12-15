@@ -886,12 +886,11 @@ func (s *StatelessServer) handleUndoRedo(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Failed to undo/redo", http.StatusInternalServerError)
 		return
 	}
-	if err := s.gameStore.UpdateGame(r.Context(), g.State()); err != nil {
+	if err := s.storeGameAndNotify(r.Context(), action, g); err != nil {
 		http.Error(w, "failed to save game state", http.StatusInternalServerError)
-		hlog.Errorf("Could not store game %s: %s", q.gameId, err)
+		hlog.Errorf("Could not store game %s: %v", q.gameId, err)
 		return
 	}
-	s.storeGameAndNotify(r.Context(), action, g)
 }
 
 func (s *StatelessServer) handleGameSettings(w http.ResponseWriter, r *http.Request) {

@@ -186,13 +186,18 @@ func (c *RedisClient) storeActiveGame(ctx context.Context, s *pb.GameState) erro
 
 func (c *RedisClient) refreshGameTTLs(ctx context.Context, s *pb.GameState) error {
 	var err error
-	err = c.client.ZAddXX(ctx, "/activegames", redis.Z{
-		Score:  float64(s.Modified.Seconds),
-		Member: s.GameInfo.Id,
-	}).Err()
-	if err != nil {
-		return fmt.Errorf("failed to update TTL in /activegames for %s: %v", s.GameInfo.Id, err)
+	if s.AllPlayersJoined {
+		// Active game. Always ZADD, it might not yet exist.
+		err = c.client.ZAdd(ctx, "/activegames", redis.Z{
+			Score:  float64(s.Modified.Seconds),
+			Member: s.GameInfo.Id,
+		}).Err()
+		if err != nil {
+			return fmt.Errorf("failed to update TTL in /activegames for %s: %v", s.GameInfo.Id, err)
+		}
+		return nil
 	}
+	// Open game. Only ZADD XX (if exists), a new game is always stored on creation.
 	err = c.client.ZAddXX(ctx, "/opengames", redis.Z{
 		Score:  float64(s.Modified.Seconds),
 		Member: s.GameInfo.Id,

@@ -4,13 +4,8 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
-	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"path/filepath"
-	"regexp"
-	"strings"
 	"testing"
 	"time"
 
@@ -19,14 +14,10 @@ import (
 	"github.com/dnswlt/hexz/pkg/hexzpb"
 )
 
-const (
-	testPlayerId   = "testId"
-	testPlayerName = "tester"
-)
-
 var (
 	// This is typically going to be postgres://hexz_test:hexz_test@localhost:5432/hexz_test
-	postgresTestURL = flag.String("test-postgres-url", "", "URL to PostgreSQL DB for integration tests")
+	testPostgresURL = flag.String("test-postgres-url", "", "URL to PostgreSQL DB for integration tests")
+	testRedisAddr   = flag.String("test-redis-addr", "", "Address of the (e.g. \"localhost:6379\") for integration tests")
 )
 
 func testServerConfig(t *testing.T) *ServerConfig {
@@ -41,6 +32,8 @@ func testServerConfig(t *testing.T) *ServerConfig {
 		LoginTTL:          24 * time.Hour, // By default, don't auto-log out players in tests.
 		InactivityTimeout: 1 * time.Hour,
 		CPUPlayerMode:     hexzpb.CPUPlayerMode_EMBEDDED_CPU,
+		RedisAddr:         *testRedisAddr,
+		PostgresURL:       *testPostgresURL,
 	}
 }
 
@@ -108,37 +101,143 @@ func TestHandleNewGame(t *testing.T) {
 	if err != nil {
 		t.Fatal("Could not create server:", err)
 	}
-	if err := s.playerStore.Login(context.Background(), testPlayerId, testPlayerName); err != nil {
-		t.Error("Cannot log in test player: ", err)
-	}
-	w := httptest.NewRecorder()
-	// Create request with login form parameters.
-	form := url.Values{}
-	form.Add("type", string(gameTypeFlagz))
-	// form.Add("singlePlayer", "true")
-	r := httptest.NewRequest(http.MethodPost, "/hexz/new", strings.NewReader(form.Encode()))
-	r.AddCookie(s.makePlayerCookie(testPlayerId, 24*time.Hour))
-	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	testServer := httptest.NewServer(s.createMux())
+	defer testServer.Close()
 
-	s.handleNewGame(w, r)
+	c, err := newHexzTestClient(testServer.URL)
+	if err != nil {
+		t.Fatalf("could not create client: %s", err)
+	}
+	// Log in.
+	if err := c.login("testuser"); err != nil {
+		t.Fatal(err)
+	}
+	// Start a new single player game.
+	if _, err := c.newFlagzGame(true); err != nil {
+		t.Fatal(err)
+	}
+}
 
-	// Expect a redirect to /hexz/{gameId}
-	resp := w.Result()
-	want := http.StatusSeeOther
-	if resp.StatusCode != want {
-		msg, _ := io.ReadAll(resp.Body)
-		t.Errorf("Want: %s, got: %s %q", http.StatusText(want), resp.Status, msg)
+func TestListActiveGames1P(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Don't run http tests in -short mode.")
 	}
-	loc := resp.Header.Get("Location")
-	if pattern := `/hexz/[A-Z]{6}`; !regexp.MustCompile(pattern).MatchString(loc) {
-		t.Errorf("Wrong Location header: want: %s, got: %q", pattern, loc)
+	cfg := testServerConfig(t)
+	s, err := newTestStatelessServer(t, cfg)
+	if err != nil {
+		t.Fatal("Could not create server:", err)
 	}
+	testServer := httptest.NewServer(s.createMux())
+	defer testServer.Close()
+
+	c, err := newHexzTestClient(testServer.URL)
+	if err != nil {
+		t.Fatalf("could not create client: %s", err)
+	}
+	// Log in.
+	if err := c.login("testuser"); err != nil {
+		t.Fatal(err)
+	}
+	// Start a new single player game.
+	if _, err := c.newFlagzGame(true); err != nil {
+		t.Fatal(err)
+	}
+	// Should not be listed under open games: it's 1P.
 	openGames, err := s.gameStore.ListOpenGames(context.Background(), 100)
+	if err != nil {
+		t.Fatal("Could not get active games:", err)
+	}
+	if len(openGames) != 0 {
+		t.Errorf("Open games: %d, want: 0", len(openGames))
+	}
+	// Should be listed under active games immediately.
+	activeGames, err := s.gameStore.ListActiveGames(context.Background(), 100)
+	if err != nil {
+		t.Fatal("Could not get active games:", err)
+	}
+	if len(activeGames) != 1 {
+		t.Errorf("Open games: %d, want: 1", len(activeGames))
+	}
+}
+
+func TestListActiveGames2P(t *testing.T) {
+	// Starts a 2 player game. Expects the game to appear as an open game after creation,
+	// and as an active game after the second player joined.
+	if testing.Short() {
+		t.Skip("Don't run http tests in -short mode.")
+	}
+	cfg := testServerConfig(t)
+	s, err := newTestStatelessServer(t, cfg)
+	if err != nil {
+		t.Fatal("Could not create server:", err)
+	}
+	testServer := httptest.NewServer(s.createMux())
+	defer testServer.Close()
+
+	c, err := newHexzTestClient(testServer.URL)
+	if err != nil {
+		t.Fatalf("could not create client: %s", err)
+	}
+	// Log in.
+	if err := c.login("testuser"); err != nil {
+		t.Fatal(err)
+	}
+	// Start a new single player game.
+	if _, err := c.newFlagzGame(false); err != nil {
+		t.Fatal(err)
+	}
+	// Should be listed under open games: it's 1P.
+	openGames, err := c.openGames()
 	if err != nil {
 		t.Fatal("Could not get open games:", err)
 	}
 	if len(openGames) != 1 {
-		t.Errorf("Open games: %d, want: 1", len(openGames))
+		t.Fatalf("Open games: %d, want: 1", len(openGames))
+	}
+	// Should not be listed under active games immediately.
+	activeGames, err := c.activeGames()
+	if err != nil {
+		t.Fatal("Could not get active games:", err)
+	}
+	if len(activeGames) != 0 {
+		t.Errorf("Active games: %d, want: 0", len(activeGames))
+	}
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	defer cancel1()
+	_, err = c.receiveEvents(ctx1, testServer.URL+"/hexz/sse/"+openGames[0].Id)
+	if err != nil {
+		t.Fatalf("Could not receive events for P1: %v", err)
+	}
+	// Second player joins.
+	c2, err := newHexzTestClient(testServer.URL)
+	if err != nil {
+		t.Fatalf("could not create 2nd client: %s", err)
+	}
+	if err := c2.login("testuser_2"); err != nil {
+		t.Fatal(err)
+	}
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+	_, err = c2.receiveEvents(ctx2, testServer.URL+"/hexz/sse/"+openGames[0].Id)
+	if err != nil {
+		t.Fatalf("Could not receive events for P2: %v", err)
+	}
+
+	// Now the game should no longer be open.
+	openGames, err = c.openGames()
+	if err != nil {
+		t.Fatal("Could not get open games:", err)
+	}
+	if len(openGames) != 0 {
+		t.Fatalf("Open games: %d, want: 0", len(openGames))
+	}
+	// Should now be listed under active games.
+	activeGames, err = c.activeGames()
+	if err != nil {
+		t.Fatal("Could not get active games:", err)
+	}
+	if len(activeGames) != 1 {
+		t.Errorf("Active games: %d, want: 1", len(activeGames))
 	}
 }
 
@@ -191,11 +290,10 @@ func receiveBoards(ctx context.Context, eventCh <-chan tcServerEvent) <-chan *Bo
 }
 
 func TestHistoryDatabase(t *testing.T) {
-	if *postgresTestURL == "" {
+	if *testPostgresURL == "" {
 		t.Skip("--test-postgres-url is not set, skipping database integration test")
 	}
 	cfg := testServerConfig(t)
-	cfg.PostgresURL = *postgresTestURL
 	cfg.CpuThinkTime = 1 * time.Millisecond // We want a fast test, not smart moves.
 	srv, err := newTestStatelessServer(t, cfg)
 	if err != nil {

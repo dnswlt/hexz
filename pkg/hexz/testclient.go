@@ -48,7 +48,7 @@ func (c *HexzTestClient) login(name string) error {
 }
 
 // newFlagzGame (somewhat unsurprisingly) starts a new Flagz game.
-func (c *HexzTestClient) newFlagzGame(singlePlayer bool) (gameId string, err error) {
+func (c *HexzTestClient) newFlagzGame(singlePlayer bool) (gameID string, err error) {
 	newGameForm := url.Values{}
 	newGameForm.Add("type", string(gameTypeFlagz))
 	newGameForm.Add("singlePlayer", strconv.FormatBool(singlePlayer))
@@ -64,7 +64,11 @@ func (c *HexzTestClient) newFlagzGame(singlePlayer bool) (gameId string, err err
 	if i == -1 {
 		return "", fmt.Errorf("response URL path has no game ID: %s", p)
 	}
-	return p[i+1:], nil
+	gameID = p[i+1:]
+	if !isValidGameId(gameID) {
+		return "", fmt.Errorf("invalid game ID: %q", gameID)
+	}
+	return
 }
 
 func (c *HexzTestClient) makeMove(gameId string, m *MoveRequest) error {
@@ -139,12 +143,34 @@ func (c *HexzTestClient) history(gameId string) (*GameHistoryResponse, error) {
 		return nil, fmt.Errorf("cannot get history: %s", historyResp.Status)
 	}
 	defer historyResp.Body.Close()
-	dec := json.NewDecoder(historyResp.Body)
 	var hist *GameHistoryResponse
-	if err := dec.Decode(&hist); err != nil {
+	if err := json.NewDecoder(historyResp.Body).Decode(&hist); err != nil {
 		return nil, fmt.Errorf("cannot unmarshal %T: %s", hist, err)
 	}
 	return hist, nil
+}
+
+func (c *HexzTestClient) fetchGameInfos(urlSuffix string) ([]*GameInfo, error) {
+	resp, err := c.client.Get(fmt.Sprintf("%s/hexz/%s", c.serverURL, urlSuffix))
+	if err != nil {
+		return nil, fmt.Errorf("cannot get %s: %v", urlSuffix, err)
+	}
+	defer resp.Body.Close()
+	hist := []*GameInfo{}
+	if err := json.NewDecoder(resp.Body).Decode(&hist); err != nil {
+		return nil, fmt.Errorf("cannot unmarshal %T: %s", hist, err)
+	}
+	return hist, nil
+
+}
+
+func (c *HexzTestClient) activeGames() ([]*GameInfo, error) {
+	return c.fetchGameInfos("activegames")
+}
+
+func (c *HexzTestClient) openGames() ([]*GameInfo, error) {
+	return c.fetchGameInfos("opengames")
+
 }
 
 // Test client server event. Used to signal SSE errors back to clients.
@@ -155,8 +181,8 @@ type tcServerEvent struct {
 }
 
 // Establishes a SSE connection with the given URL and sends the "data:" part
-// of each event through the returned channel. Clients should close the done channel
-// to abort the SSE connection.
+// of each event through the returned channel.
+// Clients should cancel the context to abort the SSE connection.
 func (c *HexzTestClient) receiveEvents(ctx context.Context, url string) (<-chan tcServerEvent, error) {
 	ch := make(chan tcServerEvent)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
