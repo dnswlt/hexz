@@ -185,16 +185,19 @@ func (c *RedisClient) storeActiveGame(ctx context.Context, s *pb.GameState) erro
 }
 
 func (c *RedisClient) refreshGameTTLs(ctx context.Context, s *pb.GameState) error {
-	if err := c.client.ZAddXX(ctx, "/activegames", redis.Z{
+	var err error
+	err = c.client.ZAddXX(ctx, "/activegames", redis.Z{
 		Score:  float64(s.Modified.Seconds),
 		Member: s.GameInfo.Id,
-	}); err != nil {
+	}).Err()
+	if err != nil {
 		return fmt.Errorf("failed to update TTL in /activegames for %s: %v", s.GameInfo.Id, err)
 	}
-	if err := c.client.ZAddXX(ctx, "/opengames", redis.Z{
+	err = c.client.ZAddXX(ctx, "/opengames", redis.Z{
 		Score:  float64(s.Modified.Seconds),
 		Member: s.GameInfo.Id,
-	}); err != nil {
+	}).Err()
+	if err != nil {
 		return fmt.Errorf("failed to update TTL in /opengames for %s: %v", s.GameInfo.Id, err)
 	}
 	return nil

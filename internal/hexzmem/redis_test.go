@@ -147,7 +147,6 @@ func TestRedisPubsub(t *testing.T) {
 }
 
 func TestRedisListOpenGamesCleanup(t *testing.T) {
-	*testRedisAddr = "localhost:6379"
 	// White-box test. Checks that old and deleted entries get purged.
 	if *testRedisAddr == "" {
 		t.Skip("Skipping integration test because -test-redis-addr is not set")
@@ -235,7 +234,9 @@ func TestRedisListOpenGamesSkipActive(t *testing.T) {
 	}
 	// Mark the game as active:
 	gameState.AllPlayersJoined = true
-	rc.UpdateGame(ctx, gameState)
+	if err := rc.UpdateGame(ctx, gameState); err != nil {
+		t.Fatalf("Failed to update game: %v", err)
+	}
 	games, err := rc.ListOpenGames(ctx, 1)
 	if err != nil {
 		t.Fatal("Failed to list recent games: ", err)
@@ -303,5 +304,45 @@ func TestRedisListOpenGamesSkipDeleted(t *testing.T) {
 	}
 	if games[0].Id != gameIds[len(gameIds)-2] {
 		t.Errorf("ListOpenGames returned wrong gameId: want %s, got %s", gameIds[len(gameIds)-2], games[0].Id)
+	}
+}
+
+func TestRedisUpdateGameState(t *testing.T) {
+	// White-box test.
+	// Checks that games that have become active in the meantime are not returned as open games.
+	if *testRedisAddr == "" {
+		t.Skip("Skipping integration test because -test-redis-addr is not set")
+	}
+	rc, err := NewRedisClient(&RedisClientConfig{
+		Addr:     *testRedisAddr,
+		LoginTTL: 24 * time.Hour,
+		GameTTL:  12 * time.Hour,
+		DB:       1, // Use test DB
+	})
+	fakeClock := NewFakeClock(time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC))
+	rc.clock = fakeClock
+	if err != nil {
+		t.Fatal("Failed to connect to Redis: ", err)
+	}
+	defer rc.client.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := rc.client.FlushDB(ctx).Err(); err != nil {
+		t.Fatal("Failed to flush Redis DB: ", err)
+	}
+	started := rc.clock.Now()
+	gameState := &pb.GameState{
+		GameInfo: &pb.GameInfo{
+			Id:      "game",
+			Started: tpb.New(started),
+		},
+	}
+	if err := rc.StoreNewGame(ctx, gameState); err != nil {
+		t.Fatal("Failed to store game: ", err)
+	}
+	// Mark the game as active:
+	gameState.AllPlayersJoined = true
+	if err := rc.UpdateGame(ctx, gameState); err != nil {
+		t.Fatalf("Failed to update game: %v", err)
 	}
 }
