@@ -31,6 +31,7 @@ type InMemoryPlayerStore struct {
 	mut         sync.Mutex
 	loginTTL    time.Duration // How long a login is valid.
 	lastCleanup time.Time
+	clock       Clock
 }
 
 // Creates a new in-memory player store and loads the player DB from the given file.
@@ -39,6 +40,7 @@ func NewInMemoryPlayerStore(loginTTL time.Duration) (*InMemoryPlayerStore, error
 	s := &InMemoryPlayerStore{
 		players:  make(map[api.PlayerId]*api.Player),
 		loginTTL: loginTTL,
+		clock:    &RealClock{},
 	}
 	return s, nil
 }
@@ -47,8 +49,8 @@ func (s *InMemoryPlayerStore) Lookup(ctx context.Context, playerId api.PlayerId)
 	s.mut.Lock()
 	defer s.mut.Unlock()
 	// Clean up periodically.
-	if time.Since(s.lastCleanup) > 1*time.Minute {
-		now := time.Now()
+	if s.clock.Now().Sub(s.lastCleanup) > 1*time.Minute {
+		now := s.clock.Now()
 		for pId, p := range s.players {
 			if now.Sub(p.LastActive) > s.loginTTL {
 				delete(s.players, pId)
@@ -60,7 +62,7 @@ func (s *InMemoryPlayerStore) Lookup(ctx context.Context, playerId api.PlayerId)
 	if !ok {
 		return api.Player{}, errPlayerNotFound
 	}
-	p.LastActive = time.Now()
+	p.LastActive = s.clock.Now()
 	return *p, nil
 }
 
@@ -73,7 +75,7 @@ func (s *InMemoryPlayerStore) Login(ctx context.Context, playerId api.PlayerId, 
 	s.players[playerId] = &api.Player{
 		Id:         playerId,
 		Name:       name,
-		LastActive: time.Now(),
+		LastActive: s.clock.Now(),
 	}
 	return nil
 }
@@ -99,43 +101,48 @@ var (
 // gameplay.
 type InMemoryGameStore struct {
 	gameTTL    time.Duration // How long a game is kept in memory.
-	gameStates map[string]*gameStoreEntry
+	gameStates map[string]*pb.GameState
 	// Sequence of game IDs. Used to list the most recent games.
 	gameStatesSeq []string
 	mut           sync.Mutex
 	gamePubsubMap map[string]string
 	subscribers   map[string][]chan<- *pb.GameStorePubsubEvent
-}
-
-type gameStoreEntry struct {
-	gameState *pb.GameState
-	created   time.Time
+	clock         Clock
 }
 
 func NewInMemoryGameStore(gameTTL time.Duration) *InMemoryGameStore {
 	return &InMemoryGameStore{
 		gameTTL:       gameTTL,
-		gameStates:    make(map[string]*gameStoreEntry),
+		gameStates:    make(map[string]*pb.GameState),
 		gamePubsubMap: make(map[string]string),
 		subscribers:   make(map[string][]chan<- *pb.GameStorePubsubEvent),
+		clock:         &RealClock{},
 	}
 }
 
 // Deletes all games from the store that are older than s.gameTTL.
 // Must only be called while holding the s.mut lock.
 func (s *InMemoryGameStore) deleteOldGames() {
-	j := 0
-	for i := 0; i < len(s.gameStatesSeq); i++ {
+	// gameStatesSeq is ordered by created date.
+	now := s.clock.Now()
+	l := len(s.gameStatesSeq)
+	i := 0
+	for ; i < l; i++ {
 		id := s.gameStatesSeq[i]
 		gs := s.gameStates[id]
-		if time.Since(gs.created) >= s.gameTTL {
-			delete(s.gameStates, id)
-		} else {
-			s.gameStatesSeq[j] = s.gameStatesSeq[i]
-			j++
+		if now.Sub(gs.Modified.AsTime()) < s.gameTTL {
+			break
 		}
+		delete(s.gameStates, id)
 	}
-	s.gameStatesSeq = s.gameStatesSeq[:j]
+	if i == 0 {
+		return // Nothing was deleted.
+	}
+	if i == l {
+		s.gameStatesSeq = nil // Everything was deleted.
+		return
+	}
+	s.gameStatesSeq = s.gameStatesSeq[i:]
 }
 
 func (s *InMemoryGameStore) StoreNewGame(ctx context.Context, state *pb.GameState) error {
@@ -145,7 +152,7 @@ func (s *InMemoryGameStore) StoreNewGame(ctx context.Context, state *pb.GameStat
 	s.mut.Lock()
 	defer s.mut.Unlock()
 	s.deleteOldGames()
-	state.Modified = tpb.Now()
+	state.Modified = tpb.New(s.clock.Now())
 	gameId := state.GameInfo.Id
 	if gameId == "" {
 		for {
@@ -162,10 +169,7 @@ func (s *InMemoryGameStore) StoreNewGame(ctx context.Context, state *pb.GameStat
 	}
 	state.GameInfo.PubsubChannelId = pubsubId
 	// Create a copy, like the remote store would, to avoid nasty concurrent access problems.
-	s.gameStates[gameId] = &gameStoreEntry{
-		gameState: proto.Clone(state).(*pb.GameState),
-		created:   time.Now(),
-	}
+	s.gameStates[gameId] = proto.Clone(state).(*pb.GameState)
 	s.gameStatesSeq = append(s.gameStatesSeq, gameId)
 	return nil
 }
@@ -173,9 +177,9 @@ func (s *InMemoryGameStore) StoreNewGame(ctx context.Context, state *pb.GameStat
 func (s *InMemoryGameStore) LookupGame(ctx context.Context, gameId string) (*pb.GameState, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
-	if e, ok := s.gameStates[gameId]; ok {
+	if gameState, ok := s.gameStates[gameId]; ok {
 		// Create a copy, like the remote store would, to avoid nasty concurrent access problems.
-		state := proto.Clone(e.gameState).(*pb.GameState)
+		state := proto.Clone(gameState).(*pb.GameState)
 		return state, nil
 	}
 	return nil, ErrGameNotExist
@@ -184,13 +188,13 @@ func (s *InMemoryGameStore) LookupGame(ctx context.Context, gameId string) (*pb.
 func (s *InMemoryGameStore) UpdateGame(ctx context.Context, state *pb.GameState) error {
 	s.mut.Lock()
 	defer s.mut.Unlock()
-	state.Modified = tpb.Now()
-	gs, ok := s.gameStates[state.GetGameInfo().GetId()]
+	state.Modified = tpb.New(s.clock.Now())
+	_, ok := s.gameStates[state.GetGameInfo().GetId()]
 	if !ok {
 		return fmt.Errorf("game %v does not exist in the store", state.GetGameInfo().GetId())
 	}
 	// Create a copy, like the remote store would, to avoid nasty concurrent access problems.
-	gs.gameState = proto.Clone(state).(*pb.GameState)
+	s.gameStates[state.GetGameInfo().GetId()] = proto.Clone(state).(*pb.GameState)
 	return nil
 }
 
@@ -205,9 +209,9 @@ func (s *InMemoryGameStore) listGames(limit int, accept func(*pb.GameState) bool
 	var infos []*GameInfo
 	for i := l - 1; i >= 0; i-- {
 		id := s.gameStatesSeq[i]
-		e := s.gameStates[id]
-		if accept(e.gameState) {
-			gi := e.gameState.GetGameInfo()
+		gameState := s.gameStates[id]
+		if accept(gameState) {
+			gi := gameState.GetGameInfo()
 			infos = append(infos, &GameInfo{
 				Id:       gi.Id,
 				Host:     gi.Host,
@@ -268,6 +272,7 @@ func (s *InMemoryGameStore) Subscribe(ctx context.Context, pubsubId string) <-ch
 					if len(subs) > 0 {
 						s.subscribers[pubsubId] = subs
 					} else {
+						// No subscribers left => remove whole topic.
 						delete(s.subscribers, pubsubId)
 					}
 					return

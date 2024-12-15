@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dnswlt/hexz/internal/api"
@@ -30,6 +31,10 @@ type RedisClient struct {
 	client *redis.Client
 	config *RedisClientConfig
 	clock  Clock
+	// Last time a cleanup of the open & active game sets was run.
+	// Used to periodically remove old games.
+	lastCleanup time.Time
+	mut         sync.Mutex
 }
 
 type RedisClientConfig struct {
@@ -134,7 +139,7 @@ func (c *RedisClient) StoreNewGame(ctx context.Context, state *pb.GameState) err
 		}
 		state.GameInfo.Id = gameId
 	}
-	state.Modified = tpb.Now()
+	state.Modified = tpb.New(c.clock.Now())
 	// Store pubsub ID mapping
 	if state.GameInfo.PubsubChannelId == "" {
 		// 16 bytes of random data should be enough to assume no collisions.
@@ -150,21 +155,47 @@ func (c *RedisClient) StoreNewGame(ctx context.Context, state *pb.GameState) err
 		return fmt.Errorf("failed to store game in Redis: %v", err)
 	}
 	if state.AllPlayersJoined {
-		// All players have joined (probably single player game). Store in /activegames set.
-		if err := c.client.ZAdd(ctx, "/activegames", redis.Z{
-			Score:  float64(state.GetGameInfo().GetStarted().GetSeconds()),
-			Member: state.GameInfo.Id,
-		}).Err(); err != nil {
-			return fmt.Errorf("failed to add game %q to active games: %v", gameId, err)
-		}
-	} else {
-		// Waiting for more players. Store in /opengames set.
-		if err := c.client.ZAdd(ctx, "/opengames", redis.Z{
-			Score:  float64(state.GetGameInfo().GetStarted().GetSeconds()),
-			Member: state.GameInfo.Id,
-		}).Err(); err != nil {
-			return fmt.Errorf("failed to add game %q to open games: %v", gameId, err)
-		}
+		// All players have joined (probably single player game).
+		return c.storeActiveGame(ctx, state)
+	}
+	// Waiting for more players.
+	return c.storeOpenGame(ctx, state)
+}
+
+func (c *RedisClient) storeOpenGame(ctx context.Context, s *pb.GameState) error {
+	err := c.client.ZAdd(ctx, "/opengames", redis.Z{
+		Score:  float64(s.Modified.Seconds),
+		Member: s.GameInfo.Id,
+	}).Err()
+	if err != nil {
+		return fmt.Errorf("failed to add game %q to open games: %v", s.GameInfo.Id, err)
+	}
+	return nil
+}
+
+func (c *RedisClient) storeActiveGame(ctx context.Context, s *pb.GameState) error {
+	err := c.client.ZAdd(ctx, "/activegames", redis.Z{
+		Score:  float64(s.Modified.Seconds),
+		Member: s.GameInfo.Id,
+	}).Err()
+	if err != nil {
+		return fmt.Errorf("failed to add game %q to active games: %v", s.GameInfo.Id, err)
+	}
+	return nil
+}
+
+func (c *RedisClient) refreshGameTTLs(ctx context.Context, s *pb.GameState) error {
+	if err := c.client.ZAddXX(ctx, "/activegames", redis.Z{
+		Score:  float64(s.Modified.Seconds),
+		Member: s.GameInfo.Id,
+	}); err != nil {
+		return fmt.Errorf("failed to update TTL in /activegames for %s: %v", s.GameInfo.Id, err)
+	}
+	if err := c.client.ZAddXX(ctx, "/opengames", redis.Z{
+		Score:  float64(s.Modified.Seconds),
+		Member: s.GameInfo.Id,
+	}); err != nil {
+		return fmt.Errorf("failed to update TTL in /opengames for %s: %v", s.GameInfo.Id, err)
 	}
 	return nil
 }
@@ -175,13 +206,16 @@ func (c *RedisClient) UpdateGame(ctx context.Context, s *pb.GameState) error {
 	if s.GetGameInfo().Id == "" {
 		return fmt.Errorf("game state must have an ID for UpdateGame")
 	}
-	s.Modified = tpb.Now()
+	s.Modified = tpb.New(c.clock.Now())
 	data, err := proto.Marshal(s)
 	if err != nil {
 		return err
 	}
 	gameId := s.GameInfo.Id
-	return c.client.Set(ctx, rkey("/game", gameId), data, c.config.GameTTL).Err()
+	if err := c.client.Set(ctx, rkey("/game", gameId), data, c.config.GameTTL).Err(); err != nil {
+		return fmt.Errorf("failed to update game %s: %v", gameId, err)
+	}
+	return c.refreshGameTTLs(ctx, s)
 }
 
 func (c *RedisClient) LookupGame(ctx context.Context, gameId string) (*pb.GameState, error) {
@@ -200,8 +234,33 @@ func (c *RedisClient) DeleteGame(ctx context.Context, gameId string) error {
 	if err := c.client.Del(ctx, rkey("/game", gameId)).Err(); err != nil {
 		return err
 	}
+	if err := c.client.ZRem(ctx, "/opengames", gameId).Err(); err != nil {
+		return fmt.Errorf("failed to remove game %q from /opengames: %v", gameId, err)
+	}
 	if err := c.client.ZRem(ctx, "/activegames", gameId).Err(); err != nil {
-		hlog.Errorf("Failed to remove game %q from activegames: %v", gameId, err)
+		return fmt.Errorf("failed to remove game %q from /activegames: %v", gameId, err)
+	}
+	return nil
+}
+
+// Cleans up games that are older than the gameTTL from the open & active game sets.
+// This method is safe to be called frequently, it throttles internally to 1 cleanup / minute.
+func (c *RedisClient) cleanupGameSets(ctx context.Context, force bool) error {
+	c.mut.Lock()
+	defer c.mut.Unlock()
+	if !force && c.clock.Now().Sub(c.lastCleanup) < 1*time.Minute {
+		// Clean up at most once per minute.
+		return nil
+	}
+	now := c.clock.Now()
+	c.lastCleanup = now
+	err := c.client.ZRemRangeByScore(ctx, "/opengames", "-inf", strconv.FormatInt(now.Add(-c.config.GameTTL).Unix(), 10)).Err()
+	if err != nil {
+		return fmt.Errorf("failed to remove old games from /opengames: %v", err)
+	}
+	err = c.client.ZRemRangeByScore(ctx, "/activegames", "-inf", strconv.FormatInt(now.Add(-c.config.GameTTL).Unix(), 10)).Err()
+	if err != nil {
+		return fmt.Errorf("failed to remove old games from /activegames: %v", err)
 	}
 	return nil
 }
@@ -216,6 +275,8 @@ func (c *RedisClient) ListOpenGames(ctx context.Context, limit int) ([]*GameInfo
 	games := make([]*GameInfo, 0, len(gameIds))
 	foundOldEntry := false
 	var removeIds []any
+	// Iterate over retrieved game IDs, filtering out expired and deleted ones.
+	// These are cleaned up below.
 	for _, gameId := range gameIds {
 		gameState, err := c.LookupGame(ctx, gameId)
 		if err != nil {
@@ -231,7 +292,7 @@ func (c *RedisClient) ListOpenGames(ctx context.Context, limit int) ([]*GameInfo
 			removeIds = append(removeIds, gameId)
 			continue
 		}
-		if c.clock.Now().Sub(gameState.GameInfo.Started.AsTime()) >= c.config.GameTTL {
+		if c.clock.Now().Sub(gameState.Modified.AsTime()) >= c.config.GameTTL {
 			foundOldEntry = true
 			break
 		}
@@ -254,34 +315,34 @@ func (c *RedisClient) ListOpenGames(ctx context.Context, limit int) ([]*GameInfo
 			return c.ListOpenGames(ctx, limit)
 		}
 	}
-	if foundOldEntry {
-		// Drop all games older than the GameTTL.
-		c.client.ZRemRangeByScore(ctx, "/opengames", "-inf", strconv.FormatInt(c.clock.Now().Add(-c.config.GameTTL).Unix(), 10))
+	if err := c.cleanupGameSets(ctx, foundOldEntry); err != nil {
+		return nil, err
 	}
 	return games, nil
 }
 
 func (c *RedisClient) ListActiveGames(ctx context.Context, limit int) ([]*GameInfo, error) {
-	gameIds, err := c.client.ZRevRange(ctx, "/activegames", 0, int64(limit-1)).Result()
+	// Fetch 2x as many games as requested to increase chances of having enough in the face of deletions.
+	rangeLimit := 2 * limit
+	gameIds, err := c.client.ZRevRange(ctx, "/activegames", 0, int64(rangeLimit)).Result()
 	if err != nil {
 		return nil, err
 	}
-	games := make([]*GameInfo, 0, len(gameIds))
-	needsCleanup := false
+	games := make([]*GameInfo, 0, limit)
+	foundOldEntry := false
+	var removeIds []any
 	for _, gameId := range gameIds {
 		gameState, err := c.LookupGame(ctx, gameId)
 		if err != nil {
 			if errors.Is(err, redis.Nil) {
 				// Game no longer exists: purge
-				if err := c.client.ZRem(ctx, "/activegames", gameId).Err(); err != nil {
-					return nil, fmt.Errorf("failed to delete game %s from /activegames: %v", gameId, err)
-				}
+				removeIds = append(removeIds, gameId)
 				continue
 			}
 			return nil, fmt.Errorf("failed to lookup game ID %s: %v", gameId, err)
 		}
-		if c.clock.Now().Sub(gameState.GameInfo.Started.AsTime()) > c.config.GameTTL {
-			needsCleanup = true
+		if c.clock.Now().Sub(gameState.Modified.AsTime()) >= c.config.GameTTL {
+			foundOldEntry = true
 			break
 		}
 		games = append(games, &GameInfo{
@@ -290,10 +351,21 @@ func (c *RedisClient) ListActiveGames(ctx context.Context, limit int) ([]*GameIn
 			Started:  gameState.GameInfo.Started.AsTime(),
 			GameType: api.GameType(gameState.GameInfo.Type),
 		})
+		if len(games) == limit {
+			break // collected the requested number of games
+		}
 	}
-	if needsCleanup {
-		// Drop all games older than the GameTTL.
-		c.client.ZRemRangeByScore(ctx, "/activegames", "-inf", strconv.FormatInt(c.clock.Now().Add(-c.config.GameTTL).Unix(), 10))
+	if len(removeIds) > 0 {
+		if err := c.client.ZRem(ctx, "/activegames", removeIds...).Err(); err != nil {
+			return nil, fmt.Errorf("failed to delete games %v from /activegames: %v", removeIds, err)
+		}
+		if len(games) < limit && !foundOldEntry && len(gameIds) == rangeLimit {
+			// We found stale entries and there might be more valid entries: retry
+			return c.ListActiveGames(ctx, limit)
+		}
+	}
+	if err := c.cleanupGameSets(ctx, foundOldEntry); err != nil {
+		return nil, err
 	}
 	return games, nil
 }

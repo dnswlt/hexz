@@ -147,6 +147,7 @@ func TestRedisPubsub(t *testing.T) {
 }
 
 func TestRedisListOpenGamesCleanup(t *testing.T) {
+	*testRedisAddr = "localhost:6379"
 	// White-box test. Checks that old and deleted entries get purged.
 	if *testRedisAddr == "" {
 		t.Skip("Skipping integration test because -test-redis-addr is not set")
@@ -168,23 +169,22 @@ func TestRedisListOpenGamesCleanup(t *testing.T) {
 	if err := rc.client.FlushDB(ctx).Err(); err != nil {
 		t.Fatal("Failed to flush Redis DB: ", err)
 	}
-	started := rc.clock.Now()
 	// Add one game every hour, 24 hours.
 	for i := 0; i < 24; i++ {
 		gameId := fmt.Sprintf("%d", i)
 		gameState := &pb.GameState{
 			GameInfo: &pb.GameInfo{
 				Id:      gameId,
-				Started: tpb.New(started.Add(time.Duration(i) * time.Hour)),
+				Started: tpb.New(fakeClock.Now()),
 			},
 		}
 		err := rc.StoreNewGame(ctx, gameState)
 		if err != nil {
 			t.Fatal("Failed to store game: ", err)
 		}
+		fakeClock.Advance(1 * time.Hour)
 	}
-	// Advance the clock by 24h and list open games. Only the last 11 should be returned.
-	fakeClock.Advance(time.Duration(24) * time.Hour)
+	// List open games. Only the last 11 should be returned.
 	games, err := rc.ListOpenGames(ctx, 24)
 	if err != nil {
 		t.Fatal("Failed to list recent games: ", err)
@@ -287,13 +287,13 @@ func TestRedisListOpenGamesSkipDeleted(t *testing.T) {
 		if err != nil {
 			t.Fatal("Failed to store game: ", err)
 		}
+		fakeClock.Advance(1 * time.Hour)
 	}
 	// Delete the last game that was added.
 	if err := rc.DeleteGame(ctx, gameIds[len(gameIds)-1]); err != nil {
 		t.Fatalf("Could not delete game %s: %v", gameIds[len(gameIds)-1], err)
 	}
-	// Advance the clock by 24h and list open games. Only the last 10 should be returned.
-	fakeClock.Advance(time.Duration(24) * time.Hour)
+	// List open games. Only the last 10 should be returned.
 	games, err := rc.ListOpenGames(ctx, 1)
 	if err != nil {
 		t.Fatal("Failed to list recent games: ", err)
