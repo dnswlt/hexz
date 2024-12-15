@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -45,11 +46,27 @@ func newTestStatelessServer(t testing.TB, config *ServerConfig) (*StatelessServe
 		absPath, _ := filepath.Abs(templateDir)
 		return nil, fmt.Errorf("failed to created renderer in directory %s: %v", absPath, err)
 	}
-	playerStore, err := hexzmem.NewInMemoryPlayerStore(config.LoginTTL)
-	if err != nil {
-		return nil, err
+	var playerStore hexzmem.PlayerStore
+	var gameStore hexzmem.GameStore
+	if config.RedisAddr != "" {
+		rc, err := hexzmem.NewRedisClient(&hexzmem.RedisClientConfig{
+			Addr:     config.RedisAddr,
+			LoginTTL: config.LoginTTL,
+			GameTTL:  config.InactivityTimeout,
+			DB:       1, // Use testing DB
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Redis client: %v", err)
+		}
+		playerStore = &hexzmem.RemotePlayerStore{RedisClient: rc}
+		gameStore = rc
+	} else {
+		playerStore, err = hexzmem.NewInMemoryPlayerStore(config.LoginTTL)
+		if err != nil {
+			return nil, err
+		}
+		gameStore = hexzmem.NewInMemoryGameStore(config.InactivityTimeout)
 	}
-	gameStore := hexzmem.NewInMemoryGameStore(config.InactivityTimeout)
 	b := NewStatelessServerBuilder(config, playerStore, gameStore, renderer)
 	if config.PostgresURL != "" {
 		var dbStore hexzsql.DatabaseStore
@@ -118,7 +135,14 @@ func TestHandleNewGame(t *testing.T) {
 	}
 }
 
+func containsGameID(infos []*GameInfo, gameID string) bool {
+	return slices.ContainsFunc(infos, func(info *GameInfo) bool {
+		return info.Id == gameID
+	})
+}
+
 func TestListActiveGames1P(t *testing.T) {
+	// Starts a single player game. Expects the game to appear as an active game.
 	if testing.Short() {
 		t.Skip("Don't run http tests in -short mode.")
 	}
@@ -139,24 +163,25 @@ func TestListActiveGames1P(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Start a new single player game.
-	if _, err := c.newFlagzGame(true); err != nil {
+	gameID, err := c.newFlagzGame(true)
+	if err != nil {
 		t.Fatal(err)
 	}
 	// Should not be listed under open games: it's 1P.
-	openGames, err := s.gameStore.ListOpenGames(context.Background(), 100)
+	openGames, err := c.openGames()
 	if err != nil {
 		t.Fatal("Could not get active games:", err)
 	}
-	if len(openGames) != 0 {
-		t.Errorf("Open games: %d, want: 0", len(openGames))
+	if containsGameID(openGames, gameID) {
+		t.Errorf("Game %s should not be part of open games", gameID)
 	}
 	// Should be listed under active games immediately.
-	activeGames, err := s.gameStore.ListActiveGames(context.Background(), 100)
+	activeGames, err := c.activeGames()
 	if err != nil {
 		t.Fatal("Could not get active games:", err)
 	}
-	if len(activeGames) != 1 {
-		t.Errorf("Open games: %d, want: 1", len(activeGames))
+	if !containsGameID(activeGames, gameID) {
+		t.Errorf("Active games does not contain game %s", gameID)
 	}
 }
 
@@ -183,7 +208,8 @@ func TestListActiveGames2P(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Start a new single player game.
-	if _, err := c.newFlagzGame(false); err != nil {
+	gameID, err := c.newFlagzGame(false)
+	if err != nil {
 		t.Fatal(err)
 	}
 	// Should be listed under open games: it's 1P.
@@ -191,16 +217,16 @@ func TestListActiveGames2P(t *testing.T) {
 	if err != nil {
 		t.Fatal("Could not get open games:", err)
 	}
-	if len(openGames) != 1 {
-		t.Fatalf("Open games: %d, want: 1", len(openGames))
+	if !containsGameID(openGames, gameID) {
+		t.Fatalf("Open games does not contain %s", gameID)
 	}
 	// Should not be listed under active games immediately.
 	activeGames, err := c.activeGames()
 	if err != nil {
 		t.Fatal("Could not get active games:", err)
 	}
-	if len(activeGames) != 0 {
-		t.Errorf("Active games: %d, want: 0", len(activeGames))
+	if containsGameID(activeGames, gameID) {
+		t.Errorf("Active games contains %s", gameID)
 	}
 	ctx1, cancel1 := context.WithCancel(context.Background())
 	defer cancel1()
@@ -228,16 +254,16 @@ func TestListActiveGames2P(t *testing.T) {
 	if err != nil {
 		t.Fatal("Could not get open games:", err)
 	}
-	if len(openGames) != 0 {
-		t.Fatalf("Open games: %d, want: 0", len(openGames))
+	if containsGameID(openGames, gameID) {
+		t.Fatalf("Open games contains %s", gameID)
 	}
 	// Should now be listed under active games.
 	activeGames, err = c.activeGames()
 	if err != nil {
 		t.Fatal("Could not get active games:", err)
 	}
-	if len(activeGames) != 1 {
-		t.Errorf("Active games: %d, want: 1", len(activeGames))
+	if !containsGameID(activeGames, gameID) {
+		t.Errorf("Active games does not contain %s", gameID)
 	}
 }
 
