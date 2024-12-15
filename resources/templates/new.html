@@ -75,8 +75,10 @@
     </div>
     <script src="{{.URLPathPrefix}}/static/js/game.js?v={{.VCSRevision}}"></script>
     <script>
-        loadGames(document.getElementById("opengames"), "opengames");
-        loadGames(document.getElementById("activegames"), "activegames");
+        window.addEventListener('pageshow', () => {
+            loadGames(document.getElementById("opengames"), "opengames");
+            loadGames(document.getElementById("activegames"), "activegames");
+        });
     </script>
 
 </body>
