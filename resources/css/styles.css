@@ -7,6 +7,7 @@
     --yellow-gray: #d9cd9f;
     --dark-text: #1e1e1e;
     --light-text: #ececec;
+    --medium-light-text: #7f7f7f;
     --medium-gray: #5f5f5f;
     --medium-dark-gray: #3a3a3a;
     --orange-highlight: #da8100;
@@ -202,13 +203,18 @@ td {
     padding-right: 1em;
 }
 
-#joingame {
+div.games {
     /* Initially hidden */
     display: none;
+    text-align: center;
+}
+
+div.games th {
+    color: var(--medium-light-text);
 }
 
 #login-info {
-    color: var(--medium-gray);
+    color: var(--medium-light-text);
 }
 
 .inline-form {
@@ -218,7 +224,7 @@ td {
 .inline-form button {
     background: none;
     border: none;
-    color: var(--medium-gray);
+    color: var(--medium-light-text);
     text-decoration: underline;
     cursor: pointer;
     font: inherit;

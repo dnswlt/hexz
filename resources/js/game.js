@@ -734,6 +734,28 @@ async function getOpenGames(joingameDivId) {
     }
 }
 
+async function loadGames(div, urlSuffix) {
+    if (!div) {
+        return;
+    }
+    const resp = await fetch(`${URL_PREFIX}/${urlSuffix}`);
+    const games = await resp.json();
+    console.log("loadGames:", games);
+    if (games && games.length > 0) {
+        // Unhide <div>
+        div.style.display = "block";
+    }
+    const tbody = div.querySelector("table.gamelist > tbody");
+    for (const g of games) {
+        tbody.insertAdjacentHTML("beforeend",
+            `<tr>
+                <td><a href="${URL_PREFIX}/${g.id}">${g.id}</a></td>
+                <td>${g.host}</td>
+                <td>${g.gameType}</td>
+            </tr>`);
+    }
+}
+
 async function updateCPUThinkTIme(thinkTimeMillis) {
     const resp = await fetch(`${URL_PREFIX}/gamesettings/${gameId()}`, {
         method: "POST",

@@ -515,13 +515,7 @@ func (s *StatelessServer) handleHexz(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *StatelessServer) handleOpenGames(w http.ResponseWriter, r *http.Request) {
-	gameInfos, err := s.gameStore.ListOpenGames(r.Context(), 10)
-	if err != nil {
-		http.Error(w, "list open games", http.StatusInternalServerError)
-		hlog.Errorf("Cannot list open games: %s", err)
-		return
-	}
+func (s *StatelessServer) serveGameInfos(w http.ResponseWriter, gameInfos []*hexzmem.GameInfo) {
 	resp := make([]*GameInfo, len(gameInfos))
 	for i, g := range gameInfos {
 		resp[i] = &GameInfo{
@@ -535,9 +529,30 @@ func (s *StatelessServer) handleOpenGames(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		http.Error(w, "marshal error", http.StatusInternalServerError)
 		hlog.Errorf("JSON marshal error: %s", err)
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(json)
+}
+
+func (s *StatelessServer) handleActiveGames(w http.ResponseWriter, r *http.Request) {
+	gameInfos, err := s.gameStore.ListActiveGames(r.Context(), 10)
+	if err != nil {
+		http.Error(w, "list active games", http.StatusInternalServerError)
+		hlog.Errorf("Cannot list active games: %s", err)
+		return
+	}
+	s.serveGameInfos(w, gameInfos)
+}
+
+func (s *StatelessServer) handleOpenGames(w http.ResponseWriter, r *http.Request) {
+	gameInfos, err := s.gameStore.ListOpenGames(r.Context(), 10)
+	if err != nil {
+		http.Error(w, "list open games", http.StatusInternalServerError)
+		hlog.Errorf("Cannot list open games: %s", err)
+		return
+	}
+	s.serveGameInfos(w, gameInfos)
 }
 
 func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
@@ -1313,6 +1328,7 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	// GET method API
 	handleFunc("", s.handleHexz)
 	handleFunc("/opengames", s.handleOpenGames)
+	handleFunc("/activegames", s.handleActiveGames)
 	handleFunc("/view/{gameId}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, r.URL.Path+"/0", http.StatusTemporaryRedirect)
 	})

@@ -6,10 +6,7 @@
 </head>
 
 <body>
-    <h1 class="center">Start a new game</h1>
-    <p class="center">
-        Select the game you want to play:
-    </p>
+    <h1 class="center">Start new game</h1>
     <div class="centered spacer">
         <form action="{{.URLPathPrefix}}/new" method="post">
             <input type="hidden" name="type" id="type" value="Flagz">
@@ -36,10 +33,27 @@
         </form>
     </div>
 
-    <div id="joingame">
-        <h1 class="center">Join a game</h1>
+    <div class="games" id="opengames">
+        <h1 class="center">Join game</h1>
         <div class="centered">
-            <table>
+            <table class="gamelist">
+                <thead>
+                    <tr>
+                        <th>Game</th>
+                        <th>Host</th>
+                        <th>Type</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="games" id="activegames">
+        <h1 class="center">Watch game</h1>
+        <div class="centered">
+            <table class="gamelist">
                 <thead>
                     <tr>
                         <th>Game</th>
@@ -54,14 +68,15 @@
     </div>
 
     <div id="login-info" class="centered xlspacer">
-        Logged in as {{.PlayerName}}. &nbsp; 
+        Logged in as {{.PlayerName}}. &nbsp;
         <form action="{{.URLPathPrefix}}/logout" method="POST" class="inline-form">
             <button type="submit">Logout</button>
         </form>
     </div>
     <script src="{{.URLPathPrefix}}/static/js/game.js?v={{.VCSRevision}}"></script>
     <script>
-        getOpenGames("joingame");
+        loadGames(document.getElementById("opengames"), "opengames");
+        loadGames(document.getElementById("activegames"), "activegames");
     </script>
 
 </body>
