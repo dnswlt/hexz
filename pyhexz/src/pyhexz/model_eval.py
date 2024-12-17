@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from pyhexz.model import HexzNeuralNetwork
 from pyhexz.modelrepo import LocalModelRepository
+from torch.utils import tensorboard
 
 
 @dataclass
@@ -27,7 +28,7 @@ class WeightStats:
         return "[" + " ".join(f"{p:.6f}" for p in self.percentiles) + "]"
 
 
-def weight_stats(model: torch.nn.Module):
+def weight_stats(model: torch.nn.Module) -> dict[str, WeightStats]:
     """Returns WeightStats for each relevant module type (Conv2d, Linear)."""
     weight_data = {
         "Conv2d": [],
@@ -61,7 +62,8 @@ def weight_stats(model: torch.nn.Module):
     return stats
 
 
-def weights_timeline(model_name="res10", base_dir=None):
+def weights_timeline(model_name: str = "res10", base_dir: str | None = None) -> list[tuple[int, dict[str, WeightStats]]]:
+    """Returns a list of weight stats for all model checkpoints."""
     if base_dir is None:
         base_dir = os.path.join(os.getenv("HOME"), "tmp/hexz-models")
     repo = LocalModelRepository(base_dir)
@@ -72,3 +74,17 @@ def weights_timeline(model_name="res10", base_dir=None):
         stats.append((i, weight_stats(model)))
 
     return stats
+
+
+def write_weight_stats(log_dir: str, model_name: str = "res10", base_dir: str | None = None):
+    """Writes TensorBoard stats of the weights of each model checkpoint to log_dir."""
+    if base_dir is None:
+        base_dir = os.path.join(os.getenv("HOME"), "tmp/hexz-models")
+    repo = LocalModelRepository(base_dir)
+    latest = repo.get_latest_checkpoint(model_name)
+    writer = tensorboard.SummaryWriter(log_dir=log_dir)
+
+    for i in range(latest + 1):
+        model: HexzNeuralNetwork = repo.get_model(model_name, checkpoint=i)
+        for name, param in model.named_parameters():
+            writer.add_histogram(f"{name}.weights", param, i)

@@ -29,3 +29,5 @@ nbench.html
 .DS_Store
 server
 aws/
+# Ignore TensorBoard model evaluation data
+tensorboard/

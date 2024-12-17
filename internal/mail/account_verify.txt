@@ -1,0 +1,16 @@
+Dear {{.Username}},
+
+Thank you for signing up for a Hexz account!
+
+To complete your registration, please verify your email address by
+clicking the link below:
+
+{{.VerificationLink}}
+
+This link will expire in 24 hours.
+
+Once verified, you'll be able to access your account.
+
+Best regards,
+
+The Hexz Team

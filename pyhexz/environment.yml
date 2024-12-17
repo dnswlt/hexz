@@ -16,3 +16,4 @@ dependencies:
   - requests
   - grpcio
   - grpcio-tools
+  - tensorboard
