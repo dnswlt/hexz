@@ -15,6 +15,8 @@ import (
 	"github.com/dnswlt/hexz/internal/hexzmem"
 	"github.com/dnswlt/hexz/internal/hexzsql"
 	"github.com/dnswlt/hexz/internal/hlog"
+	"github.com/dnswlt/hexz/internal/mail"
+	"github.com/dnswlt/hexz/internal/users"
 	"github.com/dnswlt/hexz/pkg/hexz"
 	"github.com/dnswlt/hexz/pkg/hexzpb"
 )
@@ -56,7 +58,11 @@ func main() {
 	flag.StringVar(&cfg.RedisAddr, "redis-addr", "",
 		"Address of the Redis server storing game states. If empty, an embedded in-memory store is used.")
 	flag.StringVar(&cfg.PostgresURL, "postgres-url", "",
-		"URL of the PostgreSQL server (e.g. \"postgres://hexz:hexz@localhost:5432/hexz\"). If empty, no persistent storage is used.")
+		"URL of the PostgreSQL server (e.g. \"postgres://hexz@localhost:5432/hexz\").\n"+
+			"If empty, no persistent storage is used.\n"+
+			"Use the PGPASSWORD environment variable to specify the password.")
+	flag.StringVar(&cfg.FromAddress, "from-address", "",
+		"Email address to use for transactional emails. Required for user management.")
 	cpuPlayerMode := flag.String("cpu-player-mode", "embedded", "Mode in which to run CPU players. One of {wasm, embedded, remote}")
 	flag.DurationVar(&cfg.InactivityTimeout, "inactivity-timeout", 60*time.Minute,
 		"Time to wait before ending a game due to inactivity")
@@ -166,14 +172,24 @@ func main() {
 	}
 	b := hexz.NewStatelessServerBuilder(cfg, playerStore, gameStore, renderer)
 	// Postgres (optional)
+	var dbStore *hexzsql.PostgresStore
 	if cfg.PostgresURL != "" {
-		var dbStore hexzsql.DatabaseStore
-		dbStore, err := hexzsql.NewPostgresStore(context.Background(), cfg.PostgresURL)
+		dbStore, err = hexzsql.NewPostgresStore(context.Background(), cfg.PostgresURL)
 		if err != nil {
 			hlog.Fatalf("error connecting to postgres: %s", err)
 		}
 		hlog.Infof("connected to PostgreSQL at %s", redactPGPassword(cfg.PostgresURL))
 		b = b.WithDatabaseStore(dbStore)
+	}
+	// User service (optional) (register / activate / change password, etc.)
+	postmarkServerToken := os.Getenv("HEXZ_POSTMARK_SERVER_TOKEN")
+	validFromAddress := hexz.ValidateEmail(cfg.FromAddress) == nil
+	if validFromAddress && postmarkServerToken != "" && dbStore != nil {
+		mailClient := mail.NewPostmarkClient(postmarkServerToken, cfg.FromAddress)
+		userService := users.NewService(dbStore, mailClient)
+		b = b.WithUserService(userService)
+	} else {
+		hlog.Infof("Disabling user management: HEXZ_POSTMARK_SERVER_TOKEN, -postgres-url and -from-address must be set")
 	}
 	// Remote CPU (optional)
 	if cfg.RemoteCPUPlayerURL != "" {

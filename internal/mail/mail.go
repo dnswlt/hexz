@@ -18,14 +18,21 @@ var embeddedPasswordResetTmpl string
 //go:embed account_verify.txt
 var embeddedAccountVerificationTmpl string
 
-// Interface that clients needs to implement in order to fake out the real postmark client.
-type pClient interface {
+// Mailer is the interface that clients needs to implement in order to fake out the real postmark client.
+type Mailer interface {
 	SendEmail(ctx context.Context, email postmark.Email) (postmark.EmailResponse, error)
 }
 
 type Client struct {
 	from   string // The sender address to use in the From: header
-	client pClient
+	mailer Mailer
+}
+
+func NewClient(mailer Mailer, from string) *Client {
+	return &Client{
+		from:   from,
+		mailer: mailer,
+	}
 }
 
 func NewPostmarkClient(serverToken string, from string) *Client {
@@ -33,7 +40,7 @@ func NewPostmarkClient(serverToken string, from string) *Client {
 	accountToken := ""
 	return &Client{
 		from:   from,
-		client: postmark.NewClient(serverToken, accountToken),
+		mailer: postmark.NewClient(serverToken, accountToken),
 	}
 }
 
@@ -55,7 +62,7 @@ func (c *Client) SendPasswordResetMail(ctx context.Context, to string, username 
 		Tag:        "pw-reset",
 		TrackOpens: false,
 	}
-	resp, err := c.client.SendEmail(ctx, email)
+	resp, err := c.mailer.SendEmail(ctx, email)
 	if err != nil {
 		return fmt.Errorf("failed to send password reset email: %v", err)
 	}
@@ -83,7 +90,7 @@ func (c *Client) SendAccountVerificationMail(ctx context.Context, to string, use
 		Tag:        "acct-verify",
 		TrackOpens: false,
 	}
-	resp, err := c.client.SendEmail(ctx, email)
+	resp, err := c.mailer.SendEmail(ctx, email)
 	if err != nil {
 		return fmt.Errorf("failed to send account verification email: %v", err)
 	}

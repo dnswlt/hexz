@@ -10,6 +10,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib" // Needed to register pgx as a database/sql driver.
 	"google.golang.org/protobuf/proto"
 
@@ -247,6 +248,153 @@ func (s *PostgresStore) InsertStats(ctx context.Context, stats *api.WASMStatsReq
 func (s *PostgresStore) Close() error {
 	if s.pool != nil {
 		s.pool.Close()
+	}
+	return nil
+}
+
+func (s *PostgresStore) FindUser(ctx context.Context, email string) (*User, error) {
+	query := `
+		SELECT
+			id,
+			email,
+			password_hash,
+			player_name,
+			account_status,
+			COALESCE(verification_token, ''),
+			COALESCE(reset_password_token, ''),
+			token_expiry,
+			created_at,
+			updated_at
+		FROM users
+		WHERE email = $1
+	`
+	row := s.pool.QueryRowContext(ctx, query, email)
+	user := &User{}
+	var tokenExpiry sql.NullTime
+	err := row.Scan(
+		&user.ID,
+		&user.Email,
+		&user.PasswordHash,
+		&user.PlayerName,
+		&user.AccountStatus,
+		&user.VerificationToken,
+		&user.ResetPasswordToken,
+		&tokenExpiry,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, ErrUserNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("error reading row: %v", err)
+	}
+	if tokenExpiry.Valid {
+		user.TokenExpiry = tokenExpiry.Time
+	}
+	return user, nil
+}
+
+func (s *PostgresStore) AddUser(ctx context.Context, user *User) error {
+	if user.ID != "" {
+		return fmt.Errorf("user already has an ID: %v", user.ID)
+	}
+	err := s.pool.QueryRowContext(ctx, `
+		INSERT INTO users (
+			email,
+			password_hash,
+			player_name,
+			account_status,
+			verification_token,
+			reset_password_token,
+			token_expiry
+		) VALUES (
+		  $1, $2, $3, $4, $5, $6, $7
+		) RETURNING id`,
+		user.Email,
+		user.PasswordHash,
+		user.PlayerName,
+		user.AccountStatus,
+		user.VerificationToken,
+		user.ResetPasswordToken,
+		user.TokenExpiry,
+	).Scan(&user.ID)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			// 23505 - unique_violation
+			// https://www.postgresql.org/docs/11/errcodes-appendix.html
+			return ErrUserAlreadyExists
+		}
+		return fmt.Errorf("failed to insert user: %w", err)
+	}
+	return nil
+}
+
+func (s *PostgresStore) UpdateUser(ctx context.Context, user *User) error {
+	if user.ID == "" {
+		return fmt.Errorf("user ID must not be empty for update")
+	}
+	r, err := s.pool.ExecContext(ctx, `
+		UPDATE users
+		SET 
+			email = $1,
+			password_hash = $2,
+			player_name = $3,
+			account_status = $4,
+			verification_token = $5,
+			reset_password_token = $6,
+			token_expiry = $7
+		WHERE id = $8`,
+		user.Email,
+		user.PasswordHash,
+		user.PlayerName,
+		user.AccountStatus,
+		user.VerificationToken,
+		user.ResetPasswordToken,
+		user.TokenExpiry,
+		user.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update user: %v", err)
+	}
+	n, err := r.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get affected rows: %v", err)
+	}
+	if n != 1 {
+		return fmt.Errorf("user update failed: %d rows updated", n)
+	}
+	return nil
+}
+
+func (s *PostgresStore) VerifyUser(ctx context.Context, verificationToken string) error {
+	if verificationToken == "" {
+		return fmt.Errorf("empty verification token")
+	}
+	r, err := s.pool.ExecContext(ctx, `
+		UPDATE users
+		SET 
+			verification_token = NULL,
+			token_expiry = NULL,
+			account_status = $1
+		WHERE 
+			verification_token = $2
+			AND account_status = $3
+			AND token_expiry > now()`,
+		AccountStatusActive,
+		verificationToken,
+		AccountStatusNew,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update verification_token: %v", err)
+	}
+	n, err := r.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get affected rows: %v", err)
+	}
+	if n == 0 {
+		return ErrVerificationFailed
 	}
 	return nil
 }

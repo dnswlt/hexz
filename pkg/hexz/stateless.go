@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/mail"
 	"os"
 	"path"
 	"strconv"
@@ -26,6 +27,7 @@ import (
 	"github.com/dnswlt/hexz/internal/hexzmem"
 	"github.com/dnswlt/hexz/internal/hexzsql"
 	"github.com/dnswlt/hexz/internal/hlog"
+	"github.com/dnswlt/hexz/internal/users"
 	"github.com/dnswlt/hexz/internal/xrand"
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 	"google.golang.org/protobuf/proto"
@@ -44,6 +46,7 @@ type ServerConfig struct {
 	CPUPlayerMode      pb.CPUPlayerMode_Enum // Type of CPU player to use.
 	RedisAddr          string                // Address of the Redis server. If empty, local storage is used.
 	PostgresURL        string                // URL of the PostgreSQL server. If empty, no persistent storage is used.
+	FromAddress        string                // Address to use for transactional emails
 	InactivityTimeout  time.Duration         // Time after which a game is ended due to inactivity.
 	PlayerRemoveDelay  time.Duration         // Time to wait before removing an unregistered player from the game.
 	LoginTTL           time.Duration
@@ -82,6 +85,7 @@ type StatelessServer struct {
 	playerStore     hexzmem.PlayerStore
 	dbStore         hexzsql.DatabaseStore
 	gameStore       hexzmem.GameStore
+	userService     users.Service
 	remoteCPUClient pb.CPUPlayerServiceClient // Only non-nil if a remote CPU addr was configured.
 }
 
@@ -110,6 +114,11 @@ func (b *StatelessServerBuilder) WithCPUPlayerServiceClient(client pb.CPUPlayerS
 	return b
 }
 
+func (b *StatelessServerBuilder) WithUserService(userService users.Service) *StatelessServerBuilder {
+	b.s.userService = userService
+	return b
+}
+
 func (b *StatelessServerBuilder) Build() *StatelessServer {
 	s := b.s
 	b.s = nil
@@ -121,6 +130,51 @@ func generatePlayerId() api.PlayerId {
 	p := make([]byte, 16)
 	crand.Read(p)
 	return api.PlayerId(hex.EncodeToString(p))
+}
+
+func ValidateEmail(email string) error {
+	if email == "" {
+		return fmt.Errorf("missing email")
+	}
+	if len(email) > 254 {
+		return fmt.Errorf("email address too long")
+	}
+	if addr, err := mail.ParseAddress(email); err != nil || addr.Name != "" {
+		return fmt.Errorf("invalid email address")
+	}
+	return nil
+}
+
+func validatePassword(password string) error {
+	if len(password) < 8 || len(password) > 72 {
+		// 72 is the max that bcrypt supports.
+		return fmt.Errorf("passwords must be 8-72 characters long")
+	}
+	var hasUpper, hasLower, hasNumber, hasSpecial int
+
+	// Allowed special characters
+	allowedSpecials := "!@#$%^&*()-=+~.,><;:'\"\\|/?"
+
+	for _, char := range password {
+		switch {
+		case unicode.IsUpper(char):
+			hasUpper = 1
+		case unicode.IsLower(char):
+			hasLower = 1
+		case unicode.IsDigit(char):
+			hasNumber = 1
+		case strings.ContainsRune(allowedSpecials, char):
+			hasSpecial = 1
+		default:
+			// Reject any character not in the allowed set
+			return fmt.Errorf("invalid character in password: %c", char)
+		}
+	}
+	characterClasses := hasUpper + hasLower + hasNumber + hasSpecial
+	if characterClasses < 2 {
+		return fmt.Errorf("password too simple: use at least two of {uppercase, lowercase, digits, specials}")
+	}
+	return nil
 }
 
 func validatePlayerName(name string) error {
@@ -386,6 +440,48 @@ func (s *StatelessServer) serveHtmlTemplateParams(w http.ResponseWriter, filenam
 	}
 	w.Header().Set("Content-Type", "text/html")
 	w.Write(data.Bytes())
+}
+
+func (s *StatelessServer) handleRegisterUser(w http.ResponseWriter, r *http.Request) {
+	// Expect a form with these fields:
+	// email: the email address of the user
+	// playername: the user's player name (e.g. "John Doe")
+	// password: the plain text password (not a hash)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form", http.StatusBadRequest)
+		return
+	}
+	email := r.Form.Get("email")
+	email = strings.TrimSpace(email)
+	if err := ValidateEmail(email); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid email: %v", err), http.StatusBadRequest)
+	}
+	playername := r.Form.Get("playername")
+	playername = strings.TrimSpace(playername)
+	if err := validatePlayerName(playername); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid player name: %v", err), http.StatusBadRequest)
+		return
+	}
+	password := r.Form.Get("password")
+	if err := validatePassword(password); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid password: %v", err), http.StatusBadRequest)
+		return
+	}
+	// Replace the last segment of the URL path (should be "register") by "activate".
+	verifyURL := *r.URL
+	dir, _ := path.Split(verifyURL.Path)
+	verifyURL.Path = path.Join(dir, "activate")
+	err := s.userService.CreateUser(r.Context(), users.CreateUserParams{
+		Email:      email,
+		PlayerName: playername,
+		Password:   password,
+		VerifyURL:  &verifyURL,
+	})
+	if err != nil {
+		hlog.Infof("Adding user %s failed: %v", email, err)
+		http.Error(w, "Failed to add user", http.StatusPreconditionFailed)
+		return
+	}
 }
 
 func (s *StatelessServer) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
@@ -1293,8 +1389,6 @@ func (s *StatelessServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *StatelessServer) createMux() *http.ServeMux {
-	// TODO: Several generic handler functions are copy&pasted from server.go. We should
-	// refactor them into a common place.
 
 	mux := &http.ServeMux{}
 	handle := func(pattern string, handler http.Handler) {
@@ -1303,40 +1397,50 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	handleFunc := func(pattern string, handler func(http.ResponseWriter, *http.Request)) {
 		mux.HandleFunc(s.prefix(pattern), handler)
 	}
+
 	// Static resources (images, JavaScript, ...) live under DocumentRoot.
 	// Use gzipped.FileServer to deliver the WASM module compressed with
 	// Content-Encoding: gzip
 	// (other resources, too, but for them it doesn't matter).
 	handle("/static/", http.StripPrefix(s.prefix("/static/"),
 		gzipped.FileServer(gzipped.Dir(s.config.DocumentRoot))))
-	// POST method API
+
+	// Login
 	handleFunc("/login", postHandlerFunc(s.handleLoginRequest))
 	handleFunc("/logout", postHandlerFunc(s.handleLogoutRequest))
+	handleFunc("/loginnames", s.handleLoginNames)
+
+	// User management
+	handleFunc("/register", postHandlerFunc(s.handleRegisterUser))
+
+	// Game API
 	handleFunc("/new", postHandlerFunc(s.handleNewGame))
 	handleFunc("/move/{gameId}", postHandlerFunc(s.handleMove))
 	handleFunc("/reset/{gameId}", postHandlerFunc(s.handleReset))
-	// Methods for CPU player.
-	handleFunc("/state/{gameId}", s.handleState)
-	handleFunc("/wasmstats/{gameId}", postHandlerFunc(s.handleWASMStats))
 	handleFunc("/undo/{gameId}", postHandlerFunc(s.handleUndoRedo))
 	handleFunc("/redo/{gameId}", postHandlerFunc(s.handleUndoRedo))
 	handleFunc("/gamesettings/{gameId}", postHandlerFunc(s.handleGameSettings))
-	// Server-sent Event handling
+	// Methods for CPU player.
+	handleFunc("/state/{gameId}", s.handleState)
+	handleFunc("/wasmstats/{gameId}", postHandlerFunc(s.handleWASMStats))
+	// Valid modes (mostly for testing)
+	handleFunc("/moves/{gameId}", s.handleValidMoves)
+
+	// Server-sent Event (SSE) handling
 	handleFunc("/sse/{gameId}", s.handleSSE)
 
-	// GET method API
+	// Home page
 	handleFunc("", s.handleHexz)
 	handleFunc("/opengames", s.handleOpenGames)
 	handleFunc("/activegames", s.handleActiveGames)
+
+	// Game history
 	handleFunc("/view/{gameId}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, r.URL.Path+"/0", http.StatusTemporaryRedirect)
 	})
 	handleFunc("/view/{gameId}/{seqNum}", s.handleView)
 	handleFunc("/history", s.handleHistoryList)
 	handleFunc("/history/{gameId}", s.handleHistory)
-	handleFunc("/moves/{gameId}", s.handleValidMoves)
-
-	handleFunc("/loginnames", s.handleLoginNames)
 
 	// Must come last to avoid capturing other paths:
 	handleFunc("/{gameId}", s.handleGame)
@@ -1346,7 +1450,11 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	// If we're not behind a reverse proxy and serve the root URL ourselves:
 	// Redirect to prefix path
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, s.prefix(""), http.StatusTemporaryRedirect)
+		if s.config.URLPathPrefix != "" {
+			http.Redirect(w, r, s.prefix(""), http.StatusTemporaryRedirect)
+			return
+		}
+		s.handleHexz(w, r)
 	})
 	return mux
 }
@@ -1364,7 +1472,7 @@ func (s *StatelessServer) Serve() {
 		hlog.Fatalf("Cannot load game HTML: %s", err)
 	}
 
-	hlog.Infof("Stateless server listening on %s", addr)
+	hlog.Infof("Hexz server listening on %s", addr)
 
 	if s.config.TlsCertChain != "" && s.config.TlsPrivKey != "" {
 		hlog.Fatalf("%v", srv.ListenAndServeTLS(s.config.TlsCertChain, s.config.TlsPrivKey))

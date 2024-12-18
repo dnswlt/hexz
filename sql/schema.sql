@@ -3,8 +3,11 @@
 -- See the README.md for detailed instructions.
 --
 -- To just regenerate the schema:
--- 
--- psql -f schema.sql -h localhost hexz hexz 
+--
+-- psql -f schema.sql -h localhost hexz hexz
+
+-- Needed for gen_random_uuid
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 DROP TABLE IF EXISTS games;
 CREATE TABLE games (
@@ -67,3 +70,45 @@ CREATE TABLE wasm_stats (
     hardware_concurrency INTEGER
 );
 CREATE INDEX wasm_stats_game_id_idx ON wasm_stats (game_id);
+
+DROP TABLE IF EXISTS users;
+CREATE TABLE users (
+    -- UUIDs are generated in the database.
+    -- An INSERT into the users table should leave the id field empty
+    -- and use a "RETURNING id" clause to obtain the generated id.
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    -- Users are uniquely identified by their email address.
+    email TEXT NOT NULL UNIQUE,
+    -- The securely (bcrypt) hashed password.
+    password_hash TEXT NOT NULL,
+    -- User's player name (not unique, changeable)
+    player_name TEXT NOT NULL,
+    -- Account status.
+    -- Possible values: 0(new), 1(active), 2(blocked), 3(deleted)
+    account_status INTEGER NOT NULL DEFAULT 0,
+    -- Token for email verification
+    verification_token TEXT,
+    -- Token for password reset
+    reset_password_token TEXT,
+    -- Expiry for verification/reset tokens
+    token_expiry TIMESTAMP WITH TIME ZONE,
+    -- Account creation timestamp
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    -- Last update timestamp
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
+
+
+-- Automatically update 'updated_at' on row changes
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+   NEW.updated_at = now();
+   RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_set_updated_at
+BEFORE UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();

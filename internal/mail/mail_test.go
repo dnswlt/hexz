@@ -22,7 +22,7 @@ func TestPasswordResetMail(t *testing.T) {
 	fakeClient := &FakeClient{}
 	client := &Client{
 		from:   "dummy@example.com",
-		client: fakeClient,
+		mailer: fakeClient,
 	}
 	resetLink, err := url.Parse("http://example.com/reset?token=abcdefgh")
 	if err != nil {
