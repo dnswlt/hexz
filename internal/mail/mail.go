@@ -9,6 +9,7 @@ import (
 
 	_ "embed"
 
+	"github.com/dnswlt/hexz/internal/hlog"
 	"github.com/mrz1836/postmark"
 )
 
@@ -42,6 +43,20 @@ func NewPostmarkClient(serverToken string, from string) *Client {
 		from:   from,
 		mailer: postmark.NewClient(serverToken, accountToken),
 	}
+}
+
+// DebugLoggingMailer is a Mailer implementation for local debugging.
+// It never sends actual emails, but only logs the emails it is asked to send.
+type DebugLoggingMailer struct{}
+
+func (m DebugLoggingMailer) SendEmail(ctx context.Context, email postmark.Email) (postmark.EmailResponse, error) {
+	hlog.Infof(`DebugLoggingMailer email:
+	From: %s
+	To: %s
+	Subject: %s
+	Body: %s`,
+		email.From, email.To, email.Subject, email.TextBody)
+	return postmark.EmailResponse{}, nil
 }
 
 func (c *Client) SendPasswordResetMail(ctx context.Context, to string, username string, resetLink *url.URL) error {

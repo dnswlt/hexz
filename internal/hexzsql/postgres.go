@@ -394,7 +394,7 @@ func (s *PostgresStore) VerifyUser(ctx context.Context, verificationToken string
 		return fmt.Errorf("failed to get affected rows: %v", err)
 	}
 	if n == 0 {
-		return ErrVerificationFailed
+		return ErrInvalidToken
 	}
 	return nil
 }

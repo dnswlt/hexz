@@ -9,6 +9,7 @@ import (
 
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/uuid"
 	"google.golang.org/protobuf/testing/protocmp"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -133,4 +134,34 @@ func TestInMemListOpenGamesCleanup(t *testing.T) {
 	if n != wantGames {
 		t.Errorf("Want %d games in gameStatesSeq, got %d", wantGames, n)
 	}
+}
+
+func TestInMemFlashStore(t *testing.T) {
+	s := NewInMemFlashStore()
+	flashID := uuid.New().String()
+	for i := 0; i < 4; i++ {
+		err := s.AddMessage(context.Background(), flashID, FlashMessage{
+			Kind:    "Test",
+			Created: time.Date(2024, 1, 1, 12, 1, 0, 0, time.UTC),
+		})
+		if err != nil {
+			t.Fatalf("AddMessage failed: %v", err)
+		}
+	}
+	messages, err := s.PopMessages(context.Background(), flashID)
+	if err != nil {
+		t.Fatalf("PopMessages failed: %v", err)
+	}
+	if len(messages) != 4 {
+		t.Errorf("Wrong number of messages: want 4, got %d", len(messages))
+	}
+	// Should get 0 messages second time around.
+	messages, err = s.PopMessages(context.Background(), flashID)
+	if err != nil {
+		t.Fatalf("PopMessages failed: %v", err)
+	}
+	if len(messages) != 0 {
+		t.Errorf("Wrong number of messages: want 0, got %d", len(messages))
+	}
+
 }

@@ -22,6 +22,10 @@ type CreateUserParams struct {
 	VerifyURL *url.URL
 }
 
+var (
+	ErrVerificationFailed = errors.New("user could not be verified")
+)
+
 type Service interface {
 	// CreateUser adds a new user to the store.
 	// The default implementation sends out a verification email.
@@ -31,7 +35,8 @@ type Service interface {
 	// not expired and assigned to a user account awaiting verification.
 	// If the checks are successful, the user is marked as verified and
 	// can be used to log in.
-	// Otherwise, an error isreturned.
+	// Returns ErrVerificationFailed if the verification itself failed,
+	// but was executed without errors,
 	VerifyUser(ctx context.Context, token string) error
 }
 
@@ -87,5 +92,10 @@ func (s *ServiceDefault) CreateUser(ctx context.Context, ps CreateUserParams) er
 }
 
 func (s *ServiceDefault) VerifyUser(ctx context.Context, token string) error {
-	return s.store.VerifyUser(ctx, token)
+	err := s.store.VerifyUser(ctx, token)
+	// Map DB error code to service layer code.
+	if errors.Is(err, hexzsql.ErrInvalidToken) {
+		return ErrVerificationFailed
+	}
+	return err
 }

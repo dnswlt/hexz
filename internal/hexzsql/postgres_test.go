@@ -188,13 +188,13 @@ func TestPostgresFindUser(t *testing.T) {
 			email, 
 			password_hash, 
 			player_name, 
-			is_verified
+			account_status
 		) VALUES (
 			$1,
 			$2,
 			'hashed_pwd',
 			'John Doe',
-			FALSE
+			1
 		)
 	`, uid, email)
 	if err != nil {
@@ -377,7 +377,7 @@ func TestPostgresVerifyUserInvalidToken(t *testing.T) {
 		t.Fatalf("AddUser failed: %v", err)
 	}
 	err = db.VerifyUser(ctx, token+"_invalid")
-	if !errors.Is(err, ErrVerificationFailed) {
+	if !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("VerifyUser with invalid token had unexpected error: %v", err)
 	}
 }
@@ -406,7 +406,7 @@ func TestPostgresVerifyUserExpiredToken(t *testing.T) {
 		t.Fatalf("AddUser failed: %v", err)
 	}
 	err = db.VerifyUser(ctx, token)
-	if !errors.Is(err, ErrVerificationFailed) {
+	if !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("VerifyUser with invalid token had unexpected error: %v", err)
 	}
 }
@@ -446,7 +446,7 @@ func TestPostgresVerifyUserSuccess(t *testing.T) {
 	}
 	// It should fail the second time:
 	err = db.VerifyUser(ctx, token)
-	if !errors.Is(err, ErrVerificationFailed) {
+	if !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("VerifyUser did not fail as expected on the second attempt: %v", err)
 	}
 }

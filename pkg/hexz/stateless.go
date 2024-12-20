@@ -14,13 +14,16 @@ import (
 	"io"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"os"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
 
+	"github.com/google/uuid"
 	"github.com/lpar/gzipped/v2"
 
 	"github.com/dnswlt/hexz/internal/api"
@@ -63,12 +66,13 @@ type ServerConfig struct {
 }
 
 const (
-	playerIdCookieName = "playerId"
+	playerIDCookieName = "playerId"
+	flashIDCookieName  = "flashId"
 )
 
 var (
-	errInvalidGameID = fmt.Errorf("invalid game ID")
-	errMissingCookie = fmt.Errorf("missing cookie")
+	errInvalidGameID = errors.New("invalid game ID")
+	errMissingCookie = errors.New("missing cookie")
 )
 
 // This file contains the implementation of the stateless hexz game server.
@@ -85,6 +89,8 @@ type StatelessServer struct {
 	playerStore     hexzmem.PlayerStore
 	dbStore         hexzsql.DatabaseStore
 	gameStore       hexzmem.GameStore
+	tokenStore      hexzmem.TokenStore
+	flashStore      hexzmem.FlashStore
 	userService     users.Service
 	remoteCPUClient pb.CPUPlayerServiceClient // Only non-nil if a remote CPU addr was configured.
 }
@@ -119,6 +125,16 @@ func (b *StatelessServerBuilder) WithUserService(userService users.Service) *Sta
 	return b
 }
 
+func (b *StatelessServerBuilder) WithTokenStore(tokenStore hexzmem.TokenStore) *StatelessServerBuilder {
+	b.s.tokenStore = tokenStore
+	return b
+}
+
+func (b *StatelessServerBuilder) WithFlashStore(flashStore hexzmem.FlashStore) *StatelessServerBuilder {
+	b.s.flashStore = flashStore
+	return b
+}
+
 func (b *StatelessServerBuilder) Build() *StatelessServer {
 	s := b.s
 	b.s = nil
@@ -132,28 +148,37 @@ func generatePlayerId() api.PlayerId {
 	return api.PlayerId(hex.EncodeToString(p))
 }
 
-func ValidateEmail(email string) error {
-	if email == "" {
+var (
+	// mail.ParseAddress is very permissive, so we add an extra regexp to
+	// validate a bit more strictly.
+	emailRE = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+)
+
+func ValidateEmailAddress(address string) error {
+	if address == "" {
 		return fmt.Errorf("missing email")
 	}
-	if len(email) > 254 {
+	if len(address) > 254 {
 		return fmt.Errorf("email address too long")
 	}
-	if addr, err := mail.ParseAddress(email); err != nil || addr.Name != "" {
+	if a, err := mail.ParseAddress(address); err != nil || a.Name != "" {
+		return fmt.Errorf("invalid email address")
+	}
+	if !emailRE.MatchString(address) {
 		return fmt.Errorf("invalid email address")
 	}
 	return nil
 }
 
 func validatePassword(password string) error {
-	if len(password) < 8 || len(password) > 72 {
+	if len(password) < 6 || len(password) > 72 {
 		// 72 is the max that bcrypt supports.
-		return fmt.Errorf("passwords must be 8-72 characters long")
+		return fmt.Errorf("passwords must be 6-72 characters long")
 	}
 	var hasUpper, hasLower, hasNumber, hasSpecial int
 
 	// Allowed special characters
-	allowedSpecials := "!@#$%^&*()-=+~.,><;:'\"\\|/?"
+	allowedSpecials := "!@#$%^&*()-=+~.,><;:'_\"\\|/?"
 
 	for _, char := range password {
 		switch {
@@ -167,7 +192,7 @@ func validatePassword(password string) error {
 			hasSpecial = 1
 		default:
 			// Reject any character not in the allowed set
-			return fmt.Errorf("invalid character in password: %c", char)
+			return fmt.Errorf("invalid character in password: '%c'", char)
 		}
 	}
 	characterClasses := hasUpper + hasLower + hasNumber + hasSpecial
@@ -199,7 +224,7 @@ func validatePlayerName(name string) error {
 		prev = r
 	}
 	if letters == 0 {
-		return fmt.Errorf("player name must contain at least one latin letter")
+		return fmt.Errorf("player name must contain at least one Latin letter")
 	}
 	return nil
 }
@@ -269,6 +294,25 @@ func (s *StatelessServer) loggingHandler(h http.Handler) http.Handler {
 	})
 }
 
+type throttle struct {
+	bucket   string
+	maxQPS   float64
+	capacity int
+}
+
+// Can be used to throttle certain expensive API calls, like those that involve sending an email.
+func (s *StatelessServer) throttlingHandlerFunc(t throttle, h http.Handler) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ok, err := s.tokenStore.TokenBucketGet(r.Context(), t.bucket, 1, t.maxQPS, t.capacity)
+		if err != nil || !ok {
+			http.Error(w, "request limit exceeded", http.StatusTooManyRequests)
+			hlog.Infof("Request throttling kicked in for %s", t.bucket)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
 func postHandlerFunc(h http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -294,9 +338,9 @@ func (s *StatelessServer) prefix(urlPath string) string {
 	return urlJoinPath(s.config.URLPathPrefix, urlPath)
 }
 
-func (s *StatelessServer) makePlayerCookie(playerId api.PlayerId, ttl time.Duration) *http.Cookie {
+func (s *StatelessServer) generatePlayerCookie(playerId api.PlayerId, ttl time.Duration) *http.Cookie {
 	return &http.Cookie{
-		Name:     playerIdCookieName,
+		Name:     playerIDCookieName,
 		Value:    string(playerId),
 		Path:     s.prefix(""),
 		MaxAge:   int(ttl.Seconds()),
@@ -308,7 +352,7 @@ func (s *StatelessServer) makePlayerCookie(playerId api.PlayerId, ttl time.Durat
 
 func (s *StatelessServer) deletePlayerCookie() *http.Cookie {
 	return &http.Cookie{
-		Name:     playerIdCookieName,
+		Name:     playerIDCookieName,
 		Value:    "",
 		Path:     s.prefix(""),
 		MaxAge:   -1,    // Delete immediately
@@ -319,7 +363,7 @@ func (s *StatelessServer) deletePlayerCookie() *http.Cookie {
 }
 
 func (s *StatelessServer) lookupPlayerFromCookie(r *http.Request) (api.Player, error) {
-	cookie, err := r.Cookie(playerIdCookieName)
+	cookie, err := r.Cookie(playerIDCookieName)
 	if err != nil {
 		return api.Player{}, errMissingCookie
 	}
@@ -442,46 +486,164 @@ func (s *StatelessServer) serveHtmlTemplateParams(w http.ResponseWriter, filenam
 	w.Write(data.Bytes())
 }
 
+// generateVerificationURL generates a verification URL that can be sent to users via email.
+// It is reverse-proxy aware and takes the X-Forwarded-Proto and X-Forwarded-Host headers into account.
+func (s *StatelessServer) generateVerificationURL(r *http.Request) *url.URL {
+	scheme := r.Header.Get("X-Forwarded-Proto")
+	if scheme == "" {
+		if r.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	host := r.Host
+	if forwardedHost := r.Header.Get("X-Forwarded-Host"); forwardedHost != "" {
+		host = forwardedHost
+	}
+	return &url.URL{
+		Scheme: scheme,
+		Host:   host,
+		Path:   s.prefix("/verify"),
+	}
+}
+
+// addFlashMessages adds "flash" messages to the store, so they can be retrieved on the next page.
+// The is particularly useful for the POST-Redirect-GET pattern.
+// It works by storing a flash ID in a short-lived flash cookie that is read by pages that support
+// the display of flash messages.
+func (s *StatelessServer) addFlashMessages(ctx context.Context, w http.ResponseWriter, messages []hexzmem.FlashMessage) {
+	flashID := uuid.New().String()
+	for i := range messages {
+		s.flashStore.AddMessage(ctx, flashID, messages[i])
+	}
+	// Set cookie for flash message after redirect.
+	http.SetCookie(w, &http.Cookie{
+		Name:     flashIDCookieName,
+		Value:    flashID,
+		Path:     s.prefix(""),
+		MaxAge:   30, // 30 seconds
+		HttpOnly: true,
+		Secure:   false, // also allow plain http
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func (s *StatelessServer) addInfoFlashMessage(ctx context.Context, w http.ResponseWriter, message string) {
+	s.addFlashMessages(ctx, w, []hexzmem.FlashMessage{
+		{Created: time.Now(), Kind: "Info", Message: message},
+	})
+}
+
+func (s *StatelessServer) addErrorFlashMessage(ctx context.Context, w http.ResponseWriter, message string) {
+	s.addFlashMessages(ctx, w, []hexzmem.FlashMessage{
+		{Created: time.Now(), Kind: "Error", Message: message},
+	})
+}
+
+// validateCSRFToken validates the given csrfToken.
+// If validation fails, it sends an HTTP error back to the client and logs the event.
+func (s *StatelessServer) validateCSRFToken(w http.ResponseWriter, r *http.Request, csrfToken string) bool {
+	if csrfToken == "" {
+		http.Error(w, "missing token", http.StatusBadRequest)
+		hlog.Infof("Received registration form without csrf_token from %s", r.RemoteAddr)
+		return false
+	}
+	if len(csrfToken) > 128 {
+		http.Error(w, "invalid token", http.StatusBadRequest)
+		hlog.Infof("Received registration form with invalid csrf_token (too long) from %s", r.RemoteAddr)
+		return false
+	}
+	ok, err := s.tokenStore.ConsumeCSRFToken(r.Context(), csrfToken)
+	if err != nil {
+		hlog.Errorf("Failed to consume CSRF token: %v", err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return false
+	}
+	if !ok {
+		hlog.Infof("Received registration form with invalid csrf_token %s from %s", csrfToken, r.RemoteAddr)
+		http.Error(w, "invalid token", http.StatusBadRequest)
+		return false
+	}
+	return true
+}
+
 func (s *StatelessServer) handleRegisterUser(w http.ResponseWriter, r *http.Request) {
-	// Expect a form with these fields:
-	// email: the email address of the user
-	// playername: the user's player name (e.g. "John Doe")
-	// password: the plain text password (not a hash)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid form", http.StatusBadRequest)
 		return
 	}
+
+	if ok := s.validateCSRFToken(w, r, r.Form.Get("csrf_token")); !ok {
+		return // validateCSRFToken does the logging and response handling.
+	}
+
+	// Validate user-provided data.
+	var messages []string
 	email := r.Form.Get("email")
 	email = strings.TrimSpace(email)
-	if err := ValidateEmail(email); err != nil {
-		http.Error(w, fmt.Sprintf("Invalid email: %v", err), http.StatusBadRequest)
+	if err := ValidateEmailAddress(email); err != nil {
+		messages = append(messages, err.Error())
 	}
 	playername := r.Form.Get("playername")
 	playername = strings.TrimSpace(playername)
 	if err := validatePlayerName(playername); err != nil {
-		http.Error(w, fmt.Sprintf("Invalid player name: %v", err), http.StatusBadRequest)
-		return
+		messages = append(messages, err.Error())
 	}
 	password := r.Form.Get("password")
 	if err := validatePassword(password); err != nil {
-		http.Error(w, fmt.Sprintf("Invalid password: %v", err), http.StatusBadRequest)
+		messages = append(messages, err.Error())
+	}
+	// If there were any validation errors, redirect the user back
+	// to the form and display the errors as flash messages.
+	if len(messages) > 0 {
+		s.addErrorFlashMessage(r.Context(), w, strings.Join(messages, "\n\n"))
+		http.Redirect(w, r, s.prefix("/join"), http.StatusSeeOther)
 		return
 	}
-	// Replace the last segment of the URL path (should be "register") by "activate".
-	verifyURL := *r.URL
-	dir, _ := path.Split(verifyURL.Path)
-	verifyURL.Path = path.Join(dir, "activate")
+
+	// Create the user and send an email.
 	err := s.userService.CreateUser(r.Context(), users.CreateUserParams{
 		Email:      email,
 		PlayerName: playername,
 		Password:   password,
-		VerifyURL:  &verifyURL,
+		VerifyURL:  s.generateVerificationURL(r),
 	})
 	if err != nil {
 		hlog.Infof("Adding user %s failed: %v", email, err)
 		http.Error(w, "Failed to add user", http.StatusPreconditionFailed)
 		return
 	}
+	hlog.Infof("Added new user %s to the database", email)
+
+	// Add flash message and redirect.
+	s.addInfoFlashMessage(r.Context(), w,
+		"Please check your inbox. We sent you an email with an activation link.")
+	http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+}
+
+func (s *StatelessServer) handleVerifyUser(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		hlog.Infof("Received user verification request without token: %v", r.URL)
+		http.Error(w, "empty token", http.StatusBadRequest)
+		return
+	}
+	err := s.userService.VerifyUser(r.Context(), token)
+	if errors.Is(err, users.ErrVerificationFailed) {
+		s.addInfoFlashMessage(r.Context(), w, "Verifying your account failed, most likely because you already verified it.")
+		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+	} else if err != nil {
+		hlog.Errorf("VerifyUser error: %v", err)
+		http.Error(w, "verification failed", http.StatusBadRequest)
+		return
+	}
+
+	hlog.Infof("Successfully verified user with token %s", token)
+
+	// Add flash message and redirect.
+	s.addInfoFlashMessage(r.Context(), w, "You successfully verified your account. You can now log in and play!")
+	http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
 }
 
 func (s *StatelessServer) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
@@ -507,7 +669,7 @@ func (s *StatelessServer) handleLoginRequest(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "Cannot log in right now", http.StatusPreconditionFailed)
 		return
 	}
-	http.SetCookie(w, s.makePlayerCookie(playerId, s.config.LoginTTL))
+	http.SetCookie(w, s.generatePlayerCookie(playerId, s.config.LoginTTL))
 	http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
 }
 
@@ -598,16 +760,52 @@ func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *StatelessServer) popFlashMessages(r *http.Request) []hexzmem.FlashMessage {
+	cookie, err := r.Cookie(flashIDCookieName)
+	if err != nil {
+		return nil
+	}
+	flashID := cookie.Value
+	messages, err := s.flashStore.PopMessages(r.Context(), flashID)
+	if err != nil {
+		// Failing to load flash messages is not a fatal error. Log and proceed.
+		hlog.Errorf("Failed to pop flash messages for ID %q: %v", flashID, err)
+		return nil
+	}
+	return messages
+}
+
+func (s *StatelessServer) handleJoin(w http.ResponseWriter, r *http.Request) {
+	// Get CSRF token for the form.
+	csrf, err := s.tokenStore.NewCSRFToken(r.Context(), 1*time.Hour)
+	if err != nil {
+		hlog.Errorf("Could not get a CSRF token: %v", err)
+		http.Error(w, "token store error", http.StatusInternalServerError)
+		return
+	}
+
+	s.serveHtmlTemplateParams(w, joinHtmlFilename, map[string]any{
+		"CSRFToken": csrf,
+		"Messages":  s.popFlashMessages(r),
+	})
+}
+
 func (s *StatelessServer) handleHexz(w http.ResponseWriter, r *http.Request) {
+	// Check if player is logged in. If not, show login screen.
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
-		s.serveHtmlTemplate(w, loginHtmlFilename)
+		// Serve login screen.
+		s.serveHtmlTemplateParams(w, loginHtmlFilename, map[string]any{
+			"Messages": s.popFlashMessages(r),
+		})
 		return
 	}
 	// Prolong cookie ttl.
-	http.SetCookie(w, s.makePlayerCookie(p.Id, s.config.LoginTTL))
+	http.SetCookie(w, s.generatePlayerCookie(p.Id, s.config.LoginTTL))
+	// Serve game title screen.
 	s.serveHtmlTemplateParams(w, newGameHtmlFilename, map[string]any{
 		"PlayerName": p.Name,
+		"Messages":   s.popFlashMessages(r),
 	})
 }
 
@@ -669,7 +867,7 @@ func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Game exists, serve HTML and prolong cookie ttl.
-	http.SetCookie(w, s.makePlayerCookie(p.Id, s.config.LoginTTL))
+	http.SetCookie(w, s.generatePlayerCookie(p.Id, s.config.LoginTTL))
 	params := map[string]any{}
 	if g.isCPUGame() {
 		params["CPUThinkTimeOptions"] = cpuThinkTimeOptions(s.config.CpuThinkTime)
@@ -1411,7 +1609,11 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	handleFunc("/loginnames", s.handleLoginNames)
 
 	// User management
-	handleFunc("/register", postHandlerFunc(s.handleRegisterUser))
+	handleFunc("/join", s.handleJoin)
+	handleFunc("/register", s.throttlingHandlerFunc(
+		throttle{bucket: "register", maxQPS: 0.1, capacity: 1},
+		postHandlerFunc(s.handleRegisterUser)))
+	handleFunc("/verify", s.handleVerifyUser)
 
 	// Game API
 	handleFunc("/new", postHandlerFunc(s.handleNewGame))
@@ -1449,7 +1651,7 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 
 	// If we're not behind a reverse proxy and serve the root URL ourselves:
 	// Redirect to prefix path
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/$", func(w http.ResponseWriter, r *http.Request) {
 		if s.config.URLPathPrefix != "" {
 			http.Redirect(w, r, s.prefix(""), http.StatusTemporaryRedirect)
 			return

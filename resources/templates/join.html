@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    {{template "snip_head.html" .}}
+</head>
+
+<body>
+    <h1 class="center">Welcome to Hexz!</h1>
+    {{template "snip_flash.html" .}}
+    <p class="center">
+        To register, provide your email address, a player name, and a password.
+    </p>
+    <div class="account-form">
+        <form action="{{.URLPathPrefix}}/register" method="post">
+            <div>
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <input type="email" name="email" id="email" placeholder="jane.doe@example.com" required>
+                <input type="text" name="playername" id="playername" placeholder="Jane Doe" required>
+                <input type="password" name="password" id="password" autocomplete="new-password"
+                    placeholder="Choose a strong password" required>
+            </div>
+            <div>
+                <button type="submit">Register me!</button>
+            </div>
+        </form>
+    </div>
+    <script src="{{.URLPathPrefix}}/static/js/register.js?v={{.VCSRevision}}"></script>
+    <script>
+        initRegister();
+    </script>
+</body>
+
+</html>

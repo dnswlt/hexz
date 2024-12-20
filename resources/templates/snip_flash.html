@@ -1,0 +1,7 @@
+{{range .Messages}}
+<div class="flashmessage flash-{{tolower .Kind}}">
+    {{range (paragraphs .Message)}}
+    <p>{{.}}</p>
+    {{end}}
+</div>
+{{end}}

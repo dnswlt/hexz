@@ -5,11 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"regexp"
+	"sync"
 	"testing"
 	"time"
 
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/uuid"
 	"google.golang.org/protobuf/testing/protocmp"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -345,4 +347,191 @@ func TestRedisUpdateGameState(t *testing.T) {
 	if err := rc.UpdateGame(ctx, gameState); err != nil {
 		t.Fatalf("Failed to update game: %v", err)
 	}
+}
+
+func TestRedisTokenBucketGet(t *testing.T) {
+	if *testRedisAddr == "" {
+		t.Skip("Skipping integration test because -test-redis-addr is not set")
+	}
+	rc, err := NewRedisClient(&RedisClientConfig{
+		Addr:     *testRedisAddr,
+		LoginTTL: 24 * time.Hour,
+		GameTTL:  12 * time.Hour,
+		DB:       1, // Use test DB
+	})
+	if err != nil {
+		t.Fatalf("NewRedisClient error: %v", err)
+	}
+	bucket := "TestRedisTokenBucketGet"
+	rc.client.Del(context.Background(), bucket)
+	ok, err := rc.TokenBucketGet(context.Background(), bucket, 1, 1.0/60, 1)
+	if err != nil {
+		t.Fatalf("TokenBucketGet error: %v", err)
+	}
+	if !ok {
+		t.Errorf("Got NOK, want OK for %s", bucket)
+	}
+	// Get a second token right afterwards. This should fail, since the capacity is 1.
+	ok, err = rc.TokenBucketGet(context.Background(), bucket, 1, 1.0/60, 1)
+	if err != nil {
+		t.Fatalf("TokenBucketGet error: %v", err)
+	}
+	if ok {
+		t.Errorf("Got OK, want NOK for %s", bucket)
+	}
+}
+
+func TestRedisTokenBucketRefresh(t *testing.T) {
+	// Get a tokens per second at exactly the refresh rate.
+	// Expect every token request to succeed.
+	if *testRedisAddr == "" {
+		t.Skip("Skipping integration test because -test-redis-addr is not set")
+	}
+	rc, err := NewRedisClient(&RedisClientConfig{
+		Addr:     *testRedisAddr,
+		LoginTTL: 24 * time.Hour,
+		GameTTL:  12 * time.Hour,
+		DB:       1, // Use test DB
+	})
+	if err != nil {
+		t.Fatalf("NewRedisClient error: %v", err)
+	}
+	bucket := "TestRedisTokenBucketRefresh"
+	rc.client.Del(context.Background(), bucket)
+	rounds := 5
+	capacity := 10
+	ch := make(chan error, capacity)
+	var wg sync.WaitGroup
+	for i := 0; i < capacity; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for k := 0; k < rounds; k++ {
+				ok, err := rc.TokenBucketGet(context.Background(), bucket, 1, float64(capacity), capacity)
+				if err != nil {
+					ch <- err
+					return
+				}
+				if !ok {
+					ch <- fmt.Errorf("Got NOK, want OK for goroutine %d in round %d", i, k)
+					return
+				}
+				time.Sleep(1 * time.Second)
+			}
+		}()
+	}
+	wg.Wait()
+Loop:
+	for {
+		select {
+		case err := <-ch:
+			t.Fatal(err)
+		default:
+			break Loop
+		}
+	}
+}
+
+func TestRedisCSRFToken(t *testing.T) {
+	if *testRedisAddr == "" {
+		t.Skip("Skipping integration test because -test-redis-addr is not set")
+	}
+	rc, err := NewRedisClient(&RedisClientConfig{
+		Addr:     *testRedisAddr,
+		LoginTTL: 24 * time.Hour,
+		GameTTL:  12 * time.Hour,
+		DB:       1, // Use test DB
+	})
+	if err != nil {
+		t.Fatalf("NewRedisClient error: %v", err)
+	}
+	token, err := rc.NewCSRFToken(context.Background(), 1*time.Minute)
+	if err != nil {
+		t.Fatalf("Failed to get CSRF token: %v", err)
+	}
+	if token == "" {
+		t.Fatalf("Received an empty token")
+	}
+	if len(token) < 16 {
+		t.Errorf("Token length too small: %d", len(token))
+	}
+	ok, err := rc.ConsumeCSRFToken(context.Background(), token)
+	if err != nil {
+		t.Fatalf("Failed to consume CSRF token: %v", err)
+	}
+	if !ok {
+		t.Errorf("ConsumeCSRFToken returned false")
+	}
+	ok, err = rc.ConsumeCSRFToken(context.Background(), token)
+	if err != nil {
+		t.Fatalf("Failed to consume CSRF token: %v", err)
+	}
+	if ok {
+		t.Errorf("ConsumeCSRFToken returned true the second time around")
+	}
+}
+
+func TestRedisAddPopMessages(t *testing.T) {
+	if *testRedisAddr == "" {
+		t.Skip("Skipping integration test because -test-redis-addr is not set")
+	}
+	rc, err := NewRedisClient(&RedisClientConfig{
+		Addr:     *testRedisAddr,
+		LoginTTL: 24 * time.Hour,
+		GameTTL:  12 * time.Hour,
+		DB:       1, // Use test DB
+	})
+	if err != nil {
+		t.Fatalf("NewRedisClient error: %v", err)
+	}
+	ctx := context.Background()
+	sessionID := uuid.New().String()
+	// Pop empty.
+	messages, err := rc.PopMessages(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("PopMessages on empty failed: %v", err)
+	}
+	if len(messages) != 0 {
+		t.Errorf("Received %d messages out of the blue?", len(messages))
+	}
+	// Add a few messages, unordered.
+	t0 := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	createdTimes := []time.Time{
+		t0.Add(1 * time.Minute),
+		t0.Add(4 * time.Minute),
+		t0.Add(2 * time.Minute),
+		t0.Add(3 * time.Minute),
+	}
+	n := len(createdTimes)
+	for i := 0; i < n; i++ {
+		rc.AddMessage(ctx, sessionID, FlashMessage{
+			Kind:    "Info",
+			Created: createdTimes[i],
+			Message: fmt.Sprintf("Message #%d", i),
+		})
+	}
+	// Get all messages out, expect them to be ordered.
+	messages, err = rc.PopMessages(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("PopMessages on non-empty failed: %v", err)
+	}
+	if len(messages) != n {
+		t.Errorf("Received %d messages, want %d", len(messages), n)
+	}
+	for i := 1; i < n; i++ {
+		if !messages[i-1].Created.Before(messages[i].Created) {
+			t.Errorf("Messages are not ordered: %v before %v at %d",
+				messages[i-1].Created, messages[i].Created, i)
+			break
+		}
+	}
+	// Now there should be no messages anymore.
+	messages, err = rc.PopMessages(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("PopMessages on empty failed: %v", err)
+	}
+	if len(messages) != 0 {
+		t.Errorf("Received %d messages after previous PopMessages call", len(messages))
+	}
+
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/dnswlt/hexz/internal/api"
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
+	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -290,4 +291,48 @@ func (s *InMemoryGameStore) Subscribe(ctx context.Context, pubsubId string) <-ch
 		}
 	}()
 	return ch
+}
+
+// AlwaysAcceptTokenStore is an implementation of TokenStore
+// that accepts everything.
+type AlwaysAcceptTokenStore struct{}
+
+func (s AlwaysAcceptTokenStore) NewCSRFToken(ctx context.Context, ttl time.Duration) (string, error) {
+	return uuid.New().String(), nil
+}
+
+func (s AlwaysAcceptTokenStore) ConsumeCSRFToken(ctx context.Context, token string) (bool, error) {
+	return true, nil
+}
+
+func (s AlwaysAcceptTokenStore) TokenBucketGet(ctx context.Context, bucket string, tokens int, refillRate float64, capacity int) (bool, error) {
+	return true, nil
+}
+
+// InMemFlashStore is an in-memory implementation of a FlashStore.
+// Its methods can safely be called by multiple goroutines.
+type InMemFlashStore struct {
+	messages map[string][]FlashMessage
+	mut      sync.Mutex
+}
+
+func NewInMemFlashStore() *InMemFlashStore {
+	return &InMemFlashStore{
+		messages: make(map[string][]FlashMessage),
+	}
+}
+
+func (s *InMemFlashStore) AddMessage(ctx context.Context, flashID string, msg FlashMessage) error {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+	s.messages[flashID] = append(s.messages[flashID], msg)
+	return nil
+}
+
+func (s *InMemFlashStore) PopMessages(ctx context.Context, flashID string) ([]FlashMessage, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+	messages := s.messages[flashID]
+	delete(s.messages, flashID)
+	return messages, nil
 }

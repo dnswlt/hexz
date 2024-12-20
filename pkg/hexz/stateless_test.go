@@ -112,6 +112,60 @@ func TestValidPlayerName(t *testing.T) {
 	}
 }
 
+func TestValidateEmailAddress(t *testing.T) {
+	tests := []struct {
+		name    string
+		address string
+		accept  bool
+	}{
+		// Should be rejected:
+		{"empty", "", false},
+		{"no @", "abc", false},
+		{"no .tld", "abc@bar", false},
+		{"umlauts", "juerg@käse.ch", false}, // IDNA not supported yet.
+		{"double dot", "abc@bar..foo", false},
+		{"with_name", "Hans Meier <hm@example.com>", false},
+		// Should be accepted:
+		{"simpleOK", "abc@foo.bar", true},
+		{"dot_plus", "johnnie.walker+notify@example.com", true},
+		{"underscore_UPPER", "johnnie_walker@TRI.example.com", true},
+		{"dash", "hooli--twice@games.com", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := ValidateEmailAddress(tc.address); (err == nil) != tc.accept {
+				t.Errorf("unexpected error result for address %s: %v", tc.address, err)
+			}
+		})
+	}
+}
+
+func TestValidatePassword(t *testing.T) {
+	tests := []struct {
+		name     string
+		password string
+		accept   bool
+	}{
+		// Should be rejected:
+		{"empty", "", false},
+		{"short", "12aB$", false},
+		{"space", "aB3$ xxx", false},
+		{"too_long", "51826d61a7d18c3c0e1e500464faf3dc8688ce7c1e181194bd1f77a770f3ac5f3f4155fdX", false},
+		// Should be accepted:
+		{"long_ok", "51826d61a7d18c3c0e1e500464faf3dc8688ce7c1e181194bd1f77a770f3ac5f3f4155fd", true},
+		{"two_classes", "simpleOK", true},
+		{"umlauts", "käse-straße.123", true},
+		{"specials", "<a1!@#$%^&*()_+=-,./<>?|\\", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := validatePassword(tc.password); (err == nil) != tc.accept {
+				t.Errorf("unexpected error result for password %s: %v", tc.password, err)
+			}
+		})
+	}
+}
+
 func TestHandleNewGame(t *testing.T) {
 	cfg := testServerConfig(t)
 	s, err := newTestStatelessServer(t, cfg)

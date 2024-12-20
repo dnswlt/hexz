@@ -4,6 +4,7 @@ package hexzmem
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 	"github.com/dnswlt/hexz/internal/api"
 	"github.com/dnswlt/hexz/internal/hlog"
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 	tpb "google.golang.org/protobuf/types/known/timestamppb"
@@ -413,4 +415,122 @@ func (c *RedisClient) Publish(ctx context.Context, pubsubId string, event *pb.Ga
 		hlog.Fatalf("Cannot marshal event: %v", err)
 	}
 	return c.client.Publish(ctx, rkey("/pubsub", pubsubId), data).Err()
+}
+
+func (c *RedisClient) NewCSRFToken(ctx context.Context, ttl time.Duration) (string, error) {
+	uid := uuid.New().String()
+	err := c.client.Set(ctx, rkey("/csrf", uid), 1, ttl).Err()
+	if err != nil {
+		return "", fmt.Errorf("could not store token: %v", err)
+	}
+	return uid, nil
+}
+
+func (c *RedisClient) ConsumeCSRFToken(ctx context.Context, token string) (bool, error) {
+	n, err := c.client.Del(ctx, rkey("/csrf", token)).Result()
+	if err != nil {
+		return false, fmt.Errorf("could not consume token: %v", err)
+	}
+	return n == 1, nil
+}
+
+func (c *RedisClient) TokenBucketGet(ctx context.Context, bucket string, tokens int, refillRate float64, capacity int) (bool, error) {
+	if tokens <= 0 {
+		return false, fmt.Errorf("tokens must be positive")
+	}
+	if refillRate <= 0 {
+		return false, fmt.Errorf("refillRate must be positive")
+	}
+	if capacity <= 0 {
+		return false, fmt.Errorf("capacity must be positive")
+	}
+	now := time.Now().Unix()
+	// WTF, right?! Go, Lua, Redis.
+	luaScript := `
+		local key = KEYS[1]
+		local tokens = tonumber(ARGV[1])
+		local refillRate = tonumber(ARGV[2])
+		local capacity = tonumber(ARGV[3])
+		local now = tonumber(ARGV[4])
+
+		-- Get current bucket state
+		local bucket = redis.call("HMGET", key, "remaining_tokens", "last_refill_time")
+		local remainingTokens = tonumber(bucket[1]) or capacity
+		local lastRefillTime = tonumber(bucket[2]) or now
+
+		-- Calculate tokens to refill
+		local timeElapsed = now - lastRefillTime
+		local tokensToAdd = math.floor(timeElapsed * refillRate)
+		remainingTokens = math.min(capacity, remainingTokens + tokensToAdd)
+
+		-- Update last refill time
+		lastRefillTime = now
+
+		-- TTL for the bucket: seconds it takes to fill entirely
+		local ttl = math.ceil(capacity / refillRate)
+
+		-- Check if request can be allowed
+		if remainingTokens >= tokens then
+			remainingTokens = remainingTokens - tokens
+			redis.call("HMSET", key, "remaining_tokens", remainingTokens, "last_refill_time", lastRefillTime, "ttl", ttl)
+			redis.call("EXPIRE", key, math.max(60, ttl))
+			return 1 -- Allow request
+		else
+			-- Deny request
+			redis.call("HMSET", key, "remaining_tokens", remainingTokens, "last_refill_time", lastRefillTime, "ttl", ttl)
+			redis.call("EXPIRE", key, math.max(60, ttl))
+			return 0 -- Deny request
+		end
+	`
+
+	// Execute Lua script to atomically check and update the bucket.
+	result, err := c.client.Eval(ctx, luaScript, []string{rkey("/tb", bucket)},
+		tokens, refillRate, capacity, now).Result()
+	if err != nil {
+		return false, err
+	}
+	return result == int64(1), nil
+}
+
+func (c *RedisClient) AddMessage(ctx context.Context, flashID string, msg FlashMessage) error {
+	data, err := json.Marshal(&msg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal FlashMessage: %v", err)
+	}
+	key := rkey("/flash", flashID)
+	err = c.client.ZAdd(ctx, key, redis.Z{
+		Member: data,
+		Score:  float64(msg.Created.Unix()),
+	}).Err()
+	if err != nil {
+		return fmt.Errorf("failed to store FlashMessage: %v", err)
+	}
+	// Ensure flash messages that are never retrieved get removed quickly.
+	c.client.Expire(ctx, key, 1*time.Minute)
+	return nil
+}
+
+func (c *RedisClient) PopMessages(ctx context.Context, flashID string) ([]FlashMessage, error) {
+	key := rkey("/flash", flashID)
+
+	// Fetch all messages.
+	msgs, err := c.client.ZRange(ctx, key, 0, -1).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch FlashMessages: %v", err)
+	}
+	if len(msgs) == 0 {
+		return nil, nil
+	}
+	// Delete all messages.
+	if _, err := c.client.Del(ctx, key).Result(); err != nil {
+		return nil, fmt.Errorf("failed to delete FlashMessages: %v", err)
+	}
+	result := make([]FlashMessage, len(msgs))
+	for i, m := range msgs {
+		if err := json.Unmarshal([]byte(m), &result[i]); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal FlashMessage: %v", err)
+		}
+	}
+
+	return result, nil
 }

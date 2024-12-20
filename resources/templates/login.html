@@ -7,6 +7,7 @@
 
 <body>
     <h1 class="center">Welcome to Hexz!</h1>
+    {{template "snip_flash.html" .}}
     <p class="center">
         To play, please enter a user name.
     </p>
@@ -19,7 +20,8 @@
         <form action="{{.URLPathPrefix}}/login" method="post">
             <div>
                 <input type="text" name="name" id="name" placeholder="Enter username" required>
-                <button type="button" id="name-refresh" class="inputlike labelonly"><i class="fa-solid fa-rotate fa-xl"></i></button>
+                <button type="button" id="name-refresh" class="inputlike labelonly"><i
+                        class="fa-solid fa-rotate fa-xl"></i></button>
             </div>
             <div>
                 <button type="submit">Let's play!</button>

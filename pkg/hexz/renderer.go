@@ -5,6 +5,8 @@ import (
 	"html/template"
 	"io"
 	"path"
+	"regexp"
+	"strings"
 	"time"
 
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
@@ -20,10 +22,15 @@ type Renderer struct {
 const (
 	gameHtmlFilename    = "game.html"
 	viewHtmlFilename    = "view.html"
+	joinHtmlFilename    = "join.html"
 	loginHtmlFilename   = "login.html"
 	newGameHtmlFilename = "new.html"
 	rulesHtmlFilename   = "rules.html"
 	historyHtmlFilename = "history.html"
+)
+
+var (
+	paragraphSepRE = regexp.MustCompile(`\n{2,}`)
 )
 
 func commonFuncs() template.FuncMap {
@@ -47,6 +54,12 @@ func commonFuncs() template.FuncMap {
 			default:
 				return "?"
 			}
+		},
+		"paragraphs": func(s string) []string {
+			return paragraphSepRE.Split(s, -1)
+		},
+		"tolower": func(s string) string {
+			return strings.ToLower(s)
 		},
 	}
 }

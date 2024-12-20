@@ -177,6 +177,73 @@ div.login {
     font: inherit;
 }
 
+/* Join */
+
+.account-form {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+
+.account-form form {
+    width: 300px;
+}
+
+.account-form input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+
+.account-form button {
+    padding: 10px 20px;
+    background-color: var(--blue-light);
+    color: var(--dark-text);
+    border: none;
+    cursor: pointer;
+    border-radius: 5px;
+}
+
+/* Flash messages */
+
+.flashmessage {
+    border-radius: 5px;
+    padding: 10px;
+    margin: 10px 0;
+    border: 2px solid;
+}
+
+.flash-error {
+    border-color: #e74c3c;
+    background-color: #f9e6e6;
+    color: #c0392b;
+}
+
+.flash-info {
+    border-color: #1e8449;
+    background-color: #e9f7ef;
+    color: #1e8449;
+}
+/* 
+.flash-info {
+    border-color: #3498db; 
+    background-color: #eaf6fc; 
+    color: #2a73b9; 
+} */
+/* 
+.flash-info {
+    border-color: #f1c40f;
+    background-color: #fcf6dc;
+    color: #c49b0e;
+} */
+
+
 /* New Game */
 
 div.spacer {

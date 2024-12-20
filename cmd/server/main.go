@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"path"
 	"regexp"
@@ -148,6 +149,8 @@ func main() {
 
 	var gameStore hexzmem.GameStore
 	var playerStore hexzmem.PlayerStore
+	var tokenStore hexzmem.TokenStore
+	var flashStore hexzmem.FlashStore
 	if cfg.RedisAddr != "" {
 		rc, err := hexzmem.NewRedisClient(&hexzmem.RedisClientConfig{
 			Addr:     cfg.RedisAddr,
@@ -161,16 +164,22 @@ func main() {
 		//Redis stores
 		playerStore = &hexzmem.RemotePlayerStore{RedisClient: rc}
 		gameStore = rc
+		tokenStore = rc
+		flashStore = rc
 	} else {
 		// Local stores
-		hlog.Infof("Using in memory player and game stores.")
+		hlog.Infof("Using in memory player/game/token stores.")
 		playerStore, err = hexzmem.NewInMemoryPlayerStore(cfg.LoginTTL)
 		if err != nil {
 			hlog.Fatalf("error creating in-memory player store: %v", err)
 		}
 		gameStore = hexzmem.NewInMemoryGameStore(cfg.InactivityTimeout)
+		tokenStore = hexzmem.AlwaysAcceptTokenStore{}
+		flashStore = hexzmem.NewInMemFlashStore()
 	}
 	b := hexz.NewStatelessServerBuilder(cfg, playerStore, gameStore, renderer)
+	b = b.WithTokenStore(tokenStore)
+	b = b.WithFlashStore(flashStore)
 	// Postgres (optional)
 	var dbStore *hexzsql.PostgresStore
 	if cfg.PostgresURL != "" {
@@ -183,9 +192,23 @@ func main() {
 	}
 	// User service (optional) (register / activate / change password, etc.)
 	postmarkServerToken := os.Getenv("HEXZ_POSTMARK_SERVER_TOKEN")
-	validFromAddress := hexz.ValidateEmail(cfg.FromAddress) == nil
-	if validFromAddress && postmarkServerToken != "" && dbStore != nil {
-		mailClient := mail.NewPostmarkClient(postmarkServerToken, cfg.FromAddress)
+	validFromAddress := false
+	if cfg.FromAddress != "" {
+		err := hexz.ValidateEmailAddress(cfg.FromAddress)
+		if err != nil {
+			log.Fatalf("Invalid -from-address %q: %v", cfg.FromAddress, err)
+		}
+		validFromAddress = true
+	}
+	mailerAvailable := postmarkServerToken != "" || cfg.DebugMode
+	if validFromAddress && mailerAvailable && dbStore != nil {
+		var mailClient *mail.Client
+		if postmarkServerToken != "" {
+			mailClient = mail.NewPostmarkClient(postmarkServerToken, cfg.FromAddress)
+		} else {
+			hlog.Infof("HEXZ_POSTMARK_SERVER_TOKEN not set. Mails will only be logged.")
+			mailClient = mail.NewClient(mail.DebugLoggingMailer{}, cfg.FromAddress)
+		}
 		userService := users.NewService(dbStore, mailClient)
 		b = b.WithUserService(userService)
 	} else {

@@ -52,3 +52,36 @@ type GameStore interface {
 	// and terminate when the provided context ctx is cancelled.
 	Subscribe(ctx context.Context, pubsubId string) <-chan *pb.GameStorePubsubEvent
 }
+
+// TokenStore is the interface for a store of tokens.
+// Tokens can be used for CSRF prevention and rate limiting.
+type TokenStore interface {
+	// NewCSRFToken creates and returns a new token with the specified TTL.
+	NewCSRFToken(ctx context.Context, ttl time.Duration) (string, error)
+	// ConsumeCSRFToken checks if the given CSRF token is known, and consumes it.
+	ConsumeCSRFToken(ctx context.Context, token string) (bool, error)
+
+	// TokenBucketGet atomically gets the requested number of tokens from bucket.
+	// Before removing any tokens, it refills the bucket according to the
+	// given refillRate (in tokens per second) and the most recent refill time.
+	// On the first call (ever or after the max TTL for any bucket), the bucket
+	// is assumed to contain capacity tokens. The bucket will never contain
+	// more than capacity tokens.
+	TokenBucketGet(ctx context.Context, bucket string, tokens int, refillRate float64, capacity int) (bool, error)
+}
+
+type FlashMessage struct {
+	Kind    string    `json:"kind"`
+	Message string    `json:"message"`
+	Created time.Time `json:"created"`
+}
+
+type FlashStore interface {
+	// AddMessage adds a flash message for the given flashID.
+	// Given the short-lived nature of flash messages, implementations should
+	// ensure that messages associated with a flashID have a short TTL
+	// (1 minute should be enough).
+	AddMessage(ctx context.Context, flashID string, msg FlashMessage) error
+	// PopMessages retrieves all flash messages for the flashID and removes them from the store.
+	PopMessages(ctx context.Context, flashID string) ([]FlashMessage, error)
+}
