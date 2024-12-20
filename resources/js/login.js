@@ -39,5 +39,20 @@ async function initLogin() {
             input.select();
         })
     }
+    const toggleGuest = document.querySelector("#toggle-guest");
+    if (toggleGuest) {
+        toggleGuest.addEventListener("click", () => {
+            document.querySelector("#account-login").classList.add("hidden");
+            document.querySelector("#guest-login").classList.remove("hidden");
+        })
+    }
+    const toggleAccount = document.querySelector("#toggle-account");
+    if (toggleAccount) {
+        toggleAccount.addEventListener("click", () => {
+            document.querySelector("#account-login").classList.remove("hidden");
+            document.querySelector("#guest-login").classList.add("hidden");
+        })
+    }
+    
     updateUsername();
 }

@@ -658,9 +658,9 @@ func (s *StatelessServer) handleLoginRequest(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if err := validatePlayerName(name); err != nil {
-		s.serveHtmlTemplateParams(w, loginHtmlFilename, map[string]any{
-			"ErrorMessage": fmt.Sprintf("Invalid username: %v", err),
-		})
+		// Invalid player name. Try again.
+		s.addErrorFlashMessage(r.Context(), w, fmt.Sprintf("Invalid username: %v", err))
+		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
 		return
 	}
 	playerId := generatePlayerId()

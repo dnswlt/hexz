@@ -7,24 +7,43 @@
 
 <body>
     <h1 class="center">Welcome to Hexz!</h1>
+
     {{template "snip_flash.html" .}}
+
     <p class="center">
-        To play, please enter a user name.
+        Please log in to play:
     </p>
-    <div class="login">
-        {{if .ErrorMessage}}
-        <div class="errormessage">
-            {{.ErrorMessage}}
-        </div>
-        {{end}}
+    <div id="account-login" class="account-form">
         <form action="{{.URLPathPrefix}}/login" method="post">
-            <div>
-                <input type="text" name="name" id="name" placeholder="Enter username" required>
-                <button type="button" id="name-refresh" class="inputlike labelonly"><i
-                        class="fa-solid fa-rotate fa-xl"></i></button>
-            </div>
-            <div>
+            <div class="inputs">
+                <input type="hidden" name="login_type" value="user">
+                <input type="email" name="email" placeholder="Enter email address" required>
+                <input type="password" name="password" placeholder="Enter password" required>
                 <button type="submit">Let's play!</button>
+                <button id="toggle-guest" type="button">
+                    <i class="fa-solid fa-user-secret"></i>
+                    <span>Play as Guest</span>
+                </button>
+            </div>
+        </form>
+    </div>
+    <p class="center">
+        To try the game, play as a guest:
+    </p>
+    <div id="guest-login" class="account-form hidden">
+        <form action="{{.URLPathPrefix}}/login" method="post">
+            <div class="inputs">
+                <input type="hidden" name="login_type" value="guest">
+                <div class="input-with-button">
+                    <input type="text" name="name" id="name" placeholder="Enter username" required>
+                    <button type="button" id="name-refresh" class="inputlike"><i
+                            class="fa-solid fa-rotate fa-xl"></i></button>
+                </div>
+                <button type="submit">Let's play!</button>
+                <button id="toggle-account" type="button">
+                    <i class="fa-solid fa-user"></i>
+                    <span>Account Login</span>
+                </button>
             </div>
         </form>
     </div>

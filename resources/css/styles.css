@@ -7,6 +7,7 @@
     --yellow-gray: #d9cd9f;
     --dark-text: #1e1e1e;
     --light-text: #ececec;
+    --medium-light-bg: #a7a7a7;
     --medium-light-text: #7f7f7f;
     --medium-gray: #5f5f5f;
     --medium-dark-gray: #3a3a3a;
@@ -131,36 +132,14 @@ div.centered {
     align-items: center;
 }
 
-/* Login */
+.hidden {
+    display: none !important;
+}
+
+/* Login and Join */
 div.login {
     text-align: center;
     margin-top: 20px;
-}
-
-.login form div {
-    margin: 10px 0;
-}
-
-.login input[type="text"] {
-    padding: 10px;
-}
-
-.login button[type='submit'] {
-    padding: 10px 20px;
-    background-color: var(--blue-light);
-    color: var(--dark-text);
-    border: none;
-    cursor: pointer;
-    border-radius: 5px;
-}
-
-.errormessage {
-    background-color: #fdecea;
-    color: #b71c1c;
-    border: 1px solid #b71c1c;
-    border-radius: 5px;
-    padding: 10px;
-    text-align: center;
 }
 
 .inputlike {
@@ -168,16 +147,16 @@ div.login {
     color: var(--dark-text);
     border-radius: 5px;
     padding: 10px;
-}
-
-.labelonly {
-    /* background: none; */
     border: none;
     cursor: pointer;
     font: inherit;
 }
 
-/* Join */
+.input-with-button {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+}
 
 .account-form {
     display: flex;
@@ -194,20 +173,31 @@ div.login {
 .account-form input {
     width: 100%;
     padding: 10px;
-    margin-bottom: 10px;
     box-sizing: border-box;
     border: 1px solid #ccc;
     border-radius: 5px;
 }
 
+div.account-form div.inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
 
 .account-form button {
     padding: 10px 20px;
-    background-color: var(--blue-light);
     color: var(--dark-text);
     border: none;
     cursor: pointer;
     border-radius: 5px;
+}
+
+.account-form button[type='button'] {
+    background-color: var(--medium-light-bg);
+}
+
+.account-form button[type='submit'] {
+    background-color: var(--blue-light);
 }
 
 /* Flash messages */
@@ -217,12 +207,13 @@ div.login {
     padding: 10px;
     margin: 10px 0;
     border: 2px solid;
+    text-align: center;
 }
 
 .flash-error {
-    border-color: #e74c3c;
-    background-color: #f9e6e6;
-    color: #c0392b;
+    background-color: #fdecea;
+    color: #b71c1c;
+    border: 1px solid #b71c1c;
 }
 
 .flash-info {
@@ -230,6 +221,7 @@ div.login {
     background-color: #e9f7ef;
     color: #1e8449;
 }
+
 /* 
 .flash-info {
     border-color: #3498db; 
