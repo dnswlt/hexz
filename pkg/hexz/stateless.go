@@ -148,6 +148,10 @@ func generatePlayerId() api.PlayerId {
 	return api.PlayerId(hex.EncodeToString(p))
 }
 
+const (
+	maxPasswordLength = 72
+)
+
 var (
 	// mail.ParseAddress is very permissive, so we add an extra regexp to
 	// validate a bit more strictly.
@@ -171,7 +175,7 @@ func ValidateEmailAddress(address string) error {
 }
 
 func validatePassword(password string) error {
-	if len(password) < 6 || len(password) > 72 {
+	if len(password) < 6 || len(password) > maxPasswordLength {
 		// 72 is the max that bcrypt supports.
 		return fmt.Errorf("passwords must be 6-72 characters long")
 	}
@@ -303,11 +307,13 @@ type throttle struct {
 // Can be used to throttle certain expensive API calls, like those that involve sending an email.
 func (s *StatelessServer) throttlingHandlerFunc(t throttle, h http.Handler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ok, err := s.tokenStore.TokenBucketGet(r.Context(), t.bucket, 1, t.maxQPS, t.capacity)
-		if err != nil || !ok {
-			http.Error(w, "request limit exceeded", http.StatusTooManyRequests)
-			hlog.Infof("Request throttling kicked in for %s", t.bucket)
-			return
+		if s.tokenStore != nil {
+			ok, err := s.tokenStore.TokenBucketGet(r.Context(), t.bucket, 1, t.maxQPS, t.capacity)
+			if err != nil || !ok {
+				http.Error(w, "request limit exceeded", http.StatusTooManyRequests)
+				hlog.Infof("Request throttling kicked in for %s", t.bucket)
+				return
+			}
 		}
 		h.ServeHTTP(w, r)
 	})
@@ -362,10 +368,10 @@ func (s *StatelessServer) deletePlayerCookie() *http.Cookie {
 	}
 }
 
-func (s *StatelessServer) lookupPlayerFromCookie(r *http.Request) (api.Player, error) {
+func (s *StatelessServer) lookupPlayerFromCookie(r *http.Request) (hexzmem.Player, error) {
 	cookie, err := r.Cookie(playerIDCookieName)
 	if err != nil {
-		return api.Player{}, errMissingCookie
+		return hexzmem.Player{}, errMissingCookie
 	}
 	return s.playerStore.Lookup(r.Context(), api.PlayerId(cookie.Value))
 }
@@ -406,7 +412,7 @@ func (s *StatelessServer) storeNewGameFromExisting(ctx context.Context, inputGam
 }
 
 // Stores a new game in the game store and returns the new game ID.
-func (s *StatelessServer) startNewGame(r *http.Request, p *api.Player, gameType api.GameType, singlePlayer bool) (*GameRepr, error) {
+func (s *StatelessServer) startNewGame(r *http.Request, p *hexzmem.Player, gameType api.GameType, singlePlayer bool) (*GameRepr, error) {
 	engineState := NewGameEngine(gameType).Proto()
 	players := []*pb.Player{{Id: string(p.Id), Name: p.Name}}
 	allJoined := false
@@ -646,7 +652,55 @@ func (s *StatelessServer) handleVerifyUser(w http.ResponseWriter, r *http.Reques
 	http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
 }
 
-func (s *StatelessServer) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
+// Handles a login for an account
+func (s *StatelessServer) handleAccountLoginRequest(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form", http.StatusBadRequest)
+		return
+	}
+	email := r.Form.Get("email")
+	if err := ValidateEmailAddress(email); err != nil {
+		s.addErrorFlashMessage(r.Context(), w, "Invalid email address")
+		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+		return
+	}
+	password := r.Form.Get("password")
+	if password == "" || len(password) > maxPasswordLength {
+		s.addErrorFlashMessage(r.Context(), w, "Invalid password")
+		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+		return
+	}
+
+	user, err := s.userService.ValidateLogin(r.Context(), email, password)
+	if errors.Is(err, users.ErrInvalidLogin) {
+		s.addErrorFlashMessage(r.Context(), w, "Invalid credentials")
+		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+		return
+	} else if errors.Is(err, users.ErrAccountNotActive) {
+		s.addErrorFlashMessage(r.Context(), w, "Your account is not active. Did you open the verification link you received via email?")
+		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+		return
+	} else if err != nil {
+		hlog.Errorf("Error validating login: %v", err)
+		http.Error(w, "validation error", http.StatusInternalServerError)
+		return
+	}
+
+	player := hexzmem.Player{
+		Id:     generatePlayerId(),
+		Name:   user.PlayerName,
+		UserID: user.ID,
+	}
+	if err := s.playerStore.Login(r.Context(), player); err != nil {
+		hlog.Infof("Rejected login for player %s: %s", user.PlayerName, err)
+		http.Error(w, "Cannot log in right now", http.StatusPreconditionFailed)
+		return
+	}
+	http.SetCookie(w, s.generatePlayerCookie(player.Id, s.config.LoginTTL))
+	http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+}
+
+func (s *StatelessServer) handleGuestLoginRequest(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid form", http.StatusBadRequest)
 		return
@@ -663,14 +717,33 @@ func (s *StatelessServer) handleLoginRequest(w http.ResponseWriter, r *http.Requ
 		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
 		return
 	}
-	playerId := generatePlayerId()
-	if err := s.playerStore.Login(r.Context(), playerId, name); err != nil {
+	player := hexzmem.Player{
+		Id:   generatePlayerId(),
+		Name: name,
+	}
+	if err := s.playerStore.Login(r.Context(), player); err != nil {
 		hlog.Infof("Rejected login for player %s: %s", name, err)
 		http.Error(w, "Cannot log in right now", http.StatusPreconditionFailed)
 		return
 	}
-	http.SetCookie(w, s.generatePlayerCookie(playerId, s.config.LoginTTL))
+	http.SetCookie(w, s.generatePlayerCookie(player.Id, s.config.LoginTTL))
 	http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+}
+
+// Handles a login POST request.
+func (s *StatelessServer) handleLoginRequest(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form", http.StatusBadRequest)
+		return
+	}
+	// Check login type (regular account vs. guest)
+	loginType := r.Form.Get("login_type")
+	if loginType == "account" {
+		s.handleAccountLoginRequest(w, r)
+		return
+	}
+	// Treat the request as a guest login.
+	s.handleGuestLoginRequest(w, r)
 }
 
 func (s *StatelessServer) handleLogoutRequest(w http.ResponseWriter, r *http.Request) {
@@ -1029,8 +1102,10 @@ func (s *StatelessServer) goMakeCPUMove(g *GameRepr) {
 	}(g.GameID(), g.Engine().Board().Turn)
 }
 
+// GameRequest is a generic struct that holds commonly used data needed to process a request for a game.
+// It is not used in API requests or responses.
 type GameRequest[R any] struct {
-	player   api.Player
+	player   hexzmem.Player
 	gameId   string
 	request  *R
 	gameRepr *GameRepr
@@ -1604,7 +1679,9 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 		gzipped.FileServer(gzipped.Dir(s.config.DocumentRoot))))
 
 	// Login
-	handleFunc("/login", postHandlerFunc(s.handleLoginRequest))
+	handleFunc("/login", s.throttlingHandlerFunc(
+		throttle{bucket: "login", maxQPS: 1, capacity: 10},
+		postHandlerFunc(s.handleLoginRequest)))
 	handleFunc("/logout", postHandlerFunc(s.handleLogoutRequest))
 	handleFunc("/loginnames", s.handleLoginNames)
 

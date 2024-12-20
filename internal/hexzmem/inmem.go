@@ -28,7 +28,7 @@ var (
 
 type InMemoryPlayerStore struct {
 	// Contains all logged in players, mapped by their (cookie) playerId.
-	players     map[api.PlayerId]*api.Player
+	players     map[api.PlayerId]*Player
 	mut         sync.Mutex
 	loginTTL    time.Duration // How long a login is valid.
 	lastCleanup time.Time
@@ -39,14 +39,14 @@ type InMemoryPlayerStore struct {
 // If dbPath is empty, no persistent storage is used.
 func NewInMemoryPlayerStore(loginTTL time.Duration) (*InMemoryPlayerStore, error) {
 	s := &InMemoryPlayerStore{
-		players:  make(map[api.PlayerId]*api.Player),
+		players:  make(map[api.PlayerId]*Player),
 		loginTTL: loginTTL,
 		clock:    &RealClock{},
 	}
 	return s, nil
 }
 
-func (s *InMemoryPlayerStore) Lookup(ctx context.Context, playerId api.PlayerId) (api.Player, error) {
+func (s *InMemoryPlayerStore) Lookup(ctx context.Context, playerId api.PlayerId) (Player, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 	// Clean up periodically.
@@ -61,23 +61,20 @@ func (s *InMemoryPlayerStore) Lookup(ctx context.Context, playerId api.PlayerId)
 	}
 	p, ok := s.players[playerId]
 	if !ok {
-		return api.Player{}, errPlayerNotFound
+		return Player{}, errPlayerNotFound
 	}
 	p.LastActive = s.clock.Now()
 	return *p, nil
 }
 
-func (s *InMemoryPlayerStore) Login(ctx context.Context, playerId api.PlayerId, name string) error {
+func (s *InMemoryPlayerStore) Login(ctx context.Context, player Player) error {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 	if len(s.players) >= maxLoggedInPlayers {
 		return fmt.Errorf("too many logged in players")
 	}
-	s.players[playerId] = &api.Player{
-		Id:         playerId,
-		Name:       name,
-		LastActive: s.clock.Now(),
-	}
+	s.players[player.Id] = &player
+	s.players[player.Id].LastActive = s.clock.Now()
 	return nil
 }
 

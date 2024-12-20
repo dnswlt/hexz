@@ -38,6 +38,7 @@ var (
 type UserStore interface {
 	// Looks up a single user by email address.
 	FindUser(ctx context.Context, email string) (*User, error)
+
 	// Adds a new user to the database.
 	// The ID field will be populated. An error is returned if
 	// it is not empty.
@@ -49,13 +50,6 @@ type UserStore interface {
 	// If the token is not expired, the user's account status
 	// is set to `active`.
 	VerifyUser(ctx context.Context, verificationToken string) error
-
-	// Updates an existing user in the database.
-	// The ID field must be set to the user to be updated.
-	// An error is returned if the ID is empty.
-	// UpdatedAt may be empty, in which case it
-	// will be set to "now" in the database.
-	UpdateUser(ctx context.Context, user *User) error
 }
 
 type GameRow struct {

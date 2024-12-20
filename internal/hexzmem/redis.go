@@ -51,12 +51,12 @@ type RemotePlayerStore struct {
 	*RedisClient
 }
 
-func (s *RemotePlayerStore) Lookup(ctx context.Context, playerId api.PlayerId) (api.Player, error) {
+func (s *RemotePlayerStore) Lookup(ctx context.Context, playerId api.PlayerId) (Player, error) {
 	return s.LookupPlayer(ctx, playerId)
 }
 
-func (s *RemotePlayerStore) Login(ctx context.Context, playerId api.PlayerId, name string) error {
-	return s.LoginPlayer(ctx, playerId, name)
+func (s *RemotePlayerStore) Login(ctx context.Context, player Player) error {
+	return s.LoginPlayer(ctx, player)
 }
 
 func (s *RemotePlayerStore) Logout(ctx context.Context, playerId api.PlayerId) error {
@@ -96,20 +96,25 @@ func rkey(path, key string) string {
 	return strings.TrimRight(path, "/") + "/" + escape(key)
 }
 
-func (c *RedisClient) LookupPlayer(ctx context.Context, playerId api.PlayerId) (api.Player, error) {
-	val, err := c.client.GetEx(ctx, rkey("/login", string(playerId)), c.config.LoginTTL).Result()
+func (c *RedisClient) LookupPlayer(ctx context.Context, playerId api.PlayerId) (Player, error) {
+	data, err := c.client.GetEx(ctx, rkey("/login", string(playerId)), c.config.LoginTTL).Bytes()
 	if err != nil {
-		return api.Player{}, err
+		return Player{}, err
 	}
-	return api.Player{
-		Id:         playerId,
-		Name:       val,
-		LastActive: c.clock.Now(),
-	}, nil
+	var player Player
+	err = json.Unmarshal(data, &player)
+	if err != nil {
+		return Player{}, fmt.Errorf("failed to unmarshal player: %v", err)
+	}
+	return player, nil
 }
 
-func (c *RedisClient) LoginPlayer(ctx context.Context, playerId api.PlayerId, name string) error {
-	return c.client.SetEx(ctx, rkey("/login", string(playerId)), name, c.config.LoginTTL).Err()
+func (c *RedisClient) LoginPlayer(ctx context.Context, player Player) error {
+	data, err := json.Marshal(player)
+	if err != nil {
+		return fmt.Errorf("cannot marshal player: %v", err)
+	}
+	return c.client.SetEx(ctx, rkey("/login", string(player.Id)), data, c.config.LoginTTL).Err()
 }
 
 func (c *RedisClient) LogoutPlayer(ctx context.Context, playerId api.PlayerId) error {

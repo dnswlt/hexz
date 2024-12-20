@@ -266,7 +266,8 @@ func (s *PostgresStore) FindUser(ctx context.Context, email string) (*User, erro
 			created_at,
 			updated_at
 		FROM users
-		WHERE email = $1
+		WHERE
+			email = $1
 	`
 	row := s.pool.QueryRowContext(ctx, query, email)
 	user := &User{}
@@ -331,6 +332,11 @@ func (s *PostgresStore) AddUser(ctx context.Context, user *User) error {
 	return nil
 }
 
+// Updates an existing user in the database.
+// The ID field must be set to the user to be updated.
+// An error is returned if the ID is empty.
+// UpdatedAt may be empty, in which case it
+// will be set to "now" in the database.
 func (s *PostgresStore) UpdateUser(ctx context.Context, user *User) error {
 	if user.ID == "" {
 		return fmt.Errorf("user ID must not be empty for update")

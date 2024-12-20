@@ -22,8 +22,16 @@ type CreateUserParams struct {
 	VerifyURL *url.URL
 }
 
+type User struct {
+	ID         string
+	Email      string
+	PlayerName string
+}
+
 var (
 	ErrVerificationFailed = errors.New("user could not be verified")
+	ErrInvalidLogin       = errors.New("invalid login")
+	ErrAccountNotActive   = errors.New("account is not active")
 )
 
 type Service interface {
@@ -38,6 +46,8 @@ type Service interface {
 	// Returns ErrVerificationFailed if the verification itself failed,
 	// but was executed without errors,
 	VerifyUser(ctx context.Context, token string) error
+
+	ValidateLogin(ctx context.Context, email, password string) (*User, error)
 }
 
 type ServiceDefault struct {
@@ -98,4 +108,26 @@ func (s *ServiceDefault) VerifyUser(ctx context.Context, token string) error {
 		return ErrVerificationFailed
 	}
 	return err
+}
+
+func (s *ServiceDefault) ValidateLogin(ctx context.Context, email, password string) (*User, error) {
+	u, err := s.store.FindUser(ctx, email)
+	if errors.Is(err, hexzsql.ErrUserNotFound) {
+		return nil, ErrInvalidLogin
+	} else if err != nil {
+		return nil, fmt.Errorf("error validating login: %v", err)
+	}
+	if u.AccountStatus != hexzsql.AccountStatusActive {
+		return nil, ErrAccountNotActive
+	}
+	err = bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password))
+	if err != nil {
+		// We allow unlimited login attempts for now, and just limit the login request rate.
+		return nil, ErrInvalidLogin
+	}
+	return &User{
+		ID:         u.ID,
+		Email:      u.Email,
+		PlayerName: u.PlayerName,
+	}, nil
 }

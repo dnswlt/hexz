@@ -8,12 +8,25 @@ import (
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 )
 
+// Player contains the data that is stored in the PlayerStore for a given player.
+// It has JSON annotations for serialization (to disk or in memory storage).
+type Player struct {
+	// A randomly generated unique ID.
+	// This ID may be used in cookies.
+	Id         api.PlayerId `json:"id"`
+	Name       string       `json:"name"`
+	LastActive time.Time    `json:"lastActive"`
+	// Only set for registered users. For guests, this field is empty.
+	UserID string `json:"userId"`
+}
+
 type PlayerStore interface {
 	// Lookup looks up the given player by ID.
-	Lookup(ctx context.Context, playerId api.PlayerId) (api.Player, error)
+	Lookup(ctx context.Context, playerId api.PlayerId) (Player, error)
 	// Login logs in the given player. If the player is already logged in,
 	// the existing data will be overwritten with the new data.
-	Login(ctx context.Context, playerId api.PlayerId, name string) error
+	// LastActive will be updated internally and does not need to be set by the caller.
+	Login(ctx context.Context, player Player) error
 	// Deletes the player from the store.
 	Logout(ctx context.Context, playerId api.PlayerId) error
 }

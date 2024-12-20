@@ -10,13 +10,13 @@
 
     {{template "snip_flash.html" .}}
 
-    <p class="center">
-        Please log in to play:
-    </p>
     <div id="account-login" class="account-form">
+        <p class="center">
+            Please log in to play:
+        </p>
         <form action="{{.URLPathPrefix}}/login" method="post">
             <div class="inputs">
-                <input type="hidden" name="login_type" value="user">
+                <input type="hidden" name="login_type" value="account">
                 <input type="email" name="email" placeholder="Enter email address" required>
                 <input type="password" name="password" placeholder="Enter password" required>
                 <button type="submit">Let's play!</button>
@@ -26,11 +26,12 @@
                 </button>
             </div>
         </form>
+        <p><a href="{{.URLPathPrefix}}/join">Create an account</a></p>
     </div>
-    <p class="center">
-        To try the game, play as a guest:
-    </p>
     <div id="guest-login" class="account-form hidden">
+        <p class="center">
+            Play as a guest:
+        </p>
         <form action="{{.URLPathPrefix}}/login" method="post">
             <div class="inputs">
                 <input type="hidden" name="login_type" value="guest">
