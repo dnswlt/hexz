@@ -294,11 +294,11 @@ func (s *InMemoryGameStore) Subscribe(ctx context.Context, pubsubId string) <-ch
 // that accepts everything.
 type AlwaysAcceptTokenStore struct{}
 
-func (s AlwaysAcceptTokenStore) NewCSRFToken(ctx context.Context, ttl time.Duration) (string, error) {
+func (s AlwaysAcceptTokenStore) NewCSRFToken(ctx context.Context, playerId api.PlayerId, ttl time.Duration) (string, error) {
 	return uuid.New().String(), nil
 }
 
-func (s AlwaysAcceptTokenStore) ConsumeCSRFToken(ctx context.Context, token string) (bool, error) {
+func (s AlwaysAcceptTokenStore) ConsumeCSRFToken(ctx context.Context, playerId api.PlayerId, token string) (bool, error) {
 	return true, nil
 }
 

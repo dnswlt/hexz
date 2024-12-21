@@ -10,6 +10,7 @@
 
     {{template "snip_flash.html" .}}
 
+    {{if .UserManagementEnabled }}
     <div id="account-login" class="account-form">
         <p class="center">
             Please log in to play:
@@ -28,7 +29,9 @@
         </form>
         <p><a href="{{.URLPathPrefix}}/join">Create an account</a></p>
     </div>
-    <div id="guest-login" class="account-form hidden">
+    {{end}}
+
+    <div id="guest-login" class="account-form {{if .UserManagementEnabled }}hidden{{end}}">
         <p class="center">
             Play as a guest:
         </p>
@@ -41,10 +44,12 @@
                             class="fa-solid fa-rotate fa-xl"></i></button>
                 </div>
                 <button type="submit">Let's play!</button>
+                {{if .UserManagementEnabled }}
                 <button id="toggle-account" type="button">
                     <i class="fa-solid fa-user"></i>
                     <span>Account Login</span>
                 </button>
+                {{end}}
             </div>
         </form>
     </div>

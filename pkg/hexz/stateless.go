@@ -278,6 +278,10 @@ func urlJoinPath(prefix, urlPath string) string {
 	return prefix + "/" + urlPath
 }
 
+func (s *StatelessServer) userMgmtEnabled() bool {
+	return s.userService != nil
+}
+
 func (s *StatelessServer) loggingHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.config.DebugMode {
@@ -454,11 +458,6 @@ func (s *StatelessServer) startNewGame(r *http.Request, p *hexzmem.Player, gameT
 	return NewGameRepr(gameState), nil
 }
 
-// Sends the contents of filename to the ResponseWriter.
-func (s *StatelessServer) serveHtmlTemplate(w http.ResponseWriter, filename string) {
-	s.serveHtmlTemplateParams(w, filename, nil)
-}
-
 func (s *StatelessServer) defaultTemplateParams() map[string]any {
 	vcsRevision := s.config.VCSRevision
 	if len(s.config.VCSRevision) > 12 {
@@ -467,9 +466,15 @@ func (s *StatelessServer) defaultTemplateParams() map[string]any {
 		vcsRevision = vcsRevision[:12]
 	}
 	return map[string]any{
-		"URLPathPrefix": s.config.URLPathPrefix,
-		"VCSRevision":   vcsRevision,
+		"URLPathPrefix":         s.config.URLPathPrefix,
+		"VCSRevision":           vcsRevision,
+		"UserManagementEnabled": s.userMgmtEnabled(),
 	}
+}
+
+// Sends the contents of filename to the ResponseWriter.
+func (s *StatelessServer) serveHtmlTemplate(w http.ResponseWriter, filename string) {
+	s.serveHtmlTemplateParams(w, filename, nil)
 }
 
 func (s *StatelessServer) serveHtmlTemplateParams(w http.ResponseWriter, filename string, params map[string]any) {
@@ -547,41 +552,10 @@ func (s *StatelessServer) addErrorFlashMessage(ctx context.Context, w http.Respo
 	})
 }
 
-// validateCSRFToken validates the given csrfToken.
-// If validation fails, it sends an HTTP error back to the client and logs the event.
-func (s *StatelessServer) validateCSRFToken(w http.ResponseWriter, r *http.Request, csrfToken string) bool {
-	if csrfToken == "" {
-		http.Error(w, "missing token", http.StatusBadRequest)
-		hlog.Infof("Received registration form without csrf_token from %s", r.RemoteAddr)
-		return false
-	}
-	if len(csrfToken) > 128 {
-		http.Error(w, "invalid token", http.StatusBadRequest)
-		hlog.Infof("Received registration form with invalid csrf_token (too long) from %s", r.RemoteAddr)
-		return false
-	}
-	ok, err := s.tokenStore.ConsumeCSRFToken(r.Context(), csrfToken)
-	if err != nil {
-		hlog.Errorf("Failed to consume CSRF token: %v", err)
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return false
-	}
-	if !ok {
-		hlog.Infof("Received registration form with invalid csrf_token %s from %s", csrfToken, r.RemoteAddr)
-		http.Error(w, "invalid token", http.StatusBadRequest)
-		return false
-	}
-	return true
-}
-
 func (s *StatelessServer) handleRegisterUser(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Invalid form", http.StatusBadRequest)
 		return
-	}
-
-	if ok := s.validateCSRFToken(w, r, r.Form.Get("csrf_token")); !ok {
-		return // validateCSRFToken does the logging and response handling.
 	}
 
 	// Validate user-provided data.
@@ -849,17 +823,8 @@ func (s *StatelessServer) popFlashMessages(r *http.Request) []hexzmem.FlashMessa
 }
 
 func (s *StatelessServer) handleJoin(w http.ResponseWriter, r *http.Request) {
-	// Get CSRF token for the form.
-	csrf, err := s.tokenStore.NewCSRFToken(r.Context(), 1*time.Hour)
-	if err != nil {
-		hlog.Errorf("Could not get a CSRF token: %v", err)
-		http.Error(w, "token store error", http.StatusInternalServerError)
-		return
-	}
-
 	s.serveHtmlTemplateParams(w, joinHtmlFilename, map[string]any{
-		"CSRFToken": csrf,
-		"Messages":  s.popFlashMessages(r),
+		"Messages": s.popFlashMessages(r),
 	})
 }
 
@@ -1686,11 +1651,13 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	handleFunc("/loginnames", s.handleLoginNames)
 
 	// User management
-	handleFunc("/join", s.handleJoin)
-	handleFunc("/register", s.throttlingHandlerFunc(
-		throttle{bucket: "register", maxQPS: 0.1, capacity: 1},
-		postHandlerFunc(s.handleRegisterUser)))
-	handleFunc("/verify", s.handleVerifyUser)
+	if s.userMgmtEnabled() {
+		handleFunc("/join", s.handleJoin)
+		handleFunc("/register", s.throttlingHandlerFunc(
+			throttle{bucket: "register", maxQPS: 0.1, capacity: 1},
+			postHandlerFunc(s.handleRegisterUser)))
+		handleFunc("/verify", s.handleVerifyUser)
+	}
 
 	// Game API
 	handleFunc("/new", postHandlerFunc(s.handleNewGame))

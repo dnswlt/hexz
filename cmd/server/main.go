@@ -212,7 +212,7 @@ func main() {
 		userService := users.NewService(dbStore, mailClient)
 		b = b.WithUserService(userService)
 	} else {
-		hlog.Infof("Disabling user management: HEXZ_POSTMARK_SERVER_TOKEN, -postgres-url and -from-address must be set")
+		hlog.Infof("Disabling user management: (HEXZ_POSTMARK_SERVER_TOKEN or -debug), -postgres-url and -from-address must be set")
 	}
 	// Remote CPU (optional)
 	if cfg.RemoteCPUPlayerURL != "" {

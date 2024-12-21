@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dnswlt/hexz/internal/api"
 	pb "github.com/dnswlt/hexz/pkg/hexzpb"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
@@ -445,7 +446,8 @@ func TestRedisCSRFToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRedisClient error: %v", err)
 	}
-	token, err := rc.NewCSRFToken(context.Background(), 1*time.Minute)
+	var playerId api.PlayerId = "TestRedisCSRFToken.playerId"
+	token, err := rc.NewCSRFToken(context.Background(), playerId, 1*time.Minute)
 	if err != nil {
 		t.Fatalf("Failed to get CSRF token: %v", err)
 	}
@@ -455,14 +457,14 @@ func TestRedisCSRFToken(t *testing.T) {
 	if len(token) < 16 {
 		t.Errorf("Token length too small: %d", len(token))
 	}
-	ok, err := rc.ConsumeCSRFToken(context.Background(), token)
+	ok, err := rc.ConsumeCSRFToken(context.Background(), playerId, token)
 	if err != nil {
 		t.Fatalf("Failed to consume CSRF token: %v", err)
 	}
 	if !ok {
 		t.Errorf("ConsumeCSRFToken returned false")
 	}
-	ok, err = rc.ConsumeCSRFToken(context.Background(), token)
+	ok, err = rc.ConsumeCSRFToken(context.Background(), playerId, token)
 	if err != nil {
 		t.Fatalf("Failed to consume CSRF token: %v", err)
 	}

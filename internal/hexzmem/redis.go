@@ -92,6 +92,7 @@ func escape(keySegment string) string {
 }
 
 // rjoin "redis joins" the dir and file parts of a redis key.
+// The key is properly escaped to ensure it does not contain path separators.
 func rkey(path, key string) string {
 	return strings.TrimRight(path, "/") + "/" + escape(key)
 }
@@ -422,17 +423,17 @@ func (c *RedisClient) Publish(ctx context.Context, pubsubId string, event *pb.Ga
 	return c.client.Publish(ctx, rkey("/pubsub", pubsubId), data).Err()
 }
 
-func (c *RedisClient) NewCSRFToken(ctx context.Context, ttl time.Duration) (string, error) {
-	uid := uuid.New().String()
-	err := c.client.Set(ctx, rkey("/csrf", uid), 1, ttl).Err()
+func (c *RedisClient) NewCSRFToken(ctx context.Context, playerId api.PlayerId, ttl time.Duration) (string, error) {
+	token := uuid.New().String()
+	err := c.client.Set(ctx, rkey("/csrf", string(playerId)+":"+token), 1, ttl).Err()
 	if err != nil {
 		return "", fmt.Errorf("could not store token: %v", err)
 	}
-	return uid, nil
+	return token, nil
 }
 
-func (c *RedisClient) ConsumeCSRFToken(ctx context.Context, token string) (bool, error) {
-	n, err := c.client.Del(ctx, rkey("/csrf", token)).Result()
+func (c *RedisClient) ConsumeCSRFToken(ctx context.Context, playerId api.PlayerId, token string) (bool, error) {
+	n, err := c.client.Del(ctx, rkey("/csrf", string(playerId)+":"+token)).Result()
 	if err != nil {
 		return false, fmt.Errorf("could not consume token: %v", err)
 	}

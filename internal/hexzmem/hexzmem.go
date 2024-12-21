@@ -70,9 +70,9 @@ type GameStore interface {
 // Tokens can be used for CSRF prevention and rate limiting.
 type TokenStore interface {
 	// NewCSRFToken creates and returns a new token with the specified TTL.
-	NewCSRFToken(ctx context.Context, ttl time.Duration) (string, error)
+	NewCSRFToken(ctx context.Context, playerId api.PlayerId, ttl time.Duration) (string, error)
 	// ConsumeCSRFToken checks if the given CSRF token is known, and consumes it.
-	ConsumeCSRFToken(ctx context.Context, token string) (bool, error)
+	ConsumeCSRFToken(ctx context.Context, playerId api.PlayerId, token string) (bool, error)
 
 	// TokenBucketGet atomically gets the requested number of tokens from bucket.
 	// Before removing any tokens, it refills the bucket according to the
