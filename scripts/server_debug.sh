@@ -7,6 +7,6 @@ export PGPASSWORD=hexz
 
 postgres_url="postgres://hexz@localhost:5432/hexz"
 redis_addr="localhost:6379"
-from_address="nobody@example.com"
+from_address="${HEXZ_FROM_ADDRESS:-nobody@example.com}"
 
 go run ./cmd/server -debug -postgres-url "$postgres_url" -redis-addr "$redis_addr" -from-address "$from_address"

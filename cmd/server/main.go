@@ -204,6 +204,7 @@ func main() {
 	if validFromAddress && mailerAvailable && dbStore != nil {
 		var mailClient *mail.Client
 		if postmarkServerToken != "" {
+			hlog.Infof("Creating new Postmark client using HEXZ_POSTMARK_SERVER_TOKEN and From: address %s.", cfg.FromAddress)
 			mailClient = mail.NewPostmarkClient(postmarkServerToken, cfg.FromAddress)
 		} else {
 			hlog.Infof("HEXZ_POSTMARK_SERVER_TOKEN not set. Mails will only be logged.")

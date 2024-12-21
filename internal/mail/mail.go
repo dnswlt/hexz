@@ -110,7 +110,8 @@ func (c *Client) SendAccountVerificationMail(ctx context.Context, to string, use
 		return fmt.Errorf("failed to send account verification email: %v", err)
 	}
 	if resp.ErrorCode != 0 {
-		return fmt.Errorf("postmark returned a non-zero error: %d: %s", resp.ErrorCode, resp.Message)
+		return fmt.Errorf("mailer returned a non-zero error: %d: %s", resp.ErrorCode, resp.Message)
 	}
+	hlog.Infof("Sent account verification email to %s", email.To)
 	return nil
 }

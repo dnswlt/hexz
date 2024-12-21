@@ -1695,7 +1695,7 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 
 	// If we're not behind a reverse proxy and serve the root URL ourselves:
 	// Redirect to prefix path
-	mux.HandleFunc("/$", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
 		if s.config.URLPathPrefix != "" {
 			http.Redirect(w, r, s.prefix(""), http.StatusTemporaryRedirect)
 			return
