@@ -589,6 +589,11 @@ func (s *StatelessServer) handleRegisterUser(w http.ResponseWriter, r *http.Requ
 		Password:   password,
 		VerifyURL:  s.generateVerificationURL(r),
 	})
+	if errors.Is(err, users.ErrUserAccountExists) {
+		s.addErrorFlashMessage(r.Context(), w,
+			"An account for the email address already exists.")
+		http.Redirect(w, r, s.prefix("/join"), http.StatusSeeOther)
+	}
 	if err != nil {
 		hlog.Infof("Adding user %s failed: %v", email, err)
 		http.Error(w, "Failed to add user", http.StatusPreconditionFailed)
@@ -650,7 +655,7 @@ func (s *StatelessServer) handleAccountLoginRequest(w http.ResponseWriter, r *ht
 		s.addErrorFlashMessage(r.Context(), w, "Invalid credentials")
 		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
 		return
-	} else if errors.Is(err, users.ErrAccountNotActive) {
+	} else if errors.Is(err, users.ErrUserAccountNotActive) {
 		s.addErrorFlashMessage(r.Context(), w, "Your account is not active. Did you open the verification link you received via email?")
 		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
 		return

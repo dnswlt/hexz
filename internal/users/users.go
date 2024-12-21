@@ -29,9 +29,10 @@ type User struct {
 }
 
 var (
-	ErrVerificationFailed = errors.New("user could not be verified")
-	ErrInvalidLogin       = errors.New("invalid login")
-	ErrAccountNotActive   = errors.New("account is not active")
+	ErrVerificationFailed   = errors.New("user could not be verified")
+	ErrInvalidLogin         = errors.New("invalid login")
+	ErrUserAccountNotActive = errors.New("user account is not active")
+	ErrUserAccountExists    = errors.New("user account already exists")
 )
 
 type Service interface {
@@ -70,6 +71,13 @@ func (s *ServiceDefault) CreateUser(ctx context.Context, ps CreateUserParams) er
 	}
 	verificationToken := uuid.New().String()
 
+	// Check if user already exists. Return error if that is the case.
+	_, err = s.store.FindUser(ctx, ps.Email)
+	if err == nil {
+		return ErrUserAccountExists
+	} else if !errors.Is(err, hexzsql.ErrUserNotFound) {
+		return fmt.Errorf("failed to check if user exists: %v", err)
+	}
 	// Send verification email first, so we don't add users to the DB that cannot verify
 	// themselves.
 	verifyLink := *ps.VerifyURL
@@ -92,7 +100,8 @@ func (s *ServiceDefault) CreateUser(ctx context.Context, ps CreateUserParams) er
 	}
 	err = s.store.AddUser(ctx, user)
 	if errors.Is(err, hexzsql.ErrUserAlreadyExists) {
-		return err
+		// This should not happen, since we check for it above.
+		return ErrUserAccountExists
 	}
 	if err != nil {
 		return fmt.Errorf("could not create user: %v", err)
@@ -118,7 +127,7 @@ func (s *ServiceDefault) ValidateLogin(ctx context.Context, email, password stri
 		return nil, fmt.Errorf("error validating login: %v", err)
 	}
 	if u.AccountStatus != hexzsql.AccountStatusActive {
-		return nil, ErrAccountNotActive
+		return nil, ErrUserAccountNotActive
 	}
 	err = bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password))
 	if err != nil {

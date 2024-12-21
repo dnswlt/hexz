@@ -145,7 +145,7 @@ func TestValidateLoginNotVerified(t *testing.T) {
 		t.Fatalf("User wasnt' stored in the store")
 	}
 	_, err = s.ValidateLogin(context.Background(), email, password)
-	if !errors.Is(err, ErrAccountNotActive) {
+	if !errors.Is(err, ErrUserAccountNotActive) {
 		t.Errorf("ValidateLogin did not fail for unverified user with expected error: %v", err)
 	}
 }

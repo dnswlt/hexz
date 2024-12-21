@@ -37,6 +37,7 @@ var (
 
 type UserStore interface {
 	// Looks up a single user by email address.
+	// Returns ErrUserNotFound if no user with the given email exists.
 	FindUser(ctx context.Context, email string) (*User, error)
 
 	// Adds a new user to the database.
