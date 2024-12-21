@@ -17,13 +17,16 @@ scriptmodule="$model_base_dir/$model_name/checkpoints/$latest/scriptmodule.pt"
 
 pushd cpp/build > /dev/null
 echo "Starting cpuserver with model $model_name:$latest"
-./cpuserver --device=cuda --max_think_time_ms=5000 --model_path="$scriptmodule" --server_addr="$cpuserver_addr" &
+./cpuserver --device=cuda --max_think_time_ms=5000 --model_path="$scriptmodule" --model_key="$model_name:$latest" --server_addr="$cpuserver_addr" &
 cpu_pid=$!
 echo "Started cpuserver with PID $cpu_pid"
 popd > /dev/null
 
-go build ./cmd/server && \
-  env PGPASSWORD=$(cat psql.cred.txt) ./server \
+trap 'echo "Killing cpuserver process $cpu_pid"; kill $cpu_pid; exit' INT
+
+go build ./cmd/server || { echo "Build failed. Exiting."; exit 1; }
+
+env PGPASSWORD=$(cat psql.cred.txt) ./server \
   -cpu-player-mode remote \
   -url-path-prefix "$url_path_prefix" \
   -remote-cpu-url "$cpuserver_addr" \
@@ -31,7 +34,9 @@ go build ./cmd/server && \
   -port=$server_port \
   -postgres-url "postgres://hexz@nuc:5432/hexz" \
   -debug \
-  -redis-addr nuc:6379
+  -redis-addr nuc:6379 \
+  2>&1 | tee log/hexz.log
 
 echo "Terminating cpuserver process"
 kill $cpu_pid
+
