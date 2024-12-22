@@ -71,25 +71,7 @@ func (s *ServiceDefault) CreateUser(ctx context.Context, ps CreateUserParams) er
 	}
 	verificationToken := uuid.New().String()
 
-	// Check if user already exists. Return error if that is the case.
-	_, err = s.store.FindUser(ctx, ps.Email)
-	if err == nil {
-		return ErrUserAccountExists
-	} else if !errors.Is(err, hexzsql.ErrUserNotFound) {
-		return fmt.Errorf("failed to check if user exists: %v", err)
-	}
-	// Send verification email first, so we don't add users to the DB that cannot verify
-	// themselves.
-	verifyLink := *ps.VerifyURL
-	q := verifyLink.Query()
-	q.Set("token", verificationToken)
-	verifyLink.RawQuery = q.Encode()
-	err = s.mailClient.SendAccountVerificationMail(ctx, ps.Email, ps.PlayerName, &verifyLink)
-	if err != nil {
-		return fmt.Errorf("user not added: failed to send verification email: %v", err)
-	}
-
-	// Add user to DB
+	// Tentatively add the user to the DB. Abort if the user already exists.
 	user := &hexzsql.User{
 		Email:             ps.Email,
 		PlayerName:        ps.PlayerName,
@@ -100,11 +82,25 @@ func (s *ServiceDefault) CreateUser(ctx context.Context, ps CreateUserParams) er
 	}
 	err = s.store.AddUser(ctx, user)
 	if errors.Is(err, hexzsql.ErrUserAlreadyExists) {
-		// This should not happen, since we check for it above.
+		// User already exists.
 		return ErrUserAccountExists
 	}
 	if err != nil {
 		return fmt.Errorf("could not create user: %v", err)
+	}
+
+	// Send verification email.
+	verifyLink := *ps.VerifyURL
+	q := verifyLink.Query()
+	q.Set("token", verificationToken)
+	verifyLink.RawQuery = q.Encode()
+	err = s.mailClient.SendAccountVerificationMail(ctx, ps.Email, ps.PlayerName, &verifyLink)
+	if err != nil {
+		// Failed to send verification email. Delete user so they can try again.
+		if err := s.store.DeleteUser(ctx, ps.Email); err != nil {
+			hlog.Errorf("Could not delete user %q after failing to send verification email.", ps.Email)
+		}
+		return fmt.Errorf("user not added: failed to send verification email: %v", err)
 	}
 
 	return nil

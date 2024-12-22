@@ -47,6 +47,9 @@ type UserStore interface {
 	// will be set to "now" in the database.
 	AddUser(ctx context.Context, user *User) error
 
+	// DeleteUser deletes a user from the users database.
+	DeleteUser(ctx context.Context, email string) error
+
 	// Locates a user that has the given verification token.
 	// If the token is not expired, the user's account status
 	// is set to `active`.

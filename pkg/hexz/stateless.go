@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/mail"
 	"net/url"
@@ -303,19 +304,44 @@ func (s *StatelessServer) loggingHandler(h http.Handler) http.Handler {
 }
 
 type throttle struct {
-	bucket   string
-	maxQPS   float64
-	capacity int
+	bucket       string
+	maxQPS       float64
+	capacity     int
+	byRemoteAddr bool // Set to true to throttle per remote address, not globally.
+}
+
+// getRemoteIP extracts the IP of the remote client from the request data.
+// It takes reverse proxy headers X-Real-IP and X-Forwarded-For into account.
+// If those are not set, it returns the host part of r.RemoteAddr.
+func getRemoteIP(r *http.Request) string {
+	if xRealIP := r.Header.Get("X-Real-IP"); xRealIP != "" {
+		return xRealIP
+	}
+	if xForwardedFor := r.Header.Get("X-Forwarded-For"); xForwardedFor != "" {
+		addr, _, _ := strings.Cut(xForwardedFor, ",")
+		return strings.TrimSpace(addr)
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil {
+		return host
+	}
+	return ""
 }
 
 // Can be used to throttle certain expensive API calls, like those that involve sending an email.
 func (s *StatelessServer) throttlingHandlerFunc(t throttle, h http.Handler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.tokenStore != nil {
-			ok, err := s.tokenStore.TokenBucketGet(r.Context(), t.bucket, 1, t.maxQPS, t.capacity)
+			var bucket string
+			if t.byRemoteAddr {
+				bucket = t.bucket + ":" + getRemoteIP(r)
+			} else {
+				bucket = t.bucket
+			}
+			ok, err := s.tokenStore.TokenBucketGet(r.Context(), bucket, 1, t.maxQPS, t.capacity)
 			if err != nil || !ok {
 				http.Error(w, "request limit exceeded", http.StatusTooManyRequests)
-				hlog.Infof("Request throttling kicked in for %s", t.bucket)
+				hlog.Infof("Request throttling kicked in for bucket %q from %s", bucket, getRemoteIP(r))
 				return
 			}
 		}
@@ -341,10 +367,16 @@ func (s *StatelessServer) readStaticResource(filename string) ([]byte, error) {
 	return os.ReadFile(path.Join(s.config.DocumentRoot, filename))
 }
 
-// prefix adds the configured URL prefix to the given urlPath.
-// To run a server under any configured URL path prefix, every
+// index returns the index path under which this server operates.
+// This path serves the game home page.
+func (s *StatelessServer) index() string {
+	return s.config.URLPathPrefix
+}
+
+// path adds the configured URL path to the given urlPath.
+// To run a server under any configured URL path path, every
 // client-facing URL should be built using this method.
-func (s *StatelessServer) prefix(urlPath string) string {
+func (s *StatelessServer) path(urlPath string) string {
 	return urlJoinPath(s.config.URLPathPrefix, urlPath)
 }
 
@@ -352,7 +384,7 @@ func (s *StatelessServer) generatePlayerCookie(playerId api.PlayerId, ttl time.D
 	return &http.Cookie{
 		Name:     playerIDCookieName,
 		Value:    string(playerId),
-		Path:     s.prefix(""),
+		Path:     s.index(),
 		MaxAge:   int(ttl.Seconds()),
 		HttpOnly: true,  // Don't let JS access the cookie
 		Secure:   false, // also allow plain http
@@ -364,7 +396,7 @@ func (s *StatelessServer) deletePlayerCookie() *http.Cookie {
 	return &http.Cookie{
 		Name:     playerIDCookieName,
 		Value:    "",
-		Path:     s.prefix(""),
+		Path:     s.index(),
 		MaxAge:   -1,    // Delete immediately
 		HttpOnly: true,  // Don't let JS access the cookie
 		Secure:   false, // also allow plain http
@@ -515,7 +547,7 @@ func (s *StatelessServer) generateVerificationURL(r *http.Request) *url.URL {
 	return &url.URL{
 		Scheme: scheme,
 		Host:   host,
-		Path:   s.prefix("/verify"),
+		Path:   s.path("/verify"),
 	}
 }
 
@@ -532,7 +564,7 @@ func (s *StatelessServer) addFlashMessages(ctx context.Context, w http.ResponseW
 	http.SetCookie(w, &http.Cookie{
 		Name:     flashIDCookieName,
 		Value:    flashID,
-		Path:     s.prefix(""),
+		Path:     s.index(),
 		MaxAge:   30, // 30 seconds
 		HttpOnly: true,
 		Secure:   false, // also allow plain http
@@ -578,7 +610,7 @@ func (s *StatelessServer) handleRegisterUser(w http.ResponseWriter, r *http.Requ
 	// to the form and display the errors as flash messages.
 	if len(messages) > 0 {
 		s.addErrorFlashMessage(r.Context(), w, strings.Join(messages, "\n\n"))
-		http.Redirect(w, r, s.prefix("/join"), http.StatusSeeOther)
+		http.Redirect(w, r, s.path("/join"), http.StatusSeeOther)
 		return
 	}
 
@@ -592,7 +624,7 @@ func (s *StatelessServer) handleRegisterUser(w http.ResponseWriter, r *http.Requ
 	if errors.Is(err, users.ErrUserAccountExists) {
 		s.addErrorFlashMessage(r.Context(), w,
 			"An account for the email address already exists.")
-		http.Redirect(w, r, s.prefix("/join"), http.StatusSeeOther)
+		http.Redirect(w, r, s.path("/join"), http.StatusSeeOther)
 	}
 	if err != nil {
 		hlog.Infof("Adding user %s failed: %v", email, err)
@@ -604,7 +636,7 @@ func (s *StatelessServer) handleRegisterUser(w http.ResponseWriter, r *http.Requ
 	// Add flash message and redirect.
 	s.addInfoFlashMessage(r.Context(), w,
 		"Please check your inbox. We sent you an email with an activation link.")
-	http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+	http.Redirect(w, r, s.index(), http.StatusSeeOther)
 }
 
 func (s *StatelessServer) handleVerifyUser(w http.ResponseWriter, r *http.Request) {
@@ -617,7 +649,7 @@ func (s *StatelessServer) handleVerifyUser(w http.ResponseWriter, r *http.Reques
 	err := s.userService.VerifyUser(r.Context(), token)
 	if errors.Is(err, users.ErrVerificationFailed) {
 		s.addInfoFlashMessage(r.Context(), w, "Verifying your account failed, most likely because you already verified it.")
-		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+		http.Redirect(w, r, s.index(), http.StatusSeeOther)
 	} else if err != nil {
 		hlog.Errorf("VerifyUser error: %v", err)
 		http.Error(w, "verification failed", http.StatusBadRequest)
@@ -628,7 +660,7 @@ func (s *StatelessServer) handleVerifyUser(w http.ResponseWriter, r *http.Reques
 
 	// Add flash message and redirect.
 	s.addInfoFlashMessage(r.Context(), w, "You successfully verified your account. You can now log in and play!")
-	http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+	http.Redirect(w, r, s.index(), http.StatusSeeOther)
 }
 
 // Handles a login for an account
@@ -640,24 +672,24 @@ func (s *StatelessServer) handleAccountLoginRequest(w http.ResponseWriter, r *ht
 	email := r.Form.Get("email")
 	if err := ValidateEmailAddress(email); err != nil {
 		s.addErrorFlashMessage(r.Context(), w, "Invalid email address")
-		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+		http.Redirect(w, r, s.index(), http.StatusSeeOther)
 		return
 	}
 	password := r.Form.Get("password")
 	if password == "" || len(password) > maxPasswordLength {
 		s.addErrorFlashMessage(r.Context(), w, "Invalid password")
-		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+		http.Redirect(w, r, s.index(), http.StatusSeeOther)
 		return
 	}
 
 	user, err := s.userService.ValidateLogin(r.Context(), email, password)
 	if errors.Is(err, users.ErrInvalidLogin) {
 		s.addErrorFlashMessage(r.Context(), w, "Invalid credentials")
-		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+		http.Redirect(w, r, s.index(), http.StatusSeeOther)
 		return
 	} else if errors.Is(err, users.ErrUserAccountNotActive) {
 		s.addErrorFlashMessage(r.Context(), w, "Your account is not active. Did you open the verification link you received via email?")
-		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+		http.Redirect(w, r, s.index(), http.StatusSeeOther)
 		return
 	} else if err != nil {
 		hlog.Errorf("Error validating login: %v", err)
@@ -676,7 +708,7 @@ func (s *StatelessServer) handleAccountLoginRequest(w http.ResponseWriter, r *ht
 		return
 	}
 	http.SetCookie(w, s.generatePlayerCookie(player.Id, s.config.LoginTTL))
-	http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+	http.Redirect(w, r, s.index(), http.StatusSeeOther)
 }
 
 func (s *StatelessServer) handleGuestLoginRequest(w http.ResponseWriter, r *http.Request) {
@@ -693,7 +725,7 @@ func (s *StatelessServer) handleGuestLoginRequest(w http.ResponseWriter, r *http
 	if err := validatePlayerName(name); err != nil {
 		// Invalid player name. Try again.
 		s.addErrorFlashMessage(r.Context(), w, fmt.Sprintf("Invalid username: %v", err))
-		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+		http.Redirect(w, r, s.index(), http.StatusSeeOther)
 		return
 	}
 	player := hexzmem.Player{
@@ -706,7 +738,7 @@ func (s *StatelessServer) handleGuestLoginRequest(w http.ResponseWriter, r *http
 		return
 	}
 	http.SetCookie(w, s.generatePlayerCookie(player.Id, s.config.LoginTTL))
-	http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+	http.Redirect(w, r, s.index(), http.StatusSeeOther)
 }
 
 // Handles a login POST request.
@@ -741,7 +773,7 @@ func (s *StatelessServer) handleLogoutRequest(w http.ResponseWriter, r *http.Req
 		return
 	}
 	http.SetCookie(w, s.deletePlayerCookie())
-	http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+	http.Redirect(w, r, s.index(), http.StatusSeeOther)
 }
 
 func (s *StatelessServer) handleNewGame(w http.ResponseWriter, r *http.Request) {
@@ -782,7 +814,7 @@ func (s *StatelessServer) handleNewGame(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "", http.StatusPreconditionFailed)
 		return
 	}
-	http.Redirect(w, r, s.prefix(g.GameID()), http.StatusSeeOther)
+	http.Redirect(w, r, s.path(g.GameID()), http.StatusSeeOther)
 }
 
 func (s *StatelessServer) handleReset(w http.ResponseWriter, r *http.Request) {
@@ -895,7 +927,7 @@ func (s *StatelessServer) handleOpenGames(w http.ResponseWriter, r *http.Request
 func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
-		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+		http.Redirect(w, r, s.index(), http.StatusSeeOther)
 		return
 	}
 	gameId := r.PathValue("gameId")
@@ -906,7 +938,7 @@ func (s *StatelessServer) handleGame(w http.ResponseWriter, r *http.Request) {
 	g, err := s.loadGame(r.Context(), gameId)
 	if err != nil {
 		// Game does not exist: offer to start a new game.
-		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+		http.Redirect(w, r, s.index(), http.StatusSeeOther)
 		return
 	}
 	// Game exists, serve HTML and prolong cookie ttl.
@@ -951,7 +983,7 @@ func (s *StatelessServer) handleWASMStats(w http.ResponseWriter, r *http.Request
 func (s *StatelessServer) handleState(w http.ResponseWriter, r *http.Request) {
 	p, err := s.lookupPlayerFromCookie(r)
 	if err != nil {
-		http.Redirect(w, r, s.prefix(""), http.StatusSeeOther)
+		http.Redirect(w, r, s.index(), http.StatusSeeOther)
 		return
 	}
 	gameId := r.PathValue("gameId")
@@ -1635,22 +1667,22 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 
 	mux := &http.ServeMux{}
 	handle := func(pattern string, handler http.Handler) {
-		mux.Handle(s.prefix(pattern), handler)
+		mux.Handle(s.path(pattern), handler)
 	}
 	handleFunc := func(pattern string, handler func(http.ResponseWriter, *http.Request)) {
-		mux.HandleFunc(s.prefix(pattern), handler)
+		mux.HandleFunc(s.path(pattern), handler)
 	}
 
 	// Static resources (images, JavaScript, ...) live under DocumentRoot.
 	// Use gzipped.FileServer to deliver the WASM module compressed with
 	// Content-Encoding: gzip
 	// (other resources, too, but for them it doesn't matter).
-	handle("/static/", http.StripPrefix(s.prefix("/static/"),
+	handle("/static/", http.StripPrefix(s.path("/static/"),
 		gzipped.FileServer(gzipped.Dir(s.config.DocumentRoot))))
 
 	// Login
 	handleFunc("/login", s.throttlingHandlerFunc(
-		throttle{bucket: "login", maxQPS: 1, capacity: 10},
+		throttle{bucket: "login", maxQPS: 1, capacity: 1, byRemoteAddr: true},
 		postHandlerFunc(s.handleLoginRequest)))
 	handleFunc("/logout", postHandlerFunc(s.handleLogoutRequest))
 	handleFunc("/loginnames", s.handleLoginNames)
@@ -1702,7 +1734,7 @@ func (s *StatelessServer) createMux() *http.ServeMux {
 	// Redirect to prefix path
 	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
 		if s.config.URLPathPrefix != "" {
-			http.Redirect(w, r, s.prefix(""), http.StatusTemporaryRedirect)
+			http.Redirect(w, r, s.index(), http.StatusTemporaryRedirect)
 			return
 		}
 		s.handleHexz(w, r)

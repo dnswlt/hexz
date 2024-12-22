@@ -482,9 +482,6 @@ func (c *RedisClient) TokenBucketGet(ctx context.Context, bucket string, tokens 
 			redis.call("EXPIRE", key, math.max(60, ttl))
 			return 1 -- Allow request
 		else
-			-- Deny request
-			redis.call("HMSET", key, "remaining_tokens", remainingTokens, "last_refill_time", lastRefillTime, "ttl", ttl)
-			redis.call("EXPIRE", key, math.max(60, ttl))
 			return 0 -- Deny request
 		end
 	`

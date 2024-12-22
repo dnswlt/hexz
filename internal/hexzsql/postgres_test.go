@@ -450,3 +450,42 @@ func TestPostgresVerifyUserSuccess(t *testing.T) {
 		t.Errorf("VerifyUser did not fail as expected on the second attempt: %v", err)
 	}
 }
+
+func TestPostgresDeleteUser(t *testing.T) {
+	if *testPostgresURL == "" {
+		t.Skip("Flag -test-postgres-url is not set. Skipping DB integration test.")
+	}
+	ctx := context.Background()
+	db, err := NewPostgresStore(ctx, *testPostgresURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.DeleteUser(ctx, "notpresent@example.com"); err != ErrUserNotFound {
+		t.Fatalf("DeleteUser: want ErrUserNotFound, got %v", err)
+	}
+
+	// Add user to be deleted:
+	email := uniqueTestEmail()
+	token := uuid.New().String()
+	err = db.AddUser(ctx, &User{
+		Email:             email,
+		PasswordHash:      "hashed_pwd",
+		PlayerName:        "John Doe",
+		VerificationToken: token,
+		TokenExpiry:       time.Now().Add(24 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("AddUser failed: %v", err)
+	}
+
+	if err := db.DeleteUser(ctx, email); err != nil {
+		t.Errorf("DeleteUser: failed to delete: %v", err)
+	}
+
+	_, err = db.FindUser(ctx, email)
+	if err != ErrUserNotFound {
+		t.Fatalf("FindUser unexpected result (want ErrUserNotFound): %v", err)
+	}
+
+}

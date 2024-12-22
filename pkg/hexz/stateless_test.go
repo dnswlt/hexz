@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"slices"
@@ -77,6 +78,73 @@ func newTestStatelessServer(t testing.TB, config *ServerConfig) (*StatelessServe
 		b = b.WithDatabaseStore(dbStore)
 	}
 	return b.Build(), nil
+}
+
+func TestGetRemoteIP(t *testing.T) {
+	tests := []struct {
+		name       string
+		remoteAddr string
+		header     map[string]string
+		want       string
+	}{
+		{
+			name:       "x_real_ip",
+			remoteAddr: "1.2.3.4",
+			header: map[string]string{
+				"X-Real-IP":       "8.8.8.8",
+				"X-Forwarded-For": "8.8.8.128, 9.9.9.9",
+			},
+			want: "8.8.8.8",
+		},
+		{
+			name:       "x_forwarded_for_1",
+			remoteAddr: "1.2.3.4",
+			header: map[string]string{
+				"X-Forwarded-For": "8.8.8.8",
+			},
+			want: "8.8.8.8",
+		},
+		{
+			name:       "x_forwarded_for_2",
+			remoteAddr: "1.2.3.4",
+			header: map[string]string{
+				"X-Forwarded-For": "8.8.8.8, 9.9.9.9",
+			},
+			want: "8.8.8.8",
+		},
+		{
+			name:       "remote_addr_v4",
+			remoteAddr: "1.2.3.4:8080",
+			want:       "1.2.3.4",
+		},
+		{
+			name:       "remote_addr_v4_no_port",
+			remoteAddr: "1.2.3.4",
+			want:       "",
+		},
+		{
+			name:       "remote_addr_v6",
+			remoteAddr: "[1fff:0:a88:85a3::ac1f]:8001",
+			want:       "1fff:0:a88:85a3::ac1f",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			header := make(http.Header)
+			// Add headers explicitly. This ensures their names will be canonicalized.
+			// (e.g., X-Real-IP becomes X-Real-Ip).
+			for h, v := range tc.header {
+				header.Add(h, v)
+			}
+			r := &http.Request{
+				RemoteAddr: tc.remoteAddr,
+				Header:     header,
+			}
+			if addr := getRemoteIP(r); addr != tc.want {
+				t.Errorf("getRemoteIP: want %q, got %q", tc.want, addr)
+			}
+		})
+	}
 }
 
 func TestValidPlayerName(t *testing.T) {

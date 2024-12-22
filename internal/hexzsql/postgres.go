@@ -332,6 +332,24 @@ func (s *PostgresStore) AddUser(ctx context.Context, user *User) error {
 	return nil
 }
 
+func (s *PostgresStore) DeleteUser(ctx context.Context, email string) error {
+	r, err := s.pool.ExecContext(ctx, `
+		DELETE FROM users
+		WHERE email = $1`,
+		email)
+	if err != nil {
+		return fmt.Errorf("failed to delete user: %v", err)
+	}
+	n, err := r.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get affected rows: %v", err)
+	}
+	if n == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
 // Updates an existing user in the database.
 // The ID field must be set to the user to be updated.
 // An error is returned if the ID is empty.
