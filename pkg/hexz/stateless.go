@@ -286,18 +286,8 @@ func (s *StatelessServer) userMgmtEnabled() bool {
 func (s *StatelessServer) loggingHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.config.DebugMode {
-			var proxyHeaders []string
-			if xRealIP := r.Header.Get("X-Real-IP"); xRealIP != "" {
-				proxyHeaders = append(proxyHeaders, "X-Real-IP: "+xRealIP)
-			}
-			if xForwardedFor := r.Header.Get("X-Forwarded-For"); xForwardedFor != "" {
-				proxyHeaders = append(proxyHeaders, "X-Forwarded-For: "+xForwardedFor)
-			}
-			var proxyInfo string
-			if len(proxyHeaders) > 0 {
-				proxyInfo = fmt.Sprintf(" (via proxy: %s)", strings.Join(proxyHeaders, "; "))
-			}
-			hlog.Infof("Incoming request: %s %s %s%s", r.RemoteAddr, r.Method, r.URL.String(), proxyInfo)
+			remoteIP := getRemoteIP(r)
+			hlog.Infof("Incoming request: %s %s %s", remoteIP, r.Method, r.URL.String())
 		}
 		h.ServeHTTP(w, r)
 	})
