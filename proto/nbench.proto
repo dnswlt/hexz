@@ -22,4 +22,20 @@ message BenchmarkResult  {
     PlayerResult p2_result = 5;
     // Arguments that nbench was called with.
     repeated string args = 6;
+
+    // Per-game results make it possible to pair games that started from the
+    // same position but used reversed player assignments.
+    message GameResult {
+        // Stable content-derived identifier of the initial GameEngineState.
+        string position_id = 1;
+        // Winner as a seat number: 0=draw, 1=P1, 2=P2.
+        int32 winner = 2;
+        int32 p1_score = 3;
+        int32 p2_score = 4;
+        int32 moves = 5;
+        double duration_seconds = 6;
+    }
+    repeated GameResult game_results = 7;
+    // Path of the position corpus, if one was used.
+    string position_set = 8;
 }

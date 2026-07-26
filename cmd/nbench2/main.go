@@ -27,16 +27,19 @@ import (
 )
 
 type CLIArgs struct {
-	CPUServerFile string
-	NumGames      int
-	Iterations    int
-	StatsFile     string
-	ModelRepo     string
-	ModelKey1     string
-	ModelKey2     string
-	ModelKeys     []string
-	Device        string
-	PlayBothSides bool
+	CPUServerFile  string
+	NumGames       int
+	Concurrency    int
+	Iterations     int
+	StatsFile      string
+	ModelRepo      string
+	ModelKey1      string
+	ModelKey2      string
+	ModelKeys      []string
+	Device         string
+	PlayBothSides  bool
+	PositionsFile  string
+	WritePositions int
 
 	// Elo related flags
 
@@ -57,6 +60,7 @@ func parseArgs() (*CLIArgs, error) {
 
 	flag.StringVar(&args.CPUServerFile, "cpuserver", "./cpp/build/cpuserver", "cpuserver binary to execute")
 	flag.IntVar(&args.NumGames, "games", 1, "Number of games to play")
+	flag.IntVar(&args.Concurrency, "concurrency", 0, "Maximum concurrent games (0 means one worker per game)")
 	flag.IntVar(&args.Iterations, "iterations", 800, "Maximum MCTS iterations per move for both players")
 	flag.StringVar(&args.StatsFile, "stats-file", "./stats/nbench.jsonl", "JSONlines file to which results are append")
 	flag.StringVar(&args.ModelRepo, "model-repo", ".", "Base folder of hexz model repository")
@@ -66,6 +70,10 @@ func parseArgs() (*CLIArgs, error) {
 	flag.StringVar(&args.Device, "device", "cuda", "PyTorch device type (cuda, cpu, mps)")
 	flag.BoolVar(&args.PlayBothSides, "both-sides", false,
 		"Whether to play both as P1 and P2. If true, twice as many games are played as specified in --games.")
+	flag.StringVar(&args.PositionsFile, "positions-file", "",
+		"JSONL corpus of initial positions. Reverse-seat games reuse the same positions.")
+	flag.IntVar(&args.WritePositions, "write-positions", 0,
+		"Generate this many initial positions in --positions-file and exit; refuses to overwrite.")
 	flag.BoolVar(&args.PrintElo, "print-elo", false,
 		"If true, print Elo scores resulting from all results in --stats-file, and exit.")
 
@@ -168,13 +176,23 @@ func terminateSubprocesses(doneCh chan bool, cancel context.CancelFunc, cmds ...
 	}
 }
 
-func playConcurrent(ctx context.Context, p1, p2 *hexz.RemoteCPUPlayer, numGames int, statsFile string) error {
+func playConcurrent(
+	ctx context.Context,
+	p1, p2 *hexz.RemoteCPUPlayer,
+	positions []StartingPosition,
+	concurrency int,
+	statsFile string,
+	positionSet string,
+) (*ResultStats, error) {
 	// This is ML model evaluation mode. Play concurrently to benefit from concurrent requests to the GPU.
-	nb, err := NewConcurrentNBench(p1, p2, numGames, statsFile)
+	nb, err := NewConcurrentNBench(p1, p2, positions, concurrency, statsFile, positionSet)
 	if err != nil {
-		return fmt.Errorf("failed to create ConcurrentNBench: %v", err)
+		return nil, fmt.Errorf("failed to create ConcurrentNBench: %v", err)
 	}
-	return nb.Play(ctx)
+	if err := nb.Play(ctx); err != nil {
+		return nil, err
+	}
+	return nb.stats, nil
 }
 
 func printEloRatings(statsFile string) {
@@ -263,6 +281,21 @@ func main() {
 		return
 	}
 
+	if args.WritePositions > 0 {
+		if args.PositionsFile == "" {
+			log.Fatal("--positions-file is required with --write-positions")
+		}
+		positions, err := generateStartingPositions(args.WritePositions)
+		if err != nil {
+			log.Fatalf("Could not generate positions: %v", err)
+		}
+		if err := writeStartingPositions(args.PositionsFile, positions); err != nil {
+			log.Fatalf("Could not write positions: %v", err)
+		}
+		log.Printf("Wrote %d positions to %s", len(positions), args.PositionsFile)
+		return
+	}
+
 	if args.PrintElo {
 		if args.StatsFile == "" {
 			log.Fatalf("Must specifiy --stats-file for --print-elo")
@@ -270,6 +303,29 @@ func main() {
 		printEloRatings(args.StatsFile)
 		return
 	}
+
+	var positions []StartingPosition
+	if args.PositionsFile != "" {
+		positions, err = readStartingPositions(args.PositionsFile)
+		if err != nil {
+			log.Fatalf("Could not read positions: %v", err)
+		}
+		if args.NumGames > len(positions) {
+			log.Fatalf("--games=%d exceeds the %d positions in %s", args.NumGames, len(positions), args.PositionsFile)
+		}
+		if args.NumGames > 0 {
+			positions = positions[:args.NumGames]
+		}
+	} else {
+		if args.NumGames <= 0 {
+			log.Fatal("--games must be positive without --positions-file")
+		}
+		positions, err = generateStartingPositions(args.NumGames)
+		if err != nil {
+			log.Fatalf("Could not generate in-memory positions: %v", err)
+		}
+	}
+	log.Printf("Using %d initial positions", len(positions))
 
 	modelKey1, modelKey2, err := chooseModels(args)
 	if err != nil {
@@ -329,14 +385,21 @@ func main() {
 		return
 	}
 
-	if err := playConcurrent(ctx, p1, p2, args.NumGames, args.StatsFile); err != nil {
+	first, err := playConcurrent(
+		ctx, p1, p2, positions, args.Concurrency, args.StatsFile, args.PositionsFile,
+	)
+	if err != nil {
 		log.Printf("Play failed: %v", err)
 		return
 	}
 	if args.PlayBothSides {
-		if err := playConcurrent(ctx, p2, p1, args.NumGames, args.StatsFile); err != nil {
+		reverse, err := playConcurrent(
+			ctx, p2, p1, positions, args.Concurrency, args.StatsFile, args.PositionsFile,
+		)
+		if err != nil {
 			log.Printf("Reverse play failed: %v", err)
 			return
 		}
+		logPairedSummary(modelKey1, modelKey2, first, reverse)
 	}
 }

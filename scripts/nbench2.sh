@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Validate the two explicitly specified checkpoints against each other.
+# Validate two checkpoints against each other on a fixed, paired position set.
 
 if [[ $# -ne 2 ]]; then
     echo "Usage: $0 <checkpoint_1> <checkpoint_2>"
@@ -15,14 +15,18 @@ if [[ "$(uname)" = "Darwin" ]]; then
     device=mps
 fi
 iterations=3200
-num_games=20
-model_repo="$HOME/tmp/hexz-models"
+concurrency="${HEXZ_NBENCH_CONCURRENCY:-64}"
+model_repo="${HEXZ_MODEL_REPO_BASE_DIR:-/home/dw/data/hexz-models}"
+positions_file="${HEXZ_NBENCH_POSITIONS_FILE:-testdata/nbench/flagz_initial_v1.jsonl}"
 
 go run ./cmd/nbench2 \
     -model-repo "$model_repo" \
-    -keys any \
-    -games $num_games \
+    -key1 "$model_name:$1" \
+    -key2 "$model_name:$2" \
+    -positions-file "$positions_file" \
+    -games 0 \
+    -concurrency "$concurrency" \
     -both-sides \
-    -iterations $iterations \
+    -iterations "$iterations" \
     -device "$device" \
     -stats-file "./stats/nbench.jsonl"

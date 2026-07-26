@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"sync"
 	"time"
@@ -16,9 +17,10 @@ import (
 )
 
 type ResultStats struct {
-	games int
-	wins  [2]int
-	mut   sync.Mutex
+	games       int
+	wins        [2]int
+	gameResults []*npb.BenchmarkResult_GameResult
+	mut         sync.Mutex
 }
 
 func (r *ResultStats) Games() int {
@@ -34,13 +36,15 @@ func (r *ResultStats) Wins() [2]int {
 }
 
 // winner == 0 means draw.
-func (r *ResultStats) Add(winner int) {
+func (r *ResultStats) Add(result *npb.BenchmarkResult_GameResult) {
 	r.mut.Lock()
 	defer r.mut.Unlock()
 	r.games++
+	winner := int(result.Winner)
 	if winner > 0 {
 		r.wins[winner-1]++
 	}
+	r.gameResults = append(r.gameResults, result)
 }
 func (r *ResultStats) String() string {
 	r.mut.Lock()
@@ -52,14 +56,22 @@ type ConcurrentNBench struct {
 	p1 *hexz.RemoteCPUPlayer
 	p2 *hexz.RemoteCPUPlayer
 	// These are populated when the game is started
-	p1Key     *hexzpb.ModelKey
-	p2Key     *hexzpb.ModelKey
-	numGames  int
-	stats     *ResultStats
-	statsFile string
+	p1Key       *hexzpb.ModelKey
+	p2Key       *hexzpb.ModelKey
+	positions   []StartingPosition
+	concurrency int
+	stats       *ResultStats
+	statsFile   string
+	positionSet string
 }
 
-func NewConcurrentNBench(p1, p2 *hexz.RemoteCPUPlayer, numGames int, statsFile string) (*ConcurrentNBench, error) {
+func NewConcurrentNBench(
+	p1, p2 *hexz.RemoteCPUPlayer,
+	positions []StartingPosition,
+	concurrency int,
+	statsFile string,
+	positionSet string,
+) (*ConcurrentNBench, error) {
 	// Get model keys for logging
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
@@ -72,14 +84,22 @@ func NewConcurrentNBench(p1, p2 *hexz.RemoteCPUPlayer, numGames int, statsFile s
 		return nil, fmt.Errorf("cannot get model key for P2: %v", err)
 	}
 
+	if len(positions) == 0 {
+		return nil, fmt.Errorf("no starting positions")
+	}
+	if concurrency <= 0 || concurrency > len(positions) {
+		concurrency = len(positions)
+	}
 	return &ConcurrentNBench{
-		p1:        p1,
-		p2:        p2,
-		p1Key:     p1Key,
-		p2Key:     p2Key,
-		numGames:  numGames,
-		stats:     &ResultStats{},
-		statsFile: statsFile,
+		p1:          p1,
+		p2:          p2,
+		p1Key:       p1Key,
+		p2Key:       p2Key,
+		positions:   positions,
+		concurrency: concurrency,
+		stats:       &ResultStats{},
+		statsFile:   statsFile,
+		positionSet: positionSet,
 	}, nil
 }
 
@@ -98,7 +118,9 @@ func (nb *ConcurrentNBench) appendStats(started, done time.Time) error {
 			Wins:       int32(nb.stats.wins[1]),
 			Iterations: int32(nb.p2.MaxIterations()),
 		},
-		Args: os.Args[1:],
+		Args:        os.Args[1:],
+		GameResults: nb.stats.gameResults,
+		PositionSet: nb.positionSet,
 	}
 	return elo.AppendStats(nb.statsFile, res)
 }
@@ -111,50 +133,73 @@ func (nb *ConcurrentNBench) P2Name() string {
 }
 
 func (nb *ConcurrentNBench) Play(ctx context.Context) error {
-	log.Printf("Playing %s vs. %s\n", nb.P1Name(), nb.P2Name())
+	log.Printf("Playing %s vs. %s on %d positions with concurrency %d\n",
+		nb.P1Name(), nb.P2Name(), len(nb.positions), nb.concurrency)
 
 	var wg sync.WaitGroup
 
 	started := time.Now()
-	// Start "worker" goroutines playing games.
 	workerCtx, workerCancel := context.WithCancel(ctx)
 	defer workerCancel()
-	for i := 0; i < nb.numGames; i++ {
+	jobs := make(chan int)
+	for worker := 0; worker < nb.concurrency; worker++ {
 		wg.Add(1)
-		go func(ctx context.Context, i int) {
+		go func(worker int) {
 			defer wg.Done()
-			ge := hexz.NewGameEngineFlagz()
-			for !ge.IsDone() {
-				var mv *hexz.GameEngineMove
-				// Make a direct RPC, relying on batching on the server side.
-				p := nb.p1
-				if ge.Board().Turn == 2 {
-					p = nb.p2
-				}
-				var err error
-				mv, _, err = p.SuggestMove(ctx, ge)
-				if err != nil {
-					log.Printf("Worker %d: RPC failed: %v", i, err)
-					workerCancel() // Kill all workers, we want all or nothing.
-					return
-				}
-				if err := ge.MakeMoveError(*mv); err != nil {
-					log.Printf("Failed to make a move: %v\n", err)
+			for i := range jobs {
+				position := nb.positions[i]
+				ge := hexz.NewGameEngineFlagz()
+				if err := ge.FromProto(position.State); err != nil {
+					log.Printf("Worker %d: invalid position %s: %v", worker, position.ID, err)
 					workerCancel()
 					return
 				}
-				log.Printf("[worker %d] score at move %d: %v\n", i, ge.Board().Move, ge.Board().Score)
+				gameStarted := time.Now()
+				for !ge.IsDone() {
+					p := nb.p1
+					if ge.Board().Turn == 2 {
+						p = nb.p2
+					}
+					mv, _, err := p.SuggestMove(workerCtx, ge)
+					if err != nil {
+						log.Printf("Worker %d position %s: RPC failed: %v", worker, position.ID, err)
+						workerCancel()
+						return
+					}
+					if err := ge.MakeMoveError(*mv); err != nil {
+						log.Printf("Worker %d position %s: failed move: %v", worker, position.ID, err)
+						workerCancel()
+						return
+					}
+				}
+				score := ge.Board().Score
+				result := &npb.BenchmarkResult_GameResult{
+					PositionId:      position.ID,
+					Winner:          int32(ge.Winner()),
+					P1Score:         int32(score[0]),
+					P2Score:         int32(score[1]),
+					Moves:           int32(ge.Board().Move),
+					DurationSeconds: time.Since(gameStarted).Seconds(),
+				}
+				log.Printf("[worker %d] Position %s over after %d moves: winner=%d score=%v",
+					worker, position.ID, ge.Board().Move, ge.Winner(), score)
+				nb.stats.Add(result)
 			}
-			log.Printf("[worker %d] Game over after %d moves. Final score: %v\n", i, ge.Board().Move, ge.Board().Score)
-			nb.stats.Add(ge.Winner())
-		}(workerCtx, i)
+		}(worker)
 	}
+sendJobs:
+	for i := range nb.positions {
+		select {
+		case jobs <- i:
+		case <-workerCtx.Done():
+			break sendJobs
+		}
+	}
+	close(jobs)
 
-	// Wait until all workers are done.
 	wg.Wait()
 	done := time.Now()
-	// Print results.
-	if nb.stats.Games() != nb.numGames {
+	if nb.stats.Games() != len(nb.positions) {
 		return fmt.Errorf("benchmark was aborted; intermediate result: %v", nb.stats)
 	}
 	var result string
@@ -166,7 +211,8 @@ func (nb *ConcurrentNBench) Play(ctx context.Context) error {
 		result = "P2 wins"
 	}
 
-	log.Printf("Final result: best of %d: %s vs %s: %s %d-%d\n", nb.numGames, nb.P1Name(), nb.P2Name(), result, nb.stats.wins[0], nb.stats.wins[1])
+	log.Printf("Final result: best of %d: %s vs %s: %s %d-%d\n",
+		len(nb.positions), nb.P1Name(), nb.P2Name(), result, nb.stats.wins[0], nb.stats.wins[1])
 	if nb.statsFile != "" {
 		err := nb.appendStats(started, done)
 		if err != nil {
@@ -174,4 +220,31 @@ func (nb *ConcurrentNBench) Play(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func wilsonInterval(wins, games int) (float64, float64) {
+	if games == 0 {
+		return 0, 0
+	}
+	const z = 1.959963984540054
+	n := float64(games)
+	p := float64(wins) / n
+	denom := 1 + z*z/n
+	center := (p + z*z/(2*n)) / denom
+	margin := z * math.Sqrt((p*(1-p)+z*z/(4*n))/n) / denom
+	return center - margin, center + margin
+}
+
+func logPairedSummary(model1, model2 string, first, reverse *ResultStats) {
+	model1Wins := first.wins[0] + reverse.wins[1]
+	model2Wins := first.wins[1] + reverse.wins[0]
+	games := first.games + reverse.games
+	draws := games - model1Wins - model2Wins
+	lo, hi := wilsonInterval(model1Wins, games)
+	log.Printf(
+		"Paired summary over %d positions (%d games): %s=%d, %s=%d, draws=%d; "+
+			"%s strict win rate %.1f%% (95%% Wilson CI %.1f%%..%.1f%%)",
+		first.games, games, model1, model1Wins, model2, model2Wins, draws,
+		model1, 100*float64(model1Wins)/float64(games), 100*lo, 100*hi,
+	)
 }

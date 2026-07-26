@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -138,7 +138,7 @@ func ReadResults(statsFile string) ([]*npb.BenchmarkResult, error) {
 
 // AppendStats appends result to the JSONlines statsFile.
 func AppendStats(statsFile string, result *npb.BenchmarkResult) error {
-	if err := os.MkdirAll(path.Base(statsFile), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(statsFile), 0755); err != nil {
 		return fmt.Errorf("cannot create directory for logfile: %v", err)
 	}
 	f, err := os.OpenFile(statsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
