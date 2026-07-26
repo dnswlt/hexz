@@ -6,7 +6,9 @@ set -euo pipefail
 # concurrently without requiring a host C++ build.
 
 if [[ $# -ne 2 ]]; then
-    echo "Usage: $0 <checkpoint_1> <checkpoint_2>"
+    echo "Usage: $0 <model-or-checkpoint-1> <model-or-checkpoint-2>"
+    echo "Examples: $0 62 63"
+    echo "          $0 res10:63 res10-r4-cp63:10"
     exit 1
 fi
 
@@ -25,6 +27,20 @@ p2_port="${HEXZ_NBENCH_P2_PORT:-50172}"
 p1_container="hexz-nbench2-p1"
 p2_container="hexz-nbench2-p2"
 
+parse_model_key() {
+    local value="$1"
+    if [[ "$value" == *:* ]]; then
+        printf '%s %s\n' "${value%:*}" "${value##*:}"
+    else
+        printf '%s %s\n' "$model_name" "$value"
+    fi
+}
+
+read -r p1_model p1_checkpoint < <(parse_model_key "$1")
+read -r p2_model p2_checkpoint < <(parse_model_key "$2")
+p1_key="$p1_model:$p1_checkpoint"
+p2_key="$p2_model:$p2_checkpoint"
+
 cleanup() {
     docker stop "$p1_container" "$p2_container" >/dev/null 2>&1 || true
 }
@@ -32,10 +48,14 @@ trap cleanup EXIT
 
 cleanup
 
-for spec in "p1:$1:$p1_port:$p1_container" "p2:$2:$p2_port:$p2_container"; do
-    IFS=: read -r player checkpoint port container <<< "$spec"
-    model_path="/models/models/flagz/$model_name/checkpoints/$checkpoint/scriptmodule.pt"
-    echo "Starting $player server for $model_name:$checkpoint on port $port"
+start_server() {
+    local player="$1"
+    local model="$2"
+    local checkpoint="$3"
+    local port="$4"
+    local container="$5"
+    local model_path="/models/models/flagz/$model/checkpoints/$checkpoint/scriptmodule.pt"
+    echo "Starting $player server for $model:$checkpoint on port $port"
     docker run --rm -d \
         --name "$container" \
         -p "$port:$port" \
@@ -45,16 +65,19 @@ for spec in "p1:$1:$p1_port:$p1_container" "p2:$2:$p2_port:$p2_container"; do
         --device=cuda \
         --max_think_time_ms=0 \
         --model_path="$model_path" \
-        --model_key="$model_name:$checkpoint" \
+        --model_key="$model:$checkpoint" \
         --server_addr="0.0.0.0:$port" >/dev/null
-done
+}
+
+start_server p1 "$p1_model" "$p1_checkpoint" "$p1_port" "$p1_container"
+start_server p2 "$p2_model" "$p2_checkpoint" "$p2_port" "$p2_container"
 
 sleep "${HEXZ_NBENCH_STARTUP_SECONDS:-3}"
 
 go run ./cmd/nbench2 \
     -model-repo "$model_repo" \
-    -key1 "$model_name:$1" \
-    -key2 "$model_name:$2" \
+    -key1 "$p1_key" \
+    -key2 "$p2_key" \
     -p1-addr "localhost:$p1_port" \
     -p2-addr "localhost:$p2_port" \
     -positions-file "$positions_file" \

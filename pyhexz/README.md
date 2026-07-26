@@ -142,6 +142,39 @@ of the replay window. The effective reuse is therefore approximately
 `25 * 4096 / 25000 = 4.1`. Optimizer state and the global training step are
 stored with every checkpoint, so Adam momentum is preserved between triggers.
 
+### Isolated training experiments
+
+Do not continue experimental training directly under the baseline model name.
+Seed a candidate from a known checkpoint and an aligned tail of its replay:
+
+```bash
+cd ..
+PYTHONPATH=pyhexz/src pyhexz/.venv/bin/python3 -m pyhexz.experiment \
+  --repo /home/dw/data/hexz-models \
+  --source-model res10 \
+  --source-checkpoint 63 \
+  --candidate-model res10-r4-cp63 \
+  --replay-examples 1048576 \
+  --trigger-threshold 25000
+```
+
+This creates candidate checkpoint 0 with the source weights and 1,025,000
+replay examples. Rounding down to a trigger multiple ensures that the first
+candidate checkpoint is trained only after 25,000 fresh examples arrive. The
+source model is never modified, and the candidate directory is exposed only
+after the checkpoint, replay, and `experiment.json` manifest are complete.
+
+Run the normal pipeline with `HEXZ_MODEL_NAME=res10-r4-cp63`, then compare the
+candidate to its source using the paired corpus:
+
+```bash
+HEXZ_MODEL_NAME=res10-r4-cp63 bash scripts/training_server_local.sh
+# Start a worker for a runtime chosen for this experiment.
+bash scripts/worker_docker_cuda.sh host.docker.internal:50051 3600
+
+bash scripts/nbench2.sh res10:63 res10-r4-cp63:10
+```
+
 If we assume similar parameters in the actual AlphaZero implementation:
 
 * 700'000 training steps have been run for 44'000'000 games.

@@ -4,11 +4,13 @@ import logging
 import time
 import h5py
 import io
+import json
 import numpy as np
 import pytest
 import torch
 from pyhexz import hexz_pb2
 from pyhexz.config import TrainingConfig
+from pyhexz.experiment import initialize_training_experiment
 from pyhexz.model import HexzNeuralNetwork
 from pyhexz.modelrepo import LocalModelRepository
 from pyhexz.training import HDF5IterableDataset, TrainingTask, rchunks
@@ -190,3 +192,57 @@ def test_training_batch_limit_and_optimizer_resume(tmp_path):
     state = repo.get_training_state(model_name, 2)
     assert state["global_step"] == 4
     assert state["examples_trained"] == 16
+
+
+def test_initialize_training_experiment_isolated_and_aligned(tmp_path):
+    repo = LocalModelRepository(tmp_path)
+    source_name = "source"
+    repo.store_model(
+        source_name,
+        7,
+        HexzNeuralNetwork(blocks=1, filters=8),
+    )
+    repo.add_examples(
+        hexz_pb2.AddTrainingExamplesRequest(
+            examples=[
+                _training_example(source_name, checkpoint=7) for _ in range(12)
+            ]
+        )
+    )
+    repo.close_all()
+
+    manifest = initialize_training_experiment(
+        repo_base_dir=tmp_path,
+        source_model=source_name,
+        source_checkpoint=7,
+        candidate_model="candidate-r4",
+        replay_examples=10,
+        trigger_threshold=4,
+    )
+
+    assert manifest["source"]["replay_range"] == [4, 12]
+    assert manifest["training"]["requested_replay_examples"] == 10
+    assert manifest["training"]["seed_replay_examples"] == 8
+    assert repo.get_latest_checkpoint(source_name) == 7
+    assert repo.h5_size(source_name) == 12
+    assert repo.get_latest_checkpoint("candidate-r4") == 0
+    assert repo.h5_size("candidate-r4") == 8
+    with repo.acquire_h5(source_name) as source:
+        with repo.acquire_h5("candidate-r4") as candidate:
+            for name in ("boards", "action_masks", "move_probs", "values"):
+                np.testing.assert_array_equal(candidate[name][:], source[name][-8:])
+    with open(
+        tmp_path / "models" / "flagz" / "candidate-r4" / "experiment.json"
+    ) as f:
+        assert json.load(f) == manifest
+    repo.close_all()
+
+    with pytest.raises(FileExistsError):
+        initialize_training_experiment(
+            repo_base_dir=tmp_path,
+            source_model=source_name,
+            source_checkpoint=7,
+            candidate_model="candidate-r4",
+            replay_examples=8,
+            trigger_threshold=4,
+        )
