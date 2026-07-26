@@ -11,6 +11,8 @@ import io
 import itertools
 import json
 import queue
+import shutil
+import tempfile
 import time
 import typing
 import h5py
@@ -55,6 +57,7 @@ class ModelRepository:
         checkpoint: int | None,
         model: HexzNeuralNetwork,
         store_sm=True,
+        training_state: dict[str, Any] | None = None,
     ) -> str:
         """Stores the given model in the repository as a state_dict.
 
@@ -100,6 +103,9 @@ class LocalModelRepository:
 
     def _scriptmodule_path(self, name: str, checkpoint: int):
         return os.path.join(self._checkpoints_dir(name, checkpoint), "scriptmodule.pt")
+
+    def _training_state_path(self, name: str, checkpoint: int):
+        return os.path.join(self._checkpoints_dir(name, checkpoint), "training_state.pt")
 
     def _examples_dir(self, name: str, checkpoint: int):
         return os.path.join(self._checkpoints_dir(name, checkpoint), "examples")
@@ -209,29 +215,62 @@ class LocalModelRepository:
             self.model_cache[key] = model
         return model
 
+    def get_training_state(
+        self,
+        name: str,
+        checkpoint: int,
+        map_location="cpu",
+    ) -> dict[str, Any] | None:
+        """Loads optimizer/global-step state associated with a checkpoint.
+
+        Older checkpoints do not have this file and return None.
+        """
+        path = self._training_state_path(name, checkpoint)
+        if not os.path.exists(path):
+            return None
+        return torch.load(path, map_location=map_location, weights_only=True)
+
     def store_model(
         self,
         name: str,
         checkpoint: int | None,
         model: HexzNeuralNetwork,
         store_sm=True,
+        training_state: dict[str, Any] | None = None,
     ) -> str:
         if checkpoint is None:
             checkpoint = self.get_latest_checkpoint(name) + 1
-        m_path = self._model_path(name, checkpoint)
+        checkpoint_dir = self._checkpoints_dir(name, checkpoint)
+        checkpoints_dir = os.path.dirname(checkpoint_dir)
         with self.models_lock:
-            if os.path.exists(m_path):
-                raise IOError(f"Model already exists at {m_path}")
-            os.makedirs(os.path.dirname(m_path), exist_ok=True)
-            with open(m_path + ".params", "w") as f_out:
-                json.dump(model.ctor_args, f_out, indent=2)
-            torch.save(model.state_dict(), m_path)
-            if store_sm:
-                # Generate and store a ScriptModule as well.
-                sm_path = self._scriptmodule_path(name, checkpoint)
-                sm = torch.jit.script(model)
-                sm.save(sm_path)
-        return m_path
+            if os.path.exists(checkpoint_dir):
+                raise IOError(f"Checkpoint already exists at {checkpoint_dir}")
+            os.makedirs(checkpoints_dir, exist_ok=True)
+            staging_dir = tempfile.mkdtemp(
+                prefix=f".{checkpoint}.", dir=checkpoints_dir
+            )
+            try:
+                m_path = os.path.join(staging_dir, "model.pt")
+                with open(m_path + ".params", "w") as f_out:
+                    json.dump(model.ctor_args, f_out, indent=2)
+                torch.save(model.state_dict(), m_path)
+                if store_sm:
+                    sm_path = os.path.join(staging_dir, "scriptmodule.pt")
+                    sm = torch.jit.script(model)
+                    sm.save(sm_path)
+                if training_state is not None:
+                    torch.save(
+                        training_state,
+                        os.path.join(staging_dir, "training_state.pt"),
+                    )
+                # A numeric checkpoint directory only becomes visible after
+                # every requested artifact was written successfully.
+                os.rename(staging_dir, checkpoint_dir)
+            except Exception:
+                shutil.rmtree(staging_dir, ignore_errors=True)
+                raise
+            self.model_cache.clear()
+        return self._model_path(name, checkpoint)
 
     def _index_add(
         self, model_name: str, filename: str, req: hexz_pb2.AddTrainingExamplesRequest

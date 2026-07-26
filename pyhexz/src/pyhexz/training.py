@@ -33,6 +33,9 @@ class TrainingResultInfo:
     done: str  # YYYY-MM-DD HH:MM:SSZ
     model: ModelInfo
     num_epochs: int
+    training_batches: int
+    examples_trained: int
+    global_step: int
     training_time: float
     total_time: float
     examples_window: Tuple[int, int]
@@ -45,6 +48,7 @@ class TrainingStats:
     examples: int = 0
     training_runs_started: int = 0
     training_runs_completed: int = 0
+    training_runs_failed: int = 0
     last_training_ex_count: int = 0
     last_training_info: TrainingResultInfo | None = None
 
@@ -57,7 +61,7 @@ class HDF5IterableDataset(torch.utils.data.IterableDataset):
     """PyTorch iterable-style Dataset implementation to read Hexz examples from HDF5."""
 
     def __init__(
-        self, h5_file: h5py.File, window_size=0, shuffle=False, shuffle_chunk_size=2**20
+        self, h5_file: h5py.File, window_size=0, shuffle=False, shuffle_chunk_size=2**15
     ):
         """Builds a new dataset that reads from the h5_file HDF5 file handle.
 
@@ -70,9 +74,9 @@ class HDF5IterableDataset(torch.utils.data.IterableDataset):
             window_size: The maximum number of examples to use from the file.
                 Only the rightmost (newest) window_size examples are used.
                 None means that all examples in h5_file will be used.
-            shuffle: If True, examples are shuffled within large (2^20) chunks.
-                (We cannot shuffle the whole dataset unless it fits in memory.
-                 Shuffling large chunks independently should be good enough.)
+            shuffle: If True, both the chunk order and the examples inside
+                each chunk are shuffled. This permits bounded training runs to
+                sample across the entire replay window without loading it all.
         """
         super().__init__()
         self.h5_file = h5_file
@@ -91,7 +95,10 @@ class HDF5IterableDataset(torch.utils.data.IterableDataset):
     def __iter__(self):
         rng = np.random.default_rng()
         size = self.shuffle_chunk_size if self.shuffle else 4096
-        for c in rchunks(self.start, self.end, size):
+        chunks = list(rchunks(self.start, self.end, size))
+        if self.shuffle:
+            rng.shuffle(chunks)
+        for c in chunks:
             bs = self.h5_file["boards"][c]
             am = self.h5_file["action_masks"][c]
             mp = self.h5_file["move_probs"][c]
@@ -178,11 +185,39 @@ class TrainingTask:
             pr_loss_fn = nn.CrossEntropyLoss()
             val_loss_fn = nn.MSELoss()
 
-            optimizer = torch.optim.Adam(
+            optimizer_name = self.config.optimizer.lower()
+            optimizer_types = {
+                "adam": torch.optim.Adam,
+                "adamw": torch.optim.AdamW,
+            }
+            optimizer_type = optimizer_types.get(optimizer_name)
+            if optimizer_type is None:
+                raise ValueError(f"Invalid optimizer: {self.config.optimizer}")
+            optimizer = optimizer_type(
                 model.parameters(),
                 lr=self.config.learning_rate,
                 weight_decay=self.config.adam_weight_decay,
             )
+            previous_state = self.model_repo.get_training_state(
+                self.model_name, self.checkpoint, map_location=device
+            )
+            global_step = 0
+            total_examples_trained = 0
+            if previous_state is not None:
+                previous_optimizer = previous_state.get("optimizer_name")
+                if previous_optimizer != optimizer_name:
+                    raise ValueError(
+                        f"Cannot resume optimizer {previous_optimizer!r} as {optimizer_name!r}"
+                    )
+                optimizer.load_state_dict(previous_state["optimizer_state"])
+                # Treat the configured values as authoritative when resuming.
+                for group in optimizer.param_groups:
+                    group["lr"] = self.config.learning_rate
+                    group["weight_decay"] = self.config.adam_weight_decay
+                global_step = int(previous_state.get("global_step", 0))
+                total_examples_trained = int(
+                    previous_state.get("examples_trained", 0)
+                )
             t_iter_start = time.time()
             training_ns = 0
             cum_stats = defaultdict(
@@ -191,6 +226,10 @@ class TrainingTask:
                     "gradients": torch.tensor(0.0, device=device),
                 }
             )
+            training_batches = 0
+            examples_trained = 0
+            stop_training = False
+            epochs_completed = 0
             for epoch in range(self.config.num_epochs):
                 for (X_board, X_action_mask), (y_pr, y_val) in loader:
                     t_start_batch = time.perf_counter_ns()
@@ -216,12 +255,27 @@ class TrainingTask:
                     # Backpropagation
                     loss.backward()
                     optimizer.step()
+                    training_batches += 1
+                    global_step += 1
+                    batch_examples = len(y_val)
+                    examples_trained += batch_examples
+                    total_examples_trained += batch_examples
                     t_end_batch = time.perf_counter_ns()
                     training_ns += t_end_batch - t_start_batch
                     # Accumulate stats across all batches
                     self.accumulate_stats(cum_stats, model)
+                    if (
+                        self.config.training_batches_per_trigger > 0
+                        and training_batches
+                        >= self.config.training_batches_per_trigger
+                    ):
+                        stop_training = True
+                        break
                 # Log stats aggregated across batches for each epoch.
                 self.log_training_statistics(cum_stats, epoch)
+                epochs_completed = epoch + 1
+                if stop_training:
+                    break
 
         # Training is done. Save model under incremented checkpoint.
         next_cp = self.checkpoint + 1
@@ -229,19 +283,42 @@ class TrainingTask:
             name=self.model_name,
             checkpoint=next_cp,
             model=model,
+            training_state={
+                "optimizer_name": optimizer_name,
+                "optimizer_state": optimizer.state_dict(),
+                "global_step": global_step,
+                "examples_trained": total_examples_trained,
+                "config": {
+                    **dataclasses.asdict(self.config),
+                    "model_repo_base_dir": str(
+                        self.config.model_repo_base_dir
+                    ),
+                },
+            },
         )
         t_end = time.time()
+        effective_reuse = (
+            examples_trained / self.config.training_trigger_threshold
+            if self.config.training_trigger_threshold > 0
+            else 0
+        )
         self.logger.info(
             f"_run_training done in {(t_end-t_start):.3f}s."
             f" setup time: {(t_iter_start-t_start):.3f}s."
             f" training time: {training_ns/1e9:.3f}s."
+            f" batches: {training_batches}."
+            f" examples trained: {examples_trained}."
+            f" effective replay reuse: {effective_reuse:.2f}."
         )
         return TrainingResultInfo(
             model=ModelInfo(self.model_name, next_cp),
             started=datetime.fromtimestamp(t_start).isoformat(),
             done=datetime.fromtimestamp(t_end).isoformat(),
             total_time=t_end - t_start,
-            num_epochs=self.config.num_epochs,
+            num_epochs=epochs_completed,
+            training_batches=training_batches,
+            examples_trained=examples_trained,
+            global_step=global_step,
             training_time=training_ns / 1e9,
             examples_window=(dataset.start, dataset.end),
         )
@@ -328,9 +405,20 @@ class TrainingState:
     def _training_done(self, fut: Future[TrainingResultInfo]):
         """A callback that is called when a TrainingTask is done."""
         with self.lock:
-            self._stats.training_runs_completed += 1
             self.is_training = False
-            res = fut.result()
+            try:
+                res = fut.result()
+            except Exception:
+                self._stats.training_runs_failed += 1
+                self.logger.exception("Training task failed")
+                for q in self._subscriptions:
+                    q.put(
+                        hexz_pb2.ControlEvent(
+                            training_done=hexz_pb2.ControlEvent.TrainingDone(),
+                        )
+                    )
+                return
+            self._stats.training_runs_completed += 1
             self.latest_checkpoint = res.model.checkpoint
             self._stats.last_training_info = res
             self.logger.info(f"Training done: {res}")

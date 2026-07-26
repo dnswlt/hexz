@@ -36,6 +36,11 @@ class TrainingConfig:
     training_examples_window_size: int = 2**20
     # Training parameters
     num_epochs: int = 7
+    # If positive, stop after this many optimizer batches, regardless of
+    # num_epochs. This decouples checkpoint frequency from replay-buffer reuse.
+    training_batches_per_trigger: int = 0
+    # One of: adam, adamw.
+    optimizer: str = "adam"
     learning_rate: float = 1e-3
     adam_weight_decay: float = 1e-4
     

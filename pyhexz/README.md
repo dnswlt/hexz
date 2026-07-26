@@ -42,10 +42,13 @@ To run the `training_server` locally:
 env HEXZ_MODEL_BLOCKS=10 \
   HEXZ_MODEL_TYPE=resnet \
   HEXZ_BATCH_SIZE=4096 \
-  HEXZ_TRAINING_TRIGGER_THRESHOLD=100000 \
+  HEXZ_TRAINING_TRIGGER_THRESHOLD=25000 \
   HEXZ_MODEL_NAME=resus \
   HEXZ_MODEL_REPO_BASE_DIR=$HOME/tmp/hexz-models \
-  HEXZ_NUM_EPOCHS=7 \
+  HEXZ_NUM_EPOCHS=1 \
+  HEXZ_TRAINING_BATCHES_PER_TRIGGER=25 \
+  HEXZ_OPTIMIZER=adam \
+  HEXZ_LEARNING_RATE=0.0003 \
   HEXZ_DEVICE=cuda \
   HEXZ_SHUFFLE=true \
   gunicorn --bind :8080 --workers 1 --threads 8 --timeout 0 'pyhexz.training_server:create_app()'
@@ -126,11 +129,18 @@ I don't think that the default values are chosen specifically to be optimal for 
 chess. Open Spiel supports a variety of simpler games as well.
 However, the structure of training is very similar to ours! We should probably drop the epoch loop,
 and maybe instead train more frequently, i.e. reduce the trigger threshold.
-As of Nov 2024, we train for 7 epochs once we have 100'000 new samples, sampling (without replacement)
-batches of size 4096 from a window of the latest 1'000'000 samples.
+The original setup trained for 7 epochs whenever 100'000 new samples arrived,
+sampling batches of size 4096 from a window of the latest 1'000'000 samples.
 
-In DeepMind's terms, we set `replay_buffer_reuse = 10` and `replay_buffer_size = 1_000_000`.
-Due to the 7 epochs, our reuse factor per sample is actually 70. That's probably too much.
+In DeepMind's terms, that set `replay_buffer_reuse = 10` and
+`replay_buffer_size = 1_000_000`. Due to the 7 epochs, the effective reuse
+factor per sample was about 70.
+
+The current setup decouples update frequency from buffer passes. Every 25'000
+new positions trigger 25 batches of 4096 positions sampled from shuffled chunks
+of the replay window. The effective reuse is therefore approximately
+`25 * 4096 / 25000 = 4.1`. Optimizer state and the global training step are
+stored with every checkpoint, so Adam momentum is preserved between triggers.
 
 If we assume similar parameters in the actual AlphaZero implementation:
 
@@ -142,4 +152,3 @@ If we assume similar parameters in the actual AlphaZero implementation:
 Still it does not give us a clue about the training window used for each training step.
 Each 4096 batch must trigger a training step: otherwise you couldn't train 700'000 steps
 on the 44m games. But those mini-batches must not contain sequential samples from a single game.
-

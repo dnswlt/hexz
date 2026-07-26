@@ -138,3 +138,55 @@ def test_training(tmp_path):
     assert repo.get_latest_checkpoint(model_name) == result.model.checkpoint
     m = repo.get_model(model_name, result.model.checkpoint, repr="scriptmodule")
     assert m is not None
+
+
+def test_training_batch_limit_and_optimizer_resume(tmp_path):
+    d = tmp_path / "repo"
+    repo = LocalModelRepository(d)
+    model_name = "limited"
+    repo.store_model(model_name, 0, HexzNeuralNetwork(blocks=1, filters=8))
+    req = hexz_pb2.AddTrainingExamplesRequest(
+        examples=[
+            _training_example(model_name, checkpoint=0)
+            for _ in range(24)
+        ]
+    )
+    repo.add_examples(req)
+    config = TrainingConfig(
+        model_repo_base_dir=d,
+        model_name=model_name,
+        batch_size=4,
+        num_epochs=7,
+        training_batches_per_trigger=2,
+        device="cpu",
+    )
+
+    first = TrainingTask(
+        model_name,
+        checkpoint=0,
+        model_repo=repo,
+        config=config,
+        logger=logging.getLogger(__name__),
+    ).execute()
+    assert first.training_batches == 2
+    assert first.examples_trained == 8
+    assert first.global_step == 2
+    state = repo.get_training_state(model_name, 1)
+    assert state["optimizer_name"] == "adam"
+    assert state["global_step"] == 2
+    assert state["examples_trained"] == 8
+    assert state["optimizer_state"]["state"]
+
+    second = TrainingTask(
+        model_name,
+        checkpoint=1,
+        model_repo=repo,
+        config=config,
+        logger=logging.getLogger(__name__),
+    ).execute()
+    assert second.training_batches == 2
+    assert second.examples_trained == 8
+    assert second.global_step == 4
+    state = repo.get_training_state(model_name, 2)
+    assert state["global_step"] == 4
+    assert state["examples_trained"] == 16
