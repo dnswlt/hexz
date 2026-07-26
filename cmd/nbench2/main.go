@@ -400,6 +400,9 @@ func main() {
 			log.Printf("Reverse play failed: %v", err)
 			return
 		}
-		logPairedSummary(modelKey1, modelKey2, first, reverse)
+		if err := logPairedSummary(modelKey1, modelKey2, first, reverse); err != nil {
+			log.Printf("Cannot summarize paired results: %v", err)
+			return
+		}
 	}
 }

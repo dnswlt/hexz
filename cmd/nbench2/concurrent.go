@@ -222,29 +222,113 @@ sendJobs:
 	return nil
 }
 
-func wilsonInterval(wins, games int) (float64, float64) {
-	if games == 0 {
-		return 0, 0
-	}
-	const z = 1.959963984540054
-	n := float64(games)
-	p := float64(wins) / n
-	denom := 1 + z*z/n
-	center := (p + z*z/(2*n)) / denom
-	margin := z * math.Sqrt((p*(1-p)+z*z/(4*n))/n) / denom
-	return center - margin, center + margin
+type PairedSummary struct {
+	Positions  int
+	Games      int
+	Model1Wins int
+	Model2Wins int
+	Draws      int
+	// Model1Score counts a win as 1, a draw as 0.5, and a loss as 0.
+	Model1Score float64
+	// The confidence interval treats each starting position, rather than each
+	// game, as one independent observation. The two seat-swapped games from a
+	// position are deliberately kept in the same observation.
+	ScoreLo float64
+	ScoreHi float64
 }
 
-func logPairedSummary(model1, model2 string, first, reverse *ResultStats) {
+func model1GameScore(result *npb.BenchmarkResult_GameResult, model1IsP1 bool) float64 {
+	if result.Winner == 0 {
+		return 0.5
+	}
+	if (result.Winner == 1) == model1IsP1 {
+		return 1
+	}
+	return 0
+}
+
+func pairedSummary(first, reverse *ResultStats) (PairedSummary, error) {
+	firstByPosition := make(map[string]*npb.BenchmarkResult_GameResult, len(first.gameResults))
+	for _, result := range first.gameResults {
+		if _, exists := firstByPosition[result.PositionId]; exists {
+			return PairedSummary{}, fmt.Errorf("duplicate first-game position %q", result.PositionId)
+		}
+		firstByPosition[result.PositionId] = result
+	}
+	reverseByPosition := make(map[string]*npb.BenchmarkResult_GameResult, len(reverse.gameResults))
+	for _, result := range reverse.gameResults {
+		if _, exists := reverseByPosition[result.PositionId]; exists {
+			return PairedSummary{}, fmt.Errorf("duplicate reverse-game position %q", result.PositionId)
+		}
+		reverseByPosition[result.PositionId] = result
+	}
+	if len(firstByPosition) != len(reverseByPosition) {
+		return PairedSummary{}, fmt.Errorf(
+			"position count mismatch: first=%d reverse=%d",
+			len(firstByPosition), len(reverseByPosition),
+		)
+	}
+
+	pairScores := make([]float64, 0, len(firstByPosition))
+	for positionID, firstResult := range firstByPosition {
+		reverseResult, ok := reverseByPosition[positionID]
+		if !ok {
+			return PairedSummary{}, fmt.Errorf("position %q missing from reverse games", positionID)
+		}
+		pairScores = append(pairScores,
+			(model1GameScore(firstResult, true)+model1GameScore(reverseResult, false))/2,
+		)
+	}
+	if len(pairScores) == 0 {
+		return PairedSummary{}, fmt.Errorf("cannot summarize zero paired positions")
+	}
+
 	model1Wins := first.wins[0] + reverse.wins[1]
 	model2Wins := first.wins[1] + reverse.wins[0]
 	games := first.games + reverse.games
 	draws := games - model1Wins - model2Wins
-	lo, hi := wilsonInterval(model1Wins, games)
+	var score float64
+	for _, pairScore := range pairScores {
+		score += pairScore
+	}
+	score /= float64(len(pairScores))
+
+	lo, hi := score, score
+	if len(pairScores) > 1 {
+		var sumSquaredDeviations float64
+		for _, pairScore := range pairScores {
+			d := pairScore - score
+			sumSquaredDeviations += d * d
+		}
+		sampleVariance := sumSquaredDeviations / float64(len(pairScores)-1)
+		const z95 = 1.959963984540054
+		margin := z95 * math.Sqrt(sampleVariance/float64(len(pairScores)))
+		lo = math.Max(0, score-margin)
+		hi = math.Min(1, score+margin)
+	}
+	return PairedSummary{
+		Positions:   len(pairScores),
+		Games:       games,
+		Model1Wins:  model1Wins,
+		Model2Wins:  model2Wins,
+		Draws:       draws,
+		Model1Score: score,
+		ScoreLo:     lo,
+		ScoreHi:     hi,
+	}, nil
+}
+
+func logPairedSummary(model1, model2 string, first, reverse *ResultStats) error {
+	summary, err := pairedSummary(first, reverse)
+	if err != nil {
+		return err
+	}
 	log.Printf(
 		"Paired summary over %d positions (%d games): %s=%d, %s=%d, draws=%d; "+
-			"%s strict win rate %.1f%% (95%% Wilson CI %.1f%%..%.1f%%)",
-		first.games, games, model1, model1Wins, model2, model2Wins, draws,
-		model1, 100*float64(model1Wins)/float64(games), 100*lo, 100*hi,
+			"%s score %.1f%% (paired-position 95%% CI %.1f%%..%.1f%%)",
+		summary.Positions, summary.Games,
+		model1, summary.Model1Wins, model2, summary.Model2Wins, summary.Draws,
+		model1, 100*summary.Model1Score, 100*summary.ScoreLo, 100*summary.ScoreHi,
 	)
+	return nil
 }
