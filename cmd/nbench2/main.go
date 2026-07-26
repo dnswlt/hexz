@@ -36,6 +36,8 @@ type CLIArgs struct {
 	ModelKey1      string
 	ModelKey2      string
 	ModelKeys      []string
+	P1Addr         string
+	P2Addr         string
 	Device         string
 	PlayBothSides  bool
 	PositionsFile  string
@@ -67,6 +69,10 @@ func parseArgs() (*CLIArgs, error) {
 	flag.StringVar(&args.ModelKey1, "key1", "", "Model key (e.g. \"res10:58\") of the first model to evaluate")
 	flag.StringVar(&args.ModelKey2, "key2", "", "Model key (e.g. \"res10:23\") of the second model to evaluate")
 	modelKeys := flag.String("keys", "", "Model keys (e.g. \"res10:23,res10:24,res10:25\") ")
+	flag.StringVar(&args.P1Addr, "p1-addr", "",
+		"Address of an already-running server for player 1; requires --p2-addr")
+	flag.StringVar(&args.P2Addr, "p2-addr", "",
+		"Address of an already-running server for player 2; requires --p1-addr")
 	flag.StringVar(&args.Device, "device", "cuda", "PyTorch device type (cuda, cpu, mps)")
 	flag.BoolVar(&args.PlayBothSides, "both-sides", false,
 		"Whether to play both as P1 and P2. If true, twice as many games are played as specified in --games.")
@@ -332,6 +338,9 @@ func main() {
 		log.Fatalf("Could not choose model keys: %v", err)
 	}
 	log.Printf("Using model keys %v - %v", modelKey1, modelKey2)
+	if (args.P1Addr == "") != (args.P2Addr == "") {
+		log.Fatal("--p1-addr and --p2-addr must be specified together")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
@@ -347,30 +356,33 @@ func main() {
 		cancel()
 	}()
 
-	subDoneCh := make(chan bool, 2)
+	p1URL, p2URL := args.P1Addr, args.P2Addr
+	if p1URL == "" {
+		subDoneCh := make(chan bool, 2)
+		p1URL = "localhost:50171"
+		cmd1, err := launchCPUPlayer(ctx, args, modelKey1, p1URL)
+		if err != nil {
+			log.Printf("Failed to start cpuserver[1]: %v", err)
+			return
+		}
+		go waitForCompletion(cmd1, subDoneCh)
 
-	p1URL := "localhost:50171"
-	cmd1, err := launchCPUPlayer(ctx, args, modelKey1, p1URL)
-	if err != nil {
-		log.Printf("Failed to start cpuserver[1]: %v", err)
-		return
-	}
-	go waitForCompletion(cmd1, subDoneCh)
+		p2URL = "localhost:50172"
+		cmd2, err := launchCPUPlayer(ctx, args, modelKey2, p2URL)
+		if err != nil {
+			log.Printf("Failed to start cpuserver[2]: %v", err)
+			return
+		}
+		go waitForCompletion(cmd2, subDoneCh)
+		defer terminateSubprocesses(subDoneCh, cancel, cmd1, cmd2)
 
-	p2URL := "localhost:50172"
-	cmd2, err := launchCPUPlayer(ctx, args, modelKey2, p2URL)
-	if err != nil {
-		log.Printf("Failed to start cpuserver[2]: %v", err)
-		return
-	}
-	go waitForCompletion(cmd2, subDoneCh)
-
-	defer terminateSubprocesses(subDoneCh, cancel, cmd1, cmd2)
-
-	log.Printf("Waiting for servers to come alive:")
-	for i := 4; i > 0; i-- {
-		log.Printf("%d ...", i)
-		time.Sleep(1 * time.Second)
+		log.Printf("Waiting for servers to come alive:")
+		for i := 4; i > 0; i-- {
+			log.Printf("%d ...", i)
+			time.Sleep(1 * time.Second)
+		}
+	} else {
+		log.Printf("Using existing CPU player servers at %s and %s", p1URL, p2URL)
 	}
 	log.Printf("Let's go!")
 
