@@ -1,13 +1,14 @@
-if [[ -z "$CONDA_DEFAULT_ENV" ]]; then
+base_dir="$(realpath "$(dirname "$0")/..")"
+
+if [[ ! -x "$base_dir/pyhexz/.venv/bin/gunicorn" && -z "$CONDA_DEFAULT_ENV" ]]; then
     if [[ -e "$HOME/miniconda3/bin/activate" ]]; then
         . $HOME/miniconda3/bin/activate pyhexz
     else
-        echo "You must be in the 'pyhexz' conda env"
+        echo "No pyhexz virtualenv or active Conda environment found"
         exit 1
     fi
 fi
 
-base_dir="$(realpath $(dirname $0)/..)"
 log_dir="$base_dir/log"
 
 mkdir -p "$log_dir"
