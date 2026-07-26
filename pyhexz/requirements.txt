@@ -1,0 +1,12 @@
+torch
+numpy
+h5py
+grpcio
+grpcio-tools
+flask
+gunicorn
+pytz
+protobuf
+pytest
+tensorboard
+requests

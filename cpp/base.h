@@ -9,7 +9,7 @@ namespace hexz {
 
 struct Config {
   // gRPC address of the training server, e.g. "localhost:8080".
-  std::string training_server_addr;
+  std::string training_server_addr = "";
   // The device on which model predictions are made. Must be one of
   // {"cpu", "mps", "cuda"}.
   std::string device = "cpu";

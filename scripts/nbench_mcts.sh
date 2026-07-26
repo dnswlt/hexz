@@ -1,27 +1,51 @@
 #!/bin/bash
 
-# Validate the model-based CPU player against the Go MCTS-based one.
+# Validate the model-based CPU player against the Go MCTS-based reference player.
 
 p1_iterations=${1:-32000}
 p2_iterations=${2:-3200}
+num_games=${3:-5}
 
-server_addr=localhost:50071
-model_base_dir="$HOME/tmp/hexz-models/models/flagz"
-model_name=res10
-latest=$(ls "$model_base_dir/$model_name/checkpoints" | awk -F'/' '{print $NF}' | sort -nr | head -n 1)
-scriptmodule="$model_base_dir/$model_name/checkpoints/$latest/scriptmodule.pt"
+server_port=50071
+model_base_dir="${HEXZ_MODEL_REPO_BASE_DIR:-/home/dw/data/hexz-models}"
+model_name="${HEXZ_MODEL_NAME:-res10}"
 
-cd $(dirname $0)/..
+latest_cp=$(ls "$model_base_dir/models/flagz/$model_name/checkpoints" 2>/dev/null | sort -nr | head -n 1)
+latest_cp="${latest_cp:-63}"
+scriptmodule="/models/models/flagz/$model_name/checkpoints/$latest_cp/scriptmodule.pt"
 
-pushd cpp/build > /dev/null
-echo './cpuserver --device=cuda --max_think_time_ms=0 --model_path="$scriptmodule" --server_addr=$server_addr 2>&1 > /tmp/cpuserver.log &'
-./cpuserver --device=cuda --max_think_time_ms=0 --model_path="$scriptmodule" --server_addr=$server_addr  >> /tmp/cpuserver.log 2>&1 &
-cpu_pid=$!
-sleep 2  # let cpuserver become available
-popd > /dev/null
+base_dir="$(realpath $(dirname $0)/..)"
+log_dir="$base_dir/log"
+mkdir -p "$log_dir"
 
-echo 'go run ./cmd/nbench -num-games 5 -p2-addr $server_addr -p1-max-iter $p1_iterations -p2-max-iter $p2_iterations -p2-eval'
-go run ./cmd/nbench -num-games 5 -p2-addr $server_addr -p1-max-iter $p1_iterations -p2-max-iter $p2_iterations -p2-eval
+# Clean up any leftover container
+docker stop hexz-cpuserver > /dev/null 2>&1 || true
 
-echo "Terminating cpuserver process"
-kill $cpu_pid
+echo "Starting CUDA cpuserver container for $model_name checkpoint $latest_cp on port $server_port..."
+docker run --rm -d \
+  --name hexz-cpuserver \
+  -p ${server_port}:${server_port} \
+  -v "$model_base_dir:/models" \
+  --gpus all \
+  hexz-cpuserver-cuda:latest \
+  --device=cuda \
+  --max_think_time_ms=0 \
+  --model_path="$scriptmodule" \
+  --model_key="$model_name:$latest_cp" \
+  --server_addr="0.0.0.0:${server_port}" > /dev/null
+
+sleep 3  # let cpuserver start
+
+echo "Running nbench: P1 (Go MCTS reference, $p1_iterations iters) vs P2 (ML Model $model_name:$latest_cp, $p2_iterations iters)..."
+cd "$base_dir"
+/usr/local/go/bin/go run ./cmd/nbench \
+  -num-games $num_games \
+  -p1-addr "" \
+  -p2-addr "localhost:${server_port}" \
+  -p1-max-iter $p1_iterations \
+  -p2-max-iter $p2_iterations \
+  -p2-eval 2>&1 | tee -a "$log_dir/nbench_mcts.log"
+
+echo "Stopping cpuserver container..."
+docker stop hexz-cpuserver > /dev/null 2>&1
+

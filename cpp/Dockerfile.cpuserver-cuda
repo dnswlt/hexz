@@ -1,13 +1,10 @@
-# This is the CUDA-enabled Docker image.
-# See Dockerfile.worker-cpu for the CPU-only version.
+# This is the CUDA-enabled Docker image for cpuserver (Neural MCTS model evaluation server).
 
 # Stage 1: build
 FROM nvidia/cuda:12.2.2-cudnn8-devel-ubuntu22.04 AS builder
 
 WORKDIR /build
 
-# Build gRPC separately. PyTorch libraries blow up the image size substantially
-# already (~ 1G IIRC), but (uncleaned) gRPC build artifacts are a whopping 3G.
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
@@ -17,13 +14,6 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && apt-get clean
 
-# Build cmake.
-#
-# We need a recent version of it for C++20 support and to avoid the
-# Target []...] requires the language dialect "CUDA20" (with compiler                                                                          
-# extensions), but CMake does not know the compile flags to use to enable it.
-# https://stackoverflow.com/questions/75010206/cuda-12-c20-support-with-cmake-not-working
-
 RUN curl -L -O https://github.com/Kitware/CMake/releases/download/v3.30.5/cmake-3.30.5.tar.gz \
     && tar --no-same-owner -xzf cmake-3.30.5.tar.gz \
     && cd cmake-3.30.5 \
@@ -31,10 +21,7 @@ RUN curl -L -O https://github.com/Kitware/CMake/releases/download/v3.30.5/cmake-
     && make -j$(($(nproc) < 8 ? $(nproc) : 8)) \
     && make install
 
-# Ensure cmake (and protoc, once built) are visible.
 ENV PATH="${PATH}:/opt/bin"
-
-# Build gRPC.
 
 RUN git clone --recurse-submodules -b v1.66.0 --depth 1 --shallow-submodules https://github.com/grpc/grpc
 
@@ -65,8 +52,6 @@ RUN curl -L -o libtorch.zip https://download.pytorch.org/libtorch/cu121/libtorch
     && unzip -d /opt libtorch.zip \
     && rm libtorch.zip
 
-# Copy source files. Do this after required libraries were installed to avoid repeating that
-# each time a source changes.
 COPY ./cpp/ ./
 COPY ./proto/*.proto ./proto/
 
@@ -74,16 +59,15 @@ RUN protoc -Iproto --cpp_out=. --grpc_out=. --plugin=protoc-gen-grpc=$(which grp
     && mkdir build \
     && cd build \
     && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="/opt/libtorch/share/cmake;/opt/lib/cmake" .. \
-    && make -j4 worker
+    && make -j4 cpuserver_main
 
 # Stage 2: final image
 FROM nvidia/cuda:12.2.2-runtime-ubuntu22.04
 
 WORKDIR /app
 
-# Only copy relevant dynamic libs and the application binary.
 COPY --from=builder /opt/lib/libjemalloc.so /opt/lib/libjemalloc.so
 COPY --from=builder /opt/libtorch/lib /opt/libtorch/lib
-COPY --from=builder /build/build/worker /app/worker
+COPY --from=builder /build/build/cpuserver /app/cpuserver
 
-ENTRYPOINT ["/usr/bin/env", "LD_PRELOAD=/opt/lib/libjemalloc.so", "./worker"]
+ENTRYPOINT ["/usr/bin/env", "LD_PRELOAD=/opt/lib/libjemalloc.so", "./cpuserver"]

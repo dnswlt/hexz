@@ -44,8 +44,12 @@ fi
 
 if [[ $gen_py == 1 ]]; then
     echo "Generating proto and gRPC files for Python..."
-    # protoc -Ihexzpb hexzpb/hexz.proto --python_out=pyhexz/src/pyhexz --pyi_out=pyhexz/src/pyhexz
-    test -z "$CONDA_PYTHON_EXE" && { echo "CONDA_PYTHON_EXE is not set. You must run '$0 py' in a conda environment"; exit 1; }
+    PYTHON_BIN="python3"
+    if [[ -x "$(pwd)/pyhexz/.venv/bin/python3" ]]; then
+        PYTHON_BIN="$(pwd)/pyhexz/.venv/bin/python3"
+    elif [[ -n "$CONDA_PREFIX" ]]; then
+        PYTHON_BIN="$CONDA_PREFIX/bin/python3"
+    fi
 
     # grpc_tools.protoc uses the directory structure to determine the _pb2's package.
     # Make sure generated code uses proper imports like
@@ -56,6 +60,6 @@ if [[ $gen_py == 1 ]]; then
     cp ../../proto/hexz.proto ../../proto/nbench.proto pyhexz/
     # Replace proto/ prefix by pyhexz/ in imports ... what a mess.
     sed -i -e 's|^import "proto/\([^"]*\).proto"|import "pyhexz/\1.proto"|g' pyhexz/*.proto
-    python3 -m grpc_tools.protoc --proto_path=. --python_out=. --pyi_out=. --grpc_python_out=. pyhexz/hexz.proto pyhexz/nbench.proto
+    "$PYTHON_BIN" -m grpc_tools.protoc --proto_path=. --python_out=. --pyi_out=. --grpc_python_out=. pyhexz/hexz.proto pyhexz/nbench.proto
     rm -f pyhexz/hexz.proto pyhexz/nbench.proto
 fi
