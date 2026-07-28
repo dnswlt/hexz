@@ -67,6 +67,10 @@ The baseline ML player (`res10` checkpoint 63) demonstrates competitive playing 
   bash scripts/worker_docker_cuda.sh
   ```
   Launches `hexz-worker-cuda:latest` with `--gpus all` and `cuda@4:128:256` worker spec. Streams self-play game examples to the training server at **~59,000 predictions/s**.
+  A bounded 512-game dry run completed in 522.8 seconds, producing 38,445
+  examples (**73.5 completed examples/s**). The first game completed after
+  roughly 270 seconds, so worker runtimes shorter than that can report high
+  in-flight throughput while delivering no completed games.
 
 ### 2. Running Model Evaluation / Benchmarks (`nbench`)
 - **Run Go Reference MCTS vs. GPU ML Model**:
@@ -83,7 +87,19 @@ The baseline ML player (`res10` checkpoint 63) demonstrates competitive playing 
 
 | Exp ID | Model Architecture | Hyperparameters / Changes | Performance Metrics | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Baseline** | ResNet 10 blocks, 128 filters (`res10:63`) | Original Adam fixed LR 1e-3, 7 epochs/trigger | **~59,000 predictions/s**, **~102 examples/s** on RTX 4080 (`cuda@4:128:256`) | Verified & Active |
+| **Baseline** | ResNet 10 blocks, 128 filters (`res10:63`) | Original Adam fixed LR 1e-3, 7 epochs/trigger | **~59,000 predictions/s**, **73.5 completed examples/s** on RTX 4080 (`cuda@4:128:256`); short windows can show ~102 in-flight examples/s | Verified |
+
+### Current warm-start evidence
+
+- A fixed 4,096-example replay sweep over checkpoints 0–63 found checkpoint
+  62 had the best combined policy/value validation loss. Checkpoint 63 had
+  regressed in value MSE and value calibration.
+- Checkpoint 62 has finite, non-zero gradients and improves held-out loss after
+  an optimizer step. There is no evidence of vanishing gradients or model
+  collapse.
+- In small paired smoke arenas, checkpoint 62 beat checkpoint 63 by 11–4 with
+  one draw, and checkpoint 57 by 11–5. These screens justify using checkpoint
+  62 as the next warm start; they are not yet promotion-quality evaluations.
 
 ---
 
@@ -106,5 +122,4 @@ The baseline ML player (`res10` checkpoint 63) demonstrates competitive playing 
 
 ### 4. Auxiliary Training Objectives
 - **Score Margin Lead Head**: Predict final score difference ($\text{Score}_{\text{P1}} - \text{Score}_{\text{P2}}$) alongside binary win/loss outcome to provide denser learning signals per game.
-
 
