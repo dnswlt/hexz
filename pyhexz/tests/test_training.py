@@ -1,5 +1,6 @@
 """Test cases for the training.py module."""
 
+from collections import defaultdict
 import logging
 import time
 import h5py
@@ -106,7 +107,7 @@ def test_rev_chunks():
     assert list(rchunks(0, 10, 1000)) == [slice(0, 10)]
 
 
-def test_shuffled_dataset_reads_independently_shuffled_blocks(tmp_path, monkeypatch):
+def test_shuffled_dataset_reads_reproducible_random_blocks(tmp_path):
     path = tmp_path / "examples.h5"
     with h5py.File(path, "w") as h:
         values = np.arange(32, dtype=np.float32)
@@ -115,28 +116,66 @@ def test_shuffled_dataset_reads_independently_shuffled_blocks(tmp_path, monkeypa
         h.create_dataset("move_probs", data=values.reshape(32, 1))
         h.create_dataset("values", data=values.reshape(32, 1))
 
-        monkeypatch.setattr(
-            np.random,
-            "default_rng",
-            lambda: np.random.Generator(np.random.PCG64(7)),
-        )
-        dataset = HDF5IterableDataset(
+        first_dataset = HDF5IterableDataset(
             h,
             shuffle=True,
             shuffle_chunk_size=4,
+            seed=7,
         )
-        first_two_blocks = [
+        first_values = [
             int(board.item())
-            for ((board, _), _), _index in zip(dataset, range(8))
+            for ((board, _), _), _index in zip(first_dataset, range(8))
+        ]
+        second_dataset = HDF5IterableDataset(
+            h,
+            shuffle=True,
+            shuffle_chunk_size=4,
+            seed=7,
+        )
+        second_values = [
+            int(board.item())
+            for ((board, _), _), _index in zip(second_dataset, range(8))
         ]
 
+    assert first_values == second_values
+    assert first_dataset.sampled_ranges == second_dataset.sampled_ranges
     # Every four yielded examples come from one contiguous read block, while
-    # successive blocks are selected independently from the replay window.
-    first_block = {value // 4 for value in first_two_blocks[:4]}
-    second_block = {value // 4 for value in first_two_blocks[4:]}
+    # successive blocks come from distinct, randomly ordered replay regions.
+    first_block = {value // 4 for value in first_values[:4]}
+    second_block = {value // 4 for value in first_values[4:]}
     assert len(first_block) == 1
     assert len(second_block) == 1
     assert first_block != second_block
+
+
+def test_gradient_statistics_count_each_parameter_once(tmp_path):
+    model = HexzNeuralNetwork(blocks=1, filters=8)
+    for parameter in model.parameters():
+        parameter.grad = torch.ones_like(parameter)
+    config = TrainingConfig(
+        model_repo_base_dir=tmp_path,
+        model_name="stats",
+    )
+    task = TrainingTask(
+        "stats",
+        checkpoint=0,
+        model_repo=None,
+        config=config,
+        logger=logging.getLogger(__name__),
+    )
+    stats = defaultdict(
+        lambda: {
+            "parameters": torch.tensor(0.0),
+            "gradients": torch.tensor(0.0),
+        }
+    )
+
+    task.accumulate_stats(stats, model)
+
+    expected_gradient_sq = sum(p.numel() for p in model.parameters())
+    actual_gradient_sq = sum(v["gradients"].item() for v in stats.values())
+    assert actual_gradient_sq == pytest.approx(expected_gradient_sq)
+    assert set(stats) == {"Conv2d", "BatchNorm2d", "Linear"}
 
 
 def test_training(tmp_path):
@@ -193,6 +232,8 @@ def test_training_batch_limit_and_optimizer_resume(tmp_path):
         batch_size=4,
         num_epochs=7,
         training_batches_per_trigger=2,
+        replay_sampling_chunk_size=2,
+        training_seed=17,
         device="cpu",
     )
 
@@ -206,11 +247,20 @@ def test_training_batch_limit_and_optimizer_resume(tmp_path):
     assert first.training_batches == 2
     assert first.examples_trained == 8
     assert first.global_step == 2
+    assert first.replay_sample_seed == 17
+    assert len(first.sampled_ranges) == 4
+    assert first.setup_time >= 0
+    assert first.data_loading_time >= 0
+    assert first.device_transfer_time >= 0
+    assert first.compute_time >= 0
+    assert first.checkpoint_time >= 0
     state = repo.get_training_state(model_name, 1)
     assert state["optimizer_name"] == "adam"
     assert state["global_step"] == 2
     assert state["examples_trained"] == 8
     assert state["optimizer_state"]["state"]
+    assert state["last_training_run"]["replay_sample_seed"] == 17
+    assert len(state["last_training_run"]["sampled_ranges"]) == 4
 
     second = TrainingTask(
         model_name,
@@ -222,9 +272,45 @@ def test_training_batch_limit_and_optimizer_resume(tmp_path):
     assert second.training_batches == 2
     assert second.examples_trained == 8
     assert second.global_step == 4
+    assert second.replay_sample_seed == 18
     state = repo.get_training_state(model_name, 2)
     assert state["global_step"] == 4
     assert state["examples_trained"] == 16
+
+
+def test_training_rejects_non_finite_loss_before_checkpoint(tmp_path):
+    repo = LocalModelRepository(tmp_path)
+    model_name = "nonfinite"
+    repo.store_model(
+        model_name,
+        0,
+        HexzNeuralNetwork(blocks=1, filters=8),
+    )
+    example = _training_example(model_name=model_name)
+    example.board = _torch_bytes(torch.full((11, 11, 10), torch.nan))
+    repo.add_examples(
+        hexz_pb2.AddTrainingExamplesRequest(examples=[example])
+    )
+    config = TrainingConfig(
+        model_repo_base_dir=tmp_path,
+        model_name=model_name,
+        batch_size=1,
+        num_epochs=1,
+        training_batches_per_trigger=1,
+        replay_sampling_chunk_size=1,
+        device="cpu",
+    )
+
+    with pytest.raises(FloatingPointError, match="Non-finite loss"):
+        TrainingTask(
+            model_name,
+            checkpoint=0,
+            model_repo=repo,
+            config=config,
+            logger=logging.getLogger(__name__),
+        ).execute()
+
+    assert repo.get_latest_checkpoint(model_name) == 0
 
 
 def test_initialize_training_experiment_isolated_and_aligned(tmp_path):

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import dataclasses
 from datetime import datetime
 import logging
+import math
 import queue
 import threading
 import time
@@ -36,9 +37,17 @@ class TrainingResultInfo:
     training_batches: int
     examples_trained: int
     global_step: int
+    setup_time: float
+    data_loading_time: float
+    device_transfer_time: float
+    compute_time: float
+    checkpoint_time: float
     training_time: float
     total_time: float
     examples_window: Tuple[int, int]
+    replay_sample_seed: int
+    sampled_ranges: list[Tuple[int, int]]
+    fresh_examples_sampled: int
 
 
 @dataclass
@@ -61,7 +70,12 @@ class HDF5IterableDataset(torch.utils.data.IterableDataset):
     """PyTorch iterable-style Dataset implementation to read Hexz examples from HDF5."""
 
     def __init__(
-        self, h5_file: h5py.File, window_size=0, shuffle=False, shuffle_chunk_size=2**15
+        self,
+        h5_file: h5py.File,
+        window_size=0,
+        shuffle=False,
+        shuffle_chunk_size=2**15,
+        seed: int | None = None,
     ):
         """Builds a new dataset that reads from the h5_file HDF5 file handle.
 
@@ -82,6 +96,10 @@ class HDF5IterableDataset(torch.utils.data.IterableDataset):
         self.h5_file = h5_file
         self.shuffle = shuffle
         self.shuffle_chunk_size = shuffle_chunk_size
+        self.seed = seed
+        self.sampled_ranges: list[Tuple[int, int]] = []
+        if shuffle_chunk_size <= 0:
+            raise ValueError("shuffle_chunk_size must be positive")
         l = len(h5_file["boards"])
         if window_size == 0 or window_size >= l:
             self.start = 0
@@ -93,12 +111,14 @@ class HDF5IterableDataset(torch.utils.data.IterableDataset):
         return self.end - self.start
 
     def __iter__(self):
-        rng = np.random.default_rng()
+        rng = np.random.default_rng(self.seed)
+        self.sampled_ranges.clear()
         size = self.shuffle_chunk_size if self.shuffle else 4096
         chunks = list(rchunks(self.start, self.end, size))
         if self.shuffle:
             rng.shuffle(chunks)
         for c in chunks:
+            self.sampled_ranges.append((c.start, c.stop))
             bs = self.h5_file["boards"][c]
             am = self.h5_file["action_masks"][c]
             mp = self.h5_file["move_probs"][c]
@@ -133,13 +153,25 @@ class TrainingTask:
 
     def log_training_statistics(self, cum_stats, epoch):
         """Log L2 norms per layer type."""
+        total_gradients_sq = 0.0
+        total_parameters_sq = 0.0
         for typ, stats in cum_stats.items():
             gradients_norm = np.sqrt(stats['gradients'].item())
             parameters_norm = np.sqrt(stats['parameters'].item())
-            update = gradients_norm / (parameters_norm + 1e-8)
+            gradient_parameter_ratio = gradients_norm / (parameters_norm + 1e-8)
             self.logger.info(
-                f"Epoch {epoch} L2 norms: {typ}: gradients: {gradients_norm}, relative updates: {update}"
+                f"Epoch {epoch} L2 norms: {typ}: gradients: {gradients_norm}, "
+                f"gradient/parameter ratio: {gradient_parameter_ratio}"
             )
+            total_gradients_sq += stats["gradients"].item()
+            total_parameters_sq += stats["parameters"].item()
+        global_gradients_norm = np.sqrt(total_gradients_sq)
+        global_parameters_norm = np.sqrt(total_parameters_sq)
+        self.logger.info(
+            f"Epoch {epoch} L2 norms: Global: gradients: {global_gradients_norm}, "
+            "gradient/parameter ratio: "
+            f"{global_gradients_norm / (global_parameters_norm + 1e-8)}"
+        )
 
     def accumulate_stats(self, cum_stats, model: nn.Module):
         """Accumulate sum of squares for parameters and gradients per layer type."""
@@ -152,8 +184,10 @@ class TrainingTask:
                 key = "BatchNorm2d"
             else:
                 key = "Other"
-            # Nested loop to find matching parameters
-            for param in module.parameters():
+            # Only include parameters owned directly by this module. Recursive
+            # iteration would count the same child parameters once for every
+            # ancestor module.
+            for param in module.parameters(recurse=False):
                 if param.grad is not None:
                     with torch.no_grad():
                         grad_norm = param.grad.data.norm(2)
@@ -164,6 +198,18 @@ class TrainingTask:
     def execute(self) -> TrainingResultInfo:
         t_start = time.time()
         device = self.config.device
+        if self.config.training_batches_per_trigger > 0:
+            sampling_chunk_size = self.config.replay_sampling_chunk_size
+            if sampling_chunk_size <= 0:
+                raise ValueError("replay_sampling_chunk_size must be positive")
+            if self.config.batch_size % sampling_chunk_size != 0:
+                raise ValueError(
+                    "batch_size must be divisible by replay_sampling_chunk_size "
+                    "for bounded training"
+                )
+        else:
+            sampling_chunk_size = 2**15
+        replay_sample_seed = self.config.training_seed + self.checkpoint
         model = self.model_repo.get_model(self.model_name, self.checkpoint)
         model.train()
         model = model.to(device)
@@ -172,17 +218,26 @@ class TrainingTask:
                 h,
                 window_size=self.config.training_examples_window_size,
                 shuffle=self.config.shuffle,
-                # A bounded run stops after a small number of batches. Use one
-                # logical HDF5 read block per batch so those batches are
-                # independently distributed over the replay window instead of
-                # being concentrated in a few large regions.
-                shuffle_chunk_size=(
-                    self.config.batch_size
-                    if self.config.training_batches_per_trigger > 0
-                    else 2**15
-                ),
+                # Bounded training combines many small, randomly ordered,
+                # contiguous reads into each batch. This approximates uniform
+                # replay sampling without expensive HDF5 element-wise reads.
+                shuffle_chunk_size=sampling_chunk_size,
+                seed=replay_sample_seed,
             )
-            self.logger.info(f"Training dataset size: {len(dataset)}")
+            self.logger.info(
+                f"Training dataset size: {len(dataset)}; replay sample seed: "
+                f"{replay_sample_seed}; logical read size: {sampling_chunk_size}"
+            )
+            if self.config.training_batches_per_trigger > 0:
+                required_examples = (
+                    self.config.batch_size
+                    * self.config.training_batches_per_trigger
+                )
+                if len(dataset) < required_examples:
+                    raise ValueError(
+                        f"Bounded training requires {required_examples} replay "
+                        f"examples, but only {len(dataset)} are available"
+                    )
 
             loader = torch.utils.data.DataLoader(
                 dataset=dataset,
@@ -228,6 +283,10 @@ class TrainingTask:
                     previous_state.get("examples_trained", 0)
                 )
             t_iter_start = time.time()
+            setup_time = t_iter_start - t_start
+            data_loading_ns = 0
+            device_transfer_ns = 0
+            compute_ns = 0
             training_ns = 0
             cum_stats = defaultdict(
                 lambda: {
@@ -239,15 +298,21 @@ class TrainingTask:
             examples_trained = 0
             stop_training = False
             epochs_completed = 0
+            batch_wait_started = time.perf_counter_ns()
             for epoch in range(self.config.num_epochs):
                 for (X_board, X_action_mask), (y_pr, y_val) in loader:
-                    t_start_batch = time.perf_counter_ns()
+                    batch_ready = time.perf_counter_ns()
+                    data_loading_ns += batch_ready - batch_wait_started
                     # Send to device.
+                    transfer_started = time.perf_counter_ns()
                     X_board = X_board.to(device)
                     X_action_mask = X_action_mask.to(device)
                     y_pr = y_pr.to(device)
                     y_val = y_val.to(device)
+                    transfer_done = time.perf_counter_ns()
+                    device_transfer_ns += transfer_done - transfer_started
 
+                    compute_started = time.perf_counter_ns()
                     optimizer.zero_grad(set_to_none=True)
 
                     # Predict
@@ -258,21 +323,43 @@ class TrainingTask:
                     pr_loss = pr_loss_fn(pred_pr, y_pr.flatten(1))
                     val_loss = val_loss_fn(pred_val, y_val)
                     loss = pr_loss + val_loss
+                    loss_value = loss.item()
+                    if not math.isfinite(loss_value):
+                        raise FloatingPointError(
+                            f"Non-finite loss before optimizer step: "
+                            f"policy={pr_loss.item()}, value={val_loss.item()}, "
+                            f"combined={loss_value}"
+                        )
                     self.logger.info(
-                        f"Epoch {epoch}: pr_loss:{pr_loss.item():.3f} val_loss:{val_loss.item():.3f} loss: {loss.item():.3f}"
+                        f"Epoch {epoch}: pr_loss:{pr_loss.item():.3f} "
+                        f"val_loss:{val_loss.item():.3f} loss:{loss_value:.3f}"
                     )
                     # Backpropagation
                     loss.backward()
+                    # Accumulate and validate gradients before modifying model
+                    # parameters. A non-finite category norm means at least one
+                    # gradient tensor in that category is non-finite.
+                    self.accumulate_stats(cum_stats, model)
+                    non_finite_categories = [
+                        typ
+                        for typ, stats in cum_stats.items()
+                        if not torch.isfinite(stats["gradients"]).item()
+                    ]
+                    if non_finite_categories:
+                        raise FloatingPointError(
+                            "Non-finite gradients before optimizer step in: "
+                            + ", ".join(non_finite_categories)
+                        )
                     optimizer.step()
                     training_batches += 1
                     global_step += 1
                     batch_examples = len(y_val)
                     examples_trained += batch_examples
                     total_examples_trained += batch_examples
-                    t_end_batch = time.perf_counter_ns()
-                    training_ns += t_end_batch - t_start_batch
-                    # Accumulate stats across all batches
-                    self.accumulate_stats(cum_stats, model)
+                    compute_done = time.perf_counter_ns()
+                    compute_ns += compute_done - compute_started
+                    training_ns += compute_done - transfer_started
+                    batch_wait_started = compute_done
                     if (
                         self.config.training_batches_per_trigger > 0
                         and training_batches
@@ -286,8 +373,28 @@ class TrainingTask:
                 if stop_training:
                     break
 
+            sampled_ranges = list(dataset.sampled_ranges)
+            fresh_start = max(
+                dataset.start,
+                dataset.end - self.config.training_trigger_threshold,
+            )
+            fresh_examples_sampled = sum(
+                max(0, min(stop, dataset.end) - max(start, fresh_start))
+                for start, stop in sampled_ranges
+            )
+
+        with torch.no_grad():
+            parameter_norm_sq = torch.zeros((), device=device)
+            for parameter in model.parameters():
+                parameter_norm_sq += parameter.detach().float().norm(2) ** 2
+            if not torch.isfinite(parameter_norm_sq).item():
+                raise FloatingPointError(
+                    "Model parameters became non-finite; refusing to publish checkpoint"
+                )
+
         # Training is done. Save model under incremented checkpoint.
         next_cp = self.checkpoint + 1
+        checkpoint_started = time.time()
         self.model_repo.store_model(
             name=self.model_name,
             checkpoint=next_cp,
@@ -297,6 +404,13 @@ class TrainingTask:
                 "optimizer_state": optimizer.state_dict(),
                 "global_step": global_step,
                 "examples_trained": total_examples_trained,
+                "last_training_run": {
+                    "source_checkpoint": self.checkpoint,
+                    "replay_sample_seed": replay_sample_seed,
+                    "sampled_ranges": sampled_ranges,
+                    "fresh_examples_sampled": fresh_examples_sampled,
+                    "examples_window": [dataset.start, dataset.end],
+                },
                 "config": {
                     **dataclasses.asdict(self.config),
                     "model_repo_base_dir": str(
@@ -305,6 +419,7 @@ class TrainingTask:
                 },
             },
         )
+        checkpoint_time = time.time() - checkpoint_started
         t_end = time.time()
         effective_reuse = (
             examples_trained / self.config.training_trigger_threshold
@@ -313,10 +428,15 @@ class TrainingTask:
         )
         self.logger.info(
             f"_run_training done in {(t_end-t_start):.3f}s."
-            f" setup time: {(t_iter_start-t_start):.3f}s."
-            f" training time: {training_ns/1e9:.3f}s."
+            f" setup time: {setup_time:.3f}s."
+            f" data loading time: {data_loading_ns/1e9:.3f}s."
+            f" device transfer time: {device_transfer_ns/1e9:.3f}s."
+            f" compute time: {compute_ns/1e9:.3f}s."
+            f" checkpoint time: {checkpoint_time:.3f}s."
             f" batches: {training_batches}."
             f" examples trained: {examples_trained}."
+            f" sampled replay ranges: {len(sampled_ranges)}."
+            f" fresh examples sampled: {fresh_examples_sampled}."
             f" effective replay reuse: {effective_reuse:.2f}."
         )
         return TrainingResultInfo(
@@ -328,8 +448,16 @@ class TrainingTask:
             training_batches=training_batches,
             examples_trained=examples_trained,
             global_step=global_step,
+            setup_time=setup_time,
+            data_loading_time=data_loading_ns / 1e9,
+            device_transfer_time=device_transfer_ns / 1e9,
+            compute_time=compute_ns / 1e9,
+            checkpoint_time=checkpoint_time,
             training_time=training_ns / 1e9,
             examples_window=(dataset.start, dataset.end),
+            replay_sample_seed=replay_sample_seed,
+            sampled_ranges=sampled_ranges,
+            fresh_examples_sampled=fresh_examples_sampled,
         )
 
 

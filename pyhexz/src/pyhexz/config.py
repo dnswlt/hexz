@@ -39,6 +39,13 @@ class TrainingConfig:
     # If positive, stop after this many optimizer batches, regardless of
     # num_epochs. This decouples checkpoint frequency from replay-buffer reuse.
     training_batches_per_trigger: int = 0
+    # Logical contiguous HDF5 read size used for shuffled bounded training.
+    # Multiple read blocks are combined into one optimizer batch. The default
+    # is aligned to two of the replay file's physical 128-example chunks.
+    replay_sampling_chunk_size: int = 256
+    # Base seed for replay sampling. The source checkpoint is added to this
+    # value so successive training runs use different, reproducible samples.
+    training_seed: int = 1
     # One of: adam, adamw.
     optimizer: str = "adam"
     learning_rate: float = 1e-3
