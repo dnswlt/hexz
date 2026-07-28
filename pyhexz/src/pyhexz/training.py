@@ -172,6 +172,15 @@ class TrainingTask:
                 h,
                 window_size=self.config.training_examples_window_size,
                 shuffle=self.config.shuffle,
+                # A bounded run stops after a small number of batches. Use one
+                # logical HDF5 read block per batch so those batches are
+                # independently distributed over the replay window instead of
+                # being concentrated in a few large regions.
+                shuffle_chunk_size=(
+                    self.config.batch_size
+                    if self.config.training_batches_per_trigger > 0
+                    else 2**15
+                ),
             )
             self.logger.info(f"Training dataset size: {len(dataset)}")
 

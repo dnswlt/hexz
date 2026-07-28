@@ -106,6 +106,39 @@ def test_rev_chunks():
     assert list(rchunks(0, 10, 1000)) == [slice(0, 10)]
 
 
+def test_shuffled_dataset_reads_independently_shuffled_blocks(tmp_path, monkeypatch):
+    path = tmp_path / "examples.h5"
+    with h5py.File(path, "w") as h:
+        values = np.arange(32, dtype=np.float32)
+        h.create_dataset("boards", data=values.reshape(32, 1))
+        h.create_dataset("action_masks", data=values.reshape(32, 1))
+        h.create_dataset("move_probs", data=values.reshape(32, 1))
+        h.create_dataset("values", data=values.reshape(32, 1))
+
+        monkeypatch.setattr(
+            np.random,
+            "default_rng",
+            lambda: np.random.Generator(np.random.PCG64(7)),
+        )
+        dataset = HDF5IterableDataset(
+            h,
+            shuffle=True,
+            shuffle_chunk_size=4,
+        )
+        first_two_blocks = [
+            int(board.item())
+            for ((board, _), _), _index in zip(dataset, range(8))
+        ]
+
+    # Every four yielded examples come from one contiguous read block, while
+    # successive blocks are selected independently from the replay window.
+    first_block = {value // 4 for value in first_two_blocks[:4]}
+    second_block = {value // 4 for value in first_two_blocks[4:]}
+    assert len(first_block) == 1
+    assert len(second_block) == 1
+    assert first_block != second_block
+
+
 def test_training(tmp_path):
     num_requests = 1
     num_examples_per_request = 40
