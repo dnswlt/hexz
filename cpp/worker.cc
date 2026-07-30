@@ -387,6 +387,11 @@ void Worker::PopulateWorkerConfig(hexzpb::WorkerConfig& config) const {
   tp.set_dirichlet_concentration(config_.dirichlet_concentration);
   tp.set_fast_move_prob(config_.fast_move_prob);
   tp.set_runs_per_fast_move(config_.runs_per_fast_move);
+  tp.set_tail_solver_max_states(config_.tail_solver_max_states);
+  tp.set_tail_solver_max_micros(config_.tail_solver_max_micros);
+  tp.set_tail_solver_min_score_margin(
+      config_.tail_solver_min_score_margin);
+  tp.set_tail_solver_shadow(config_.tail_solver_shadow);
   // We could also take these values from config_, but since the Node::*
   // values are what actually gets used, let's use those here, too.
   tp.set_uct_c(Node::uct_c);

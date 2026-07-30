@@ -9,11 +9,13 @@
 #include <boost/fiber/all.hpp>
 #include <cassert>
 #include <cmath>
+#include <optional>
 #include <ostream>
 #include <sstream>
 #include <vector>
 
 #include "base.h"
+#include "flagz_tail.h"
 #include "perfm.h"
 
 namespace hexz {
@@ -517,6 +519,8 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
   auto root = std::make_unique<Node>(/*turn=*/0);
   float result = 0.0;
   bool game_over = false;
+  std::optional<TailResolution> shadow_tail;
+  int shadow_tail_move = -1;
   const int64_t max_micros =
       max_runtime_seconds > 0
           ? started_micros +
@@ -527,6 +531,44 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
     if (move_started > max_micros) {
       return absl::DeadlineExceededError(
           "max_runtime_seconds exceeded before the game was finished");
+    }
+    // Check before spending any search work on this move. The exact solver is
+    // eligible only after flag placement and returns kSolved only when its
+    // conservative separation proof and both bounded score searches succeed.
+    // A small maximum-attainable-score margin gate avoids truncating close
+    // games, where even a future change to the solver deserves extra caution.
+    if (config_.tail_solver_max_states > 0 &&
+        (!config_.tail_solver_shadow || !shadow_tail.has_value()) &&
+        board.Flags(0) == 0 && board.Flags(1) == 0) {
+      TailResolution tail = ResolveSeparatedTail(
+          board, config_.tail_solver_max_states,
+          config_.tail_solver_max_micros);
+      if (tail.status == TailResolveStatus::kSolved &&
+          std::abs(tail.ScoreMargin()) >=
+              config_.tail_solver_min_score_margin) {
+        if (config_.tail_solver_shadow) {
+          // Remember only the first qualifying decision point, then finish the
+          // game normally so its predicted winner can be checked below.
+          shadow_tail = tail;
+          shadow_tail_move = n;
+          ABSL_LOG(INFO)
+              << "Game " << game_id << " shadow tail resolution at move " << n
+              << ": maximum attainable scores " << tail.optimal_score[0] << "-"
+              << tail.optimal_score[1] << ", states " << tail.solve_states
+              << ", duration " << tail.solve_micros << "us";
+        } else {
+          result = tail.Result();
+          game_over = true;
+          ABSL_LOG(INFO)
+              << "Game " << game_id << " resolved separated tail at move " << n
+              << ": maximum attainable scores " << tail.optimal_score[0] << "-"
+              << tail.optimal_score[1] << ", result " << result << ", states "
+              << tail.solve_states << ", duration " << tail.solve_micros
+              << "us. Examples: " << examples.size()
+              << ". Predictions: " << predictions_count_;
+          break;
+        }
+      }
     }
     const auto [runs, is_fast_run] = NumRuns(n);
     int n_runs = 0;
@@ -555,6 +597,13 @@ absl::StatusOr<std::vector<hexzpb::TrainingExample>> NeuralMCTS::PlayGame(
                      << ". Examples: " << examples.size()
                      << ". Predictions: " << predictions_count_;
       game_over = true;
+      if (shadow_tail.has_value()) {
+        ABSL_LOG(INFO)
+            << "Game " << game_id << " shadow tail comparison: move "
+            << shadow_tail_move << ", predicted result "
+            << shadow_tail->Result() << ", actual result " << result
+            << ", match " << (shadow_tail->Result() == result);
+      }
       break;
     }
 

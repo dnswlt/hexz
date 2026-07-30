@@ -259,6 +259,12 @@ message TrainingParameters {
     float dirichlet_concentration = 5;
     float fast_move_prob = 6;
     float runs_per_fast_move = 7;
+    // Separated-tail solving is disabled when max_states is zero.
+    int32 tail_solver_max_states = 8;
+    int32 tail_solver_max_micros = 9;
+    int32 tail_solver_min_score_margin = 10;
+    // Compute and log qualifying resolutions without ending games early.
+    bool tail_solver_shadow = 11;
 }
 
 // A subset of configuration parameters from hexz::Config that

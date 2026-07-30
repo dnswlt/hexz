@@ -172,6 +172,11 @@ absl::Status UpdateConfigFromTrainingServer(hexz::TrainingServiceClient& client,
   config.dirichlet_concentration = resp->dirichlet_concentration();
   config.fast_move_prob = resp->fast_move_prob();
   config.runs_per_fast_move = resp->runs_per_fast_move();
+  config.tail_solver_max_states = resp->tail_solver_max_states();
+  config.tail_solver_max_micros = resp->tail_solver_max_micros();
+  config.tail_solver_min_score_margin =
+      resp->tail_solver_min_score_margin();
+  config.tail_solver_shadow = resp->tail_solver_shadow();
   ABSL_LOG(INFO) << "Updated training parameters from training server:\n"
                  << resp->DebugString();
   return absl::OkStatus();

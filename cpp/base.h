@@ -85,6 +85,17 @@ struct Config {
   // not taint it with low-quality examples.
   bool dry_run = false;
 
+  // After both players have used their flags, try to solve tails in which
+  // their conservatively reachable territories no longer overlap. Zero states
+  // disables the resolver.
+  int tail_solver_max_states = 50'000;
+  // Per-player wall-clock budget for exact tail solving.
+  int tail_solver_max_micros = 50'000;
+  // Only truncate when optimal final scores differ by at least this amount.
+  int tail_solver_min_score_margin = 5;
+  // Compute and log qualifying tail resolutions without truncating games.
+  bool tail_solver_shadow = false;
+
   static absl::StatusOr<Config> FromEnv();
   std::string String() const;
 };

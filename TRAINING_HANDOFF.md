@@ -154,15 +154,24 @@ at least 2, 2,689/2,692 (99.89%) at margin at least 5, and 2,359/2,359
 24,744 examples (9.74%) and 96,790 seconds (26.9 hours, 5.91%) of recorded
 search in this corpus.
 
-No production behavior has changed. The recommended rollout is:
+The C++ port is now implemented but has not been deployed to a data-producing
+worker. It uses the chosen 5-point gate, 50,000 states and 50 ms per player,
+and falls back to ordinary MCTS on overlap or any solve limit. Active mode is
+the default; shadow mode remains available as a small validation aid.
 
-1. port the detector and solver to C++ in shadow mode and cross-check its
-   decisions and timings;
-2. retain strict state/time caps and ordinary-MCTS fallback;
-3. initially truncate only exact tails with an absolute optimal-score margin
-   of at least 10;
-4. after validating newly generated games, decide whether exact optimal tail
-   labels should replace the remaining narrow-margin stochastic outcomes.
+A dry-run checkpoint-40 validation produced 80 complete games at 200 MCTS runs
+per move. Of those, 47 reached a qualifying shadow decision and all 47
+predicted winners matched the normally played result. Qualifying solves ranged
+from tens of microseconds to roughly 42 ms. An earlier production-shaped wave
+also found qualifying solves of 5.3 ms and 34.5 ms, but its continuations hit
+the deliberately configured game deadline before comparison. Both runs were
+dry runs and wrote no training examples.
+
+The C++ implementation and its design documentation are in
+`cpp/flagz_tail.{h,cc}`, `cpp/flagz_tail.md`, and
+`cpp/flagz_tail_test.cc`. `NeuralMCTS::PlayGame` invokes it before MCTS search.
+The controls are carried through `TrainingParameters` and the corresponding
+`HEXZ_TAIL_SOLVER_*` environment variables.
 
 The reusable implementation is split between
 `pyhexz/src/pyhexz/flagz_tail.py`,
@@ -186,8 +195,10 @@ the direct result is neutral and the fixed old-corpus metrics are flat to
 slightly worse. Checkpoints 20→30 and 30→40 both lean positive without
 establishing a ten-checkpoint gain. The separated-tail analysis now gives a
 concrete non-architecture improvement with substantial measured savings. The
-recommended next engineering step is the C++ shadow-mode port described above.
-Other useful options remain:
+C++ implementation is complete and its first shadow validation is 47/47.
+Before starting the next large self-play wave, rebuild the worker image from
+the committed source and confirm the training server publishes the 5-point,
+50,000-state, 50-ms active configuration. Other useful options remain:
 
 - test checkpoint 40 versus checkpoint 20 to see whether the cumulative
   twenty-checkpoint gain is established;

@@ -51,6 +51,13 @@ std::string Config::String() const {
               absl::StrFormat("suspend_while_training: %d",
                               suspend_while_training),
               absl::StrFormat("dry_run: %d", dry_run),
+              absl::StrFormat("tail_solver_max_states: %d",
+                              tail_solver_max_states),
+              absl::StrFormat("tail_solver_max_micros: %d",
+                              tail_solver_max_micros),
+              absl::StrFormat("tail_solver_min_score_margin: %d",
+                              tail_solver_min_score_margin),
+              absl::StrFormat("tail_solver_shadow: %d", tail_solver_shadow),
           },
           ", "),
       ")");
@@ -98,6 +105,10 @@ absl::StatusOr<Config> Config::FromEnv() {
       GET_ENV_BOOL(enable_health_service),
       GET_ENV_BOOL(suspend_while_training),
       GET_ENV_BOOL(dry_run),
+      GET_ENV_INT(tail_solver_max_states),
+      GET_ENV_INT(tail_solver_max_micros),
+      GET_ENV_INT(tail_solver_min_score_margin),
+      GET_ENV_BOOL(tail_solver_shadow),
   };
   // Special case: HEXZ_WORKER_SPEC is four values in one (to reduce clutter in
   // cloud env configs). Example: "cuda@4:128:256".
@@ -119,6 +130,12 @@ absl::StatusOr<Config> Config::FromEnv() {
       valid_devices.end()) {
     return absl::InvalidArgumentError(absl::StrFormat(
         "Invalid device: %s. Must be one of (cpu, mps, cuda).", config.device));
+  }
+  if (config.tail_solver_max_states < 0 ||
+      config.tail_solver_max_micros < 0 ||
+      config.tail_solver_min_score_margin < 0) {
+    return absl::InvalidArgumentError(
+        "Tail solver limits and score margin must be non-negative.");
   }
   return config;
 

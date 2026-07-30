@@ -610,6 +610,38 @@ TEST(MCTSTest, PlayGameStats) {
   EXPECT_GT(stats.max_visit_count_per_depth(0), 0);
 }
 
+TEST(MCTSTest, PlayGameResolvesSeparatedTailBeforeSearch) {
+  Config config{
+      .runs_per_move = 1,
+      .dirichlet_concentration = 0.0,
+      .tail_solver_max_states = 1'000,
+      .tail_solver_max_micros = 1'000'000,
+      .tail_solver_min_score_margin = 5,
+  };
+  auto move_probs = torch::ones({2, 11, 10});
+  move_probs /= move_probs.sum();
+  ConstantFakeModel fake_model(move_probs, /*value=*/0.0);
+  NeuralMCTS mcts(fake_model, config);
+
+  Board board = Board::EmptyBoard(/*flags=*/0);
+  for (int r = 0; r < 11; ++r) {
+    for (int c = 0; c < 10 - r % 2; ++c) {
+      board.SetCellValue(0, Board::kBlocked, r, c, 1);
+      board.SetCellValue(1, Board::kBlocked, r, c, 1);
+    }
+  }
+  for (int c = 0; c < 3; ++c) {
+    board.SetCellValue(0, Board::kBlocked, 0, c, 0);
+  }
+  board.SetCellValue(0, Board::kNextValue, 0, 0, 1);
+
+  auto examples =
+      mcts.PlayGame("separated-tail", board, /*max_runtime_seconds=*/0);
+
+  ASSERT_TRUE(examples.ok());
+  EXPECT_TRUE(examples->empty());
+}
+
 TEST_F(MCTSScriptModuleTest, WriteDotGraph) {
   TorchModel model(std::move(scriptmodule_));
   NeuralMCTS mcts(model, Config{});

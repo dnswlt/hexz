@@ -181,6 +181,10 @@ def read_training_params() -> str:
             dirichlet_concentration=0.55,
             fast_move_prob=0,
             runs_per_fast_move=100,
+            tail_solver_max_states=50_000,
+            tail_solver_max_micros=50_000,
+            tail_solver_min_score_margin=5,
+            tail_solver_shadow=False,
         )
         # print(json_format.MessageToJson(ps))
         return ps
