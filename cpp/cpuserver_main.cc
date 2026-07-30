@@ -22,6 +22,13 @@ ABSL_FLAG(std::string, model_key, "local:0",
 ABSL_FLAG(std::string, device, "cpu", "PyTorch device (cpu, cuda, mps)");
 ABSL_FLAG(int64_t, max_think_time_ms, 1000,
           "maximum thinking time for SuggestMove requests");
+ABSL_FLAG(int, tail_solver_max_states, 50'000,
+          "maximum states per player for exact separated-tail solving; "
+          "zero disables the fast path");
+ABSL_FLAG(int64_t, tail_solver_max_micros, 50'000,
+          "maximum microseconds per player for exact separated-tail solving");
+ABSL_FLAG(int, tail_solver_min_score_margin, 5,
+          "minimum exact final-score margin for the separated-tail fast path");
 
 hexzpb::ModelKey ParseModelKey(const std::string& input) {
   std::istringstream iss(input);
@@ -50,6 +57,12 @@ int main(int argc, char* argv[]) {
       .max_think_time_ms = absl::GetFlag(FLAGS_max_think_time_ms),
       .max_batch_size = 128,
       .max_concurrent_requests = 128,
+      .tail_solver_max_states =
+          absl::GetFlag(FLAGS_tail_solver_max_states),
+      .tail_solver_max_micros =
+          absl::GetFlag(FLAGS_tail_solver_max_micros),
+      .tail_solver_min_score_margin =
+          absl::GetFlag(FLAGS_tail_solver_min_score_margin),
   };
   std::string device = absl::GetFlag(FLAGS_device);
   if (device == "cuda") {

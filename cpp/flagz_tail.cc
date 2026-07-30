@@ -315,6 +315,11 @@ struct CacheEntry {
   int upper_bound = -1;
 };
 
+struct ExactResult {
+  int additional_score = 0;
+  int first_cell = -1;
+};
+
 class ExactSolver {
  public:
   ExactSolver(const PlayerPosition& position, int max_states,
@@ -341,21 +346,27 @@ class ExactSolver {
     cache_.reserve(max_states);
   }
 
-  std::optional<int> Solve(const CellMask& reachable) {
+  std::optional<ExactResult> Solve(const CellMask& reachable) {
     if (!valid_) {
       return std::nullopt;
     }
     started_ = std::chrono::steady_clock::now();
     deadline_ = started_ + std::chrono::microseconds(max_micros_);
-    int result = 0;
+    ExactResult result;
     for (const CellMask& component : ReachableComponents(reachable)) {
       SolverState state = RestrictToComponent(initial_, component);
-      const auto score = SolveState(state);
+      int first_cell = -1;
+      const auto score = SolveState(state, &first_cell);
       if (!score.has_value()) {
         elapsed_micros_ = ElapsedMicros();
         return std::nullopt;
       }
-      result += *score;
+      result.additional_score += *score;
+      // Components are independent, so an optimal first move in any nonempty
+      // component preserves the sum of their optimal scores.
+      if (result.first_cell < 0 && first_cell >= 0) {
+        result.first_cell = first_cell;
+      }
     }
     elapsed_micros_ = ElapsedMicros();
     return result;
@@ -515,7 +526,8 @@ class ExactSolver {
     return upper_bound;
   }
 
-  std::optional<int> SolveState(const SolverState& state) {
+  std::optional<int> SolveState(const SolverState& state,
+                                int* best_first_cell = nullptr) {
     // Exact depth-first dynamic programming. Different move orders frequently
     // lead to the same state, while the relaxed bound eliminates branches that
     // cannot beat the best score already found.
@@ -564,7 +576,13 @@ class ExactSolver {
       if (!remaining.has_value()) {
         return std::nullopt;
       }
-      best = std::max(best, child.gained + *remaining);
+      const int candidate = child.gained + *remaining;
+      if (candidate > best) {
+        best = candidate;
+        if (best_first_cell != nullptr) {
+          *best_first_cell = child.cell;
+        }
+      }
       if (best >= state_upper_bound) {
         break;
       }
@@ -628,7 +646,18 @@ TailResolution ResolveSeparatedTail(const Board& board, int max_states,
       return result;
     }
     result.optimal_score[player] =
-        position.score[player] + *additional_score;
+        position.score[player] + additional_score->additional_score;
+    if (additional_score->first_cell >= 0) {
+      const int cell = additional_score->first_cell;
+      int row = 0;
+      while (row < 10 && FlatIndex(row + 1, 0) <= cell) {
+        ++row;
+      }
+      const int col = cell - FlatIndex(row, 0);
+      result.optimal_move[player] =
+          Move{Move::Typ::kNormal, row, col,
+               static_cast<float>(position.player[player].next[cell])};
+    }
   }
   result.status = TailResolveStatus::kSolved;
   return result;

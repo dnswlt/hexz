@@ -52,6 +52,12 @@ TEST(FlagzTailTest, ForcedChain) {
   EXPECT_EQ(result.optimal_score[0], 6);
   EXPECT_EQ(result.optimal_score[1], 0);
   EXPECT_EQ(result.Result(), 1);
+  ASSERT_TRUE(result.optimal_move[0].has_value());
+  EXPECT_EQ(result.optimal_move[0]->typ, Move::Typ::kNormal);
+  EXPECT_EQ(result.optimal_move[0]->r, 0);
+  EXPECT_EQ(result.optimal_move[0]->c, 0);
+  EXPECT_EQ(result.optimal_move[0]->value, 1);
+  EXPECT_FALSE(result.optimal_move[1].has_value());
 }
 
 TEST(FlagzTailTest, GrassResetsPropagationAfterFive) {
@@ -97,6 +103,15 @@ TEST(FlagzTailTest, AddsIndependentComponents) {
 
   ASSERT_EQ(result.status, TailResolveStatus::kSolved);
   EXPECT_EQ(result.optimal_score[0], 10);
+  ASSERT_TRUE(result.optimal_move[0].has_value());
+
+  Board after_move = board;
+  after_move.MakeMove(0, *result.optimal_move[0]);
+  const TailResolution remainder =
+      ResolveSeparatedTail(after_move, /*max_states=*/1000,
+                           /*max_micros=*/1'000'000);
+  ASSERT_EQ(remainder.status, TailResolveStatus::kSolved);
+  EXPECT_EQ(remainder.optimal_score[0], result.optimal_score[0]);
 }
 
 TEST(FlagzTailTest, FallsBackAtStateLimit) {

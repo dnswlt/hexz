@@ -1,8 +1,11 @@
 # Flagz separated-tail solver
 
-`flagz_tail.cc` ends self-play games once their winner is known and the
-remaining moves only optimize already separated territory. It is deliberately
-one-sided: uncertain or expensive positions fall back to ordinary MCTS.
+`flagz_tail.cc` recognizes positions whose winner and optimal remaining scores
+can be computed without MCTS because the players' territories are permanently
+separated. Self-play uses this to omit uninformative tails; the neural CPU
+player uses it to return late-game moves without spending its normal think
+time. It is deliberately one-sided: uncertain or expensive positions fall back
+to ordinary MCTS.
 
 ## Safety condition
 
@@ -59,7 +62,8 @@ After separation, each player is solved independently:
    automatic grass-capture behavior as `Board::MakeMove`.
 4. Use relaxed value reachability as an admissible upper score bound for
    branch-and-bound pruning.
-5. Add the independent component optima to the player's current score.
+5. Retain a score-maximizing first move from any nonempty component.
+6. Add the independent component optima to the player's current score.
 
 The hot state consists of a 105-bit blocked mask, 105 frontier values, and five
 bits for the remaining grass cells. Board geometry and neighbor indexes are
@@ -89,7 +93,27 @@ completion and its actual winner is compared with the predicted winner. In
 active mode, the game stops immediately and all retained training examples are
 labeled with the exact result. No example is produced for the omitted tail.
 
+## CPU-player integration
+
+`CPUPlayerServiceImpl::DoSuggestMove` invokes the same resolver after decoding
+the requested board and before entering the neural model. If the solve succeeds
+and meets the configured margin, it returns the current player's
+score-maximizing normal move immediately. The response value is the exact game
+result from the current player's perspective; its single scored move has final
+probability 1. There is no neural prior on this path.
+
+The CPU server exposes matching command-line controls:
+
+- `--tail_solver_max_states`
+- `--tail_solver_max_micros`
+- `--tail_solver_min_score_margin`
+
+Setting the state limit to zero disables the fast path. Remaining flags,
+overlapping reachability, exhausted solve budgets, small score margins, and
+positions without a move for the current player all retain the existing neural
+MCTS behavior. Exact tail responses do not acquire a model inference slot.
+
 `flagz_tail_test.cc` covers flag gating, value propagation, blocking after 5
-with grass restart, overlap rejection, component addition, and search limits.
-`mcts_test.cc` also verifies that a qualifying tail terminates before MCTS
-search begins.
+with grass restart, overlap rejection, component addition, returned optimal
+moves, and search limits. `mcts_test.cc` verifies self-play truncation, while
+`cpuserver_test.cc` verifies the interactive fast path.

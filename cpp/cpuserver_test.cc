@@ -17,6 +17,7 @@ class CPUPlayerServiceImplTest : public ::testing::Test {
   CPUPlayerServiceImplTest()
       : service_(CPUPlayerServiceConfig{
             .model_path = "testdata/scriptmodule.pt",
+            .model_key = {},
         }) {
     grpc::ServerBuilder builder;
     builder.RegisterService(&service_);
@@ -58,6 +59,28 @@ hexzpb::Board DummyProtoBoard() {
   return board;
 }
 
+hexzpb::Board SeparatedTailProtoBoard(int turn, int chain_player) {
+  hexzpb::Board board;
+  board.set_turn(turn);
+  const int iFlag = static_cast<int>(hexzpb::Field::FLAG);
+  for (int i = 0; i < 2; ++i) {
+    auto& res = *board.add_resources();
+    std::vector<int32_t> num_pieces(iFlag + 1, 0);
+    res.mutable_num_pieces()->Add(num_pieces.begin(), num_pieces.end());
+  }
+  for (int i = 0; i < 105; ++i) {
+    auto& field = *board.add_flat_fields();
+    field.set_type(hexzpb::Field::NORMAL);
+    // chain_player owns a forced 1-2-3 chain in cells (0,0)..(0,2);
+    // the other player has no reachable cells. Everything else is blocked
+    // for both players.
+    field.set_blocked(i < 3 ? 1 << (1 - chain_player) : 3);
+    field.add_next_val(chain_player == 0 && i == 0 ? 1 : 0);
+    field.add_next_val(chain_player == 1 && i == 0 ? 1 : 0);
+  }
+  return board;
+}
+
 TEST_F(CPUPlayerServiceImplTest, SmokeTest) {
   grpc::ClientContext context;
   hexzpb::SuggestMoveRequest request;
@@ -72,6 +95,53 @@ TEST_F(CPUPlayerServiceImplTest, SmokeTest) {
   EXPECT_THAT(response.move().player_num(), Eq(1));
   EXPECT_THAT(response.move().cell_type(), Eq(hexzpb::Field::FLAG));
   EXPECT_EQ(response.move_stats().moves_size(), 90); // 90 valid moves.
+}
+
+TEST_F(CPUPlayerServiceImplTest, SeparatedTailBypassesMCTS) {
+  grpc::ClientContext context;
+  hexzpb::SuggestMoveRequest request;
+  request.set_max_iterations(10);
+  auto& flagz = *request.mutable_game_engine_state()->mutable_flagz();
+  *flagz.mutable_board() = SeparatedTailProtoBoard(/*turn=*/1,
+                                                   /*chain_player=*/0);
+  hexzpb::SuggestMoveResponse response;
+
+  grpc::Status status = stub_->SuggestMove(&context, request, &response);
+
+  ASSERT_THAT(status.error_code(), Eq(grpc::OK));
+  ASSERT_TRUE(response.has_move());
+  EXPECT_THAT(response.move().player_num(), Eq(1));
+  EXPECT_THAT(response.move().cell_type(), Eq(hexzpb::Field::NORMAL));
+  EXPECT_THAT(response.move().row(), Eq(0));
+  EXPECT_THAT(response.move().col(), Eq(0));
+  ASSERT_TRUE(response.has_move_stats());
+  EXPECT_THAT(response.move_stats().value(), Eq(1));
+  ASSERT_THAT(response.move_stats().moves_size(), Eq(1));
+  EXPECT_THAT(response.move_stats().moves(0).scores(0).score(), Eq(1));
+}
+
+TEST_F(CPUPlayerServiceImplTest, SeparatedTailUsesPlayerTwoPerspective) {
+  grpc::ClientContext context;
+  hexzpb::SuggestMoveRequest request;
+  request.set_max_iterations(10);
+  auto& flagz = *request.mutable_game_engine_state()->mutable_flagz();
+  *flagz.mutable_board() = SeparatedTailProtoBoard(/*turn=*/2,
+                                                   /*chain_player=*/1);
+  hexzpb::SuggestMoveResponse response;
+
+  grpc::Status status = stub_->SuggestMove(&context, request, &response);
+
+  ASSERT_THAT(status.error_code(), Eq(grpc::OK));
+  ASSERT_TRUE(response.has_move());
+  EXPECT_THAT(response.move().player_num(), Eq(2));
+  EXPECT_THAT(response.move().cell_type(), Eq(hexzpb::Field::NORMAL));
+  EXPECT_THAT(response.move().row(), Eq(0));
+  EXPECT_THAT(response.move().col(), Eq(0));
+  ASSERT_TRUE(response.has_move_stats());
+  // The exact P0 result is -1, but response values use the current player's
+  // perspective, so winning P1 receives +1.
+  EXPECT_THAT(response.move_stats().value(), Eq(1));
+  ASSERT_THAT(response.move_stats().moves_size(), Eq(1));
 }
 
 }  // namespace

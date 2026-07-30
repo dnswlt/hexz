@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 #include "board.h"
 
@@ -21,6 +22,9 @@ enum class TailResolveStatus {
 struct TailResolution {
   TailResolveStatus status = TailResolveStatus::kFlagsRemaining;
   int optimal_score[2] = {0, 0};
+  // A score-maximizing legal move for each player at the input position.
+  // This is absent when that player has no move or the tail was not solved.
+  std::optional<Move> optimal_move[2];
   int solve_states = 0;
   int64_t solve_micros = 0;
   bool reachability_fallback = false;

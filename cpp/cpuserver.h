@@ -25,6 +25,11 @@ struct CPUPlayerServiceConfig {
   // SuggestMovesRequest count as N multiple requests, where N is the
   // number of contained game engine states.
   int max_concurrent_requests = 128;
+  // Bounds for the exact separated-tail fast path. Set max states to zero to
+  // disable it. Any overlap or exhausted budget falls back to neural MCTS.
+  int tail_solver_max_states = 50'000;
+  int64_t tail_solver_max_micros = 50'000;
+  int tail_solver_min_score_margin = 5;
 };
 
 // Implementation of the gRPC server for the CPUPlayerService.

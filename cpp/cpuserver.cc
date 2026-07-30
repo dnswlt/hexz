@@ -9,8 +9,11 @@
 
 #include <boost/fiber/all.hpp>
 
+#include <cstdlib>
+
 #include "base.h"
 #include "board.h"
+#include "flagz_tail.h"
 #include "mcts.h"
 
 namespace hexz {
@@ -57,8 +60,49 @@ absl::StatusOr<hexzpb::SuggestMoveResponse> CPUPlayerServiceImpl::DoSuggestMove(
       .dirichlet_concentration = 0,
   };
 
+  if (config_.tail_solver_max_states > 0 && board->Flags(0) == 0 &&
+      board->Flags(1) == 0) {
+    const TailResolution tail = ResolveSeparatedTail(
+        *board, config_.tail_solver_max_states,
+        config_.tail_solver_max_micros);
+    if (tail.status == TailResolveStatus::kSolved &&
+        std::abs(tail.ScoreMargin()) >=
+            config_.tail_solver_min_score_margin &&
+        tail.optimal_move[turn].has_value()) {
+      const Move& best_move = *tail.optimal_move[turn];
+      hexzpb::SuggestMoveResponse response;
+      auto& stats = *response.mutable_move_stats();
+      stats.set_value(turn == 0 ? tail.Result() : -tail.Result());
+      auto& scored_move = *stats.add_moves();
+      scored_move.set_row(best_move.r);
+      scored_move.set_col(best_move.c);
+      scored_move.set_type(hexzpb::Field::NORMAL);
+      auto& final_score = *scored_move.add_scores();
+      final_score.set_kind(hexzpb::SuggestMoveStats::FINAL);
+      final_score.set_score(1.0);
+
+      auto& move = *response.mutable_move();
+      move.set_player_num(pb_board.turn());
+      move.set_move(pb_board.move());
+      move.set_cell_type(hexzpb::Field::NORMAL);
+      move.set_row(best_move.r);
+      move.set_col(best_move.c);
+
+      ABSL_LOG(INFO) << "Resolved separated CPU-player tail: scores "
+                     << tail.optimal_score[0] << "-"
+                     << tail.optimal_score[1] << ", move "
+                     << best_move.DebugString() << ", states "
+                     << tail.solve_states << ", duration "
+                     << tail.solve_micros << "us";
+      return response;
+    }
+  }
+
   NeuralMCTS mcts(model_, config);
 
+  // FiberTorchModel requires callers to hold an entry token while making
+  // predictions. Tail-solver responses return above without occupying one.
+  auto token = model_.Enter();
   absl::StatusOr<std::unique_ptr<Node>> node;
   try {
     node = mcts.SuggestMove(turn, *board, max_think_time_ms, max_iterations);
@@ -118,9 +162,6 @@ grpc::Status CPUPlayerServiceImpl::SuggestMove(
                         absl::StrCat("too many active RPCs"));
   }
   absl::Cleanup sem_releaser = [this] { concurrent_rpc_sem_.release(); };
-
-  // Required before making any calls to the model.
-  auto token = model_.Enter();
 
   absl::StatusOr<hexzpb::SuggestMoveResponse> r = DoSuggestMove(
       request->game_engine_state(), max_think_time_ms, max_iterations);
