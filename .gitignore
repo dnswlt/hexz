@@ -31,3 +31,7 @@ server
 aws/
 # Ignore TensorBoard model evaluation data
 tensorboard/
+
+# Python bytecode caches
+__pycache__/
+*.py[cod]
