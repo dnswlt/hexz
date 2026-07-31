@@ -299,6 +299,7 @@ def main() -> None:
     solved_tail_search_micros = 0
     discrepancy_samples = []
     non_monotonic_samples = []
+    active_tail_archives_skipped = 0
     started = time.monotonic()
 
     for entry in entries:
@@ -306,6 +307,16 @@ def main() -> None:
         archive_path = model_base / entry["relpath"]
         with gzip.open(archive_path, "rb") as source:
             request.ParseFromString(source.read())
+        # Active tail-solver games may end at an exact separated-tail decision
+        # rather than at a normally played final move. This analysis requires
+        # a complete stochastic continuation after its candidate cutoff.
+        training_params = request.worker_config.training_params
+        if (
+            training_params.tail_solver_max_states > 0
+            and not training_params.tail_solver_shadow
+        ):
+            active_tail_archives_skipped += 1
+            continue
         examples = request.examples
         if not examples:
             continue
@@ -371,7 +382,7 @@ def main() -> None:
 
         player_results = []
         solve_failed = False
-        for state in separation.states:
+        for player, state in enumerate(separation.states):
             solver = ExactTailSolver(
                 node_limit=args.solver_node_limit,
                 time_limit_seconds=args.solver_time_limit_ms / 1_000,
@@ -462,6 +473,7 @@ def main() -> None:
             "model": args.model,
             "checkpoints": sorted(args.checkpoints),
             "archives": len(entries),
+            "active_tail_archives_skipped": active_tail_archives_skipped,
             "games": games,
             "examples": examples_total,
             "search_duration_seconds": search_micros_total / 1_000_000,
