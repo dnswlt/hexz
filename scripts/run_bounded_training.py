@@ -122,11 +122,30 @@ def main() -> int:
     if not params.exists():
         raise FileNotFoundError(f"Missing training parameters: {params}")
 
+    current_checkpoint = latest_checkpoint(repo, args.model)
     state_path = model_base / "bounded_run.json"
     if state_path.exists():
         state = json.loads(state_path.read_text(encoding="utf-8"))
-        if state["model"] != args.model or state["max_checkpoint"] != args.max_checkpoint:
-            raise ValueError("Existing bounded-run state has incompatible settings")
+        if state["model"] != args.model:
+            raise ValueError("Existing bounded-run state belongs to another model")
+        previous_limit = state["max_checkpoint"]
+        if args.max_checkpoint != previous_limit:
+            if args.max_checkpoint < previous_limit:
+                raise ValueError("Cannot lower an existing bounded-run limit")
+            if current_checkpoint < previous_limit:
+                raise ValueError(
+                    "Cannot extend the bounded-run limit before the existing "
+                    "limit has been reached"
+                )
+            state.setdefault("limit_extensions", []).append(
+                {
+                    "at": utcnow(),
+                    "from": previous_limit,
+                    "to": args.max_checkpoint,
+                    "checkpoint": current_checkpoint,
+                }
+            )
+            state["max_checkpoint"] = args.max_checkpoint
     else:
         state = {
             "model": args.model,
@@ -137,7 +156,7 @@ def main() -> int:
 
     invocation = {
         "started_at": utcnow(),
-        "starting_checkpoint": latest_checkpoint(repo, args.model),
+        "starting_checkpoint": current_checkpoint,
         "pid": os.getpid(),
     }
     state["invocations"].append(invocation)
