@@ -41,6 +41,7 @@ type CLIArgs struct {
 	Device         string
 	PlayBothSides  bool
 	PositionsFile  string
+	PositionOffset int
 	WritePositions int
 
 	// Elo related flags
@@ -78,6 +79,8 @@ func parseArgs() (*CLIArgs, error) {
 		"Whether to play both as P1 and P2. If true, twice as many games are played as specified in --games.")
 	flag.StringVar(&args.PositionsFile, "positions-file", "",
 		"JSONL corpus of initial positions. Reverse-seat games reuse the same positions.")
+	flag.IntVar(&args.PositionOffset, "position-offset", 0,
+		"Skip this many entries at the start of the position corpus.")
 	flag.IntVar(&args.WritePositions, "write-positions", 0,
 		"Generate this many initial positions in --positions-file and exit; refuses to overwrite.")
 	flag.BoolVar(&args.PrintElo, "print-elo", false,
@@ -90,7 +93,27 @@ func parseArgs() (*CLIArgs, error) {
 	if len(flag.Args()) > 0 {
 		return nil, fmt.Errorf("unexpected extra args: %v", flag.Args())
 	}
+	if args.PositionOffset < 0 {
+		return nil, fmt.Errorf("--position-offset must be non-negative")
+	}
 	return args, nil
+}
+
+func selectPositions(positions []StartingPosition, offset, games int) ([]StartingPosition, error) {
+	if offset < 0 || offset > len(positions) {
+		return nil, fmt.Errorf("position offset %d is outside corpus of size %d", offset, len(positions))
+	}
+	positions = positions[offset:]
+	if games < 0 || games > len(positions) {
+		return nil, fmt.Errorf("--games=%d exceeds the %d positions available after offset %d", games, len(positions), offset)
+	}
+	if games > 0 {
+		positions = positions[:games]
+	}
+	if len(positions) == 0 {
+		return nil, fmt.Errorf("position selection is empty")
+	}
+	return positions, nil
 }
 
 func splitKey(key string) (string, int, error) {
@@ -316,13 +339,14 @@ func main() {
 		if err != nil {
 			log.Fatalf("Could not read positions: %v", err)
 		}
-		if args.NumGames > len(positions) {
-			log.Fatalf("--games=%d exceeds the %d positions in %s", args.NumGames, len(positions), args.PositionsFile)
-		}
-		if args.NumGames > 0 {
-			positions = positions[:args.NumGames]
+		positions, err = selectPositions(positions, args.PositionOffset, args.NumGames)
+		if err != nil {
+			log.Fatalf("Could not select positions from %s: %v", args.PositionsFile, err)
 		}
 	} else {
+		if args.PositionOffset != 0 {
+			log.Fatal("--position-offset requires --positions-file")
+		}
 		if args.NumGames <= 0 {
 			log.Fatal("--games must be positive without --positions-file")
 		}

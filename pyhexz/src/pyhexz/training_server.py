@@ -176,8 +176,8 @@ def read_training_params() -> str:
         ps = hexz_pb2.TrainingParameters(
             runs_per_move=800,
             uct_c=1.5,
-            initial_root_q_value=-0.2,
-            initial_q_penalty=0.3,
+            initial_root_q_value=0,
+            initial_q_penalty=0,
             dirichlet_concentration=0.55,
             fast_move_prob=0,
             runs_per_fast_move=100,

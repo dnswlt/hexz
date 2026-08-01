@@ -20,12 +20,19 @@ games="${HEXZ_NBENCH_GAMES:-0}"
 concurrency="${HEXZ_NBENCH_CONCURRENCY:-64}"
 model_repo="${HEXZ_MODEL_REPO_BASE_DIR:-/home/dw/data/hexz-models}"
 positions_file="${HEXZ_NBENCH_POSITIONS_FILE:-testdata/nbench/flagz_initial_v1.jsonl}"
+position_offset="${HEXZ_NBENCH_POSITION_OFFSET:-0}"
 stats_file="${HEXZ_NBENCH_STATS_FILE:-./stats/nbench.jsonl}"
 image="${HEXZ_CPUSERVER_IMAGE:-hexz-cpuserver-cuda:latest}"
 p1_port="${HEXZ_NBENCH_P1_PORT:-50171}"
 p2_port="${HEXZ_NBENCH_P2_PORT:-50172}"
 p1_container="hexz-nbench2-p1"
 p2_container="hexz-nbench2-p2"
+p1_uct_c="${HEXZ_NBENCH_P1_UCT_C:-1.5}"
+p1_root_q="${HEXZ_NBENCH_P1_INITIAL_ROOT_Q_VALUE:-0}"
+p1_q_penalty="${HEXZ_NBENCH_P1_INITIAL_Q_PENALTY:-0}"
+p2_uct_c="${HEXZ_NBENCH_P2_UCT_C:-1.5}"
+p2_root_q="${HEXZ_NBENCH_P2_INITIAL_ROOT_Q_VALUE:-0}"
+p2_q_penalty="${HEXZ_NBENCH_P2_INITIAL_Q_PENALTY:-0}"
 
 parse_model_key() {
     local value="$1"
@@ -54,6 +61,9 @@ start_server() {
     local checkpoint="$3"
     local port="$4"
     local container="$5"
+    local uct_c="$6"
+    local root_q="$7"
+    local q_penalty="$8"
     local model_path="/models/models/flagz/$model/checkpoints/$checkpoint/scriptmodule.pt"
     echo "Starting $player server for $model:$checkpoint on port $port"
     docker run --rm -d \
@@ -64,13 +74,18 @@ start_server() {
         "$image" \
         --device=cuda \
         --max_think_time_ms=0 \
+        --uct_c="$uct_c" \
+        --initial_root_q_value="$root_q" \
+        --initial_q_penalty="$q_penalty" \
         --model_path="$model_path" \
         --model_key="$model:$checkpoint" \
         --server_addr="0.0.0.0:$port" >/dev/null
 }
 
-start_server p1 "$p1_model" "$p1_checkpoint" "$p1_port" "$p1_container"
-start_server p2 "$p2_model" "$p2_checkpoint" "$p2_port" "$p2_container"
+start_server p1 "$p1_model" "$p1_checkpoint" "$p1_port" "$p1_container" \
+    "$p1_uct_c" "$p1_root_q" "$p1_q_penalty"
+start_server p2 "$p2_model" "$p2_checkpoint" "$p2_port" "$p2_container" \
+    "$p2_uct_c" "$p2_root_q" "$p2_q_penalty"
 
 sleep "${HEXZ_NBENCH_STARTUP_SECONDS:-3}"
 
@@ -81,6 +96,7 @@ go run ./cmd/nbench2 \
     -p1-addr "localhost:$p1_port" \
     -p2-addr "localhost:$p2_port" \
     -positions-file "$positions_file" \
+    -position-offset "$position_offset" \
     -games "$games" \
     -concurrency "$concurrency" \
     -both-sides \

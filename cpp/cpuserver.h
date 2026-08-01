@@ -25,6 +25,14 @@ struct CPUPlayerServiceConfig {
   // SuggestMovesRequest count as N multiple requests, where N is the
   // number of contained game engine states.
   int max_concurrent_requests = 128;
+  // Shared neural-MCTS search parameters. Self-play and normal play should
+  // use the same values; their exploration behavior differs through root
+  // noise and move selection, not through an implicit FPU configuration.
+  float uct_c = 1.5;
+  // These defaults preserve historical cpuserver behavior and are the shared
+  // configuration selected by the checkpoint-50 tuning campaign.
+  float initial_root_q_value = 0.0;
+  float initial_q_penalty = 0.0;
   // Bounds for the exact separated-tail fast path. Set max states to zero to
   // disable it. Any overlap or exhausted budget falls back to neural MCTS.
   int tail_solver_max_states = 50'000;

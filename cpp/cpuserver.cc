@@ -23,7 +23,19 @@ CPUPlayerServiceImpl::CPUPlayerServiceImpl(CPUPlayerServiceConfig config)
       model_{config.model_key,
              torch::jit::load(config.model_path, config.device_type),
              config.device_type, config.max_batch_size},
-      concurrent_rpc_sem_(config.max_concurrent_requests) {}
+      concurrent_rpc_sem_(config.max_concurrent_requests) {
+  Config mcts_config{
+      .uct_c = config_.uct_c,
+      .initial_root_q_value = config_.initial_root_q_value,
+      .initial_q_penalty = config_.initial_q_penalty,
+  };
+  InitializeFromConfig(mcts_config);
+  ABSL_LOG(INFO) << "Initialized neural MCTS search parameters: uct_c="
+                 << config_.uct_c
+                 << ", initial_root_q_value="
+                 << config_.initial_root_q_value
+                 << ", initial_q_penalty=" << config_.initial_q_penalty;
+}
 
 grpc::Status CPUPlayerServiceImpl::ServerInfo(
     grpc::ServerContext*, const hexzpb::ServerInfoRequest*,
@@ -57,6 +69,9 @@ absl::StatusOr<hexzpb::SuggestMoveResponse> CPUPlayerServiceImpl::DoSuggestMove(
       // These should not have an effect in SuggestMove, but to be safe, we
       // disable fast moves and Dirichlet noise explicitly.
       .fast_move_prob = 0,
+      .uct_c = config_.uct_c,
+      .initial_root_q_value = config_.initial_root_q_value,
+      .initial_q_penalty = config_.initial_q_penalty,
       .dirichlet_concentration = 0,
   };
 

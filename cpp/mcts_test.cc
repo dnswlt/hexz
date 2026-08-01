@@ -412,8 +412,8 @@ TEST(MCTSTest, NoMoveLowerScoreIsTerminal) {
   // i.e. the root node should become terminal.
   Config config{
       .fast_move_prob = 0.0,
-      .initial_root_q_value = -0.2,  // the default
-      .initial_q_penalty = 0.3,      // the default
+      .initial_root_q_value = -0.2,  // exercise non-default FPU
+      .initial_q_penalty = 0.3,
   };
   Node::UpdateStaticParams(config);
   Board b = Board::EmptyBoard(/*flags=*/1);
@@ -437,8 +437,8 @@ TEST(MCTSTest, NoMoveLowerScoreIsTerminal) {
 TEST(MCTSTest, SelfplayRun) {
   Config config{
       .fast_move_prob = 0.0,
-      .initial_root_q_value = -0.2,  // the default
-      .initial_q_penalty = 0.3,      // the default
+      .initial_root_q_value = -0.2,  // exercise non-default FPU
+      .initial_q_penalty = 0.3,
   };
   Node::UpdateStaticParams(config);
   // The model thinks that the current player always wins.

@@ -48,6 +48,29 @@ func TestWriteStartingPositionsDoesNotOverwrite(t *testing.T) {
 	}
 }
 
+func TestSelectPositions(t *testing.T) {
+	positions := []StartingPosition{{ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}}
+	got, err := selectPositions(positions, 1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].ID != "b" || got[1].ID != "c" {
+		t.Fatalf("selected positions = %#v, want b,c", got)
+	}
+}
+
+func TestSelectPositionsRejectsInvalidRanges(t *testing.T) {
+	positions := []StartingPosition{{ID: "a"}, {ID: "b"}}
+	for _, tc := range []struct {
+		offset int
+		games  int
+	}{{-1, 1}, {3, 1}, {1, 2}, {2, 0}} {
+		if _, err := selectPositions(positions, tc.offset, tc.games); err == nil {
+			t.Errorf("selectPositions(offset=%d, games=%d) unexpectedly succeeded", tc.offset, tc.games)
+		}
+	}
+}
+
 func result(position string, winner int32) *npb.BenchmarkResult_GameResult {
 	return &npb.BenchmarkResult_GameResult{
 		PositionId: position,

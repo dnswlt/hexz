@@ -232,6 +232,116 @@ PYTHONPATH=pyhexz/src pyhexz/.venv/bin/python3 \
   --solver-time-limit-ms 500
 ```
 
+### Shared MCTS parameter tuning
+
+Checkpoint 50 was used on both sides of a staged, paired 800-iteration arena
+to tune the search parameters shared by self-play and normal play. This also
+identified an accidental mismatch: workers used root Q `-0.2` and FPU penalty
+`0.3`, while `cpuserver` had retained its static `0/0` values because it never
+initialized them from a configuration. Normal-play exploration differences
+remain explicit: it disables root noise and chooses the most-visited move.
+
+Four 24-position FPU screens against the historical inference configuration
+`uct_c=1.5, root_q=0, penalty=0` produced:
+
+| Root Q | FPU penalty | Score | Paired 95% CI |
+| ---: | ---: | ---: | ---: |
+| -0.2 | 0.3 | 46.9% | 34.3%–59.5% |
+| -0.1 | 0.15 | 52.1% | 42.8%–61.4% |
+| -0.2 | 0 | 50.0% | 50.0%–50.0% |
+| 0 | 0.3 | 44.8% | 33.0%–56.6% |
+
+The midpoint FPU advanced. On a disjoint 24-position screen, `uct_c` values
+1.0, 1.5 and 2.0 scored 58.3%, 62.5% and 45.8%, respectively. The apparent
+`uct_c=1.5, root_q=-0.1, penalty=0.15` winner was then tested on the untouched
+80-position remainder. It scored 51.2% over 160 games (81–77 with two draws),
+with paired-position 95% CI 46.1%–56.4%. It therefore failed the predefined
+adoption gate.
+
+The selected shared configuration remains `uct_c=1.5, root_q=0, penalty=0`.
+Worker/training-server defaults and normal-play defaults are now aligned to
+those values. Self-play retains its separate Dirichlet-noise and move-sampling
+exploration controls. The reproducible runner is `scripts/tune_mcts.py`; raw
+results and the model/image/corpus hashes are in
+`log/mcts-tuning-cp50-20260801-102200/manifest.json`. The campaign completed in
+1,552 seconds and generated no training examples.
+
+### Archived deterministic re-search
+
+A phase-balanced sample of 96 checkpoint-50 archive positions (16 from each
+of moves 0–5, 6–11, 12–23, 24–47, 48–63 and 64+) was re-searched without root
+noise at 800, 3,200, 6,400 and, in a confirming extension, 12,800 iterations.
+The exact tail solver was disabled so that late positions measured neural MCTS
+rather than a different decision operator. The selected shared search settings
+`uct_c=1.5, root_q=0, penalty=0` were used throughout.
+
+The deeper teacher is materially different. Deterministic 800 versus 12,800
+had mean total-variation policy distance 0.1770 (95% bootstrap CI
+0.1424–0.2154) and changed the top move in 19/96 positions (19.8%, Wilson 95%
+CI 13.1%–28.9%). The recorded noisy 800-run archive target versus deterministic
+12,800 was farther apart still: mean distance 0.3076 and 43/96 top moves
+changed. That latter comparison combines search depth with removal of root
+noise, so it is not used alone to attribute the improvement operator.
+
+The phase split matters. At moves 12+, deterministic 800 versus 12,800 had
+mean distance 0.1223 and changed 9/64 top moves (14.1%), while 6,400 versus
+12,800 fell to 0.0387 and 5/64 (7.8%). It therefore passes the predefined
+material-gap and teacher-stability gates. Moves 0–11 did not: 6,400 versus
+12,800 still had distance 0.0945 and changed 5/32 top moves. A sensible
+isolated student should retain the recorded opening targets and replace only
+move-12+ policy targets with the deep deterministic teacher; do not use a
+single uniform teacher depth as though opening convergence had been shown.
+
+The duplicate searches also validated determinism. All 96 independently
+repeated 6,400-run policies were bit-for-bit identical. At 800 runs, 94/96
+were identical and the remaining two differed only at rounding scale, with no
+top-move changes. The reusable runner is
+`scripts/research_archived_positions.py`. The primary and confirming artifacts
+are `log/archived-research-cp50-20260801-112641/` and
+`log/archived-research-cp50-20260801-112939/`; they contain hashes, sparse
+teacher policies, per-position comparisons and aggregate summaries. No
+examples, replay rows or checkpoints were modified.
+
+### Isolated reanalysis student
+
+The first teacher-distillation experiment is complete and was **not adopted**.
+Checkpoint 50 re-searched 1,024 distinct archived move-12+ positions at 6,400
+iterations without root noise or the exact tail shortcut. The positions came
+from checkpoint-30–40 games, were balanced 256 per post-opening phase, and
+were limited to one state per game and phase. Teacher generation took 771
+seconds. The normalized corpus and hashes are in
+`log/reanalysis-teacher-cp50-20260801-114500/`.
+
+The isolated `res10-r4-rean-cp50` candidate cloned checkpoint 50 and its Adam
+state at checkpoint 0. Of the teacher positions, 819 were training-only and
+205 were held out. Repeated teacher rows occupied 9.998% of a private frozen
+1,048,576-row replay window; the original replay remained byte-for-byte
+unchanged. One 25-batch update trained 102,400 examples and produced candidate
+checkpoint 1 at global Adam step 1,275. All parameters, gradients and optimizer
+state were finite.
+
+The student moved teacher-holdout policy CE from 1.83487 to 1.82843. On a fixed
+ordinary-replay validation sample, policy CE moved slightly from 1.96878 to
+1.96937 while value MSE improved from 0.33270 to 0.33104. This establishes that
+the teacher signal affected unseen positions without materially damaging the
+ordinary replay fit, but it is not a playing-strength result.
+
+At the normal 800 search iterations, a 32-position paired screen leaned toward
+the student, 36–28, for 56.2% (paired 95% CI 47.7%–64.8%). The untouched
+96-position confirmation also leaned toward it, 100–90 with two draws, but
+scored only 52.6% with paired 95% CI 46.6%–58.6%. It failed the predefined
+adoption gate. Across all 128 positions the descriptive result was 136–118
+with two draws, 53.5%, CI 48.5%–58.5%; do not pool that post-screen result into
+an adoption claim. Checkpoint 50 remains the strongest demonstrated model.
+
+The reusable isolated trainer is `scripts/train_reanalysis_student.py`. The
+candidate manifest is
+`/home/dw/data/hexz-models/models/flagz/res10-r4-rean-cp50/experiment.json`;
+the compact evaluation is `log/reanalysis-student-cp1-summary.json`, with raw
+arenas in `log/reanalysis-student-cp1-vs-cp50-{screen,confirm}.jsonl`. Preserve
+the candidate for analysis, but do not continue the same small-corpus branch
+merely because both arenas leaned positive.
+
 ## Start here next
 
 The checkpoint-51–60 round failed its endpoint test: checkpoint 60 is
@@ -240,9 +350,16 @@ continue the unchanged self-play/training regime merely because checkpoint 60
 is latest. Checkpoint 50 remains the strongest demonstrated model and should
 be the comparison or deployment choice.
 
-Reasonable next options are:
+Search-parameter tuning did not establish a stronger configuration. Archived
+re-search established a material, stable move-12+ teacher gap, but the first
+isolated hybrid-target student did not establish stronger play. Do not deploy
+it or resume unchanged self-play. If reanalysis is pursued further, change the
+distillation experiment materially rather than adding checkpoints to this
+candidate:
 
-- investigate training/search changes before generating another 250k rows;
+- generate substantially more *distinct* move-12+ teacher positions and/or use
+  a policy-only weighted distillation loss instead of repeating 819 examples;
+  pre-generate a new fixed arena corpus before selecting the next student;
 - benchmark checkpoint 50 against checkpoint 20 or 0 to quantify cumulative
   strength with a wider signal;
 - arena-screen checkpoint 52 only if locating a transient within-round peak is

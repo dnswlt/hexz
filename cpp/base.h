@@ -46,11 +46,12 @@ struct Config {
   // The initial Q-value for the root node. This is relevant for its children,
   // which compute their initial Q-value based on the Q-value of their parent.
   // (Known as "first play urgency" (FPU) in the literature.)
-  // There shouldn't be a need to tweak this value outside tests.
-  float initial_root_q_value = -0.2;
+  // Keep this shared with normal-play search unless an experiment explicitly
+  // studies a different teacher policy.
+  float initial_root_q_value = 0.0;
   // Value subtracted from the parent's Q value to calculate an unvisited
   // child's initial Q value.
-  float initial_q_penalty = 0.3;
+  float initial_q_penalty = 0.0;
   // Concentration factor ("alpha") of the Dirichlet noise that gets
   // added to the root nodes during MCTS search.
   // Flagz has 18 moves on average (with high variance;
