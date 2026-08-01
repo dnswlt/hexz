@@ -332,7 +332,9 @@ the student, 36–28, for 56.2% (paired 95% CI 47.7%–64.8%). The untouched
 scored only 52.6% with paired 95% CI 46.6%–58.6%. It failed the predefined
 adoption gate. Across all 128 positions the descriptive result was 136–118
 with two draws, 53.5%, CI 48.5%–58.5%; do not pool that post-screen result into
-an adoption claim. Checkpoint 50 remains the strongest demonstrated model.
+an adoption claim. At that stage, checkpoint 50 remained the strongest
+demonstrated model; the later rich-representation experiment below superseded
+it.
 
 The reusable isolated trainer is `scripts/train_reanalysis_student.py`. The
 candidate manifest is
@@ -369,8 +371,12 @@ Raw arenas are `log/rich-v1-cp4-vs-cp50-{screen,confirm}.jsonl`. The confirmed
 checkpoint-4 weights, Adam state and 1,025,000-row replay were branched into
 `res10-rich-v1-r4` checkpoint 0. This is the resumable online candidate.
 
-Online training is durably capped at checkpoint 60. Use the same command both
-to start and to resume it:
+Online training completed cleanly at the durable checkpoint-60 cap. The run
+produced 1,501,920 fresh self-play positions, completed all 60 training runs
+without a failure, persisted checkpoint 60, and then stopped the server and
+worker as designed. The replay used by the final checkpoints is entirely
+rich-model self-play. The command remains the recovery/reproduction entry
+point:
 
 ```bash
 PYTHONPATH=pyhexz/src pyhexz/.venv/bin/python3 \
@@ -386,34 +392,45 @@ parameters, and tail-solver gate 3. It persists invocation state in
 runner manifest survive interruption. The training server independently
 enforces the checkpoint-60 ceiling and will not create checkpoint 61.
 
+Paired 800-search screens over the original 32 positions found:
+
+- checkpoint 20 over rich bootstrap checkpoint 4: 36--28, 56.3%, paired CI
+  44.8%--67.7%;
+- checkpoint 20 versus checkpoint 40: 32--31 with one draw, 50.8%, paired CI
+  38.6%--62.9%;
+- checkpoint 60 over checkpoint 40: 36--26 with two draws, 57.8%, paired CI
+  46.7%--68.9%.
+
+The adjacent screens therefore lean positive overall but do not individually
+establish monotonic checkpoint-by-checkpoint improvement. The direct endpoint
+comparison is decisive. Checkpoint 60 beat legacy checkpoint 50 by 52--10
+with two draws on the 32-position screen, scoring 82.8% (paired CI
+73.6%--92.0%). On the untouched 96-position confirmation it won 143--41 with
+eight draws over 192 games, scoring 76.6% (paired CI 71.4%--81.7%). Raw arenas
+are:
+
+- `log/rich-v1-cp4-vs-r4-cp20-screen.jsonl`;
+- `log/rich-v1-r4-cp20-vs-cp40-screen.jsonl`;
+- `log/rich-v1-r4-cp40-vs-cp60-screen.jsonl`;
+- `log/rich-v1-r4-cp60-vs-legacy-cp50-{screen,confirm}.jsonl`.
+
 ## Start here next
 
-The checkpoint-51–60 round failed its endpoint test: checkpoint 60 is
-significantly weaker than checkpoint 50 in the paired arena. Do **not**
-continue the unchanged self-play/training regime merely because checkpoint 60
-is latest. Checkpoint 50 remains the strongest demonstrated model and should
-be the comparison or deployment choice.
+`res10-rich-v1-r4:60` is now the strongest demonstrated model and the preferred
+deployment/comparison checkpoint. Its advantage over legacy checkpoint 50 was
+confirmed on untouched positions with a lower confidence bound above 71%.
+This is strong evidence that the representation/value-head change succeeded,
+not merely that another 60 checkpoints were produced.
 
-Search-parameter tuning did not establish a stronger configuration. Archived
-re-search established a material, stable move-12+ teacher gap, but the first
-isolated hybrid-target student did not establish stronger play. Do not deploy
-it or resume unchanged self-play. If reanalysis is pursued further, change the
-distillation experiment materially rather than adding checkpoints to this
-candidate:
-
-- generate substantially more *distinct* move-12+ teacher positions and/or use
-  a policy-only weighted distillation loss instead of repeating 819 examples;
-  pre-generate a new fixed arena corpus before selecting the next student;
-- benchmark checkpoint 50 against checkpoint 20 or 0 to quantify cumulative
-  strength with a wider signal;
-- arena-screen checkpoint 52 only if locating a transient within-round peak is
-  useful; its offline metrics were best in the failed round, but no playing-
-  strength claim exists for it;
-- lower the tail-solver gate from 5 to 3 when self-play resumes, since the
-  corrected archive analysis supports that efficiency tradeoff.
-
-Preserve the replay window and optimizer state, and do not initialize a new
-candidate or overwrite existing checkpoints.
+Do not infer smooth monotonic progress from the adjacent 32-position screens;
+their intervals are wide. Preserve checkpoints 4, 20, 40 and 60, the final
+replay, and the optimizer state. If training continues, branch from checkpoint
+60 rather than overwriting this completed experiment, retain the 1e-4 learning
+rate and checkpoint cap, and predeclare evaluation points. The highest-value
+next questions are whether checkpoint 60 improves actual interactive play and
+whether richer value targets or hex-aware convolutions can add strength beyond
+this new baseline. Search-depth teaching and MCTS parameter tuning remain
+secondary because neither established a comparable improvement.
 
 For reference, the failed checkpoint-60 versus checkpoint-50 match was:
 
