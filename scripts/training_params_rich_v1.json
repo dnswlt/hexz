@@ -1,0 +1,13 @@
+{
+  "runsPerMove": 800,
+  "uctC": 1.5,
+  "initialRootQValue": 0,
+  "initialQPenalty": 0,
+  "dirichletConcentration": 0.55,
+  "fastMoveProb": 0,
+  "runsPerFastMove": 100,
+  "tailSolverMaxStates": 50000,
+  "tailSolverMaxMicros": "50000",
+  "tailSolverMinScoreMargin": 3,
+  "tailSolverShadow": false
+}

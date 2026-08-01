@@ -1,6 +1,7 @@
 """Test cases for the training.py module."""
 
 from collections import defaultdict
+import dataclasses
 import logging
 import time
 import h5py
@@ -14,7 +15,7 @@ from pyhexz.config import TrainingConfig
 from pyhexz.experiment import initialize_training_experiment
 from pyhexz.model import HexzNeuralNetwork
 from pyhexz.modelrepo import LocalModelRepository
-from pyhexz.training import HDF5IterableDataset, TrainingTask, rchunks
+from pyhexz.training import HDF5IterableDataset, TrainingState, TrainingTask, rchunks
 
 
 def _torch_bytes(tensor: torch.Tensor) -> bytes:
@@ -278,6 +279,36 @@ def test_training_batch_limit_and_optimizer_resume(tmp_path):
     assert state["examples_trained"] == 16
 
 
+def test_training_state_honors_durable_checkpoint_limit(tmp_path):
+    repo = LocalModelRepository(tmp_path)
+    model_name = "bounded"
+    repo.store_model(model_name, 0, HexzNeuralNetwork(blocks=1, filters=8))
+    config = TrainingConfig(
+        model_repo_base_dir=tmp_path,
+        model_name=model_name,
+        training_trigger_threshold=1,
+        training_max_checkpoint=0,
+    )
+    unbounded = TrainingState(repo, model_name, logging.getLogger(__name__), config)
+    assert not unbounded.status()["at_training_limit"]
+
+    bounded_config = dataclasses.replace(config, training_max_checkpoint=1)
+    below_limit = TrainingState(
+        repo, model_name, logging.getLogger(__name__), bounded_config
+    )
+    assert not below_limit.status()["at_training_limit"]
+
+    repo.store_model(model_name, 1, HexzNeuralNetwork(blocks=1, filters=8))
+    at_limit = TrainingState(
+        repo, model_name, logging.getLogger(__name__), bounded_config
+    )
+    status = at_limit.status()
+    assert status["checkpoint"] == 1
+    assert status["at_training_limit"]
+    with at_limit.lock:
+        assert not at_limit._should_train()
+
+
 def test_training_rejects_non_finite_loss_before_checkpoint(tmp_path):
     repo = LocalModelRepository(tmp_path)
     model_name = "nonfinite"
@@ -365,3 +396,39 @@ def test_initialize_training_experiment_isolated_and_aligned(tmp_path):
             replay_examples=8,
             trigger_threshold=4,
         )
+
+
+def test_initialize_training_experiment_with_scratch_model(tmp_path):
+    repo = LocalModelRepository(tmp_path)
+    repo.store_model("source", 7, HexzNeuralNetwork(blocks=1, filters=8))
+    repo.add_examples(
+        hexz_pb2.AddTrainingExamplesRequest(
+            examples=[_training_example("source", checkpoint=7) for _ in range(8)]
+        )
+    )
+    repo.close_all()
+
+    manifest = initialize_training_experiment(
+        repo_base_dir=tmp_path,
+        source_model="source",
+        source_checkpoint=7,
+        candidate_model="scratch-rich",
+        replay_examples=4,
+        trigger_threshold=4,
+        scratch_representation="rich_v1",
+        scratch_blocks=2,
+        scratch_filters=16,
+        source_replay_end=6,
+    )
+
+    initialized = repo.get_model("scratch-rich", 0)
+    assert initialized.ctor_args == {
+        "blocks": 2,
+        "filters": 16,
+        "model_type": "resnet",
+        "representation": "rich_v1",
+    }
+    assert manifest["candidate"]["initialization"]["kind"] == "random"
+    assert manifest["source"]["replay_range"] == [2, 6]
+    assert repo.h5_size("scratch-rich") == 4
+    repo.close_all()

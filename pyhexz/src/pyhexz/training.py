@@ -509,6 +509,13 @@ class TrainingState:
             >= self._stats.last_training_ex_count
             + self.config.training_trigger_threshold
             and not self.is_training
+            and not self._at_training_limit()
+        )
+
+    def _at_training_limit(self) -> bool:
+        return (
+            self.config.training_max_checkpoint > 0
+            and self.latest_checkpoint >= self.config.training_max_checkpoint
         )
 
     def _start_training(self):
@@ -563,6 +570,15 @@ class TrainingState:
             # examples already.
             if self._should_train():
                 self._start_training()
+            elif self._at_training_limit():
+                # Workers were suspended before this training task. Keep them
+                # suspended until the bounded experiment runner stops them, so
+                # they cannot upload examples beyond the durable checkpoint
+                # boundary.
+                self.logger.info(
+                    "Reached training checkpoint limit %d",
+                    self.config.training_max_checkpoint,
+                )
             else:
                 # Notify workers to resume.
                 for q in self._subscriptions:
@@ -613,6 +629,21 @@ class TrainingState:
         """Returns a copy of the training stats."""
         with self.lock:
             return dataclasses.replace(self._stats)
+
+    def status(self) -> dict:
+        """Return a small, lock-consistent status for experiment runners."""
+        with self.lock:
+            return {
+                "model": self.model_name,
+                "checkpoint": self.latest_checkpoint,
+                "max_checkpoint": self.config.training_max_checkpoint,
+                "at_training_limit": self._at_training_limit(),
+                "is_training": self.is_training,
+                "examples": self._stats.examples,
+                "training_runs_started": self._stats.training_runs_started,
+                "training_runs_completed": self._stats.training_runs_completed,
+                "training_runs_failed": self._stats.training_runs_failed,
+            }
 
     def latest_request(self) -> hexz_pb2.AddTrainingExamplesRequest:
         with self.lock:

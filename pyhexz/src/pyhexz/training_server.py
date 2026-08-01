@@ -161,7 +161,11 @@ def init_repo_if_missing(app: Flask) -> None:
         return
     model_type = config.model_type
     blocks = config.model_blocks
-    model = HexzNeuralNetwork(model_type=model_type, blocks=blocks)
+    model = HexzNeuralNetwork(
+        model_type=model_type,
+        blocks=blocks,
+        representation=config.model_representation,
+    )
     repo.store_model(name, 0, model)
     app.logger.info(f"Created new initial model in repo for model '{name}'")
 
@@ -249,6 +253,10 @@ def create_app():
         resp = make_response("\n\n".join(lines))
         resp.headers["Content-Type"] = "text/plain"
         return resp
+
+    @app.get("/training/status")
+    def training_status():
+        return app.training_state.status()
 
     @app.get("/training/games/latest")
     def games_latest():

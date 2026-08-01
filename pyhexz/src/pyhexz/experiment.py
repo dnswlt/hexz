@@ -11,6 +11,7 @@ import uuid
 
 import h5py
 
+from pyhexz.model import HexzNeuralNetwork
 from pyhexz.modelrepo import LocalModelRepository
 
 
@@ -30,6 +31,7 @@ def _copy_replay_tail(
     destination: h5py.File,
     count: int,
     copy_chunk_size: int = 4096,
+    end: int | None = None,
 ) -> tuple[int, int]:
     missing = [name for name in _H5_DATASETS if name not in source]
     if missing:
@@ -38,10 +40,14 @@ def _copy_replay_tail(
     if len(set(lengths.values())) != 1:
         raise ValueError(f"Source replay dataset lengths differ: {lengths}")
     total = next(iter(lengths.values()))
-    if count <= 0 or count > total:
-        raise ValueError(f"Cannot copy {count} examples from replay of size {total}")
+    if end is None:
+        end = total
+    if end <= 0 or end > total:
+        raise ValueError(f"Replay end {end} is outside source replay of size {total}")
+    if count <= 0 or count > end:
+        raise ValueError(f"Cannot copy {count} examples ending at {end}")
 
-    start = total - count
+    start = end - count
     for name in _H5_DATASETS:
         src = source[name]
         kwargs = {
@@ -58,7 +64,7 @@ def _copy_replay_tail(
             size = min(copy_chunk_size, count - offset)
             dst[offset : offset + size] = src[start + offset : start + offset + size]
     destination.flush()
-    return start, total
+    return start, end
 
 
 def initialize_training_experiment(
@@ -68,14 +74,19 @@ def initialize_training_experiment(
     candidate_model: str,
     replay_examples: int,
     trigger_threshold: int,
+    scratch_representation: str | None = None,
+    scratch_blocks: int = 10,
+    scratch_filters: int = 128,
+    source_replay_end: int | None = None,
+    preserve_optimizer_state: bool = False,
 ) -> dict:
     """Seeds a candidate model without modifying its source.
 
-    The candidate starts at checkpoint 0 with weights copied from
-    source_model:source_checkpoint. Its replay is the newest requested number of
-    source examples, rounded down to a multiple of trigger_threshold. Aligning
-    the replay ensures the training server waits for one complete fresh-data
-    interval before creating the first candidate checkpoint.
+    By default, the candidate starts at checkpoint 0 with weights copied from
+    source_model:source_checkpoint. If scratch_representation is set, checkpoint
+    0 instead contains a newly initialized ResNet and the source supplies only
+    bootstrap replay. Its replay is the newest requested number of source
+    examples, rounded down to a multiple of trigger_threshold.
     """
 
     _validate_model_name(source_model)
@@ -88,6 +99,10 @@ def initialize_training_experiment(
         raise ValueError("Replay example count must be positive")
     if trigger_threshold <= 0:
         raise ValueError("Trigger threshold must be positive")
+    if scratch_blocks <= 0 or scratch_filters <= 0:
+        raise ValueError("Scratch model blocks and filters must be positive")
+    if scratch_representation is not None and preserve_optimizer_state:
+        raise ValueError("A random scratch model cannot preserve optimizer state")
 
     aligned_examples = replay_examples - replay_examples % trigger_threshold
     if aligned_examples == 0:
@@ -107,13 +122,51 @@ def initialize_training_experiment(
     repo = LocalModelRepository(str(repo_base))
 
     try:
-        source = repo.get_model(source_model, source_checkpoint, map_location="cpu")
-        repo.store_model(staging_model, 0, source)
+        if scratch_representation is None:
+            model = repo.get_model(
+                source_model, source_checkpoint, map_location="cpu"
+            )
+            training_state = None
+            if preserve_optimizer_state:
+                training_state = repo.get_training_state(
+                    source_model, source_checkpoint, map_location="cpu"
+                )
+                if training_state is None:
+                    raise ValueError(
+                        "Source checkpoint has no optimizer state to preserve"
+                    )
+            initialization = {
+                "kind": "checkpoint",
+                "model": source_model,
+                "checkpoint": source_checkpoint,
+                "optimizer_state_preserved": preserve_optimizer_state,
+            }
+        else:
+            model = HexzNeuralNetwork(
+                model_type="resnet",
+                blocks=scratch_blocks,
+                filters=scratch_filters,
+                representation=scratch_representation,
+            )
+            initialization = {
+                "kind": "random",
+                "model_type": "resnet",
+                "blocks": scratch_blocks,
+                "filters": scratch_filters,
+                "representation": scratch_representation,
+            }
+            training_state = None
+        repo.store_model(
+            staging_model, 0, model, training_state=training_state
+        )
 
         with repo.acquire_h5(source_model) as source_h5:
             with repo.acquire_h5(staging_model) as destination_h5:
                 replay_start, replay_end = _copy_replay_tail(
-                    source_h5, destination_h5, aligned_examples
+                    source_h5,
+                    destination_h5,
+                    aligned_examples,
+                    end=source_replay_end,
                 )
         repo.close_all()
 
@@ -127,6 +180,7 @@ def initialize_training_experiment(
             "candidate": {
                 "model": candidate_model,
                 "checkpoint": 0,
+                "initialization": initialization,
             },
             "training": {
                 "trigger_threshold": trigger_threshold,
@@ -156,6 +210,23 @@ def main() -> None:
     parser.add_argument("--candidate-model", required=True)
     parser.add_argument("--replay-examples", type=int, default=2**20)
     parser.add_argument("--trigger-threshold", type=int, default=25_000)
+    parser.add_argument(
+        "--scratch-representation",
+        choices=["legacy", "rich_v1"],
+        help="Initialize new random weights; use the source only for replay",
+    )
+    parser.add_argument("--scratch-blocks", type=int, default=10)
+    parser.add_argument("--scratch-filters", type=int, default=128)
+    parser.add_argument(
+        "--source-replay-end",
+        type=int,
+        help="Copy bootstrap replay ending at this exclusive source index",
+    )
+    parser.add_argument(
+        "--preserve-optimizer-state",
+        action="store_true",
+        help="Copy source Adam/global-step state into candidate checkpoint 0",
+    )
     args = parser.parse_args()
 
     manifest = initialize_training_experiment(
@@ -165,6 +236,11 @@ def main() -> None:
         candidate_model=args.candidate_model,
         replay_examples=args.replay_examples,
         trigger_threshold=args.trigger_threshold,
+        scratch_representation=args.scratch_representation,
+        scratch_blocks=args.scratch_blocks,
+        scratch_filters=args.scratch_filters,
+        source_replay_end=args.source_replay_end,
+        preserve_optimizer_state=args.preserve_optimizer_state,
     )
     print(json.dumps(manifest, indent=2))
 

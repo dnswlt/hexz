@@ -53,7 +53,8 @@ def html_export(args):
 
 def create_model(args) -> int:
     network_args = {
-        key: getattr(args, key) for key in ["blocks", "filters", "model_type"]
+        key: getattr(args, key)
+        for key in ["blocks", "filters", "model_type", "representation"]
     }
     model = HexzNeuralNetwork(**network_args)
     scriptmodule = torch.jit.script(model)
@@ -83,6 +84,12 @@ def main(argv) -> int:
     )
     create_parser.add_argument(
         "--filters", type=int, default=128, help="Number of CNN filters for the model"
+    )
+    create_parser.add_argument(
+        "--representation",
+        choices=["legacy", "rich_v1"],
+        default="legacy",
+        help="Board feature representation",
     )
     create_parser.add_argument(
         "--blocks",

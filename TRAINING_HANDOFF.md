@@ -342,6 +342,50 @@ arenas in `log/reanalysis-student-cp1-vs-cp50-{screen,confirm}.jsonl`. Preserve
 the candidate for analysis, but do not continue the same small-corpus branch
 merely because both arenas leaned positive.
 
+### Rich state representation
+
+A clean 10-block, 128-filter `rich_v1` ResNet was initialized with random
+weights and pretrained for five passes over the exact checkpoint-50 replay
+window ending at row 2,275,260. The external board/replay/TorchScript API
+remains the canonical 11-plane tensor. Inside the model it expands to 45
+planes containing explicit hex-row geometry, categorical value/next-value/
+grass/remaining-flag encodings, legal-action planes, normalized scores and
+score difference, and game phase. Its value head is widened from one to 32
+channels and a 256-unit hidden layer. This increased parameters from 2.73M to
+3.67M with only about 2.7% synthetic batch-256 inference overhead.
+
+Pretraining checkpoints 0--5 are stored as `res10-rich-v1`. Checkpoint 4 was
+the offline peak; checkpoint 5 improved policy CE but destabilized value MSE
+and bias. On a fixed 16,384-row sample, checkpoint 4 had policy CE 2.0639,
+value MSE 0.3078 and sign accuracy 88.04%, versus checkpoint 50's 1.9439,
+0.3179 and 87.81%. Checkpoint 4 then beat legacy checkpoint 50 in both paired
+arenas:
+
+- screen: 42--21 with one draw over 64 games, 66.4%, paired CI 56.7%--76.1%;
+- untouched confirmation: 106--80 with six draws over 192 games, 56.8%,
+  paired CI 50.1%--63.5%.
+
+Raw arenas are `log/rich-v1-cp4-vs-cp50-{screen,confirm}.jsonl`. The confirmed
+checkpoint-4 weights, Adam state and 1,025,000-row replay were branched into
+`res10-rich-v1-r4` checkpoint 0. This is the resumable online candidate.
+
+Online training is durably capped at checkpoint 60. Use the same command both
+to start and to resume it:
+
+```bash
+PYTHONPATH=pyhexz/src pyhexz/.venv/bin/python3 \
+  scripts/run_bounded_training.py \
+  --repo /home/dw/data/hexz-models \
+  --model res10-rich-v1-r4 \
+  --max-checkpoint 60
+```
+
+The runner uses learning rate 1e-4, 800-run self-play, the shared MCTS
+parameters, and tail-solver gate 3. It persists invocation state in
+`res10-rich-v1-r4/bounded_run.json`. Checkpoints, replay, Adam state and the
+runner manifest survive interruption. The training server independently
+enforces the checkpoint-60 ceiling and will not create checkpoint 61.
+
 ## Start here next
 
 The checkpoint-51–60 round failed its endpoint test: checkpoint 60 is

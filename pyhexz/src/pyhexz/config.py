@@ -28,6 +28,9 @@ class TrainingConfig:
     # Model type. One of (conv2d, resnet). Only relevant if a new model is created at startup.
     model_type: str = "conv2d"
     model_blocks: int = 5
+    # Input representation. One of (legacy, rich_v1). Only relevant if a new
+    # model is created at startup; checkpoints persist their constructor args.
+    model_representation: str = "legacy"
     # batch size to use for training
     batch_size: int = 4096
     # Train a new model after this many new examples were received:
@@ -39,6 +42,9 @@ class TrainingConfig:
     # If positive, stop after this many optimizer batches, regardless of
     # num_epochs. This decouples checkpoint frequency from replay-buffer reuse.
     training_batches_per_trigger: int = 0
+    # If positive, never create a checkpoint above this number. This is a
+    # durable experiment boundary and remains effective after server restarts.
+    training_max_checkpoint: int = 0
     # Logical contiguous HDF5 read size used for shuffled bounded training.
     # Multiple read blocks are combined into one optimizer batch. The default
     # is aligned to two of the replay file's physical 128-example chunks.

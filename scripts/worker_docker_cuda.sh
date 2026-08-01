@@ -9,9 +9,16 @@ server_addr="${1:-${HEXZ_TRAINING_SERVER_ADDR:-host.docker.internal:50051}}"
 runtime_seconds="${2:-${HEXZ_MAX_RUNTIME_SECONDS:-120}}"
 worker_spec="${HEXZ_WORKER_SPEC:-cuda@4:128:256}"
 suspend_while_training="${HEXZ_SUSPEND_WHILE_TRAINING:-true}"
+container_name="${HEXZ_WORKER_CONTAINER_NAME:-}"
+
+docker_args=(--rm)
+if [[ -n "$container_name" ]]; then
+  docker_args+=(--name "$container_name")
+fi
 
 echo "Starting CUDA worker container connecting to $server_addr for $runtime_seconds seconds..."
 docker run \
+  "${docker_args[@]}" \
   -e HEXZ_TRAINING_SERVER_ADDR="$server_addr" \
   -e HEXZ_MAX_RUNTIME_SECONDS="$runtime_seconds" \
   -e HEXZ_WORKER_SPEC="$worker_spec" \

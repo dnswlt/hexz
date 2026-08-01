@@ -95,6 +95,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", required=True)
     parser.add_argument("--model", required=True)
+    parser.add_argument(
+        "--replay-model",
+        help="Read the evaluation replay from this model (default: --model)",
+    )
     parser.add_argument("--checkpoints", required=True, type=parse_checkpoints)
     parser.add_argument("--examples", type=int, default=4096)
     parser.add_argument("--batch-size", type=int, default=1024)
@@ -112,11 +116,12 @@ def main() -> None:
     indices = np.sort(
         rng.choice(args.sample_population, size=args.examples, replace=False)
     )
+    replay_model = args.replay_model or args.model
     h5_path = (
         Path(args.repo)
         / "models"
         / "flagz"
-        / args.model
+        / replay_model
         / "h5"
         / "examples.h5"
     )
@@ -131,6 +136,7 @@ def main() -> None:
     repo = LocalModelRepository(args.repo)
     result = {
         "sample": {
+            "replay_model": replay_model,
             "seed": args.seed,
             "population": args.sample_population,
             "examples": args.examples,
