@@ -437,6 +437,21 @@ their norm relative to parameter norm increased substantially. The evaluator
 now accepts
 `--sample-offset` so these exact rolling-window comparisons can be reproduced.
 
+The value-error peak at checkpoint 70 did not translate into stronger play.
+On 96 positions played with both colors, checkpoint 80 beat checkpoint 70 by
+107--78 with seven draws over 192 games, scoring 57.6% (paired CI
+51.6%--63.5%). The policy improvement therefore outweighed checkpoint 80's
+worse value calibration in this direct match. The raw arena is
+`log/rich-v1-r4-cp70-vs-cp80-confirm.jsonl`.
+
+A same-size direct confirmation between checkpoints 60 and 80 did not resolve
+their ordering. Checkpoint 60 scored 100--85 with seven draws, 53.9% (paired CI
+47.7%--60.2%), reversing checkpoint 80's 33--29 lean on the original
+32-position screen. Descriptively pooling the disjoint position sets gives
+checkpoint 60 129 wins, checkpoint 80 118 and nine draws over 256 games, but
+that post-screen aggregate is not a promotion test. The raw confirmation is
+`log/rich-v1-r4-cp60-vs-cp80-confirm.jsonl`.
+
 ## Start here next
 
 `res10-rich-v1-r4:60` remains the strongest demonstrated model and the preferred
@@ -447,12 +462,13 @@ not merely that another 60 checkpoints were produced.
 
 Do not infer smooth monotonic progress from the adjacent 32-position screens;
 their intervals are wide. Checkpoint 80 is a statistically equivalent candidate,
-not a demonstrated promotion over checkpoint 60, but its positive arena lean
-and consistently lower policy error are evidence against calling the extension
-a simple plateau. Preserve checkpoints 4, 20, 40, 60, 70 and 80, the final
-replay, and the optimizer state. Before continuing unchanged self-play, resolve
-whether checkpoint 70's better value calibration or checkpoint 80's better
-policy produces stronger play, and address the late value-head instability.
+not a demonstrated promotion over checkpoint 60. Its consistently lower policy
+error and decisive win over checkpoint 70 show that the extension was not a
+simple training failure, but direct checkpoint-60/80 play is position-set
+dependent and unresolved. Preserve checkpoints 4, 20, 40, 60, 70 and 80, the
+final replay, and the optimizer state. Checkpoint 70's better value MSE is not
+a reason to deploy it; actual play favored checkpoint 80. Before continuing
+unchanged self-play, address or at least monitor the late value-head instability.
 The highest-value architectural questions remain whether richer value targets
 or hex-aware convolutions can add strength beyond this baseline, and whether
 additional strength has practical value for human play. Search-depth teaching
