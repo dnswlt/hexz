@@ -93,7 +93,7 @@ def stop_process_group(pid: int | None, timeout: float = 40) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repo", default="/home/dw/data/hexz-models")
+    parser.add_argument("--repo", default=str(Path.home() / "data" / "hexz-models"))
     parser.add_argument("--model", default="res10-rich-v1-r4")
     parser.add_argument("--max-checkpoint", type=int, default=60)
     parser.add_argument("--max-runtime-seconds", type=int, default=43_200)

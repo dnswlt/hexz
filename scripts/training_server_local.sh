@@ -25,7 +25,7 @@ if [[ -z "${HEXZ_DEVICE:-}" && "$(uname)" = "Darwin" ]]; then
     device=mps
 fi
 
-repo_dir="${HEXZ_MODEL_REPO_BASE_DIR:-/home/dw/data/hexz-models}"
+repo_dir="${HEXZ_MODEL_REPO_BASE_DIR:-$HOME/data/hexz-models}"
 model_name="${HEXZ_MODEL_NAME:-res10}"
 
 env \

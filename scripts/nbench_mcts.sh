@@ -7,7 +7,7 @@ p2_iterations=${2:-3200}
 num_games=${3:-5}
 
 server_port=50071
-model_base_dir="${HEXZ_MODEL_REPO_BASE_DIR:-/home/dw/data/hexz-models}"
+model_base_dir="${HEXZ_MODEL_REPO_BASE_DIR:-$HOME/data/hexz-models}"
 model_name="${HEXZ_MODEL_NAME:-res10}"
 
 latest_cp=$(ls "$model_base_dir/models/flagz/$model_name/checkpoints" 2>/dev/null | sort -nr | head -n 1)
@@ -48,4 +48,3 @@ cd "$base_dir"
 
 echo "Stopping cpuserver container..."
 docker stop hexz-cpuserver > /dev/null 2>&1
-

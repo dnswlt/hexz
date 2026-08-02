@@ -100,7 +100,7 @@ def replay_validation_arrays(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repo", type=Path, default=Path("/home/dw/data/hexz-models"))
+    parser.add_argument("--repo", type=Path, default=Path.home() / "data" / "hexz-models")
     parser.add_argument("--source-model", default="res10-r4-cp62")
     parser.add_argument("--source-checkpoint", type=int, default=50)
     parser.add_argument("--candidate-model", default="res10-r4-rean-cp50")

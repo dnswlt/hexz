@@ -317,7 +317,7 @@ class Campaign:
 def parse_args() -> argparse.Namespace:
     repo_root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repo", type=Path, default=Path("/home/dw/data/hexz-models"))
+    parser.add_argument("--repo", type=Path, default=Path.home() / "data" / "hexz-models")
     parser.add_argument("--model", default="res10-r4-cp62")
     parser.add_argument("--checkpoint", type=int, default=50)
     parser.add_argument("--iterations", type=int, default=800)

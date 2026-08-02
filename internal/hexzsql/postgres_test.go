@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	// Set to sth like -test-postgres-url="postgres://hexz_test:hexz_test@nuc:5432/hexz_test"
+	// Example: -test-postgres-url="postgres://hexz_test:hexz_test@db.example.internal:5432/hexz_test"
 	testPostgresURL = flag.String("test-postgres-url", "", "PostgresSQL URL for testing")
 )
 

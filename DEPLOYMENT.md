@@ -1,9 +1,8 @@
 # Production deployment
 
-The complete Hexz ML application runs on the CUDA workstation as one Docker
-Compose project. The NUC is only a TLS reverse proxy. PostgreSQL, Redis and the
-C++ gRPC service are private Compose services; only the Go server is published
-on the LAN.
+The complete Hexz ML application runs on a CUDA-capable host as one Docker
+Compose project. PostgreSQL, Redis and the C++ gRPC service are private Compose
+services; only the Go server is published by default.
 
 ## First start
 
@@ -15,7 +14,7 @@ docker compose ps
 ```
 
 Compose uses the repository-backed rich checkpoint 60. On a clean machine it
-builds the Go and C++ images when they are absent. On MONSTA the existing CUDA
+builds the Go and C++ images when they are absent; a compatible existing CUDA
 image is reused. PostgreSQL initializes `sql/schema.sql` only when its named
 volume is empty.
 
@@ -25,7 +24,7 @@ database password after PostgreSQL has initialized. It is ignored by Git.
 The application is then available at:
 
 ```text
-http://MONSTA:8080/hexzml
+http://localhost:8080/hexzml
 ```
 
 ## Everyday operation
@@ -88,27 +87,5 @@ docker compose exec -T postgres pg_restore -U hexz -d hexz --clean --if-exists \
 docker compose start game
 ```
 
-## NUC reverse proxy
-
-The NUC needs only one proxy location in the chosen TLS virtual host. This is
-the complete Hexz-specific part; Redis, PostgreSQL and CUDA are never exposed
-there. Hexz uses Server-Sent Events, so buffering must remain disabled and the
-read timeout must be long.
-
-```nginx
-location ^~ /hexzml {
-    proxy_pass http://192.168.1.71:8080;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_buffering off;
-    proxy_cache off;
-    proxy_read_timeout 1h;
-    proxy_send_timeout 1h;
-}
-```
-
-Keep this in a separate Hexz virtual host rather than modifying the weather
-site. Test with `nginx -t` before reloading nginx.
+TLS termination and reverse-proxy configuration are environment-specific and
+intentionally not stored in this repository.

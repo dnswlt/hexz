@@ -33,7 +33,7 @@ The baseline ML player (`res10` checkpoint 63) demonstrates competitive playing 
   sudo systemctl restart docker
   ```
 - **Python Environment**: Dedicated virtual environment located at `pyhexz/.venv` with PyTorch 2.13 (CUDA 13 support), `grpcio-tools`, `h5py`, `flask`, `gunicorn`, `tensorboard`, `pytest`.
-- **Baseline Model Target**: `res10` (10 ResNet blocks, 128 filters) at **checkpoint 63**, located in `/home/dw/data/hexz-models/models/flagz/res10/checkpoints/63`.
+- **Baseline Model Target**: `res10` (10 ResNet blocks, 128 filters) at **checkpoint 63**, located in `$HOME/data/hexz-models/models/flagz/res10/checkpoints/63`.
 
 ---
 
@@ -60,7 +60,7 @@ The baseline ML player (`res10` checkpoint 63) demonstrates competitive playing 
   ```bash
   bash scripts/training_server_local.sh
   ```
-  Starts Flask/gRPC server loading model checkpoint 63 from `/home/dw/data/hexz-models`, listening on port `:8080` (HTTP) and `:50051` (gRPC).
+  Starts Flask/gRPC server loading model checkpoint 63 from `$HOME/data/hexz-models`, listening on port `:8080` (HTTP) and `:50051` (gRPC).
 
 - **Start CUDA Worker Container (Self-Play Data Generation)**:
   ```bash

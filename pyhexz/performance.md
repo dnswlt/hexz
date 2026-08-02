@@ -26,16 +26,16 @@ CBoard.make_move            0.001s         80    57971.0
 From <https://pythonspeed.com/articles/docker-performance-overhead/> I learnt that sometime
 Docker security features are to blame.
 
-I can reproduce a significant speedup for `run_find_leaf` on my nuc when running Docker with
+I can reproduce a significant speedup for `run_find_leaf` on a local CPU host when running Docker with
 `--security-opt seccomp=unconfined`: 1124.3 ops/s vs. 2197.1 ops/s, almost a 2x speedup:
 
 ```
-(pyhexz) dw@nuc:~/git/github.com/dnswlt/hexz/pyhexz$ docker run  -e PYTHONUNBUFFERED=1 -e HEXZ_TRAINING_SERVER_URL=http://nuc:8080   europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/worker:latest
+(pyhexz) user@compute-host:~/src/hexz/pyhexz$ docker run -e PYTHONUNBUFFERED=1 -e HEXZ_TRAINING_SERVER_URL=http://training-host:8080 europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/worker:latest
 cuda available: False
 mps available: False
 torch version: 2.0.1
-2023-10-27 07:04:23,473 INFO SelfPlayWorker Running with config=WorkerConfig(training_server_url='http://nuc:8080', device='cpu', max_seconds=60, runs_per_move=800, http_client_timeout=1.0)
-2023-10-27 07:04:23,579 INFO SelfPlayWorker Server at http://nuc:8080 is using model abel:0.
+2023-10-27 07:04:23,473 INFO SelfPlayWorker Running with config=WorkerConfig(training_server_url='http://training-host:8080', device='cpu', max_seconds=60, runs_per_move=800, http_client_timeout=1.0)
+2023-10-27 07:04:23,579 INFO SelfPlayWorker Server at http://training-host:8080 is using model abel:0.
 Iteration 0 @2.387s: visit_count:799  move:(0, 2, 9, 1) player:0 score:(0.0, 0.0)
 Iteration 1 @4.567s: visit_count:1598  move:(0, 0, 6, 1) player:1 score:(0.0, 0.0)
 Iteration 2 @6.640s: visit_count:2397  move:(0, 7, 4, 1) player:0 score:(0.0, 0.0)
@@ -56,12 +56,12 @@ run_find_leaf              46.964s      52800     1124.3
 PurePyBoard.next_moves      0.982s      93149    94873.1
 NeuralMCTS.run             84.802s      52800      622.6
 CBoard.make_move            0.001s         65    51669.3
-(pyhexz) dw@nuc:~/git/github.com/dnswlt/hexz/pyhexz$ docker run --security-opt seccomp=unconfined -e PYTHONUNBUFFERED=1 -e HEXZ_TRAINING_SERVER_URL=http://nuc:8080   europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/worker:latest
+(pyhexz) user@compute-host:~/src/hexz/pyhexz$ docker run --security-opt seccomp=unconfined -e PYTHONUNBUFFERED=1 -e HEXZ_TRAINING_SERVER_URL=http://training-host:8080 europe-west6-docker.pkg.dev/hexz-cloud-run/hexz/worker:latest
 cuda available: False
 mps available: False
 torch version: 2.0.1
-2023-10-27 07:06:10,395 INFO SelfPlayWorker Running with config=WorkerConfig(training_server_url='http://nuc:8080', device='cpu', max_seconds=60, runs_per_move=800, http_client_timeout=1.0)
-2023-10-27 07:06:10,464 INFO SelfPlayWorker Server at http://nuc:8080 is using model abel:0.
+2023-10-27 07:06:10,395 INFO SelfPlayWorker Running with config=WorkerConfig(training_server_url='http://training-host:8080', device='cpu', max_seconds=60, runs_per_move=800, http_client_timeout=1.0)
+2023-10-27 07:06:10,464 INFO SelfPlayWorker Server at http://training-host:8080 is using model abel:0.
 Iteration 0 @1.813s: visit_count:799  move:(0, 2, 9, 1) player:0 score:(0.0, 0.0)
 Iteration 1 @3.476s: visit_count:1081  move:(0, 0, 6, 1) player:1 score:(0.0, 0.0)
 Iteration 2 @5.239s: visit_count:1880  move:(0, 7, 4, 1) player:0 score:(0.0, 0.0)
@@ -186,7 +186,7 @@ The ml-server also does a decent job:
 Added two channels (now at (11, 11, 10)) for remaining flags. Also added action_mask to ignore invalid moves in policy.
 
 ```
-I1110 21:54:36.649133       1 worker_main.cc:177] Worker started with Config(training_server_url: 'http://10.172.0.3', local_model_path: '', runs_per_move: 1000, runs_per_move_gradient: -0.010, max_moves_per_game: 200, max_runtime_seconds: 300, max_games: -1, uct_c: 5.000, dirichlet_concentration: 0.350)
+I1110 21:54:36.649133       1 worker_main.cc:177] Worker started with Config(training_server_url: 'http://training-host', local_model_path: '', runs_per_move: 1000, runs_per_move_gradient: -0.010, max_moves_per_game: 200, max_runtime_seconds: 300, max_games: -1, uct_c: 5.000, dirichlet_concentration: 0.350)
 ```
 
 2023-11-10 22:59:37.946 CET

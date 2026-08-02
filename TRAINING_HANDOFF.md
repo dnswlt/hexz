@@ -225,7 +225,7 @@ The reusable implementation is split between
 ```bash
 PYTHONPATH=pyhexz/src pyhexz/.venv/bin/python3 \
   scripts/analyze_selfplay_tail.py \
-  --repo /home/dw/data/hexz-models \
+  --repo $HOME/data/hexz-models \
   --model res10-r4-cp62 \
   --checkpoints 30-40 \
   --solver-node-limit 50000 \
@@ -338,7 +338,7 @@ it.
 
 The reusable isolated trainer is `scripts/train_reanalysis_student.py`. The
 candidate manifest is
-`/home/dw/data/hexz-models/models/flagz/res10-r4-rean-cp50/experiment.json`;
+`$HOME/data/hexz-models/models/flagz/res10-r4-rean-cp50/experiment.json`;
 the compact evaluation is `log/reanalysis-student-cp1-summary.json`, with raw
 arenas in `log/reanalysis-student-cp1-vs-cp50-{screen,confirm}.jsonl`. Preserve
 the candidate for analysis, but do not continue the same small-corpus branch
@@ -382,7 +382,7 @@ entry point:
 ```bash
 PYTHONPATH=pyhexz/src pyhexz/.venv/bin/python3 \
   scripts/run_bounded_training.py \
-  --repo /home/dw/data/hexz-models \
+  --repo $HOME/data/hexz-models \
   --model res10-rich-v1-r4 \
   --max-checkpoint 80
 ```
@@ -498,7 +498,7 @@ For reference, the failed checkpoint-60 versus checkpoint-50 match was:
 HEXZ_NBENCH_GAMES=128 \
 HEXZ_NBENCH_ITERATIONS=800 \
 HEXZ_NBENCH_CONCURRENCY=64 \
-HEXZ_NBENCH_STATS_FILE=/home/dw/data/hexz-models/models/flagz/res10-r4-cp62/nbench-checkpoint60-vs50.jsonl \
+HEXZ_NBENCH_STATS_FILE=$HOME/data/hexz-models/models/flagz/res10-r4-cp62/nbench-checkpoint60-vs50.jsonl \
 bash scripts/nbench2.sh res10-r4-cp62:60 res10-r4-cp62:50
 ```
 
@@ -506,7 +506,7 @@ To reproduce the offline comparison:
 
 ```bash
 PYTHONPATH=pyhexz/src pyhexz/.venv/bin/python3 scripts/eval_checkpoints.py \
-  --repo /home/dw/data/hexz-models \
+  --repo $HOME/data/hexz-models \
   --model res10-r4-cp62 \
   --checkpoints 0,10,20,30,40,50,60 \
   --examples 4096 \
@@ -518,16 +518,16 @@ PYTHONPATH=pyhexz/src pyhexz/.venv/bin/python3 scripts/eval_checkpoints.py \
 
 Relevant artifacts:
 
-- `/home/dw/data/hexz-models/models/flagz/res10-r4-cp62/`
-- `/home/dw/data/hexz-models/models/flagz/res10-r4-cp62/round1-summary.json`
-- `/home/dw/data/hexz-models/models/flagz/res10-r4-cp62/nbench-checkpoint10.jsonl`
-- `/home/dw/data/hexz-models/models/flagz/res10-r4-cp62/nbench-checkpoint20.jsonl`
-- `/home/dw/data/hexz-models/models/flagz/res10-r4-cp62/nbench-checkpoint20-vs10.jsonl`
-- `/home/dw/data/hexz-models/models/flagz/res10-r4-cp62/nbench-checkpoint30-vs20.jsonl`
-- `/home/dw/data/hexz-models/models/flagz/res10-r4-cp62/nbench-checkpoint40-vs30.jsonl`
-- `/home/dw/data/hexz-models/models/flagz/res10-r4-cp62/nbench-checkpoint50-vs40.jsonl`
-- `/home/dw/data/hexz-models/models/flagz/res10-r4-cp62/nbench-checkpoint60-vs50.jsonl`
-- `/home/dw/data/hexz-models/models/flagz/res10-r8-frozen-cp30/`
+- `$HOME/data/hexz-models/models/flagz/res10-r4-cp62/`
+- `$HOME/data/hexz-models/models/flagz/res10-r4-cp62/round1-summary.json`
+- `$HOME/data/hexz-models/models/flagz/res10-r4-cp62/nbench-checkpoint10.jsonl`
+- `$HOME/data/hexz-models/models/flagz/res10-r4-cp62/nbench-checkpoint20.jsonl`
+- `$HOME/data/hexz-models/models/flagz/res10-r4-cp62/nbench-checkpoint20-vs10.jsonl`
+- `$HOME/data/hexz-models/models/flagz/res10-r4-cp62/nbench-checkpoint30-vs20.jsonl`
+- `$HOME/data/hexz-models/models/flagz/res10-r4-cp62/nbench-checkpoint40-vs30.jsonl`
+- `$HOME/data/hexz-models/models/flagz/res10-r4-cp62/nbench-checkpoint50-vs40.jsonl`
+- `$HOME/data/hexz-models/models/flagz/res10-r4-cp62/nbench-checkpoint60-vs50.jsonl`
+- `$HOME/data/hexz-models/models/flagz/res10-r8-frozen-cp30/`
 - `pyhexz/src/pyhexz/flagz_tail.py`
 - `pyhexz/tests/test_flagz_tail.py`
 - `scripts/analyze_selfplay_tail.py`

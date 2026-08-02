@@ -164,10 +164,10 @@ func TestValidPlayerName(t *testing.T) {
 		{"My  Best", false}, // No consecutive spaces in the middle
 		{"123", false},      // Need at least one latin character
 		{"_letter-or.digit", true},
-		{"ab", false},       // Too short
-		{"jens$", false},    // Invalid character
-		{"dw@best", false},  // Invalid character
-		{" voodoo ", false}, // Spaces at the ends
+		{"ab", false},        // Too short
+		{"jens$", false},     // Invalid character
+		{"user@host", false}, // Invalid character
+		{" voodoo ", false},  // Spaces at the ends
 		{"", false},
 		{"verylongusernamesarenotallowedalright", false},
 	}

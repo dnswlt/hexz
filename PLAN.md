@@ -332,6 +332,6 @@ candidate name.
 ## Immediate Decision Needed
 
 The code and measurement gates are ready. The next action that changes data is
-creating `/home/dw/data/hexz-models/models/flagz/res10-r4-cp62` and then running
+creating `$HOME/data/hexz-models/models/flagz/res10-r4-cp62` and then running
 one bounded self-play/training cycle. Nothing else needs to be optimized before
 that experiment.

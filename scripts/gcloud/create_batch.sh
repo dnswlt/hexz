@@ -1,5 +1,10 @@
+#!/bin/bash
+set -euo pipefail
+
 location=europe-west1
-gcloud beta batch jobs submit hexz-worker-batch-$(date +"%Y%m%d%H%M") --location $location --config - <<EOD
+training_server_addr="${HEXZ_TRAINING_SERVER_ADDR:?Set HEXZ_TRAINING_SERVER_ADDR to the training server host and port}"
+
+gcloud beta batch jobs submit hexz-worker-batch-$(date +"%Y%m%d%H%M") --location "$location" --config - <<EOD
 {
   "name": "projects/hexz-cloud-run/locations/$location/jobs/hexz-worker-batch",
   "taskGroups": [
@@ -20,7 +25,7 @@ gcloud beta batch jobs submit hexz-worker-batch-$(date +"%Y%m%d%H%M") --location
             },
             "environment": {
               "variables": {
-                "HEXZ_TRAINING_SERVER_ADDR": "hexz.hopto.org:50051",
+                "HEXZ_TRAINING_SERVER_ADDR": "$training_server_addr",
                 "HEXZ_MAX_RUNTIME_SECONDS": "3600",
                 "HEXZ_DEVICE": "cuda",
                 "HEXZ_WORKER_THREADS": "4",

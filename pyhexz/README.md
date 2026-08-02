@@ -150,7 +150,7 @@ Seed a candidate from a known checkpoint and an aligned tail of its replay:
 ```bash
 cd ..
 PYTHONPATH=pyhexz/src pyhexz/.venv/bin/python3 -m pyhexz.experiment \
-  --repo /home/dw/data/hexz-models \
+  --repo $HOME/data/hexz-models \
   --source-model res10 \
   --source-checkpoint 63 \
   --candidate-model res10-r4-cp63 \
