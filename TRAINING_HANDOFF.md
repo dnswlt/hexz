@@ -371,26 +371,27 @@ Raw arenas are `log/rich-v1-cp4-vs-cp50-{screen,confirm}.jsonl`. The confirmed
 checkpoint-4 weights, Adam state and 1,025,000-row replay were branched into
 `res10-rich-v1-r4` checkpoint 0. This is the resumable online candidate.
 
-Online training completed cleanly at the durable checkpoint-60 cap. The run
-produced 1,501,920 fresh self-play positions, completed all 60 training runs
-without a failure, persisted checkpoint 60, and then stopped the server and
-worker as designed. The replay used by the final checkpoints is entirely
-rich-model self-play. The command remains the recovery/reproduction entry
-point:
+Online training initially completed cleanly at the durable checkpoint-60 cap.
+That run produced 1,501,920 fresh self-play positions, completed all 60
+training runs without a failure, persisted checkpoint 60, and then stopped the
+server and worker as designed. It was subsequently extended once to checkpoint
+80 as a bounded plateau test; see below. The replay used by these checkpoints
+is entirely rich-model self-play. The command remains the recovery/reproduction
+entry point:
 
 ```bash
 PYTHONPATH=pyhexz/src pyhexz/.venv/bin/python3 \
   scripts/run_bounded_training.py \
   --repo /home/dw/data/hexz-models \
   --model res10-rich-v1-r4 \
-  --max-checkpoint 60
+  --max-checkpoint 80
 ```
 
 The runner uses learning rate 1e-4, 800-run self-play, the shared MCTS
 parameters, and tail-solver gate 3. It persists invocation state in
 `res10-rich-v1-r4/bounded_run.json`. Checkpoints, replay, Adam state and the
 runner manifest survive interruption. The training server independently
-enforces the checkpoint-60 ceiling and will not create checkpoint 61.
+enforces the checkpoint-80 ceiling and will not create checkpoint 81.
 
 Paired 800-search screens over the original 32 positions found:
 
@@ -414,23 +415,34 @@ are:
 - `log/rich-v1-r4-cp40-vs-cp60-screen.jsonl`;
 - `log/rich-v1-r4-cp60-vs-legacy-cp50-{screen,confirm}.jsonl`.
 
+The checkpoint-60 cap was then monotonically extended to checkpoint 80 without
+overwriting checkpoint 60. The extension generated 498,700 additional
+self-play positions and completed cleanly at 03:22 on 2026-08-02. In the
+predeclared paired 32-position screen, checkpoint 80 scored 33 wins versus
+checkpoint 60's 29, with two draws: 53.1%, paired CI 43.6%--62.7%. This is
+statistically indistinguishable from equal strength, so the planned untouched
+confirmation was not run. The raw arena is
+`log/rich-v1-r4-cp60-vs-cp80-screen.jsonl`.
+
 ## Start here next
 
-`res10-rich-v1-r4:60` is now the strongest demonstrated model and the preferred
+`res10-rich-v1-r4:60` remains the strongest demonstrated model and the preferred
 deployment/comparison checkpoint. Its advantage over legacy checkpoint 50 was
 confirmed on untouched positions with a lower confidence bound above 71%.
 This is strong evidence that the representation/value-head change succeeded,
 not merely that another 60 checkpoints were produced.
 
 Do not infer smooth monotonic progress from the adjacent 32-position screens;
-their intervals are wide. Preserve checkpoints 4, 20, 40 and 60, the final
-replay, and the optimizer state. If training continues, branch from checkpoint
-60 rather than overwriting this completed experiment, retain the 1e-4 learning
-rate and checkpoint cap, and predeclare evaluation points. The highest-value
-next questions are whether checkpoint 60 improves actual interactive play and
-whether richer value targets or hex-aware convolutions can add strength beyond
-this new baseline. Search-depth teaching and MCTS parameter tuning remain
-secondary because neither established a comparable improvement.
+their intervals are wide. Checkpoint 80 is a statistically equivalent candidate,
+not a demonstrated promotion over checkpoint 60. Preserve checkpoints 4, 20,
+40, 60 and 80, the final replay, and the optimizer state. Do not continue the
+unchanged self-play regime merely because checkpoint 80 leaned positive; the
+bounded extension supplied no evidence of further improvement. The
+highest-value next questions are whether richer value targets or hex-aware
+convolutions can add strength beyond this baseline, and whether additional
+strength has practical value for human play. Search-depth teaching and MCTS
+parameter tuning remain secondary because neither established a comparable
+improvement.
 
 For reference, the failed checkpoint-60 versus checkpoint-50 match was:
 
