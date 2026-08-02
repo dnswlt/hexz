@@ -1,0 +1,10 @@
+{
+  "game": "flagz",
+  "model": "res10-rich-v1-r4",
+  "checkpoint": 60,
+  "representation": "rich_v1",
+  "artifact": "scriptmodule.pt",
+  "size_bytes": 14754262,
+  "sha256": "1b1a4b615ceb5a488fa6e7c81430691356db16963a56fad71070c667d2341b1d",
+  "selection": "Conservative shipping choice after checkpoint 60 and 80 tied across 448 direct arena games."
+}
