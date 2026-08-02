@@ -452,6 +452,23 @@ checkpoint 60 129 wins, checkpoint 80 118 and nine draws over 256 games, but
 that post-screen aggregate is not a promotion test. The raw confirmation is
 `log/rich-v1-r4-cp60-vs-cp80-confirm.jsonl`.
 
+One final independent arena used 96 freshly randomized boards generated in
+memory rather than the predefined corpus, again playing each board with both
+seat assignments. Checkpoint 80 led 99--88 with five draws, scoring 52.9%
+(paired CI 47.3%--58.4%). Across all three disjoint direct checkpoint-60/80
+sets, the totals are exactly tied: 217 wins each and 14 draws over 448 games.
+Neither checkpoint is a demonstrated playing-strength promotion over the
+other. The raw random arena is
+`log/rich-v1-r4-cp60-vs-cp80-random.jsonl`; reproduce this mode with
+`HEXZ_NBENCH_RANDOM_POSITIONS=1` in `scripts/nbench2.sh`.
+
+The checkpoint-60 and checkpoint-80 TorchScript artifacts are each 14,754,262
+bytes. Checkpoint 60 is the conservative shipping choice because its value head
+is better calibrated and it already has the decisive legacy-champion
+confirmation; checkpoint 80 remains an equally defensible alternative with
+lower policy error. The repository already tracks comparably sized TorchScript
+test artifacts, so either file is below the normal GitHub per-file limit.
+
 ## Start here next
 
 `res10-rich-v1-r4:60` remains the strongest demonstrated model and the preferred

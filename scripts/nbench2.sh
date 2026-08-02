@@ -4,6 +4,8 @@ set -euo pipefail
 # Validate two checkpoints against each other on a fixed, paired position set.
 # Two CUDA cpuserver containers are started so the Go coordinator can run games
 # concurrently without requiring a host C++ build.
+# Set HEXZ_NBENCH_RANDOM_POSITIONS=1 to generate fresh random boards in memory;
+# reverse-seat games still reuse the same boards for a paired comparison.
 
 if [[ $# -ne 2 ]]; then
     echo "Usage: $0 <model-or-checkpoint-1> <model-or-checkpoint-2>"
@@ -21,6 +23,7 @@ concurrency="${HEXZ_NBENCH_CONCURRENCY:-64}"
 model_repo="${HEXZ_MODEL_REPO_BASE_DIR:-/home/dw/data/hexz-models}"
 positions_file="${HEXZ_NBENCH_POSITIONS_FILE:-testdata/nbench/flagz_initial_v1.jsonl}"
 position_offset="${HEXZ_NBENCH_POSITION_OFFSET:-0}"
+random_positions="${HEXZ_NBENCH_RANDOM_POSITIONS:-0}"
 stats_file="${HEXZ_NBENCH_STATS_FILE:-./stats/nbench.jsonl}"
 image="${HEXZ_CPUSERVER_IMAGE:-hexz-cpuserver-cuda:latest}"
 p1_port="${HEXZ_NBENCH_P1_PORT:-50171}"
@@ -89,14 +92,26 @@ start_server p2 "$p2_model" "$p2_checkpoint" "$p2_port" "$p2_container" \
 
 sleep "${HEXZ_NBENCH_STARTUP_SECONDS:-3}"
 
+position_args=()
+if [[ "$random_positions" == "1" ]]; then
+    if [[ "$games" -le 0 ]]; then
+        echo "HEXZ_NBENCH_GAMES must be positive with random positions" >&2
+        exit 1
+    fi
+else
+    position_args=(
+        -positions-file "$positions_file"
+        -position-offset "$position_offset"
+    )
+fi
+
 go run ./cmd/nbench2 \
     -model-repo "$model_repo" \
     -key1 "$p1_key" \
     -key2 "$p2_key" \
     -p1-addr "localhost:$p1_port" \
     -p2-addr "localhost:$p2_port" \
-    -positions-file "$positions_file" \
-    -position-offset "$position_offset" \
+    "${position_args[@]}" \
     -games "$games" \
     -concurrency "$concurrency" \
     -both-sides \
