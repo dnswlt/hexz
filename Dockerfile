@@ -1,7 +1,5 @@
-# Use the offical golang image to create a binary.
-# This is based on Debian and sets the GOPATH to /go.
-# https://hub.docker.com/_/golang
-FROM golang:1.21.1 as builder
+# Build the Go game server.
+FROM golang:1.22-bookworm AS builder
 
 # Create and change to the app directory.
 WORKDIR /app
@@ -23,7 +21,7 @@ RUN go build -v -o server ./cmd/server
 # https://docs.docker.com/develop/develop-images/multistage-build/#use-multi-stage-builds
 FROM debian:bookworm-slim
 RUN set -x && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    ca-certificates && \
+    ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy the binary to the production image from the builder stage.
@@ -34,4 +32,4 @@ COPY --from=builder /app/resources /app/resources
 # Run the server in its "home" directory.
 WORKDIR /app
 
-CMD ["/app/server", "-cpu-think-time=5s", "-cpu-max-flags=-1", "-remove-delay=1m", "-inactivity-timeout=1h", "-stateless"]
+CMD ["/app/server", "-cpu-think-time=5s", "-cpu-max-flags=-1", "-remove-delay=1m", "-inactivity-timeout=1h"]

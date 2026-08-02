@@ -92,6 +92,10 @@ To build the WASM module, run [scripts/build_wasm.sh](./scripts/build_wasm.sh).
 
 ### Docker and Cloud Run
 
+For the self-contained CUDA production deployment (Go server, neural CPU
+player, Redis and PostgreSQL), see [DEPLOYMENT.md](./DEPLOYMENT.md). It is the
+preferred deployment for the private ML endpoint.
+
 Build and deploy Docker image:
 
 ```bash

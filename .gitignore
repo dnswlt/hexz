@@ -32,6 +32,10 @@ aws/
 # Ignore TensorBoard model evaluation data
 tensorboard/
 
+# Local Docker Compose configuration and database backups.
+/.env
+/backups/
+
 # Python bytecode caches
 __pycache__/
 *.py[cod]

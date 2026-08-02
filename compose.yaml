@@ -1,0 +1,102 @@
+name: hexz
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hexz
+      POSTGRES_USER: hexz
+      POSTGRES_PASSWORD: ${HEXZ_POSTGRES_PASSWORD:?Copy .env.example to .env and set HEXZ_POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hexz -d hexz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    stop_grace_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    stop_grace_period: 30s
+
+  cpuserver:
+    image: hexz-cpuserver-cuda:latest
+    build:
+      context: .
+      dockerfile: cpp/Dockerfile.cpuserver-cuda
+    restart: unless-stopped
+    gpus: all
+    command:
+      - --device=cuda
+      - --max_think_time_ms=5000
+      - --uct_c=1.5
+      - --initial_root_q_value=0
+      - --initial_q_penalty=0
+      - --model_path=/model/scriptmodule.pt
+      - --model_key=res10-rich-v1-r4:60
+      - --server_addr=0.0.0.0:50071
+    volumes:
+      - ./models/flagz/res10-rich-v1-r4-cp60/scriptmodule.pt:/model/scriptmodule.pt:ro
+    expose:
+      - "50071"
+    healthcheck:
+      test: ["CMD", "/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/50071"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    stop_grace_period: 30s
+
+  game:
+    image: hexz-game:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      cpuserver:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${HEXZ_POSTGRES_PASSWORD:?Copy .env.example to .env and set HEXZ_POSTGRES_PASSWORD}
+    command:
+      - /app/server
+      - -cpu-player-mode=remote
+      - -remote-cpu-url=cpuserver:50071
+      - -cpu-think-time=5s
+      - -cpu-max-flags=-1
+      - -remove-delay=1m
+      - -inactivity-timeout=1h
+      - -url-path-prefix=${HEXZ_URL_PATH_PREFIX:-/hexzml}
+      - -redis-addr=redis:6379
+      - -postgres-url=postgres://hexz@postgres:5432/hexz?sslmode=disable
+      - -host=0.0.0.0
+      - -port=8080
+    ports:
+      - "${HEXZ_BIND_ADDRESS:-0.0.0.0}:${HEXZ_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080${HEXZ_URL_PATH_PREFIX:-/hexzml} >/dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    stop_grace_period: 30s
+
+volumes:
+  postgres_data:
+  redis_data:
