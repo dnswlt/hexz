@@ -103,17 +103,20 @@ def main() -> None:
     parser.add_argument("--examples", type=int, default=4096)
     parser.add_argument("--batch-size", type=int, default=1024)
     parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--sample-offset", type=int, default=0)
     parser.add_argument("--sample-population", type=int, default=1_025_000)
     parser.add_argument("--device", default="cuda")
     args = parser.parse_args()
 
     if args.examples <= 0 or args.examples > args.sample_population:
         parser.error("--examples must be between 1 and --sample-population")
+    if args.sample_offset < 0:
+        parser.error("--sample-offset must be non-negative")
     if args.batch_size <= 0 or args.batch_size > args.examples:
         parser.error("--batch-size must be between 1 and --examples")
 
     rng = np.random.default_rng(args.seed)
-    indices = np.sort(
+    indices = args.sample_offset + np.sort(
         rng.choice(args.sample_population, size=args.examples, replace=False)
     )
     replay_model = args.replay_model or args.model
@@ -126,8 +129,8 @@ def main() -> None:
         / "examples.h5"
     )
     with h5py.File(h5_path, "r") as h5:
-        if args.sample_population > len(h5["boards"]):
-            parser.error("--sample-population exceeds the replay size")
+        if args.sample_offset + args.sample_population > len(h5["boards"]):
+            parser.error("sample range exceeds the replay size")
         arrays = tuple(
             h5[name][indices]
             for name in ("boards", "action_masks", "move_probs", "values")
@@ -138,6 +141,7 @@ def main() -> None:
         "sample": {
             "replay_model": replay_model,
             "seed": args.seed,
+            "offset": args.sample_offset,
             "population": args.sample_population,
             "examples": args.examples,
             "first_index": int(indices[0]),

@@ -420,9 +420,22 @@ overwriting checkpoint 60. The extension generated 498,700 additional
 self-play positions and completed cleanly at 03:22 on 2026-08-02. In the
 predeclared paired 32-position screen, checkpoint 80 scored 33 wins versus
 checkpoint 60's 29, with two draws: 53.1%, paired CI 43.6%--62.7%. This is
-statistically indistinguishable from equal strength, so the planned untouched
-confirmation was not run. The raw arena is
+an encouraging lean but not a statistically resolved playing-strength result,
+so the planned untouched confirmation was not run. The raw arena is
 `log/rich-v1-r4-cp60-vs-cp80-screen.jsonl`.
+
+Offline evaluation on fixed 16,384-position samples shows genuine learning but
+a policy/value split. On the final 1,048,576-row replay window, policy CE
+improved monotonically from 2.0261 at checkpoint 60 to 2.0162 at 70 and 2.0113
+at 80. On the 498,700 extension-only positions the corresponding values were
+2.0243, 2.0125 and 2.0043. Value MSE instead reached its best point at
+checkpoint 70: on the final window it moved 0.3025, 0.2975, 0.3111, while on
+the checkpoint-60-era window it moved 0.3009, 0.2981, 0.3249. Checkpoint 80's
+value bias also shifted to about -0.097 and sign accuracy fell by 0.3--0.9
+percentage points across the samples. All gradients remained finite, although
+their norm relative to parameter norm increased substantially. The evaluator
+now accepts
+`--sample-offset` so these exact rolling-window comparisons can be reproduced.
 
 ## Start here next
 
@@ -434,15 +447,17 @@ not merely that another 60 checkpoints were produced.
 
 Do not infer smooth monotonic progress from the adjacent 32-position screens;
 their intervals are wide. Checkpoint 80 is a statistically equivalent candidate,
-not a demonstrated promotion over checkpoint 60. Preserve checkpoints 4, 20,
-40, 60 and 80, the final replay, and the optimizer state. Do not continue the
-unchanged self-play regime merely because checkpoint 80 leaned positive; the
-bounded extension supplied no evidence of further improvement. The
-highest-value next questions are whether richer value targets or hex-aware
-convolutions can add strength beyond this baseline, and whether additional
-strength has practical value for human play. Search-depth teaching and MCTS
-parameter tuning remain secondary because neither established a comparable
-improvement.
+not a demonstrated promotion over checkpoint 60, but its positive arena lean
+and consistently lower policy error are evidence against calling the extension
+a simple plateau. Preserve checkpoints 4, 20, 40, 60, 70 and 80, the final
+replay, and the optimizer state. Before continuing unchanged self-play, resolve
+whether checkpoint 70's better value calibration or checkpoint 80's better
+policy produces stronger play, and address the late value-head instability.
+The highest-value architectural questions remain whether richer value targets
+or hex-aware convolutions can add strength beyond this baseline, and whether
+additional strength has practical value for human play. Search-depth teaching
+and MCTS parameter tuning remain secondary because neither established a
+comparable improvement.
 
 For reference, the failed checkpoint-60 versus checkpoint-50 match was:
 
